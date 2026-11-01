@@ -31,7 +31,7 @@
 {{define "scripts"}}
   <script type="application/json" id="yavc-state">{{json .State}}</script>
   <script type="application/json" id="yavc-config">{{json .Config}}</script>
-  <script type="application/json" id="yavc-appearance">{{json (dict "skins" .Skins "palettes" .Palettes "retention" .Retention)}}</script>
+  <script type="application/json" id="yavc-appearance">{{json (dict "skins" .Skins "palettes" .Palettes "retention" .Retention "agents" .Agents)}}</script>
   <script src="{{asset "/static/snapshot.js"}}"></script>
   <script src="{{asset "/static/continuity.js"}}"></script>
   <script src="{{asset "/static/desktop.js"}}"></script>
@@ -46,6 +46,8 @@
   <script src="{{asset "/static/host.js"}}" defer></script>
   <script src="/applets/registry.js" defer></script>
   <script src="{{asset "/pudl/pudl-actions.js"}}" defer></script>
+  <script src="{{asset "/static/site-actions.js"}}" defer></script>
+  <script src="{{asset "/static/bridge.js"}}" defer></script>
   <script src="{{asset "/pudl/pudl-menubar.js"}}" defer></script>
   <script src="{{asset "/pudl/pudl-dialog.js"}}" defer></script>
   <script src="{{asset "/pudl/pudl-tooltip.js"}}" defer></script>
@@ -96,6 +98,7 @@
             <li><a href="{{.SiteURL}}about" data-dialog="about-site">About yavc.app</a></li>
             <li><a href="{{.SiteURL}}?open=author&amp;top=author"{{if .Desktop}} data-win-open="author"{{end}}>About the author</a></li>
             <li><a href="{{.SiteURL}}about/pudl" data-dialog="about-pudl">About PUDL</a></li>
+            <li><a href="{{.SiteURL}}?open=agents&amp;top=agents"{{if .Desktop}} data-win-open="agents"{{end}}>For agents</a></li>
             <li>-</li>
             <li><a href="{{.SiteURL}}?open=privacy&amp;top=privacy"{{if .Desktop}} data-win-open="privacy"{{end}}>Privacy Policy</a></li>
             <li><a href="{{.SiteURL}}?open=terms&amp;top=terms"{{if .Desktop}} data-win-open="terms"{{end}}>Terms &amp; Conditions</a></li>
@@ -217,6 +220,7 @@
             <li><a href="{{.SiteURL}}about" data-dialog="about-site">About yavc.app</a></li>
             <li><a href="{{.SiteURL}}author">About the author</a></li>
             <li><a href="{{.SiteURL}}about/pudl" data-dialog="about-pudl">About PUDL</a></li>
+            <li><a href="{{.SiteURL}}agents">For agents</a></li>
             <li>-</li>
             <li><a href="{{.SiteURL}}privacy">Privacy Policy</a></li>
             <li><a href="{{.SiteURL}}terms">Terms &amp; Conditions</a></li>

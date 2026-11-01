@@ -43,13 +43,21 @@ Files, the Editor and the Terminal share one file system (`internal/web/static/s
 The Editor's Visual, Split and Preview views come from Dinah Desktop's page view. Their Markdown engine, the preview renderer and the page view's parser and serializer in `internal/preview` and `internal/pageview`, is compiled to WebAssembly from `cmd/yavc-md` and runs in the browser, so a document's text is never sent to the site. Build it with
 
 ```
-GOOS=js GOARCH=wasm go build -trimpath -ldflags="-s -w" -o apps/editor/md/yavc-md.wasm ./cmd/yavc-md
-cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" apps/editor/md/
+GOOS=js GOARCH=wasm go build -trimpath -ldflags="-s -w" -o apps/md-engine/yavc-md.wasm ./cmd/yavc-md
+cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" apps/md-engine/
 ```
 
 The Docker image builds it itself. Neither file is committed.
 
 The engine includes parkscomputing.com's shortcodes (`internal/shortcodes`): `{{tip:Title}} … {{/tip}}` and the other notices, `{{expand}}`, `{{columns}}` with `{{column}}`, `{{figure:/path alt="…"}}`, `{{applet:name}}`, `{{video:youtube ID}}`, `{{code:~/bin/hello}}`, `{{toc}}`, `{{status:green Done}}`, `{{kbd:Ctrl+S}}`, `{{glyph:check}}`, `{{page:slug}}`, `{{anchor:name}}` and `{{draft-note}}`. The Editor's Insert menu offers each with an example.
+
+## Slides
+
+Slides (`apps/slides`, design in [docs/slides-design.md](docs/slides-design.md)) makes a slide deck from a Markdown file named `something.slides.md`: slides divided by `---`, a `{{slide:layout=title}}` line for a slide's settings, `{{notes}}` for the speaker's notes, and the front matter for the deck's title, theme, size and transition. The current slide is edited on its canvas, as the Editor's Visual view edits a page, or as its Markdown, and the deck presents full screen with a presenter window and exports as a page that presents itself.
+
+## For agents
+
+Every application's commands are an API (design in [docs/agents-design.md](docs/agents-design.md)). Each package under `apps/` has an `actions.json` in PUDL's applet actions form, with a JSON Schema for every action's input and output; `GET /api/actions` is the catalogue of all of them, with no sign-in, and `POST /mcp` is a Model Context Protocol server offering `applet_discover`, `applet_invoke`, `applet_status`, `applet_cancel` and `applet_artifact`. An invocation is relayed to a page the person has open, because their files and the applications are in the browser: the page keeps an event stream from the engine (`static/bridge.js`), runs the action through PUDL's broker and posts the record back. A person pairs an agent in Settings, under Agents, with a token the agent sends as a bearer token; the page asks the person before an action does more than the token allows. The page at `/agents` says the same for an agent to read.
 
 ## Licence
 

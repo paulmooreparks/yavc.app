@@ -39,6 +39,30 @@ type Session struct {
 	Appearance Appearance        `json:"appearance"`
 	State      map[string]string `json:"state,omitempty"`  // applet continuity, by instance key
 	Config     map[string]string `json:"config,omitempty"` // applet settings, by applet name
+	Agents     []Agent           `json:"agents,omitempty"` // the pairing tokens the reader made
+}
+
+// Agent is a pairing token the reader made for an AI agent
+// (docs/agents-design.md, decision 5): the token's hash, its name, the
+// capabilities it was granted beyond the harmless ones, and when it was
+// last used.
+type Agent struct {
+	ID      string    `json:"id"`
+	Name    string    `json:"name"`
+	Hash    string    `json:"hash"`
+	Grant   []string  `json:"grant"`
+	Created time.Time `json:"created"`
+	Used    time.Time `json:"used,omitempty"`
+}
+
+// HasAgent says whether the session keeps a token with this id.
+func (s *Session) HasAgent(id string) bool {
+	for _, a := range s.Agents {
+		if a.ID == id {
+			return true
+		}
+	}
+	return false
 }
 
 var (
@@ -58,6 +82,10 @@ type Store struct {
 	Dir    string
 	Retain time.Duration // how long a session lives unseen
 	mu     sync.Mutex
+	// agents is which session holds each token hash, built from the
+	// files on first use and kept up as tokens are made and revoked.
+	agents  map[string]string
+	scanned time.Time
 }
 
 // New makes a store in dir, creating it.
@@ -188,4 +216,69 @@ func (s *Store) Sweep() int {
 		}
 	}
 	return gone
+}
+
+// IndexAgent records which session holds a token hash; an empty session
+// forgets the hash.
+func (s *Store) IndexAgent(hash, sessionID string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.agents == nil {
+		s.agents = map[string]string{}
+	}
+	if sessionID == "" {
+		delete(s.agents, hash)
+	} else {
+		s.agents[hash] = sessionID
+	}
+}
+
+// FindAgent finds the session and the token with this hash. A hash not
+// in the index makes the store read every session's file again, no
+// more than once a few seconds, so a token made by another process of
+// the engine is found too.
+func (s *Store) FindAgent(hash string) (*Session, *Agent, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.agents == nil {
+		s.agents = map[string]string{}
+	}
+	id, ok := s.agents[hash]
+	if !ok {
+		if time.Since(s.scanned) < 5*time.Second {
+			return nil, nil, os.ErrNotExist
+		}
+		s.scanned = time.Now()
+		entries, err := os.ReadDir(s.Dir)
+		if err != nil {
+			return nil, nil, err
+		}
+		for _, e := range entries {
+			if e.IsDir() || filepath.Ext(e.Name()) != ".json" {
+				continue
+			}
+			sess, err := s.loadLocked(e.Name()[:len(e.Name())-len(".json")])
+			if err != nil {
+				continue
+			}
+			for _, a := range sess.Agents {
+				s.agents[a.Hash] = sess.ID
+			}
+		}
+		if id, ok = s.agents[hash]; !ok {
+			return nil, nil, os.ErrNotExist
+		}
+	}
+	sess, err := s.loadLocked(id)
+	if err != nil {
+		delete(s.agents, hash)
+		return nil, nil, err
+	}
+	for i := range sess.Agents {
+		if sess.Agents[i].Hash == hash {
+			return sess, &sess.Agents[i], nil
+		}
+	}
+	delete(s.agents, hash)
+	return nil, nil, os.ErrNotExist
 }

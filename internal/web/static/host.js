@@ -19,6 +19,7 @@
        this script's own address by the page). */
     var V = (function () { var m = /[?&]v=([^&]+)/.exec((document.currentScript && document.currentScript.src) || ''); return m ? m[1] : '0'; })();
     function versioned(path) { return path + '?v=' + encodeURIComponent(V); }
+    window.yavcStaticVersion = V;
     window.pcSiteFsSrc = versioned('/static/sitefs.js');
     window.pcConfigSrc = versioned('/static/config.js');
     window.pcFileBrowserSrc = versioned('/static/filebrowser.js');

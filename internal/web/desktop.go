@@ -132,8 +132,8 @@ func (d desktopState) maximize(key string, w, h string) string {
 }
 
 type barLinks struct {
-	Back, Restore, CloseAll                   string
-	NoneShown, NoneMinimized, NoneOpen        bool
+	Back, Restore, CloseAll            string
+	NoneShown, NoneMinimized, NoneOpen bool
 }
 
 func (d desktopState) bar() barLinks {

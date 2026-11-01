@@ -1,0 +1,35 @@
+{
+  "id": "yavc.settings",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "title": "Settings",
+  "description": "The person's appearance choices on this site: the light or dark mode, the skin and the colours, kept under their session so every page follows them.",
+  "module": "actions.js",
+  "actions": [
+    {
+      "ref": "yavc.settings/appearance@1",
+      "title": "Read the Appearance",
+      "description": "The mode, skin and colours in force, and the skins and colour themes the site offers.",
+      "inputSchema": { "type": "object", "additionalProperties": false, "properties": {} },
+      "outputSchema": {
+        "type": "object", "required": ["mode", "skin", "palette", "skins", "palettes"],
+        "properties": {
+          "mode": { "enum": ["light", "dark", "system"] }, "skin": { "type": "string" }, "palette": { "type": "string" },
+          "skins": { "type": "array", "items": { "$ref": "#/$defs/choice" } }, "palettes": { "type": "array", "items": { "$ref": "#/$defs/choice" } }
+        },
+        "$defs": { "choice": { "type": "object", "required": ["id", "label"], "properties": { "id": { "type": "string" }, "label": { "type": "string" } } } }
+      },
+      "capabilities": [],
+      "replay": "pure"
+    },
+    {
+      "ref": "yavc.settings/set-appearance@1",
+      "title": "Set the Appearance",
+      "description": "Change the mode (light, dark or system), the skin or the colours, by the ids the appearance action lists. A choice left out keeps its value. The change is kept for the session, so every page of the site follows it.",
+      "inputSchema": { "type": "object", "additionalProperties": false, "properties": { "mode": { "enum": ["light", "dark", "system"] }, "skin": { "type": "string", "maxLength": 40 }, "palette": { "type": "string", "maxLength": 40 } } },
+      "outputSchema": { "type": "object", "required": ["mode", "skin", "palette"], "properties": { "mode": { "enum": ["light", "dark", "system"] }, "skin": { "type": "string" }, "palette": { "type": "string" } } },
+      "capabilities": [],
+      "replay": "once"
+    }
+  ]
+}

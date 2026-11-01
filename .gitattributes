@@ -1,0 +1,7 @@
+# Every text file is LF in the repository and in the working tree; Go, gofmt
+# and the engine write LF, and a mixed tree makes whole-file diffs.
+* text=auto eol=lf
+*.wasm binary
+*.png binary
+*.woff2 binary
+*.ico binary

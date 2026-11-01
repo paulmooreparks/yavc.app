@@ -4,3 +4,9 @@
 .yavc-settings { max-width: 720px; }
 .yavc-settings[data-applet-fit="fill"] { flex: 1 1 auto; min-height: 0; overflow-y: auto; max-width: none; }
 .yavc-settings .form-fieldset { margin-bottom: var(--space-3); }
+.yavc-settings .settings-token { margin: var(--space-3) 0 0; padding: var(--space-2) var(--space-3); overflow-x: auto; font-family: var(--font-mono); font-size: var(--text-sm); user-select: all; }
+.yavc-settings .settings-token-row { display: grid; grid-template-columns: 1fr auto; gap: 0 var(--space-3); align-items: center; }
+.yavc-settings .settings-token-name { font-weight: 600; }
+.yavc-settings .settings-token-meta { grid-column: 1; color: var(--text-muted); font-size: var(--text-sm); }
+.yavc-settings .settings-token-row .btn { grid-column: 2; grid-row: 1 / span 2; }
+.yavc-settings .form-fieldset .check { display: flex; margin-bottom: var(--space-1); }

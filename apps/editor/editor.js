@@ -990,34 +990,14 @@
            so a change to them ships with the Editor's own. */
         var HERE = (SELF_SRC || '/applets/editor/editor.js').split('?')[0].replace(/editor\.js$/, '');
         var STAMP = SELF_SRC && SELF_SRC.indexOf('?') >= 0 ? SELF_SRC.slice(SELF_SRC.indexOf('?')) : '';
-        var md = null;
+        /* The Markdown engine is shared with Slides: apps/md-engine/loader.js
+           loads it once for the page. */
         function mdEngine() {
-            if (md) { return md; }
-            md = (async function () {
-                await into(document, 'script', HERE + 'md/wasm_exec.js' + STAMP);
-                if (!window.yavcMd) {
-                    var go = new window.Go();
-                    var bytes = await fetch(HERE + 'md/yavc-md.wasm' + STAMP, { credentials: 'same-origin' }).then(function (r) {
-                        if (!r.ok) { throw new Error('the Markdown engine could not be fetched (' + r.status + ')'); }
-                        return r.arrayBuffer();
-                    });
-                    var result = await WebAssembly.instantiate(bytes, go.importObject);
-                    go.run(result.instance);
-                }
-                function call(name) {
-                    return function (arg) {
-                        var r = JSON.parse(window.yavcMd[name](typeof arg === 'string' ? arg : JSON.stringify(arg)));
-                        if (r && typeof r === 'object' && !Array.isArray(r) && r.error) { throw new Error(r.error); }
-                        return r;
-                    };
-                }
-                return { preview: call('preview'), doc: call('doc'), markdown: call('markdown'), blocks: call('blocks'), source: call('source') };
-            })();
-            md.catch(function () { md = null; });
-            return md;
+            var v = window.yavcStaticVersion ? '?v=' + encodeURIComponent(window.yavcStaticVersion) : STAMP;
+            return into(document, 'script', '/applets/md-engine/loader.js' + v).then(function () { return window.yavcMdEngine(); });
         }
         async function pageParts() {
-            await into(document, 'script', HERE + 'safe-html.js' + STAMP);
+            await mdEngine();
             await into(document, 'script', HERE + 'page-view.js' + STAMP);
         }
         function pageActive() { return !!(visual.api && visual.api.active()); }
@@ -1208,7 +1188,7 @@
             ['expand', 'Expand', '{{expand:The title}}\nWhat opens.\n{{/expand}}'],
             ['columns', 'Columns', '{{columns}}\nThe first column.\n\n{{column}}\n\nThe second.\n{{/columns}}'],
             ['figure', 'Figure', '{{figure:/images/picture.png alt="What it shows" width=80% caption="The caption, in Markdown."}}'],
-            ['video', 'Video', '{{video:youtube dQw4w9WgXcQ title="What it is"}}'],
+            ['video', 'Video', '{{video:https://youtu.be/dQw4w9WgXcQ title="What it is"}}'],
             ['code-file', 'Code Listing from a File', '{{code:~/bin/hello}}'],
             ['applet', 'Applet', '{{applet:conway fit=flow}}'],
             ['toc', 'Contents', '{{toc}}'],
@@ -2103,7 +2083,13 @@
                 cmd('key-bindings', 'Key Bindings…', null, editKeys),
                 cmd('insert', 'Insert', 'plus', null, { items: insertItems, hidden: function () { return !formatOffered; }, shortcut: undefined }),
                 cmd('source', 'Edit the Source', 'code', openSource, { hidden: function () { return !sourceOffered; } }),
-                cmd('preview', 'Preview', 'new-window', preview, { hidden: function () { return !siteUrl; } })
+                cmd('preview', 'Preview', 'new-window', preview, { hidden: function () { return !siteUrl; } }),
+                /* A deck (a file named .slides.md) presents in Slides, where
+                   the site has it. */
+                cmd('present', 'Present the Deck', 'play', function () {
+                    var t = current();
+                    if (t && t.path && window.pudlApplets.request) { window.pudlApplets.request('present', { path: t.path, present: '1' }, root); }
+                }, { hidden: function () { var t = current(); return !(t && t.path && /\.slides\.md$/i.test(t.path) && window.pudlApplets.can && window.pudlApplets.can('present')); } })
             ];
             FORMATS.forEach(function (f) {
                 table.push(cmd(f[0], f[1], f[2], function () { applyFormat(f[0]); }, {
@@ -2161,7 +2147,7 @@
            views, which the site's View menu lists again where a reader of
            the menus looks for them. Headings and separators start the
            ribbon's groups. */
-        var LAYOUT = ['toggle-files', 'toggle-wrap', '-', 'view-text', 'view-visual', 'view-split', 'view-preview', 'md-default', '-', 'source', 'preview'];
+        var LAYOUT = ['toggle-files', 'toggle-wrap', '-', 'view-text', 'view-visual', 'view-split', 'view-preview', 'md-default', '-', 'source', 'preview', 'present'];
         function menus() {
             var titles = [
                 { label: 'Editor', glyph: 'document', items: window.pcAppletIdentity(root) },

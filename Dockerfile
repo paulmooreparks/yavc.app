@@ -16,7 +16,7 @@ COPY --from=build /yavc /app/yavc
 COPY web/pudl /app/web/pudl
 COPY applets /app/applets
 COPY apps /app/apps
-COPY --from=build /md/ /app/apps/editor/md/
+COPY --from=build /md/ /app/apps/md-engine/
 COPY pages /app/pages
 COPY site /app/site
 RUN mkdir -p /data && chown yavc /data

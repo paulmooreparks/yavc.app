@@ -26,6 +26,8 @@ import (
 	"strings"
 	"time"
 
+	"yavc.app/internal/mcp"
+	"yavc.app/internal/relay"
 	"yavc.app/internal/session"
 )
 
@@ -59,6 +61,9 @@ type Server struct {
 	catalog appletCatalog
 	pages   *template.Template
 	mux     *http.ServeMux
+	// The agents' relay and the MCP endpoint (agents.go).
+	hub *relay.Hub
+	mcp *mcp.Server
 	// The versions written into asset addresses as ?v=, so a changed file
 	// is fetched again: the site's own files take a digest of their
 	// contents, and PUDL's take the release's version from pudl.css.
@@ -100,6 +105,32 @@ func (s *Server) versions() {
 		}
 		return nil
 	})
+	// A shared folder beside the packages, such as apps/md-engine, has no
+	// version of its own, and the scripts that load it stamp its files
+	// with this version, so its files go into the digest as well.
+	for _, folder := range s.Applets {
+		entries, err := os.ReadDir(folder)
+		if err != nil {
+			continue
+		}
+		for _, e := range entries {
+			dir := filepath.Join(folder, e.Name())
+			if !e.IsDir() {
+				continue
+			}
+			if _, err := os.Stat(filepath.Join(dir, "applet.json")); err == nil {
+				continue
+			}
+			filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
+				if err == nil && !d.IsDir() {
+					b, _ := os.ReadFile(p)
+					h.Write([]byte(filepath.ToSlash(p)))
+					h.Write(b)
+				}
+				return nil
+			})
+		}
+	}
 	s.staticVersion = hex.EncodeToString(h.Sum(nil))[:12]
 	s.pudlVersion = "0"
 	if head, err := os.ReadFile(filepath.Join(s.PUDL, "pudl.css")); err == nil {
@@ -128,7 +159,7 @@ func New(s *Server) (*Server, error) {
 			}
 			return `aria-checked="false"`
 		},
-		"json":  func(v any) template.JS { b, _ := json.Marshal(v); return template.JS(b) },
+		"json": func(v any) template.JS { b, _ := json.Marshal(v); return template.JS(b) },
 		"dict": func(kv ...any) map[string]any {
 			m := map[string]any{}
 			for i := 0; i+1 < len(kv); i += 2 {
@@ -164,6 +195,7 @@ func New(s *Server) (*Server, error) {
 	m.HandleFunc("PUT /appearance", s.putAppearance)
 	m.HandleFunc("DELETE /session", s.deleteSession)
 	m.HandleFunc("GET /{$}", s.root)
+	s.agentRoutes(m)
 	s.retain = s.Sessions.Retain
 	m.HandleFunc("GET /pages", s.listPage)
 	m.HandleFunc("GET /about", s.aboutPage)
@@ -184,7 +216,13 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
-		r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+		limit := int64(1 << 20)
+		// An agent's report may hold an action's artifacts, up to 4 MB
+		// each by PUDL's rule, and an MCP call may hold a deck.
+		if r.URL.Path == "/agent/report" || r.URL.Path == "/mcp" {
+			limit = 16 << 20
+		}
+		r.Body = http.MaxBytesReader(w, r.Body, limit)
 	}
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Referrer-Policy", "same-origin")
@@ -397,6 +435,7 @@ func (s *Server) pageData(r *http.Request, title string) map[string]any {
 		"Appearance": s.appearanceOf(sess), "Skins": s.skins(), "Palettes": s.palettes(),
 		"State": state, "Config": config,
 		"Applets": s.appletEntries(r), "Dialog": "", "PUDLVersion": s.pudlVersion, "Retention": s.retention(), "StaticVersion": s.staticVersion, "SiteOrigin": strings.TrimSuffix(s.siteURL(r), "/"),
+		"Agents": agentCount(sess),
 	}
 }
 
@@ -566,7 +605,10 @@ func (s *Server) windowMarkup(r *http.Request, key string) string {
 
 func (s *Server) registry(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-cache")
+	// Written for each request, and never to be kept: a proxy that caches
+	// scripts by their extension, as Cloudflare does, rewrites no-cache to
+	// a browser lifetime of hours, and a package's new version then waits.
+	w.Header().Set("Cache-Control", "no-store")
 	io.WriteString(w, s.registryScript(r))
 }
 
@@ -773,4 +815,13 @@ func (s *Server) done(w http.ResponseWriter, err error) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// agentCount is how many agents the reader has paired, for the page's
+// bridge script, which keeps a stream open only when there are any.
+func agentCount(sess *session.Session) int {
+	if sess == nil {
+		return 0
+	}
+	return len(sess.Agents)
 }

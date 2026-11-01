@@ -33,6 +33,10 @@ func TestShortcodes(t *testing.T) {
 		{"{{figure:/images/x.png alt=\"A thing\" width=80% caption=\"The *cap*\"}}", `<figure class="sc-figure"><img src="/images/x.png" alt="A thing" style="max-width:80%" loading="lazy"><figcaption>The <em>cap</em></figcaption></figure>`},
 		{"{{applet:conway fit=flow state=init=1,1}}", `<div data-applet="conway" data-applet-fit="flow" data-applet-initial="init=1,1"></div>`},
 		{"{{video:youtube dQw4w9WgXcQ title=\"Never\"}}", `youtube-nocookie.com/embed/dQw4w9WgXcQ`},
+		{"{{video:https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=5}}", `youtube-nocookie.com/embed/dQw4w9WgXcQ`},
+		{"{{video:https://youtu.be/dQw4w9WgXcQ}}", `youtube-nocookie.com/embed/dQw4w9WgXcQ`},
+		{"{{video:https://vimeo.com/76979871}}", `player.vimeo.com/video/76979871?dnt=1`},
+		{"{{video:vimeo 76979871}}", `player.vimeo.com/video/76979871?dnt=1`},
 		{"{{code:~/bin/hello}}", `<pre><code data-code-src="~/bin/hello"></code></pre>`},
 		{"{{code:/applets/dice/dice.js}}", `class="language-javascript" data-code-src="/applets/dice/dice.js"`},
 		{"{{page:author Paul}}", `<a href="/author">Paul</a>`},
@@ -42,6 +46,8 @@ func TestShortcodes(t *testing.T) {
 		{"{{note}}\nNo close", `runs to the end of the page`},
 		{"{{/tip}}", `which is not open`},
 		{"{{column}}", `means nothing outside one`},
+		{"{{slide:layout=title background=#123 reveal=steps}}", `<div class="sc-slide" hidden data-layout="title" data-background="#123" data-reveal="steps"></div>`},
+		{"{{notes}}\nSay this.\n{{/notes}}", `<aside class="sc-notes"><p class="sc-notes-label">Speaker notes</p>`},
 	}
 	for _, c := range cases {
 		got := render(t, c.md)

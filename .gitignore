@@ -2,5 +2,5 @@
 /yavc
 /yavc.exe
 /.local/
-/apps/editor/md/yavc-md.wasm
-/apps/editor/md/wasm_exec.js
+/apps/md-engine/yavc-md.wasm
+/apps/md-engine/wasm_exec.js

@@ -1,0 +1,234 @@
+{
+  "id": "yavc.slides",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "title": "Slides",
+  "description": "Slide decks as Markdown files: read, build and change a deck, move through it, and present it. The deck a live action works on is the one open in Slides; parse and make work on text alone.",
+  "module": "actions.js",
+  "actions": [
+    {
+      "ref": "yavc.slides/parse@1",
+      "title": "Parse a Deck",
+      "description": "Read a deck's Markdown into its front matter and its slides. Slides are divided by a line of three dashes; a {{slide:…}} line gives a slide's settings; {{notes}} … {{/notes}} is what the speaker says.",
+      "inputSchema": { "type": "object", "additionalProperties": false, "required": ["text"], "properties": { "text": { "type": "string" } } },
+      "outputSchema": { "$ref": "#/$defs/parsed", "$defs": { "parsed": { "$ref": "#/$defs/deck" }, "deck": { "type": "object", "required": ["front", "slides"], "properties": { "front": { "$ref": "#/$defs/front" }, "slides": { "type": "array", "items": { "$ref": "#/$defs/slide" } } }, "$defs": {} }, "front": { "type": "object", "properties": { "title": { "type": "string" }, "author": { "type": "string" }, "theme": { "type": "string" }, "size": { "type": "string" }, "transition": { "type": "string" } } }, "slide": { "type": "object", "required": ["index", "title", "settings", "text"], "properties": { "index": { "type": "integer", "minimum": 1 }, "title": { "type": "string" }, "settings": { "type": "object", "additionalProperties": { "type": "string" } }, "text": { "type": "string" }, "notes": { "type": "string" } } } } },
+      "capabilities": [],
+      "replay": "pure"
+    },
+    {
+      "ref": "yavc.slides/make@1",
+      "title": "Make a Deck",
+      "description": "Write a deck's Markdown from its front matter and its slides. Each slide is Markdown, optionally with settings (layout: title, section, content, two-column, image, quote or blank; background, a colour; image, a picture's address; reveal: steps; transition: none, fade or slide) and notes.",
+      "inputSchema": {
+        "type": "object", "additionalProperties": false, "required": ["slides"],
+        "properties": {
+          "front": { "type": "object", "additionalProperties": false, "properties": { "title": { "type": "string" }, "author": { "type": "string" }, "theme": { "enum": ["plain", "paper", "midnight"] }, "size": { "enum": ["16:9", "4:3"] }, "transition": { "enum": ["none", "fade", "slide"] } } },
+          "slides": { "type": "array", "minItems": 1, "items": { "type": "object", "additionalProperties": false, "required": ["text"], "properties": { "text": { "type": "string" }, "settings": { "type": "object", "additionalProperties": { "type": "string" } }, "notes": { "type": "string" } } } }
+        }
+      },
+      "outputSchema": { "type": "object", "additionalProperties": false, "required": ["text"], "properties": { "text": { "type": "string" } } },
+      "capabilities": [],
+      "replay": "pure"
+    },
+    {
+      "ref": "yavc.slides/present@1",
+      "title": "Open a Deck in Slides",
+      "description": "Open Slides on a deck file for the person to see, at a slide; with present true, presenting from it.",
+      "handles": "present",
+      "inputSchema": { "type": "object", "additionalProperties": false, "required": ["path"], "properties": { "path": { "type": "string", "minLength": 1, "maxLength": 1024 }, "slide": { "type": "integer", "minimum": 1 }, "present": { "type": "boolean" } } },
+      "outputSchema": { "type": "object", "additionalProperties": false, "required": ["opened"], "properties": { "opened": { "const": true }, "view": { "enum": ["window", "tab"] } } },
+      "capabilities": ["window.open"],
+      "replay": "once"
+    },
+    {
+      "ref": "yavc.slides/deck@1",
+      "title": "The Open Deck",
+      "description": "What Slides has open: the file, whether it has unsaved changes, the current slide, the front matter and every slide's title and settings.",
+      "live": true,
+      "inputSchema": { "type": "object", "additionalProperties": false, "properties": {} },
+      "outputSchema": { "type": "object", "required": ["path", "modified", "slide", "count", "front", "slides", "presenting", "view"], "properties": { "path": { "type": ["string", "null"] }, "modified": { "type": "boolean" }, "slide": { "type": "integer" }, "count": { "type": "integer" }, "front": { "type": "object" }, "slides": { "type": "array", "items": { "type": "object", "required": ["index", "title", "settings"], "properties": { "index": { "type": "integer" }, "title": { "type": "string" }, "settings": { "type": "object" } } } }, "presenting": { "type": "boolean" }, "view": { "enum": ["visual", "text", "split"] } } },
+      "capabilities": [],
+      "replay": "pure"
+    },
+    {
+      "ref": "yavc.slides/slide@1",
+      "title": "Read a Slide",
+      "description": "One slide of the open deck, by its number, or the current slide: its Markdown, settings and notes.",
+      "live": true,
+      "inputSchema": { "type": "object", "additionalProperties": false, "properties": { "index": { "type": "integer", "minimum": 1 } } },
+      "outputSchema": { "type": "object", "required": ["index", "title", "settings", "text"], "properties": { "index": { "type": "integer" }, "title": { "type": "string" }, "settings": { "type": "object" }, "text": { "type": "string" }, "notes": { "type": "string" } } },
+      "capabilities": [],
+      "replay": "pure"
+    },
+    {
+      "ref": "yavc.slides/text@1",
+      "title": "The Deck's Markdown",
+      "description": "The whole open deck as its Markdown, as Save would write it.",
+      "live": true,
+      "inputSchema": { "type": "object", "additionalProperties": false, "properties": {} },
+      "outputSchema": { "type": "object", "required": ["text"], "properties": { "path": { "type": ["string", "null"] }, "text": { "type": "string" } } },
+      "capabilities": [],
+      "replay": "pure"
+    },
+    {
+      "ref": "yavc.slides/go@1",
+      "title": "Go to a Slide",
+      "description": "Show a slide by its number in the open deck.",
+      "live": true,
+      "inputSchema": { "type": "object", "additionalProperties": false, "required": ["index"], "properties": { "index": { "type": "integer", "minimum": 1 } } },
+      "outputSchema": { "type": "object", "required": ["index"], "properties": { "index": { "type": "integer" } } },
+      "capabilities": [],
+      "replay": "once"
+    },
+    {
+      "ref": "yavc.slides/load@1",
+      "title": "Load a Deck",
+      "description": "Replace what Slides has open with this deck's Markdown, unsaved, and with no file unless a path is given to save it under later. The person sees it at once.",
+      "live": true,
+      "inputSchema": { "type": "object", "additionalProperties": false, "required": ["text"], "properties": { "text": { "type": "string" }, "path": { "type": "string", "maxLength": 1024 }, "slide": { "type": "integer", "minimum": 1 } } },
+      "outputSchema": { "type": "object", "required": ["slide", "count"], "properties": { "path": { "type": ["string", "null"] }, "slide": { "type": "integer" }, "count": { "type": "integer" } } },
+      "capabilities": [],
+      "replay": "once"
+    },
+    {
+      "ref": "yavc.slides/open@1",
+      "title": "Open a Deck File",
+      "description": "Open a deck from the person's files (~/…) in Slides. Unsaved changes to the deck that was open are lost.",
+      "live": true,
+      "inputSchema": { "type": "object", "additionalProperties": false, "required": ["path"], "properties": { "path": { "type": "string", "minLength": 1, "maxLength": 1024 }, "slide": { "type": "integer", "minimum": 1 } } },
+      "outputSchema": { "type": "object", "required": ["path", "slide", "count"], "properties": { "path": { "type": "string" }, "slide": { "type": "integer" }, "count": { "type": "integer" } } },
+      "capabilities": ["files.read"],
+      "replay": "once"
+    },
+    {
+      "ref": "yavc.slides/save@1",
+      "title": "Save the Deck",
+      "description": "Write the open deck to its file, or to the path given (~/talks/intro.slides.md), which becomes its file.",
+      "live": true,
+      "inputSchema": { "type": "object", "additionalProperties": false, "properties": { "path": { "type": "string", "minLength": 1, "maxLength": 1024 } } },
+      "outputSchema": { "type": "object", "required": ["path"], "properties": { "path": { "type": "string" } } },
+      "capabilities": ["files.write"],
+      "replay": "once"
+    },
+    {
+      "ref": "yavc.slides/set-text@1",
+      "title": "Replace a Slide's Markdown",
+      "description": "Replace one slide's Markdown, including its {{slide}} line if it has one, in the open deck. The slide shown is the one changed, so the person watches it change.",
+      "live": true,
+      "inputSchema": { "type": "object", "additionalProperties": false, "required": ["text"], "properties": { "index": { "type": "integer", "minimum": 1 }, "text": { "type": "string" } } },
+      "outputSchema": { "type": "object", "required": ["index", "title", "settings", "text"], "properties": { "index": { "type": "integer" }, "title": { "type": "string" }, "settings": { "type": "object" }, "text": { "type": "string" }, "notes": { "type": "string" } } },
+      "capabilities": [],
+      "replay": "once"
+    },
+    {
+      "ref": "yavc.slides/insert@1",
+      "title": "Add to a Slide",
+      "description": "Append Markdown to the end of a slide, or of the current one: a paragraph, a list, a picture ({{figure:…}}), a hosted video ({{video:https://youtu.be/ID}}), columns, a note.",
+      "live": true,
+      "inputSchema": { "type": "object", "additionalProperties": false, "required": ["markdown"], "properties": { "index": { "type": "integer", "minimum": 1 }, "markdown": { "type": "string" } } },
+      "outputSchema": { "type": "object", "required": ["index", "title", "settings", "text"], "properties": { "index": { "type": "integer" }, "title": { "type": "string" }, "settings": { "type": "object" }, "text": { "type": "string" }, "notes": { "type": "string" } } },
+      "capabilities": [],
+      "replay": "once"
+    },
+    {
+      "ref": "yavc.slides/add@1",
+      "title": "Add a Slide",
+      "description": "Add a slide after the slide given, or after the current one, with a layout's starting text or the Markdown given, and show it.",
+      "live": true,
+      "inputSchema": { "type": "object", "additionalProperties": false, "properties": { "after": { "type": "integer", "minimum": 0, "description": "0 puts the slide first." }, "layout": { "enum": ["content", "title", "section", "two-column", "image", "quote", "blank"] }, "text": { "type": "string" } } },
+      "outputSchema": { "type": "object", "required": ["index", "count"], "properties": { "index": { "type": "integer" }, "count": { "type": "integer" } } },
+      "capabilities": [],
+      "replay": "once"
+    },
+    {
+      "ref": "yavc.slides/duplicate@1",
+      "title": "Duplicate a Slide",
+      "description": "Copy a slide, or the current one, in place after itself, and show the copy.",
+      "live": true,
+      "inputSchema": { "type": "object", "additionalProperties": false, "properties": { "index": { "type": "integer", "minimum": 1 } } },
+      "outputSchema": { "type": "object", "required": ["index", "count"], "properties": { "index": { "type": "integer" }, "count": { "type": "integer" } } },
+      "capabilities": [],
+      "replay": "once"
+    },
+    {
+      "ref": "yavc.slides/delete@1",
+      "title": "Delete a Slide",
+      "description": "Remove a slide, or the current one, from the open deck. A deck keeps at least one slide. The deck is not saved by this.",
+      "live": true,
+      "inputSchema": { "type": "object", "additionalProperties": false, "properties": { "index": { "type": "integer", "minimum": 1 } } },
+      "outputSchema": { "type": "object", "required": ["index", "count"], "properties": { "index": { "type": "integer" }, "count": { "type": "integer" } } },
+      "capabilities": [],
+      "replay": "once"
+    },
+    {
+      "ref": "yavc.slides/move@1",
+      "title": "Move a Slide",
+      "description": "Move a slide, or the current one, to a position in the deck, and show it there.",
+      "live": true,
+      "inputSchema": { "type": "object", "additionalProperties": false, "required": ["to"], "properties": { "index": { "type": "integer", "minimum": 1 }, "to": { "type": "integer", "minimum": 1 } } },
+      "outputSchema": { "type": "object", "required": ["index", "count"], "properties": { "index": { "type": "integer" }, "count": { "type": "integer" } } },
+      "capabilities": [],
+      "replay": "once"
+    },
+    {
+      "ref": "yavc.slides/set-slide@1",
+      "title": "Set a Slide's Settings",
+      "description": "Change a slide's layout, background colour, background picture, reveal (steps, or empty for none), transition or class. An empty string removes a setting. Settings left out keep their values.",
+      "live": true,
+      "inputSchema": { "type": "object", "additionalProperties": false, "properties": { "index": { "type": "integer", "minimum": 1 }, "layout": { "enum": ["content", "title", "section", "two-column", "image", "quote", "blank"] }, "background": { "type": "string", "maxLength": 64 }, "image": { "type": "string", "maxLength": 1024 }, "reveal": { "enum": ["", "steps"] }, "transition": { "enum": ["", "none", "fade", "slide"] }, "class": { "type": "string", "maxLength": 128 } } },
+      "outputSchema": { "type": "object", "required": ["index", "settings"], "properties": { "index": { "type": "integer" }, "settings": { "type": "object" } } },
+      "capabilities": [],
+      "replay": "once"
+    },
+    {
+      "ref": "yavc.slides/set-deck@1",
+      "title": "Set the Deck's Front Matter",
+      "description": "Change the deck's title, author, theme, slide size or the transition every slide uses. Fields left out keep their values.",
+      "live": true,
+      "inputSchema": { "type": "object", "additionalProperties": false, "properties": { "title": { "type": "string", "maxLength": 256 }, "author": { "type": "string", "maxLength": 256 }, "theme": { "enum": ["plain", "paper", "midnight"] }, "size": { "enum": ["16:9", "4:3"] }, "transition": { "enum": ["none", "fade", "slide"] } } },
+      "outputSchema": { "type": "object", "required": ["front"], "properties": { "front": { "type": "object" } } },
+      "capabilities": [],
+      "replay": "once"
+    },
+    {
+      "ref": "yavc.slides/view@1",
+      "title": "Set the View",
+      "description": "Choose how the person sees the deck in Slides: the slide on its canvas, its Markdown, or both; where the canvas sits beside the Markdown in Split (left, right, top, bottom, or floating over it); and whether the filmstrip shows.",
+      "live": true,
+      "inputSchema": { "type": "object", "additionalProperties": false, "properties": { "mode": { "enum": ["visual", "text", "split"] }, "dock": { "enum": ["left", "right", "top", "bottom", "float"] }, "filmstrip": { "type": "boolean" } } },
+      "outputSchema": { "type": "object", "required": ["mode", "filmstrip", "dock"], "properties": { "mode": { "enum": ["visual", "text", "split"] }, "dock": { "type": "string" }, "filmstrip": { "type": "boolean" } } },
+      "capabilities": [],
+      "replay": "once"
+    },
+    {
+      "ref": "yavc.slides/show@1",
+      "title": "Present",
+      "description": "Present the open deck full screen, from a slide or from the start.",
+      "live": true,
+      "inputSchema": { "type": "object", "additionalProperties": false, "properties": { "from": { "type": "integer", "minimum": 1 } } },
+      "outputSchema": { "type": "object", "required": ["presenting"], "properties": { "presenting": { "const": true }, "slide": { "type": "integer" } } },
+      "capabilities": [],
+      "replay": "once"
+    },
+    {
+      "ref": "yavc.slides/leave@1",
+      "title": "Leave the Show",
+      "description": "Stop presenting and go back to editing, at the slide the show reached.",
+      "live": true,
+      "inputSchema": { "type": "object", "additionalProperties": false, "properties": {} },
+      "outputSchema": { "type": "object", "required": ["presenting", "slide"], "properties": { "presenting": { "const": false }, "slide": { "type": "integer" } } },
+      "capabilities": [],
+      "replay": "once"
+    },
+    {
+      "ref": "yavc.slides/export@1",
+      "title": "Export the Deck as a Page",
+      "description": "The open deck as one HTML page that presents itself in any browser, given as an artifact.",
+      "live": true,
+      "inputSchema": { "type": "object", "additionalProperties": false, "properties": {} },
+      "outputSchema": { "type": "object", "required": ["page"], "properties": { "page": { "type": "object" }, "title": { "type": "string" } } },
+      "capabilities": ["artifact.create"],
+      "replay": "pure"
+    }
+  ]
+}

@@ -202,8 +202,8 @@ func (p *blockParser) Continue(node ast.Node, reader text.Reader, pc parser.Cont
 }
 
 func (p *blockParser) Close(node ast.Node, reader text.Reader, pc parser.Context) {}
-func (p *blockParser) CanInterruptParagraph() bool                              { return true }
-func (p *blockParser) CanAcceptIndentedLine() bool                              { return false }
+func (p *blockParser) CanInterruptParagraph() bool                                { return true }
+func (p *blockParser) CanAcceptIndentedLine() bool                                { return false }
 
 // === The definitions ======================================================
 
@@ -450,25 +450,24 @@ func init() {
 			}
 			return out + `></div>`, nil
 		}})
-	add(&def{name: "video", kind: block, title: "Video", what: "A video, played in the page without tracking until it is played (YouTube's privacy-enhanced mode).",
-		example: `{{video:youtube dQw4w9WgXcQ title="What it is"}}`,
+	add(&def{name: "video", kind: block, title: "Video", what: "A hosted video, by its link or by its service and id: YouTube (played without tracking until it is played, in its privacy-enhanced mode) or Vimeo (with do-not-track). A video of your own, uploaded to this site, is a feature to come.",
+		example: `{{video:https://youtu.be/dQw4w9WgXcQ title="What it is"}}`,
 		render: func(c Call, doc ast.Node, src []byte) (string, error) {
-			service := ""
-			if len(c.Positional) > 0 {
-				service = strings.ToLower(c.Positional[0])
-			}
-			if service != "youtube" {
-				return "", problem{"video plays YouTube videos: {{video:youtube ID}}."}
-			}
-			id, _ := c.Get("id", 1)
-			if !youTubeRe.MatchString(id) {
-				return "", problem{"That isn't a YouTube video's id."}
+			first, _ := c.Get("src", 0)
+			second, _ := c.Get("id", 1)
+			service, id := videoOf(first, second)
+			if service == "" {
+				return "", problem{"video plays a hosted video by its link, such as {{video:https://youtu.be/ID}} or {{video:https://vimeo.com/ID}}, or by its service and id, {{video:youtube ID}}."}
 			}
 			title, ok := c.Get("title", -1)
 			if !ok {
 				title = "Video"
 			}
-			return `<div class="sc-video"><iframe src="https://www.youtube-nocookie.com/embed/` + esc(id) + `" title="` + esc(title) +
+			player := "https://www.youtube-nocookie.com/embed/" + esc(id)
+			if service == "vimeo" {
+				player = "https://player.vimeo.com/video/" + esc(id) + "?dnt=1"
+			}
+			return `<div class="sc-video" data-service="` + service + `"><iframe src="` + player + `" title="` + esc(title) +
 				`" loading="lazy" allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe></div>`, nil
 		}})
 	add(&def{name: "code", kind: block, title: "Code listing", what: "A file, shown as a listing with Copy and Download, fetched as the page loads: a path on the site from /, or one of your own files under ~.",
@@ -534,7 +533,33 @@ func init() {
 		wrap: func(c Call) (string, string, error) {
 			return `<aside class="sc-draft-note"><p class="sc-draft-note-label">Note to self, not published</p>`, `</aside>`, nil
 		}})
-	for _, name := range []string{"expand", "status", "toc", "anchor", "page", "figure", "applet", "video", "code", "kbd", "glyph", "columns", "column", "draft-note"} {
+	// A slide deck's own (docs/slides-design.md): a slide's settings, which
+	// render as a marker the Slides application reads and nothing on a
+	// page, and speaker notes, drawn as an aside a page may hide.
+	add(&def{name: "slide", kind: block, title: "Slide settings", what: "A slide's layout, background and reveal, on the first line of the slide in a deck.",
+		example: "{{slide:layout=title}}",
+		render: func(c Call, doc ast.Node, src []byte) (string, error) {
+			out := `<div class="sc-slide" hidden`
+			for _, key := range []string{"layout", "background", "image", "reveal", "transition", "class"} {
+				if v, ok := c.Get(key, -1); ok && v != "" {
+					if key == "image" {
+						u, err := safeURL(v, "image")
+						if err != nil {
+							return "", err
+						}
+						v = u
+					}
+					out += ` data-` + key + `="` + esc(v) + `"`
+				}
+			}
+			return out + `></div>`, nil
+		}})
+	add(&def{name: "notes", kind: container, title: "Speaker notes", what: "Notes for the presenter, shown in the presenter view and not on the slide.",
+		example: "{{notes}}\nWhat to say.\n{{/notes}}",
+		wrap: func(c Call) (string, string, error) {
+			return `<aside class="sc-notes"><p class="sc-notes-label">Speaker notes</p>`, `</aside>`, nil
+		}})
+	for _, name := range []string{"expand", "status", "toc", "anchor", "page", "figure", "applet", "video", "code", "kbd", "glyph", "columns", "column", "draft-note", "slide", "notes"} {
 		order = append(order, name)
 	}
 }
@@ -545,7 +570,11 @@ var (
 	sizeRe    = regexp.MustCompile(`^\d+(\.\d+)?(%|px|rem|em|ch)$`)
 	appletRe  = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
 	youTubeRe = regexp.MustCompile(`^[A-Za-z0-9_-]{6,20}$`)
-	glyphs    = map[string]bool{}
+	vimeoRe   = regexp.MustCompile(`^[0-9]{5,16}$`)
+	// A hosted video's link, as a person copies it from the service.
+	youTubeLink = regexp.MustCompile(`^(?:https?://)?(?:www\.|m\.)?(?:youtube\.com/(?:watch\?(?:.*&)?v=|embed/|shorts/|live/|v/)|youtu\.be/|youtube-nocookie\.com/embed/)([A-Za-z0-9_-]{6,20})`)
+	vimeoLink   = regexp.MustCompile(`^(?:https?://)?(?:www\.|player\.)?vimeo\.com/(?:video/)?([0-9]{5,16})`)
+	glyphs      = map[string]bool{}
 )
 
 func init() {
@@ -769,4 +798,32 @@ func (e *ext) Extend(m goldmark.Markdown) {
 		parser.WithInlineParsers(util.Prioritized(&inlineParser{}, 50)),
 	)
 	m.Renderer().AddOptions(renderer.WithNodeRenderers(util.Prioritized(&htmlRenderer{}, 50)))
+}
+
+// videoOf reads a video shortcode's arguments as a service and an id: a
+// link to the video, or the service's name and the id after it.
+func videoOf(first, second string) (service, id string) {
+	if m := youTubeLink.FindStringSubmatch(first); m != nil {
+		return "youtube", m[1]
+	}
+	if m := vimeoLink.FindStringSubmatch(first); m != nil {
+		return "vimeo", m[1]
+	}
+	switch strings.ToLower(first) {
+	case "youtube":
+		if m := youTubeLink.FindStringSubmatch(second); m != nil {
+			return "youtube", m[1]
+		}
+		if youTubeRe.MatchString(second) {
+			return "youtube", second
+		}
+	case "vimeo":
+		if m := vimeoLink.FindStringSubmatch(second); m != nil {
+			return "vimeo", m[1]
+		}
+		if vimeoRe.MatchString(second) {
+			return "vimeo", second
+		}
+	}
+	return "", ""
 }
