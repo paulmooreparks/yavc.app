@@ -18,6 +18,8 @@ Each decision is dated and numbered so that later documents and cards can refer 
 
 10. **About is a dialog with an address** (2026-11-02). Paul asked for About yavc.app and About PUDL as modal dialogs. The architectural principles keep modals for confirmations, so this is an explicit exception, on the pattern parkscomputing.com settled for its sign-in dialogs: each dialog has an address of its own (`/about`, `/about/pudl`) that draws the page with the dialog open, and a link to it opens the dialog in place with the address following.
 
+11. **A guest's files stay in the browser** (2026-11-02). Paul ruled that guests get no space on the server. The virtual file system's home for a reader without an account is kept in the browser's local storage, as parkscomputing.com keeps it, under the quota that site uses, and it is therefore per origin: a file saved on the desktop is not seen at a subdomain, and the other way round. Decision 2 still applies to the small state it names, an applet's continuity string, its settings and the appearance choices, which the engine keeps under the session. A home on the server, shared by every origin, arrives with accounts, and with it the administrator's mounts.
+
 ## Addresses
 
 `yavc.app` serves the desktop. `yavc.app/{slug}` is an application's page on the main origin, which is what a window fetches and what a link from an article opens. `{slug}.yavc.app` serves the same application standalone. The engine answers both from one deployment: a wildcard DNS record points every subdomain at it, and the engine reads the host header to choose the standalone layout for the application whose slug matches. A subdomain whose slug matches no application redirects to the desktop.
@@ -52,7 +54,7 @@ The engine gives packages the host interface, `window.pudlHost`, built with the 
 |---|---|
 | `identity`, `action`, `pages`, `pudl` | From the kit, with pages at `{slug}.yavc.app` and `/{slug}` |
 | `snapshot` | parkscomputing.com's snapshot script as it is, per browser tab in session storage; a snapshot is what a reload loses and no link should carry, so it belongs to the tab, while continuity and settings belong to the session |
-| `fs` | The virtual file system, with the guest home in the session store and the administrator's server mounts; Open and Save as dialogs |
+| `fs` | The virtual file system, with a guest's home in the browser's local storage (decision 11) and, with accounts later, a home on the server and the administrator's mounts; Open and Save as dialogs |
 | `config` | Per-applet settings in the session store |
 | `service(name)` | A map of the engine's services; `rss-fetch` for the feed reader, `score-library` for the sight reader, others as applications need them |
 | `actions.run` | PUDL's action broker |
@@ -74,7 +76,7 @@ Manifests stay JSON, since the package format is shared with parkscomputing.com 
 | barcodes, barcode-scanner, flashcards | pudl-barcodes | fs, the `barcode-products` service for lookups |
 | diff, theme-studio | pudl-tools | fs; theme studio must be brought up to 0.96 skins |
 | arcade games | PUDLSplash | To be read when installed |
-| terminal, files, editor, settings | parkscomputing.com's own applets, reimplemented as packages here | The virtual file system, the session store, the administrator's mounts; these four are the site's own and are ported, not installed |
+| terminal, files, editor, settings | parkscomputing.com's own applets, installed as site packages under `apps/` (done 2026-11-02) | The virtual file system with its browser-kept guest home, the session store, and later the administrator's mounts; these four are the site's own |
 | slides | New, in `apps/slides` | fs, for decks as Markdown files; a full-screen presentation view |
 | rss | New, in `apps/rss` | config for subscriptions and read state, the `rss-fetch` service |
 
@@ -89,6 +91,10 @@ A theme editor of the site's own, with personal themes as Dinah has them, is not
 ## As built, 2026-11-02
 
 The proof of concept runs. The engine (`cmd/yavc`, `internal/web`, `internal/session`) serves the desktop at the domain, each package standalone at its subdomain with only the applet's own menu bar above it, a window per package by its name, the registry written from the manifests, PUDL 0.96.2 with its seven admitted skins and three colour themes, and the session's state, settings and appearance at `/state/{key}`, `/config/{name}`, `/appearance` and `/session`. Dice, Sudoku and Conway are installed from their repositories; Settings is the site's own under `apps/`. A session is one JSON file under the data folder until the XferLang library exists. Verified in Chromium: windows open from the list and the Applets menu with the packages' menus in the bar, a Sudoku move reaches the engine and is drawn into the next page, the standalone page shows the same board, three appearance changes sent at once land in one session, and a cookie set at the domain is sent to a subdomain. Production runs in Docker on port 8400 behind the cloudflared tunnel, whose configuration routes the apex, www and the wildcard there; the wildcard DNS record is Paul's to add.
+
+The file system, Files, the Editor and the Terminal arrived on the same day, later. They are parkscomputing.com's own scripts installed as site packages under `apps/` with only their site references changed, and the engine serves what they ask of a server: the site tree at `/api/site/tree` (the applications, the site's pages and the scripts under `site/bin`), a page's text, and the pages themselves, Markdown files under `pages/` served at `/{slug}` and in windows. The host interface gives every package the file service and the dialogs, so the arcade games keep their scores. A reader's home is this browser's local storage (decision 11). PUDL is 0.96.3, whose documented `data-win-icon` replaced the taskbar picture workaround. The privacy policy, the terms and the author's page are pages, linked from the site and Help menus.
+
+The Editor gained Dinah Desktop's page view the same evening: Visual, Split and Preview beside Text, with find and replace on the page, tables, checklists, the slash menu, blocks edited in place as their Markdown, and Mermaid diagrams. Paul chose to run the Markdown engine in the browser rather than on the engine, so the preview renderer and the page view's parser and serializer (`internal/preview` and `internal/pageview`, lifted from Dinah) are compiled to WebAssembly (`cmd/yavc-md`, built in the image) and the document's text never leaves the browser, as decision 11 promises. parkscomputing.com's shortcodes came across the same night, ported from its C# into `internal/shortcodes` as a goldmark extension inside the same engine: the four notices, expand, columns, figure, applet, video, code, toc, status, kbd, glyph, page, anchor and draft-note, written as `{{name:args}}`. The page view keeps a shortcode and any paragraph holding one as its Markdown, drawn as the preview draws it, so the Visual view shows notices, columns and an applet running in the page and edits them in place. The four that need the site's pages or files (include, children, tagged, latest) and score are not in the browser engine.
 
 ## Order of work
 

@@ -47,6 +47,10 @@ type Server struct {
 	Applets []string
 	// PUDL is the folder holding the PUDL release's dist files.
 	PUDL string
+	// Pages is the folder of the site's pages, Markdown files served at
+	// /{slug}; Bin is the folder of the site's scripts, listed under
+	// /site/bin by the file system.
+	Pages, Bin string
 	// Sessions keeps the readers' sessions.
 	Sessions *session.Store
 	// Title is the site's name, shown in the topbar and the page titles.
@@ -144,6 +148,14 @@ func New(s *Server) (*Server, error) {
 	m.HandleFunc("GET /applets/registry.js", s.registry)
 	m.HandleFunc("GET /applets/{name}/{file...}", s.appletFile)
 	m.HandleFunc("GET /win/{key}", s.window)
+	m.HandleFunc("GET /api/site/tree", s.siteTree)
+	m.HandleFunc("GET /api/site/text/{slug}", s.siteText)
+	m.HandleFunc("GET /api/site/texts", s.siteTexts)
+	// parkscomputing.com's applets link to pages under /page/; here a
+	// page is at the root.
+	m.HandleFunc("GET /page/{slug}", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/"+r.PathValue("slug"), http.StatusPermanentRedirect)
+	})
 	m.HandleFunc("GET /state/{key}", s.getState)
 	m.HandleFunc("PUT /state/{key}", s.putState)
 	m.HandleFunc("GET /config/{name}", s.getConfig)
@@ -384,7 +396,7 @@ func (s *Server) pageData(r *http.Request, title string) map[string]any {
 		"Site": s.Title, "Title": title, "SiteURL": s.siteURL(r),
 		"Appearance": s.appearanceOf(sess), "Skins": s.skins(), "Palettes": s.palettes(),
 		"State": state, "Config": config,
-		"Applets": s.appletEntries(r), "Dialog": "", "PUDLVersion": s.pudlVersion, "Retention": s.retention(),
+		"Applets": s.appletEntries(r), "Dialog": "", "PUDLVersion": s.pudlVersion, "Retention": s.retention(), "StaticVersion": s.staticVersion, "SiteOrigin": strings.TrimSuffix(s.siteURL(r), "/"),
 	}
 }
 
@@ -423,9 +435,7 @@ func (s *Server) rootWith(w http.ResponseWriter, r *http.Request, dialog string)
 		if q := r.URL.Query(); q.Has("open") {
 			for _, k := range strings.Split(q.Get("open"), ",") {
 				if m := winKey.FindStringSubmatch(k); m != nil {
-					if _, ok := s.appletByName(m[1]); ok {
-						wins.WriteString(s.windowMarkup(r, k))
-					}
+					wins.WriteString(s.windowMarkup(r, k))
 				}
 			}
 		}
@@ -468,6 +478,13 @@ func (s *Server) classicPage(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, s.siteURL(r)+r.PathValue("slug"), http.StatusTemporaryRedirect)
 		return
 	}
+	if p, ok := s.page(r.PathValue("slug")); ok {
+		data := s.pageData(r, p.Title)
+		data["Article"] = p.Body
+		data["Slug"] = p.Slug
+		s.render(w, http.StatusOK, "article", data)
+		return
+	}
 	a, ok := s.appletByName(r.PathValue("slug"))
 	if !ok {
 		s.notFound(w, r)
@@ -490,8 +507,10 @@ func (s *Server) window(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, ok := s.appletByName(m[1]); !ok {
-		s.notFound(w, r)
-		return
+		if _, ok := s.page(key); !ok {
+			s.notFound(w, r)
+			return
+		}
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
@@ -502,7 +521,24 @@ func (s *Server) window(w http.ResponseWriter, r *http.Request) {
 // desktop page. The key has been checked.
 func (s *Server) windowMarkup(r *http.Request, key string) string {
 	m := winKey.FindStringSubmatch(key)
-	a, _ := s.appletByName(m[1])
+	a, isApplet := s.appletByName(m[1])
+	if !isApplet {
+		p, ok := s.page(key)
+		if !ok {
+			return ""
+		}
+		d := parseDesktop(r.URL.Query())
+		data := s.pageData(r, p.Title)
+		data["Article"], data["Slug"], data["Key"] = p.Body, p.Slug, key
+		data["Page"] = s.siteURL(r) + p.Slug
+		data["Minimize"], data["Maximize"], data["Close"] = d.minimize(key), d.maximize(key, "0.6", "0.8"), d.close(key)
+		data["Style"] = template.CSS("--win-x:0.08; --win-y:0.06; --win-w:0.6; --win-h:0.8")
+		var b strings.Builder
+		if err := s.pages.ExecuteTemplate(&b, "window-article", data); err != nil {
+			log.Printf("render window: %v", err)
+		}
+		return b.String()
+	}
 	data := s.pageData(r, a.Title)
 	data["Applet"] = a
 	data["Mount"] = appletBody(a, false)

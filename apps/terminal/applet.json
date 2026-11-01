@@ -1,0 +1,18 @@
+{
+  "name": "terminal",
+  "title": "Terminal",
+  "version": "43.0.0",
+  "description": "The site in terminal mode, with your own files, a shell and Lua.",
+  "license": "Apache-2.0",
+  "src": "terminal.js",
+  "css": "terminal.css",
+  "icon": "icon.svg",
+  "page": { "body": "page.html" },
+  "window": { "shape": "0.5,0.7", "min": "420,220" },
+  "handles": { "shell": { "param": "cwd", "extra": ["run"], "reuse": false } },
+  "instances": 4,
+  "actions": "actions.json",
+  "continuity": true,
+  "wants": ["snapshot", "fs", "config"],
+  "tags": ["site"]
+}

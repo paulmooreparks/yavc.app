@@ -1,0 +1,2 @@
+# hello: says hello from the site
+echo Hello from yavc.app, "$@"

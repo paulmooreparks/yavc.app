@@ -65,11 +65,16 @@ body.desktop .md-layout { --md-sidebar-w: 300px; }
 .win-body:has(> .win-content > [data-applet-fit="fill"]) { display: flex; flex-direction: column; overflow: auto; }
 .win-body:has(> .win-content > [data-applet-fit="fill"]) > .win-content { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; width: 100%; box-sizing: border-box; }
 .win-body > .win-content > [data-applet-fit="fill"] { flex: 1 1 auto; min-height: 0; width: 100%; }
+/* An applet that fills its window lays itself out; the wrapper adds no
+   padding of its own over the window body's, as parkscomputing.com's
+   wrappers add none. The Editor and the Terminal take the whole body,
+   edge to edge, so their tab bars and screens meet the window's frame. */
+.win-body:has(> .win-content > [data-applet-fit="fill"]) > .win-content { padding: 0; }
 .win-body:has(> .win-content > [data-applet-flush]) > .win-content { padding: 0; }
+.win-body:has(> .win-content > [data-applet="editor"][data-applet-fit="fill"]),
+.win-body:has(> .win-content > [data-applet="files"][data-applet-fit="fill"]),
+.win-body:has(> .win-content > [data-applet="terminal"][data-applet-fit="fill"]) { padding: 0; }
 
-/* The taskbar: a window's picture on its button, in place of PUDL's glyph. */
-.win-tab .win-item-picture { flex: none; width: 16px; height: 16px; object-fit: contain; }
-.win-tab:has(.win-item-picture)::before { display: none; }
 
 
 /* The Classic view's list of applications. */

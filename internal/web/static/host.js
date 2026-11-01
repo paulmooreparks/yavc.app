@@ -1,44 +1,181 @@
 /* Copyright 2026 Paul Parks. SPDX-License-Identifier: Apache-2.0 */
-/* What yavc.app gives an installed applet package (pudl-host-kit.js, from
-   the pudl-applet-packages repo): the kit's menu helpers, where applet
-   pages and PUDL are, this tab's snapshots, and each applet's settings,
-   kept by the engine under the reader's session (DESIGN.md, decision 2).
-   The file service comes with the virtual file system in a later
-   milestone. Loads after the kit and before the packages' registry. */
+/* What yavc.app gives an applet (pudl-host-kit.js, from the
+   pudl-applet-packages repo): the kit's menu helpers, where applet pages
+   and PUDL are, this tab's snapshots, each applet's settings and the file
+   service, with the site's own Open and Save as dialogs. The settings and
+   the files are the site file system's (static/sitefs.js and config.js,
+   from parkscomputing.com), whose home for a reader is this browser's
+   local storage (DESIGN.md, decision 11). The site's own applets, Files,
+   the Editor and the Terminal, come from parkscomputing.com as they are
+   and read the pc* globals that site gives them, which are set here from
+   the same things. Loads after the kit and before the packages'
+   registry. */
 (function () {
     'use strict';
     if (!window.pudlHostKit) { return; }
+    var kit = window.pudlHostKit;
 
-    /* Settings, per applet: a JSON object the engine keeps. load() reads
-       them once; get and set work on the copy and set sends the whole. */
-    function configFor() {
-        var cache = {};
-        var listeners = [];
-        var node = document.getElementById('yavc-config');
-        if (node) { try { cache = JSON.parse(node.textContent) || {}; } catch (err) { cache = {}; } }
-        function nameOf(root) { return root && root.getAttribute ? root.getAttribute('data-applet') : null; }
-        function parsed(name) {
-            if (typeof cache[name] === 'string') { try { cache[name] = JSON.parse(cache[name]) || {}; } catch (err) { cache[name] = {}; } }
-            return cache[name] || (cache[name] = {});
-        }
-        return {
-            load: function (root) { return Promise.resolve(parsed(nameOf(root))); },
-            get: function (root, key, fallback) { var c = parsed(nameOf(root)); return Object.prototype.hasOwnProperty.call(c, key) ? c[key] : fallback; },
-            set: function (root, key, value) {
-                var name = nameOf(root), c = parsed(name);
-                if (value === undefined) { delete c[key]; } else { c[key] = value; }
-                listeners.forEach(function (fn) { try { fn(name, key, value); } catch (err) { } });
-                return window.fetch('/config/' + encodeURIComponent(name), { method: 'PUT', body: JSON.stringify(c),
-                    headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin' }).then(function () { });
-            },
-            onChange: function (fn) { listeners.push(fn); return function () { var i = listeners.indexOf(fn); if (i >= 0) { listeners.splice(i, 1); } }; }
+    /* The site's shared scripts, at this build's version (written into
+       this script's own address by the page). */
+    var V = (function () { var m = /[?&]v=([^&]+)/.exec((document.currentScript && document.currentScript.src) || ''); return m ? m[1] : '0'; })();
+    function versioned(path) { return path + '?v=' + encodeURIComponent(V); }
+    window.pcSiteFsSrc = versioned('/static/sitefs.js');
+    window.pcConfigSrc = versioned('/static/config.js');
+    window.pcFileBrowserSrc = versioned('/static/filebrowser.js');
+    window.pcFileBrowserCss = versioned('/static/filebrowser.css');
+    window.pcSnapshot = window.yavcSnapshot || null;
+    window.pcAppletIdentity = kit.identity;
+    window.pcAppletAction = kit.action;
+    /* The terminal's extra commands, beside it in its package. */
+    window.pcTerminalCommands = ['/applets/terminal/terminal-text.js', '/applets/terminal/terminal-lua.js', '/applets/terminal/terminal-sh.js'];
+
+    function loadScript(src) {
+        return new Promise(function (resolve, reject) {
+            var s = document.createElement('script');
+            s.src = src;
+            s.onload = resolve;
+            s.onerror = function () { reject(new Error(src + ' did not load')); };
+            document.head.appendChild(s);
+        });
+    }
+    /* A shared script's global, loading the script the first time. */
+    function shared(src, name) {
+        var loading = null;
+        return function () {
+            if (!loading) { loading = (window[name] ? Promise.resolve() : loadScript(src)).then(function () { return window[name]; }); }
+            return loading;
         };
     }
+    var siteFs = shared(window.pcSiteFsSrc, 'pcSiteFs'), config = shared(window.pcConfigSrc, 'pcConfig');
+    var fileBrowser = shared(window.pcFileBrowserSrc, 'pcFileBrowser');
+    function fs() { return siteFs().then(function (f) { return f.load().then(function () { return f; }); }); }
+    function withDialog() { return Promise.all([fs(), fileBrowser()]); }
+    function isText(blob) { return /^text\/|json|xml|javascript/.test(blob.type || 'text/plain'); }
 
-    window.pudlHost = window.pudlHostKit.host({
+    /* The applets with published actions, for find(). */
+    var appletManifests = (function () {
+        var loaded = null;
+        return function () {
+            if (loaded) { return loaded; }
+            var defs = window.pudlApplets && window.pudlApplets.definitions ? window.pudlApplets.definitions() : {};
+            loaded = Promise.all(Object.keys(defs).filter(function (n) { return defs[n].actions; }).map(function (n) {
+                var d = defs[n], url = d.actions + (d.ver ? (d.actions.indexOf('?') < 0 ? '?' : '&') + 'v=' + encodeURIComponent(d.ver) : '');
+                return fetch(url, { credentials: 'same-origin' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (m) {
+                    if (!m || !m.actions) { return null; }
+                    return { id: m.id || n, title: m.title || n, description: m.description || '', manifest: url,
+                        actions: (m.actions || []).map(function (a) { return { ref: a.ref, title: a.title || a.ref, description: a.description || '' }; }) };
+                }, function () { return null; });
+            })).then(function (list) { return list.filter(Boolean).sort(function (a, b) { return a.title.localeCompare(b.title); }); });
+            return loaded;
+        };
+    })();
+
+    window.pudlHost = kit.host({
         pages: '/', pudl: '/pudl/',
-        snapshot: window.yavcSnapshot || null,
-        config: configFor(),
-        services: {}
+        snapshot: window.pcSnapshot,
+        services: {},
+        actions: {
+            run: function (ref, input) {
+                if (!window.pudlApplets || !window.pudlApplets.run) { return Promise.reject(new Error('the page has no action broker')); }
+                return window.pudlApplets.run(ref, input, { owner: { kind: 'page' }, grant: 'all' });
+            }
+        },
+        fs: {
+            /* The site's own Open and Save as (static/filebrowser.js). A
+               reader's ~ in this browser keeps text only, so there a
+               picture is offered as a download. */
+            open: function (o) {
+                o = o || {};
+                return withDialog().then(function (x) {
+                    var F = x[0], FB = x[1];
+                    return FB.pick(F, {
+                        mode: 'open', title: o.title, host: o.host, start: o.start || '~', accept: o.accept || [], computer: true,
+                        check: function (node) {
+                            if (!F.isText(node)) { return node.name + ' isn\'t a text file.'; }
+                            return o.check ? o.check(F.displayPath(node)) : null;
+                        }
+                    }).then(function (res) {
+                        if (!res) { return null; }
+                        if (res.file) { return res.file.text().then(function (text) { return { name: res.file.name, text: text }; }); }
+                        return F.read(res.node).then(function (text) { return { path: res.path, name: res.node.name, text: text }; });
+                    });
+                });
+            },
+            save: function (o) {
+                o = o || {};
+                var blob = o.blob, text = isText(blob);
+                return withDialog().then(function (x) {
+                    var F = x[0], FB = x[1];
+                    return FB.pick(F, {
+                        mode: 'save', title: o.title, name: o.name, host: o.host, start: o.start || '~', computer: true,
+                        canSaveIn: text ? null : function (dir) { return dir.server ? null : 'Pictures can\'t be kept in ~ in this browser, which keeps only text. Download it instead.'; }
+                    }).then(function (res) {
+                        if (!res) { return null; }
+                        if (res.download) { return { download: res.download }; }
+                        var refused = o.check && o.check(res.path);
+                        if (refused) { throw new Error(refused); }
+                        var written = text ? blob.text().then(function (t) { return F.write(null, res.path, t, false); })
+                            : F.upload(res.dir, new File([blob], res.name, { type: blob.type }));
+                        return written.then(function (out) {
+                            if (out && out.error) { throw new Error(out.error); }
+                            return { path: res.path };
+                        });
+                    });
+                });
+            },
+            onChange: function (fn) {
+                var off = null, gone = false;
+                siteFs().then(function (f) { if (!gone) { off = f.onChange(function () { fn(); }); } });
+                return function () { gone = true; if (off) { off(); } };
+            },
+            find: function (query, limit) {
+                var words = String(query || '').toLowerCase().split(/\s+/).filter(Boolean), max = limit || 40;
+                return Promise.all([fs(), appletManifests()]).then(function (got) {
+                    var F = got[0], out = [];
+                    got[1].forEach(function (m) {
+                        var text = (m.title + ' ' + m.id + ' ' + (m.description || '') + ' ' + m.actions.map(function (a) { return a.title + ' ' + a.ref; }).join(' ')).toLowerCase();
+                        if (words.every(function (w) { return text.indexOf(w) >= 0; })) {
+                            out.push({ path: m.id, name: m.title, kind: 'applet', description: m.description || m.actions.map(function (a) { return a.title; }).join(' · '), manifest: m.manifest });
+                        }
+                    });
+                    var applets = out; out = [];
+                    (function walk(n, depth) {
+                        if (out.length >= max || depth > 12) { return; }
+                        (n.children || []).forEach(function (c) {
+                            var r = F.realOf(c), kind = F.kindOf(c), name = c.name || '';
+                            if (name.charAt(0) === '.' && name !== '.config') { return; }
+                            var text = (name + ' ' + (c.title || '')).toLowerCase();
+                            if ((kind === 'file' || kind === 'page' || kind === 'script') && words.every(function (w) { return text.indexOf(w) >= 0; })) {
+                                out.push({ path: F.displayPath(c), name: c.title || name, kind: kind === 'page' ? 'page' : 'file' });
+                            }
+                            if (r.children && out.length < max) { walk(r, depth + 1); }
+                        });
+                    })(F.root(), 0);
+                    out.sort(function (a, b) { return (a.path.indexOf('~/') === 0 ? 0 : 1) - (b.path.indexOf('~/') === 0 ? 0 : 1) || a.path.localeCompare(b.path); });
+                    return applets.concat(out).slice(0, max);
+                });
+            },
+            readText: function (path) {
+                return fs().then(function (f) { var n = f.resolve(null, path); return n && !n.children ? f.read(n) : null; });
+            },
+            writeText: function (path, text) {
+                return fs().then(function (f) {
+                    var sp = f.splitPath(path);
+                    var made = sp.dir && !f.resolve(null, sp.dir) ? f.mkdir(null, sp.dir, true) : Promise.resolve(null);
+                    return made.then(function (err) { return err ? err : f.write(null, path, text, false).then(function (r) { return r.error || null; }); });
+                });
+            },
+            mkdir: function (path) { return fs().then(function (f) { return f.mkdir(null, path, true); }); }
+        },
+        config: {
+            load: function (name, defaults) { return config().then(function (c) { return c.load(name, defaults); }); },
+            get: function (name) { return window.pcConfig ? window.pcConfig.get(name) : null; },
+            set: function (name, changes) { return config().then(function (c) { return c.set(name, changes); }); },
+            onChange: function (name, fn) {
+                var off = null, gone = false;
+                config().then(function (c) { if (!gone) { off = c.onChange(name, fn); } });
+                return function () { gone = true; if (off) { off(); } };
+            }
+        }
     });
 })();

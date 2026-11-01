@@ -55,6 +55,7 @@
             '<section class="card">' +
               '<h2 class="card-title">What this site keeps</h2>' +
               '<p class="card-desc">Your appearance choices and each application\'s state, such as a game in progress, are kept on this site under an anonymous session, so the same game is on the desktop and on the application\'s own address. Nothing in it identifies you.' + kept + '</p>' +
+              '<p class="card-desc">Files you make, in the editor, the terminal or a game's saves, are kept in this browser alone, under the address you made them at, and this site never sees them. The desktop and each application's own address keep separate files. Clearing this browser's site data removes them, so download anything you want to keep.</p>' +
               '<div class="settings-actions"><button type="button" class="btn btn-danger" commandfor="yavc-forget-' + n + '" command="show-modal">Forget everything this site keeps for me…</button></div>' +
               '<p class="settings-status" data-status role="status"></p>' +
               '<dialog class="dialog" id="yavc-forget-' + n + '" aria-labelledby="yavc-forget-title-' + n + '">' +

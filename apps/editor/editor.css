@@ -1,0 +1,233 @@
+/* Copyright 2026 Paul Parks. SPDX-License-Identifier: Apache-2.0 */
+/* Editor: CodeMirror 6 in PUDL's clothes. The toolbar's controls are
+   raised, the editing surface is sunken like any input, and the status
+   line is flat, for reading. CodeMirror's colours come from PUDL's syntax
+   tokens in js/editor.js, so both themes apply. */
+
+.pc-editor {
+  display: flex; flex-direction: column; gap: 6px;
+  height: min(80svh, 820px); min-height: 360px;
+  font-size: var(--text-sm);
+}
+/* The Editor's box takes focus from a press between its controls, so its
+   keys work there (js/editor.js); it is never drawn as focused itself. */
+.pc-editor:focus { outline: none; }
+/* The toolbar is PUDL's (0.68.0), drawn from the Editor's command table
+   into this slot and folding as the window narrows. The glyphs it uses
+   that PUDL does not have are the Editor's own, set on the root because
+   the menu bar's ribbon draws the same commands outside the Editor. */
+:root {
+  --glyph-undo: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5.5 3.5L2.5 6.5l3 3'/%3E%3Cpath d='M2.5 6.5h7a4 4 0 0 1 0 8H7'/%3E%3C/svg%3E");
+  --glyph-redo: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M10.5 3.5l3 3-3 3'/%3E%3Cpath d='M13.5 6.5h-7a4 4 0 0 0 0 8H9'/%3E%3C/svg%3E");
+  --glyph-save: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round'%3E%3Cpath d='M2.5 2.5h9l2 2v9h-11z'/%3E%3Cpath d='M5 2.5v3.5h5V2.5M4.5 13.5V9h7v4.5'/%3E%3C/svg%3E");
+  --glyph-wrap: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2 3.5h12M2 7.5h9.5a2.25 2.25 0 0 1 0 4.5H8'/%3E%3Cpath d='M9.5 10.5L8 12l1.5 1.5M2 12h3'/%3E%3C/svg%3E");
+}
+.pc-editor .ed-toolbar-slot { flex: none; min-width: 0; }
+.pc-editor .ed-readonly {
+  display: inline-flex; align-items: center; gap: 5px;
+  color: var(--text-muted); font-weight: 600; font-size: var(--text-xs);
+}
+.pc-editor .ed-readonly[hidden] { display: none; }
+.pc-editor .ed-readonly svg { width: 13px; height: 13px; }
+
+/* The tabs are PUDL's document tabs and the surface PUDL's code surface
+   (0.26.0); only their place in the layout is set here. */
+.pc-editor .ed-tabs { min-height: 34px; }
+.pc-editor .ed-ro-mark { font-weight: 400; color: var(--text-muted); }
+/* The panes are PUDL's split: the Explorer, its handle, and the work,
+   which is the text with the preview beside it. */
+.pc-editor .ed-panes { flex: 1 1 auto; min-height: 0; }
+.pc-editor .ed-work { display: flex; gap: 6px; overflow: hidden; }
+.pc-editor .ed-surface { flex: 1 1 0; min-width: 0; min-height: 0; overflow: hidden; }
+.pc-editor .ed-surface .cm-editor { height: 100%; }
+/* The preview, beside the text on a wide screen and under it on a narrow
+   one: the public page, flat, for reading. */
+.pc-editor .ed-page { flex: 1 1 0; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 6px; }
+.pc-editor .ed-page[hidden] { display: none; }
+.pc-editor .ed-preview {
+  flex: 1 1 0; min-width: 0; min-height: 0;
+  border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg);
+}
+.pc-editor .ed-preview[hidden] { display: none; }
+
+/* The find bar, in the text (CodeMirror's search panel) and over the page:
+   the two fields sunken, the buttons raised, Match Case, Whole Word and
+   Regular Expression latching, the count between, and Close at the end. */
+.pc-editor .ed-find-place { flex: none; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.pc-editor .ed-find-place[hidden] { display: none; }
+/* Two columns shared by both rows, so the Find and Replace fields line up:
+   the fields take what room there is, each row's buttons sit beside them. */
+.pc-editor .ed-find {
+  container: ed-find / inline-size;
+  padding: var(--space-2) var(--space-3); background: var(--surface);
+  font: var(--text-sm) / 1.4 var(--font); color: var(--text);
+}
+.pc-editor .ed-find-grid { display: grid; grid-template-columns: minmax(7rem, 1fr) auto; align-items: center; gap: var(--space-2) var(--space-3); }
+/* A narrow bar, such as the page's in Split, puts each row's buttons under
+   its field. */
+@container ed-find (max-width: 520px) {
+  .pc-editor .ed-find-grid { grid-template-columns: minmax(0, 1fr); gap: var(--space-1); }
+  .pc-editor .ed-find-tools { flex-wrap: wrap; margin-bottom: var(--space-1); }
+}
+.pc-editor .ed-find-row { display: contents; }
+.pc-editor .ed-find-row[hidden] { display: none; }
+.pc-editor .ed-find-field { width: 100%; min-width: 0; height: 28px; padding-block: 2px; font-size: var(--text-sm); }
+.pc-editor .ed-find-tools { display: flex; align-items: center; gap: var(--space-2); white-space: nowrap; }
+.pc-editor .ed-find-count { min-width: 6.5em; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.pc-editor .ed-find-count.ed-find-none { color: var(--danger); }
+.pc-editor .ed-find-opts { display: inline-flex; gap: 4px; }
+.pc-editor .ed-find-opt { min-width: 2.4em; font-family: var(--mono); justify-content: center; }
+.pc-editor .ed-find-close { margin-inline-start: auto; }
+.pc-editor .ed-surface .cm-panels-top { border-bottom: 1px solid var(--border); }
+@media (max-width: 800px) { .pc-editor.ed-previewing .ed-work { flex-direction: column; } }
+/* Visual alone: the page fills the work, and the text waits behind it. */
+.pc-editor.ed-visual-only .ed-surface { display: none; }
+
+.pc-editor .ed-status {
+  display: flex; flex-wrap: nowrap; gap: 4px var(--space-4); align-items: baseline;
+  color: var(--text-muted); font-size: var(--text-xs); min-height: 1.5em;
+}
+.pc-editor .ed-status [data-role="where"] { font-family: var(--mono); color: var(--text); }
+/* What just happened sits at the right of the same line as the file, its
+   language and the cursor, trimmed rather than wrapped onto a second line
+   the window's bottom would cut off. */
+.pc-editor .ed-message { margin-left: auto; min-width: 0; flex: 0 1 auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pc-editor .ed-message-error { color: var(--danger); }
+/* A shortcode in the text: its name and braces, and its arguments. */
+.pc-editor .cm-shortcode-name { color: var(--syntax-tag); font-weight: 600; }
+.pc-editor .cm-shortcode-args { color: var(--syntax-attr); }
+.pc-editor .cm-tooltip .ed-sc-tip { max-width: 28rem; padding: var(--space-2) var(--space-3); font-size: var(--text-sm); }
+.pc-editor .ed-sc-tip p { margin: 0 0 var(--space-1); }
+.pc-editor .ed-sc-tip dl { margin: var(--space-2) 0 0; display: grid; grid-template-columns: auto 1fr; gap: 2px var(--space-3); }
+.pc-editor .ed-sc-tip dd { margin: 0; color: var(--text-muted); }
+.pc-editor .cm-tooltip.cm-tooltip-autocomplete .cm-completionInfo { white-space: pre-wrap; max-width: 24rem; }
+/* The figure dialog's form. */
+.ed-figure { max-width: 34rem; }
+.ed-figure-fields { display: grid; gap: var(--space-1); }
+.ed-figure-fields .form-label { margin-top: var(--space-3); }
+.ed-figure-fields .form-help { margin: 0; }
+.ed-figure-src { display: flex; gap: var(--space-2); }
+.ed-figure-src .form-input { flex: 1 1 auto; min-width: 0; }
+.pc-editor .ed-failed { color: var(--text-muted); padding: var(--space-4); }
+.pc-editor .ed-dialog .form-input { width: 100%; }
+.pc-editor .ed-dialog .dialog-actions { gap: 8px; }
+
+/* The Explorer: the shared file browser's tree beside the text. A narrow
+   screen has no room for it, so it gives way there whatever was chosen. */
+.pc-editor .ed-panes > .ed-explorer { width: var(--split-a, 240px); display: flex; flex-direction: column; overflow: hidden; }
+.pc-editor .ed-explorer[hidden] { display: none; }
+.pc-editor .ed-explorer .fm-body { height: 100%; }
+/* PUDL's handle, standing in the gap between the Explorer and the text. */
+.pc-editor .ed-panes > .ed-split { width: 6px; margin: 0; }
+.pc-editor .ed-split[hidden] { display: none; }
+@media (max-width: 700px) { .pc-editor .ed-explorer, .pc-editor .ed-split { display: none; } }
+@media (max-width: 700px) { .pc-editor [data-action="explorer"] { display: none; } }
+
+/* === Filling a window ==================================================== */
+.pc-editor-fill { flex: 1 1 auto; height: auto; min-height: 0; }
+.win-body:has(.pc-editor-fill) { display: flex; flex-direction: column; overflow: hidden; }
+.win-body:has(.pc-editor-fill) .post-content {
+  flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column;
+  max-width: none; margin: 0; padding: 0;
+}
+.win-body:has(.pc-editor-fill) .post-body { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+
+/* Filling a window on yavc.app, where the window body has no padding of
+   its own so the tabs run edge to edge, the toolbar and the status line
+   keep their room, as Dinah Desktop's editor keeps it, and the panes a
+   small gutter. */
+.pc-editor-fill .ed-toolbar-slot { padding: var(--space-1) var(--space-3) 0; }
+.pc-editor-fill .ed-panes { padding: 0 var(--space-2); }
+.pc-editor-fill .ed-status { padding-inline: var(--space-3); }
+
+/* === The page: Visual, Split and Preview (page-view.js, from Dinah Desktop) ===
+   The page scrolls in a sunken surface beside the text; the page itself is
+   Dinah's document page, whose type the preview and the Visual view share. */
+.pc-editor .ed-scroll { flex: 1 1 0; min-height: 0; overflow: auto; border: 1px solid var(--input-border); border-radius: var(--radius-sm); background: var(--surface); box-shadow: var(--recess-shadow); }
+.pc-editor .ed-scroll:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+.pc-editor.ed-reading .ed-scroll { cursor: default; }
+.doc-page {
+  --dinah-warning-surface: color-mix(in srgb, var(--danger) 8%, var(--surface));
+  --dinah-warning-accent: var(--danger);
+  --dinah-tip-surface: color-mix(in srgb, var(--positive) 8%, var(--surface));
+  --dinah-tip-accent: var(--positive);
+  --dinah-ink: var(--text);
+  --dinah-link-on-surface: var(--accent);
+  --dinah-page-surface: var(--surface);
+  --dinah-content-border: var(--border);
+  --dinah-content-code-surface: var(--surface-alt);
+  --dinah-muted-ink: var(--text-muted);
+  display: block; box-sizing: border-box; min-height: 100%; min-width: fit-content; margin: 0;
+  padding: var(--space-5) var(--space-6) 40vh; font-family: var(--font); font-size: var(--text-sm); line-height: 1.5;
+  color: var(--dinah-ink); background-color: var(--dinah-page-surface); color-scheme: inherit;
+}
+.doc-page a { color: var(--dinah-link-on-surface); }
+.doc-page h1, .doc-page h2, .doc-page h3, .doc-page h4, .doc-page h5, .doc-page h6 { line-height: 1.25; margin: 1.1em 0 0.5em 0; color: var(--dinah-ink); }
+.doc-page h1 { margin-top: 0.75em; }
+.doc-page > :first-child, .doc-page > .ProseMirror > :first-child { margin-top: 0; }
+.doc-page pre { padding: 8px 10px; overflow-x: auto; border: 1px solid var(--dinah-content-border); border-radius: 3px; background-color: var(--dinah-content-code-surface); }
+.doc-page code { font-family: var(--mono); font-size: 0.92em; }
+.doc-page blockquote { margin: 0.6em 0; padding: 0 0 0 12px; border-left: 3px solid var(--dinah-content-border); color: var(--dinah-muted-ink); }
+.doc-page hr { border: 0; border-top: 1px solid var(--dinah-content-border); margin: 1.2em 0; }
+.doc-page li > input[type="checkbox"] { margin: 0 0.4em 0 0; vertical-align: middle; }
+.doc-page li:has(> input[type="checkbox"]) { list-style: none; }
+.doc-page table { border-collapse: collapse; margin: 0.6em 0; max-width: 100%; }
+.doc-page th, .doc-page td { min-width: 6em; padding: 4px 10px; border: 1px solid var(--dinah-content-border); text-align: left; vertical-align: top; overflow-wrap: break-word; }
+.doc-page :is(th, td) :is(a, code) { overflow-wrap: anywhere; }
+.doc-page th:empty::after, .doc-page td:empty::after { content: "\200b"; }
+.doc-page th { background-color: var(--dinah-content-code-surface); }
+.doc-page .doc-block, .doc-page .dinah-block { position: relative; margin: 0; padding: 0; scroll-margin-top: var(--space-6); }
+.doc-page .dinah-diagram-placeholder { margin: 8px 0; padding: 12px; border: 1px dashed var(--dinah-content-border); border-radius: 3px; color: var(--dinah-muted-ink); text-align: center; }
+.doc-page .dinah-diagram-placeholder.ed-diagram { border: 0; padding: 0; text-align: start; }
+.doc-page .dinah-diagram-placeholder.ed-diagram svg { max-width: 100%; height: auto; }
+.doc-page .dinah-attachment-image { max-width: 100%; height: auto; border: 1px solid var(--dinah-content-border); border-radius: 2px; }
+.doc-page .ed-missing-image { display: inline-block; padding: 2px 8px; border: 1px dashed var(--dinah-warning-accent); border-radius: 3px; color: var(--dinah-warning-accent); font-size: 0.9em; }
+/* Find's matches on the page, as the text marks them. */
+.pm-find-match { background: color-mix(in srgb, var(--accent) 22%, transparent); border-radius: 2px; }
+.pm-find-current { background: color-mix(in srgb, var(--accent) 45%, transparent); outline: 1px solid var(--accent); }
+/* Page view (page-view.js): the page is one editor. */
+.doc-page.page-view { cursor: text; }
+.doc-page.page-view > .ProseMirror { outline: none; min-height: 100%; white-space: pre-wrap; }
+.doc-page.page-view td, .doc-page.page-view th { position: relative; }
+.doc-page.page-view .selectedCell::after { content: ""; position: absolute; inset: 0; background: color-mix(in srgb, var(--accent) 22%, transparent); pointer-events: none; }
+.doc-page.page-view .pm-tight > li > p, .doc-page.page-view .pm-tight > li > .pm-task-body > p { margin: 0; }
+.doc-page.page-view li.pm-task { list-style: none; display: flex; align-items: baseline; }
+.doc-page.page-view .pm-check { flex: none; }
+.doc-page.page-view .pm-check > input { margin: 0 0.4em 0 0; vertical-align: middle; cursor: pointer; }
+.doc-page.page-view .pm-task-body { flex: 1 1 auto; min-width: 0; }
+.doc-page.page-view .pm-source.selected { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.doc-page.page-view .pm-source { white-space: normal; border-radius: var(--radius-sm); cursor: pointer; }
+.doc-page.page-view .pm-source pre { white-space: pre; }
+.doc-page.page-view .pm-source:hover { outline: 1px dashed var(--input-border); outline-offset: 3px; }
+.doc-page.page-view .pm-source > div > .doc-block { margin: 0; }
+.doc-page.page-view .pm-hint::before { content: attr(data-hint); float: left; height: 0; pointer-events: none; color: var(--dinah-muted-ink); }
+.doc-page.page-view .pm-slash-anchor { display: inline-block; width: 0; height: 1em; vertical-align: text-bottom; }
+.page-slash .menu-action[aria-selected="true"] { background: var(--menu-row-hover); }
+.page-source { display: block; width: 100%; min-height: 3em; font: var(--text-sm)/1.5 var(--mono); resize: none; overflow: hidden; }
+.pc-editor .editor-dialog { width: min(36rem, 92vw); }
+
+/* === Shortcodes on the page (internal/shortcodes, from parkscomputing.com) ===
+   Notices and status badges are PUDL's own; these place them on the page
+   and style what PUDL has no component for. */
+.doc-page .sc-notice { margin: 0 0 1.1em; }
+.doc-page .notice-body > :last-child { margin-bottom: 0; }
+.doc-page .sc-figure { text-align: center; margin: 0.6em 0 1.1em; }
+.doc-page .sc-figure img { max-width: 100%; height: auto; }
+.doc-page .sc-figure figcaption { margin-top: var(--space-2); color: var(--dinah-muted-ink); font-size: var(--text-xs); }
+.doc-page .sc-expand { margin: 0 0 1.1em; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0 var(--space-4); }
+.doc-page .sc-expand > summary { cursor: pointer; padding: var(--space-2) 0; font-weight: 600; }
+.doc-page .sc-expand[open] > summary { border-bottom: 1px solid var(--border); margin-bottom: var(--space-3); }
+.doc-page .sc-toc { margin: 0 0 1.1em; padding: var(--space-3) var(--space-4); border-inline-start: 3px solid var(--border); }
+.doc-page .sc-toc ul { margin: 0; padding-inline-start: 1.2em; }
+.doc-page .sc-toc > ul { padding-inline-start: 0; list-style: none; }
+.doc-page .sc-video { position: relative; max-width: 720px; margin: 0 auto 1.1em; aspect-ratio: 16 / 9; }
+.doc-page .sc-video iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.doc-page .sc-columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(16em, 1fr)); gap: var(--space-5); margin: 0 0 1.1em; }
+.doc-page .sc-column > :last-child { margin-bottom: 0; }
+.doc-page kbd { display: inline-block; padding: 0 .4em; border: 1px solid var(--border); border-bottom-width: 2px; border-radius: var(--radius-sm); background: var(--surface-alt); font-family: var(--mono); font-size: .85em; line-height: 1.5; }
+.doc-page .sc-glyph { --glyph-size: 1em; vertical-align: -0.1em; }
+.doc-page .sc-draft-note { margin: 0 0 1.1em; padding: var(--space-3) var(--space-4); border: 1px dashed var(--warn); border-radius: var(--radius-sm); background: color-mix(in srgb, var(--warn) 8%, transparent); }
+.doc-page .sc-draft-note-label { margin: 0 0 var(--space-1); font-size: var(--text-2xs); font-weight: 700; text-transform: uppercase; color: var(--text-muted); }
+.doc-page :is(.sc-draft-note-label + *, .sc-expand > summary + *, .sc-column > :first-child, .sc-notice .notice-body > :first-child) { margin-top: 0; }
+.doc-page [data-applet] { margin: 0.6em 0 1.1em; }
+.doc-page .sc-problem { color: var(--danger); text-decoration: wavy underline var(--danger); cursor: help; }

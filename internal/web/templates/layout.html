@@ -11,6 +11,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
   <title>{{.Title}}{{if ne .Title .Site}} · {{.Site}}{{end}}</title>
+  <meta name="pc-public-origin" content="{{.SiteOrigin}}">
   <script src="{{asset "/pudl/pudl-theme.js"}}"></script>
   <link rel="stylesheet" href="{{asset "/pudl/pudl.css"}}">
   {{if .Desktop}}<link rel="stylesheet" href="{{asset "/pudl/pudl-windows.css"}}">{{end}}
@@ -60,13 +61,11 @@
      On the desktop a link opens a window; on a page it goes to the page.
      The site navigation file in XferLang replaces this in milestone 2. */}}
 {{define "menubar"}}
-      <nav class="site-menubar" data-menubar aria-label="{{.Site}}">
+      <nav class="site-menubar" data-menubar data-menubar-ribbon aria-label="{{.Site}}">
         <ul data-menubar-source hidden>
           <li data-menubar-id="site"><img src="{{asset "/static/icon.svg"}}" alt=""> {{.Site}}<ul>
             <li><a href="{{.SiteURL}}">Desktop</a></li>
             <li><a href="{{.SiteURL}}?open=settings&amp;top=settings"{{if .Desktop}} data-win-open="settings"{{end}}>Settings</a></li>
-            <li>-</li>
-            <li><a href="{{.SiteURL}}about" data-dialog="about-site">About yavc.app</a></li>
           </ul></li>
           <li data-menubar-id="go">Go<ul>
             <li><a href="{{.SiteURL}}pages">Applications as pages</a></li>
@@ -94,7 +93,12 @@
           </ul></li>
           {{if .Desktop}}<li data-menubar-if="windows" data-menubar-id="window" data-menubar-windows>Window<ul></ul></li>{{end}}
           <li data-menubar-id="help">Help<ul>
+            <li><a href="{{.SiteURL}}about" data-dialog="about-site">About yavc.app</a></li>
+            <li><a href="{{.SiteURL}}?open=author&amp;top=author"{{if .Desktop}} data-win-open="author"{{end}}>About the author</a></li>
             <li><a href="{{.SiteURL}}about/pudl" data-dialog="about-pudl">About PUDL</a></li>
+            <li>-</li>
+            <li><a href="{{.SiteURL}}?open=privacy&amp;top=privacy"{{if .Desktop}} data-win-open="privacy"{{end}}>Privacy Policy</a></li>
+            <li><a href="{{.SiteURL}}?open=terms&amp;top=terms"{{if .Desktop}} data-win-open="terms"{{end}}>Terms &amp; Conditions</a></li>
           </ul></li>
         </ul>
         <a class="brand topbar-pill" href="{{.SiteURL}}" data-menubar-fallback><img src="{{asset "/static/icon.svg"}}" alt=""> <span class="site-menu-name">{{.Site}}</span></a>
@@ -163,7 +167,7 @@
 
 {{/* A window: the applet's page body, as PUDL's windows fetch it by key
      and as the desktop draws it for the windows the address names. */}}
-{{define "window"}}<section class="win" data-win="{{.Key}}"{{if .Applet.Icon}} data-window-icon="{{.Applet.IconURL}}"{{end}} data-win-mode="floating"{{if .Content}} data-win-size="content"{{end}}{{if .Applet.Min}} data-win-min="{{.Applet.Min}}"{{end}}{{if .Applet.Max}} data-win-max="{{.Applet.Max}}"{{end}} role="dialog" aria-labelledby="win-{{.Key}}-title"{{if .Style}} style="{{.Style}}"{{end}}>
+{{define "window"}}<section class="win" data-win="{{.Key}}"{{if .Applet.Icon}} data-win-icon="{{.Applet.IconURL}}"{{end}} data-win-mode="floating"{{if .Content}} data-win-size="content"{{end}}{{if .Applet.Min}} data-win-min="{{.Applet.Min}}"{{end}}{{if .Applet.Max}} data-win-max="{{.Applet.Max}}"{{end}} role="dialog" aria-labelledby="win-{{.Key}}-title"{{if .Style}} style="{{.Style}}"{{end}}>
   <header class="win-head">
     <button type="button" class="win-btn" data-win-action="menu" aria-label="Window menu" title="Window menu"></button>
     <h2 class="win-title" id="win-{{.Key}}-title">{{.Title}}</h2>
@@ -186,12 +190,10 @@
 <body class="standalone">
   <header class="site-header">
     <div class="topbar">
-      <nav class="site-menubar" data-menubar aria-label="{{.Title}}">
+      <nav class="site-menubar" data-menubar data-menubar-ribbon aria-label="{{.Title}}">
         <ul data-menubar-source hidden>
           <li data-menubar-id="site"><img src="{{asset "/static/icon.svg"}}" alt=""> {{.Site}}<ul>
             <li><a href="{{.SiteURL}}">Desktop</a></li>
-            <li>-</li>
-            <li><a href="{{.SiteURL}}about" data-dialog="about-site">About yavc.app</a></li>
           </ul></li>
           <li data-menubar-id="go">Go<ul>
             <li><a href="{{.SiteURL}}?open={{.Applet.Name}}&amp;top={{.Applet.Name}}">{{.Title}} on the desktop</a></li>
@@ -211,7 +213,14 @@
               {{end}}
             </ul></li>
           </ul></li>
-          <li data-menubar-id="help">Help<ul></ul></li>
+          <li data-menubar-id="help">Help<ul>
+            <li><a href="{{.SiteURL}}about" data-dialog="about-site">About yavc.app</a></li>
+            <li><a href="{{.SiteURL}}author">About the author</a></li>
+            <li><a href="{{.SiteURL}}about/pudl" data-dialog="about-pudl">About PUDL</a></li>
+            <li>-</li>
+            <li><a href="{{.SiteURL}}privacy">Privacy Policy</a></li>
+            <li><a href="{{.SiteURL}}terms">Terms &amp; Conditions</a></li>
+          </ul></li>
         </ul>
         <a class="brand topbar-pill" href="{{.SiteURL}}" data-menubar-fallback><img src="{{asset "/static/icon.svg"}}" alt=""> <span class="site-menu-name">{{.Site}}</span></a>
       </nav>
@@ -281,6 +290,40 @@
 </html>
 {{end}}
 
+{{/* A site page: a Markdown file in the pages folder, as a page of the
+     site and as a window by its slug. */}}
+{{define "article"}}{{template "head" .}}
+<body>
+  <header class="site-header"><div class="topbar">{{template "menubar" .}}</div></header>
+  <main class="site-main" id="main-content" tabindex="-1">
+    <article class="post-content">
+      <nav data-page-menu hidden aria-label="Page menu"><ul></ul></nav>
+      {{.Article}}
+    </article>
+  </main>
+  {{template "dialogs" .}}
+  {{template "scripts" .}}
+</body>
+</html>
+{{end}}
+
+{{define "window-article"}}<section class="win" data-win="{{.Key}}" data-win-mode="floating" role="dialog" aria-labelledby="win-{{.Key}}-title"{{if .Style}} style="{{.Style}}"{{end}}>
+  <header class="win-head">
+    <button type="button" class="win-btn" data-win-action="menu" aria-label="Window menu" title="Window menu"></button>
+    <h2 class="win-title" id="win-{{.Key}}-title">{{.Title}}</h2>
+    <nav class="win-chrome" aria-label="Window">
+      <a class="win-btn" data-win-action="page" href="{{.Page}}" aria-label="Open as a page" title="Open as a page"></a>
+      <a class="win-btn" data-win-action="minimize" href="{{.Minimize}}" aria-label="Minimize" title="Minimize"></a>
+      <a class="win-btn" data-win-action="maximize" href="{{.Maximize}}" aria-label="Maximize" title="Maximize"></a>
+      <a class="win-btn" data-win-action="close" href="{{.Close}}" aria-label="Close" title="Close"></a>
+    </nav>
+  </header>
+  <div class="win-body"><div class="win-content"><article class="post-content">
+    <nav data-page-menu hidden aria-label="Page menu"><ul></ul></nav>
+    {{.Article}}</article></div></div>
+</section>
+{{end}}
+
 {{define "problem"}}{{template "head" .}}
 <body>
   <header class="site-header"><div class="topbar">{{template "menubar" .}}</div></header>
@@ -305,7 +348,7 @@
     <div class="dialog-body">
       <p>yavc.app is a desktop of applications, and every one of them also runs on its own at its own address, with the same game or document you left on the desktop. The name stands for "Yet Another Vibe-Coded", said with a straight face, since the applications are developed agentically, from written designs and with review.</p>
       <p>The desktop, the windows and every control are PUDL's. Each application is a PUDL applet package, installed by copying its folder in, and most come from repositories of their own.</p>
-      <p>What this site keeps for you, your appearance and each application's state, lives under an anonymous session; Settings says more and can forget it.</p>
+      <p>What this site keeps for you, your appearance and each application's state, lives under an anonymous session; Settings says more and can forget it. Files you make are kept in your browser, not on this site, and Settings says what that means.</p>
       <p>The code is at <a href="https://github.com/paulmooreparks/yavc.app" target="_blank" rel="noopener">github.com/paulmooreparks/yavc.app</a>.</p>
     </div>
     <form class="dialog-actions" method="dialog">

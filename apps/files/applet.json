@@ -1,0 +1,16 @@
+{
+  "name": "files",
+  "title": "Files",
+  "version": "31.0.0",
+  "description": "Browse the site and keep your own files, as the Terminal and the Editor see them.",
+  "license": "Apache-2.0",
+  "src": "files.js",
+  "css": "files.css",
+  "icon": "icon.svg",
+  "page": { "body": "page.html" },
+  "window": { "shape": "0.6,0.75" },
+  "handles": { "browse": { "param": "path" } },
+  "actions": "actions.json",
+  "wants": ["snapshot", "fs", "config"],
+  "tags": ["site"]
+}

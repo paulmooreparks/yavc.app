@@ -26,6 +26,20 @@
     }
 
     document.addEventListener('pudl:applet-state', function (e) {
+        /* A one-shot hand-off: an applet opening another instance of
+           itself elsewhere (Conway's "Open this board", the terminal's
+           open) leaves the state here for the new instance, which takes
+           it once. */
+        var handoff = window.pcAppletHandoff, inst0 = e.detail && (e.detail.instance || e.detail.name);
+        if (handoff && inst0 && Object.prototype.hasOwnProperty.call(handoff, inst0)) {
+            e.detail.state = handoff[inst0];
+            delete handoff[inst0];
+            return;
+        }
+        /* An applet a page embeds with a starting state ({{applet:name
+           state=...}}) opens on it. */
+        var initial = e.target && e.target.getAttribute && e.target.getAttribute('data-applet-initial');
+        if (initial && e.detail && e.detail.state == null) { e.detail.state = initial; return; }
         var name = e.detail && e.detail.name;
         if (!name || !names[name] || (e.detail && e.detail.param)) { return; }
         var inst = e.detail.instance && e.detail.instance !== name ? name + ':' + e.detail.instance : name;

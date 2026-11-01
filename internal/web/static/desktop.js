@@ -3,8 +3,7 @@
    appearance commands, which set the choice through PUDL's APIs and keep
    it in the engine (DESIGN.md, Appearance); and on the desktop, after
    parkscomputing.com's js/desktop.js and js/window-bar.js: the sidebar
-   toggle, a window's picture on its taskbar button, and live filtering of
-   the list. Loaded before pudl-windows.js, without defer. */
+   toggle's menu row, and live filtering of the list. Loaded before pudl-windows.js, without defer. */
 (function () {
     'use strict';
     if (window.yavcDesktop) { return; }
@@ -110,23 +109,6 @@
         document.querySelectorAll('[data-site-command="sidebar"]').forEach(function (c) { c.setAttribute('aria-checked', hidden ? 'true' : 'false'); });
     }
 
-    /* A window's picture on its taskbar button. */
-    function syncTaskIcons() {
-        document.querySelectorAll('[data-win-dock] [data-win-tab]').forEach(function (tab) {
-            if (tab.querySelector('.win-item-picture')) { return; }
-            var key = tab.getAttribute('data-win-tab');
-            var win = document.querySelector('.win[data-win="' + CSS.escape(key) + '"]');
-            var icon = win && win.getAttribute('data-window-icon');
-            var title = tab.querySelector('.win-item-title');
-            if (!icon || !title) { return; }
-            var img = document.createElement('img');
-            img.className = 'win-item-picture';
-            img.src = icon;
-            img.alt = '';
-            title.parentNode.insertBefore(img, title);
-        });
-    }
-
     /* The list filtered as the reader types. */
     function initFilter() {
         var field = document.querySelector('[data-list-filter]');
@@ -147,8 +129,6 @@
         syncSidebar();
         initFilter();
         document.addEventListener('pudl:md-change', syncSidebar);
-        document.addEventListener('pudl:windows-change', function () { setTimeout(syncTaskIcons, 0); });
-        new MutationObserver(syncTaskIcons).observe(document.querySelector('[data-win-dock]') || document.body, { childList: true, subtree: true });
     }
     if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', start); } else { start(); }
 })();
