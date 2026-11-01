@@ -1,0 +1,329 @@
+{
+  "files": [
+    {
+      "path": "advanced/Arne - Rule, Britannia!.mxl",
+      "name": "Arne - Rule, Britannia!.mxl",
+      "folder": "advanced"
+    },
+    {
+      "path": "advanced/Boulanger - Deux ancolies.mxl",
+      "name": "Boulanger - Deux ancolies.mxl",
+      "folder": "advanced"
+    },
+    {
+      "path": "advanced/Chaminade - Ritournelle.mxl",
+      "name": "Chaminade - Ritournelle.mxl",
+      "folder": "advanced"
+    },
+    {
+      "path": "advanced/Faisst - Altdeutsches Lied.mxl",
+      "name": "Faisst - Altdeutsches Lied.mxl",
+      "folder": "advanced"
+    },
+    {
+      "path": "advanced/Faisst - Das Brünnlein.mxl",
+      "name": "Faisst - Das Brünnlein.mxl",
+      "folder": "advanced"
+    },
+    {
+      "path": "advanced/Hensel - Dein ist mein Herz.mxl",
+      "name": "Hensel - Dein ist mein Herz.mxl",
+      "folder": "advanced"
+    },
+    {
+      "path": "advanced/Kinkel - Rette Vater, dein geliebtes Kind!.mxl",
+      "name": "Kinkel - Rette Vater, dein geliebtes Kind!.mxl",
+      "folder": "advanced"
+    },
+    {
+      "path": "advanced/Maier - String Quartet in A major (Cello).mxl",
+      "name": "Maier - String Quartet in A major (Cello).mxl",
+      "folder": "advanced"
+    },
+    {
+      "path": "advanced/Maier - String Quartet in A major (Viola).mxl",
+      "name": "Maier - String Quartet in A major (Viola).mxl",
+      "folder": "advanced"
+    },
+    {
+      "path": "advanced/Mozart - String Quartet K 155 (Violin).mxl",
+      "name": "Mozart - String Quartet K 155 (Violin).mxl",
+      "folder": "advanced"
+    },
+    {
+      "path": "advanced/Mozart - String Quartet K 464, Allegro (Cello).mxl",
+      "name": "Mozart - String Quartet K 464, Allegro (Cello).mxl",
+      "folder": "advanced"
+    },
+    {
+      "path": "advanced/Mozart - String Quartet K 464, Menuetto and Trio.mxl",
+      "name": "Mozart - String Quartet K 464, Menuetto and Trio.mxl",
+      "folder": "advanced"
+    },
+    {
+      "path": "advanced/Schoenberg - Das schöne Beet betracht ich mir im Harren.mxl",
+      "name": "Schoenberg - Das schöne Beet betracht ich mir im Harren.mxl",
+      "folder": "advanced"
+    },
+    {
+      "path": "advanced/Schubert - Die Stadt.mxl",
+      "name": "Schubert - Die Stadt.mxl",
+      "folder": "advanced"
+    },
+    {
+      "path": "advanced/Wolf - Verschwiegene Liebe.mxl",
+      "name": "Wolf - Verschwiegene Liebe.mxl",
+      "folder": "advanced"
+    },
+    {
+      "path": "beginner/Brahms - In der Gasse.mxl",
+      "name": "Brahms - In der Gasse.mxl",
+      "folder": "beginner"
+    },
+    {
+      "path": "beginner/Chopin - Życzenie.mxl",
+      "name": "Chopin - Życzenie.mxl",
+      "folder": "beginner"
+    },
+    {
+      "path": "beginner/Happy Birthday To You.mxl",
+      "name": "Happy Birthday To You.mxl",
+      "folder": "beginner"
+    },
+    {
+      "path": "beginner/Holmès - La Belle Madeleine.mxl",
+      "name": "Holmès - La Belle Madeleine.mxl",
+      "folder": "beginner"
+    },
+    {
+      "path": "beginner/Mozart - String Quartet K 464, Menuetto and Trio (Cello).mxl",
+      "name": "Mozart - String Quartet K 464, Menuetto and Trio (Cello).mxl",
+      "folder": "beginner"
+    },
+    {
+      "path": "beginner/Mozart - String Quartet K 464, Menuetto and Trio (Viola).mxl",
+      "name": "Mozart - String Quartet K 464, Menuetto and Trio (Viola).mxl",
+      "folder": "beginner"
+    },
+    {
+      "path": "beginner/Mozart - String Quartet K 464, Menuetto and Trio (Violin).mxl",
+      "name": "Mozart - String Quartet K 464, Menuetto and Trio (Violin).mxl",
+      "folder": "beginner"
+    },
+    {
+      "path": "beginner/Reichardt - Poesie von Tieck.mxl",
+      "name": "Reichardt - Poesie von Tieck.mxl",
+      "folder": "beginner"
+    },
+    {
+      "path": "beginner/Schubert - Der Leiermann.mxl",
+      "name": "Schubert - Der Leiermann.mxl",
+      "folder": "beginner"
+    },
+    {
+      "path": "beginner/Schubert - Meeres Stille.mxl",
+      "name": "Schubert - Meeres Stille.mxl",
+      "folder": "beginner"
+    },
+    {
+      "path": "beginner/Schumann - Auf einer Burg.mxl",
+      "name": "Schumann - Auf einer Burg.mxl",
+      "folder": "beginner"
+    },
+    {
+      "path": "beginner/Schumann - Im Rhein, im heiligen Strome.mxl",
+      "name": "Schumann - Im Rhein, im heiligen Strome.mxl",
+      "folder": "beginner"
+    },
+    {
+      "path": "beginner/Stanford - The Sobbing of the Spey.mxl",
+      "name": "Stanford - The Sobbing of the Spey.mxl",
+      "folder": "beginner"
+    },
+    {
+      "path": "beginner/Warlock - The Countryman.mxl",
+      "name": "Warlock - The Countryman.mxl",
+      "folder": "beginner"
+    },
+    {
+      "path": "intermediate/Beach - Take, O Take those Lips Away.mxl",
+      "name": "Beach - Take, O Take those Lips Away.mxl",
+      "folder": "intermediate"
+    },
+    {
+      "path": "intermediate/Berlioz - Absence.mxl",
+      "name": "Berlioz - Absence.mxl",
+      "folder": "intermediate"
+    },
+    {
+      "path": "intermediate/Brahms - An die Tauben.mxl",
+      "name": "Brahms - An die Tauben.mxl",
+      "folder": "intermediate"
+    },
+    {
+      "path": "intermediate/Brahms - Bitteres zu sagen denkst du.mxl",
+      "name": "Brahms - Bitteres zu sagen denkst du.mxl",
+      "folder": "intermediate"
+    },
+    {
+      "path": "intermediate/Gounod - Aubade.mxl",
+      "name": "Gounod - Aubade.mxl",
+      "folder": "intermediate"
+    },
+    {
+      "path": "intermediate/Holmès - C'est un oiseau du bois sauvage.mxl",
+      "name": "Holmès - C'est un oiseau du bois sauvage.mxl",
+      "folder": "intermediate"
+    },
+    {
+      "path": "intermediate/Mayer - String Quartet Op 14, Scherzo (Cello).mxl",
+      "name": "Mayer - String Quartet Op 14, Scherzo (Cello).mxl",
+      "folder": "intermediate"
+    },
+    {
+      "path": "intermediate/Mayer - String Quartet Op 14, Scherzo (Viola).mxl",
+      "name": "Mayer - String Quartet Op 14, Scherzo (Viola).mxl",
+      "folder": "intermediate"
+    },
+    {
+      "path": "intermediate/Mayer - String Quartet Op 14, Scherzo (Violin).mxl",
+      "name": "Mayer - String Quartet Op 14, Scherzo (Violin).mxl",
+      "folder": "intermediate"
+    },
+    {
+      "path": "intermediate/Mozart - Rondo Alla Turca (Turkish March).mxl",
+      "name": "Mozart - Rondo Alla Turca (Turkish March).mxl",
+      "folder": "intermediate"
+    },
+    {
+      "path": "intermediate/Mozart - String Quartet K 464, Andante (Viola).mxl",
+      "name": "Mozart - String Quartet K 464, Andante (Viola).mxl",
+      "folder": "intermediate"
+    },
+    {
+      "path": "intermediate/Saint-Georges - String Quartet in G minor Op 1 No 3 (Cello).mxl",
+      "name": "Saint-Georges - String Quartet in G minor Op 1 No 3 (Cello).mxl",
+      "folder": "intermediate"
+    },
+    {
+      "path": "intermediate/Saint-Georges - String Quartet in G minor Op 1 No 3 (Violin).mxl",
+      "name": "Saint-Georges - String Quartet in G minor Op 1 No 3 (Violin).mxl",
+      "folder": "intermediate"
+    },
+    {
+      "path": "intermediate/Schubert - Die liebe Farbe.mxl",
+      "name": "Schubert - Die liebe Farbe.mxl",
+      "folder": "intermediate"
+    },
+    {
+      "path": "intermediate/Schumann - An meinem Herzen.mxl",
+      "name": "Schumann - An meinem Herzen.mxl",
+      "folder": "intermediate"
+    },
+    {
+      "path": "intermediate/Somervell - Loveliest of Trees, the Cherry now.mxl",
+      "name": "Somervell - Loveliest of Trees, the Cherry now.mxl",
+      "folder": "intermediate"
+    },
+    {
+      "path": "simple/Au clair de la lune.musicxml",
+      "name": "Au clair de la lune.musicxml",
+      "folder": "simple"
+    },
+    {
+      "path": "simple/Frere Jacques (alto clef).musicxml",
+      "name": "Frere Jacques (alto clef).musicxml",
+      "folder": "simple"
+    },
+    {
+      "path": "simple/Frere Jacques (bass clef).musicxml",
+      "name": "Frere Jacques (bass clef).musicxml",
+      "folder": "simple"
+    },
+    {
+      "path": "simple/Frere Jacques (tenor clef).musicxml",
+      "name": "Frere Jacques (tenor clef).musicxml",
+      "folder": "simple"
+    },
+    {
+      "path": "simple/Frere Jacques.musicxml",
+      "name": "Frere Jacques.musicxml",
+      "folder": "simple"
+    },
+    {
+      "path": "simple/Hot Cross Buns.musicxml",
+      "name": "Hot Cross Buns.musicxml",
+      "folder": "simple"
+    },
+    {
+      "path": "simple/Jingle Bells (chorus).musicxml",
+      "name": "Jingle Bells (chorus).musicxml",
+      "folder": "simple"
+    },
+    {
+      "path": "simple/London Bridge.musicxml",
+      "name": "London Bridge.musicxml",
+      "folder": "simple"
+    },
+    {
+      "path": "simple/Mary Had a Little Lamb (alto clef).musicxml",
+      "name": "Mary Had a Little Lamb (alto clef).musicxml",
+      "folder": "simple"
+    },
+    {
+      "path": "simple/Mary Had a Little Lamb (bass clef).musicxml",
+      "name": "Mary Had a Little Lamb (bass clef).musicxml",
+      "folder": "simple"
+    },
+    {
+      "path": "simple/Mary Had a Little Lamb (tenor clef).musicxml",
+      "name": "Mary Had a Little Lamb (tenor clef).musicxml",
+      "folder": "simple"
+    },
+    {
+      "path": "simple/Mary Had a Little Lamb.musicxml",
+      "name": "Mary Had a Little Lamb.musicxml",
+      "folder": "simple"
+    },
+    {
+      "path": "simple/Ode to Joy (alto clef).musicxml",
+      "name": "Ode to Joy (alto clef).musicxml",
+      "folder": "simple"
+    },
+    {
+      "path": "simple/Ode to Joy (bass clef).musicxml",
+      "name": "Ode to Joy (bass clef).musicxml",
+      "folder": "simple"
+    },
+    {
+      "path": "simple/Ode to Joy (tenor clef).musicxml",
+      "name": "Ode to Joy (tenor clef).musicxml",
+      "folder": "simple"
+    },
+    {
+      "path": "simple/Ode to Joy.musicxml",
+      "name": "Ode to Joy.musicxml",
+      "folder": "simple"
+    },
+    {
+      "path": "simple/Twinkle Twinkle Little Star (alto clef).musicxml",
+      "name": "Twinkle Twinkle Little Star (alto clef).musicxml",
+      "folder": "simple"
+    },
+    {
+      "path": "simple/Twinkle Twinkle Little Star (bass clef).musicxml",
+      "name": "Twinkle Twinkle Little Star (bass clef).musicxml",
+      "folder": "simple"
+    },
+    {
+      "path": "simple/Twinkle Twinkle Little Star (tenor clef).musicxml",
+      "name": "Twinkle Twinkle Little Star (tenor clef).musicxml",
+      "folder": "simple"
+    },
+    {
+      "path": "simple/Twinkle Twinkle Little Star.musicxml",
+      "name": "Twinkle Twinkle Little Star.musicxml",
+      "folder": "simple"
+    }
+  ]
+}

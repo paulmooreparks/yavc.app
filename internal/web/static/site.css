@@ -1,0 +1,85 @@
+/* Copyright 2026 Paul Parks. SPDX-License-Identifier: Apache-2.0 */
+/* yavc.app's site styles, loaded after pudl.css, pudl-windows.css and the
+   skin and colour-theme stylesheets. The desktop shell is
+   parkscomputing.com's (its css/pudl-site.css, 2026), reduced to what a
+   desktop of applets needs; the accent and topbar tints are that site's
+   too, so the two feel alike. PUDL's tokens do the rest. */
+
+/* The site's own tints apply only while no PUDL colour theme is chosen;
+   a theme sets these tokens itself (THEMES.md). */
+:root:not([data-palette]) {
+  --accent: #0d47a1;
+  --accent-hover: #08306e;
+  --tb-bg: #d7dce2;
+  --tb-fg: #1b1f24;
+  --yavc-glyph-windowed: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.3' stroke-linejoin='round'%3E%3Cpath d='M5 4V1.5h9.5V11H12'/%3E%3Crect x='1.5' y='4.5' width='10' height='10' rx='1'/%3E%3Cpath d='M2 7.5h9'/%3E%3C/svg%3E");
+  --yavc-glyph-classic: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.3'%3E%3Crect x='1.5' y='2.5' width='13' height='11' rx='1'/%3E%3Cpath d='M2 5.5h12'/%3E%3C/svg%3E");
+}
+:root:not([data-palette])[data-theme="dark"] {
+  --accent: #4da3ff;
+  --accent-hover: #7bd3ff;
+  --on-accent: #0d1117;
+  --tb-bg: #20252b;
+  --tb-fg: #e6e8eb;
+}
+
+/* === The top bar ========================================================== */
+.topbar { position: relative; justify-content: flex-start; }
+.topbar .site-menubar { flex: 0 1 auto; min-width: 0; }
+.view-seg { flex: none; margin-inline-start: auto; }
+.view-seg a { display: inline-flex; align-items: center; gap: 6px; }
+.brand img { display: block; width: 22px; height: 22px; }
+.site-header { position: sticky; top: 0; z-index: 90; }
+body.desktop .site-header { position: static; flex: none; }
+@media (max-width: 560px) { .topbar { padding-left: 10px; padding-right: 10px; } }
+@media (max-width: 380px) { .site-menu-name { display: none; } }
+
+/* === Pages ================================================================ */
+body:not(.desktop) { min-height: 100vh; display: flex; flex-direction: column; }
+.site-main { flex: 1; width: 100%; max-width: 1140px; margin: 0 auto; padding: var(--space-4) var(--space-4) 0; box-sizing: border-box; }
+/* An applet standalone takes the whole viewport under its bar. */
+body.standalone { height: 100dvh; min-height: 0; overflow: hidden; }
+.standalone-main { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; padding: var(--space-3); box-sizing: border-box; overflow: auto; }
+.standalone-main > [data-applet-fit="fill"] { flex: 1 1 auto; min-height: 0; }
+
+/* === The desktop ========================================================== */
+body.desktop { height: 100dvh; }
+body.desktop .md-layout { --md-sidebar-w: 300px; }
+.reader-stage { padding: 0; overflow: hidden; }
+.reader-col { display: flex; flex-direction: column; height: 100%; }
+.reader-col .win-host { flex: 1; min-height: 0; position: relative; }
+.reader-empty { height: 100%; overflow-y: auto; padding: 32px; }
+.reader-empty .card { max-width: 560px; margin: 10vh auto 0; }
+.welcome-card h1 { margin: 0 0 var(--space-2); font-size: var(--text-md); font-weight: 700; }
+.welcome-card p { margin: 0 0 var(--space-3); font-size: var(--text-sm); color: var(--text-muted); }
+.welcome-card p:last-child { margin-bottom: 0; }
+.site-list-icon { width: 20px; height: 20px; vertical-align: -5px; margin-inline-end: var(--space-2); object-fit: contain; }
+.icon-btn[aria-disabled="true"] { opacity: .45; cursor: not-allowed; }
+
+/* A window's content: the applet, filling the window when it says so.
+   An applet that fills (data-applet-fit="fill", which PUDL sets on a
+   mount in a window the reader sizes) gets a definite box: the body
+   becomes a column and the content passes the height down, so an
+   installed package's stylesheet need know nothing of the window. */
+.win-body > .win-content { padding: var(--space-3); }
+.win-body:has(> .win-content > [data-applet-fit="fill"]) { display: flex; flex-direction: column; overflow: auto; }
+.win-body:has(> .win-content > [data-applet-fit="fill"]) > .win-content { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; width: 100%; box-sizing: border-box; }
+.win-body > .win-content > [data-applet-fit="fill"] { flex: 1 1 auto; min-height: 0; width: 100%; }
+.win-body:has(> .win-content > [data-applet-flush]) > .win-content { padding: 0; }
+
+/* The taskbar: a window's picture on its button, in place of PUDL's glyph. */
+.win-tab .win-item-picture { flex: none; width: 16px; height: 16px; object-fit: contain; }
+.win-tab:has(.win-item-picture)::before { display: none; }
+
+
+/* The Classic view's list of applications. */
+.app-list .card-title { display: flex; align-items: center; gap: 8px; }
+.app-list .card-title .site-list-icon { margin: 0; }
+.app-list .card { display: flex; flex-direction: column; }
+.app-list .app-links { margin: auto 0 0; padding-top: var(--space-2); }
+
+/* The About dialogs. */
+.about-dialog { max-width: 36rem; }
+.about-dialog .dialog-title { display: flex; align-items: center; gap: 8px; }
+.about-dialog .dialog-title img { width: 22px; height: 22px; }
+.about-dialog .dialog-body p:last-child { margin-bottom: 0; }

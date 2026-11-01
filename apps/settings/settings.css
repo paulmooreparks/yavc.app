@@ -1,0 +1,6 @@
+/* Copyright 2026 Paul Parks. SPDX-License-Identifier: Apache-2.0 */
+/* Settings: PUDL's settings panel of cards, in a column that scrolls when
+   it fills a window. */
+.yavc-settings { max-width: 720px; }
+.yavc-settings[data-applet-fit="fill"] { flex: 1 1 auto; min-height: 0; overflow-y: auto; max-width: none; }
+.yavc-settings .form-fieldset { margin-bottom: var(--space-3); }

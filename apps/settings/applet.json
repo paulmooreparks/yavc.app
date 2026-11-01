@@ -1,0 +1,13 @@
+{
+  "name": "settings",
+  "title": "Settings",
+  "version": "0.1.0",
+  "description": "Your appearance choices and what this site keeps for you.",
+  "license": "Apache-2.0",
+  "src": "settings.js",
+  "css": "settings.css",
+  "icon": "icon.svg",
+  "page": { "body": "page.html" },
+  "window": { "shape": "0.42,0.8", "min": "360,320" },
+  "tags": ["site"]
+}

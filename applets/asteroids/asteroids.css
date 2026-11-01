@@ -1,0 +1,5 @@
+/* Asteroids (asteroids.js): the shared look, and a wide screen of lines,
+   four by three, drawn at the size it is shown so the lines stay sharp. */
+@import url(../shared/splash.css);
+.splash-asteroids .splash-stage { max-width: 640px; }
+.splash-asteroids canvas { aspect-ratio: 4 / 3; image-rendering: auto; }

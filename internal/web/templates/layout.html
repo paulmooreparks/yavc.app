@@ -1,0 +1,326 @@
+{{/* yavc.app's pages. Every page is drawn with the reader's appearance on
+     the root element and data-pudl-persistence="host", so PUDL's theme and
+     skin scripts take their choices from the markup and keep no second
+     store (DESIGN.md, Appearance). The session's applet state and settings
+     are written into the page for the continuity and host scripts. */}}
+
+{{define "head"}}<!doctype html>
+<html lang="en" data-pudl-persistence="host" data-theme="{{.Appearance.Theme}}" data-theme-pref="{{.Appearance.Mode}}" data-skin="{{.Appearance.Skin}}"{{if ne .Appearance.Palette "standard"}} data-palette="{{.Appearance.Palette}}"{{end}}>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>{{.Title}}{{if ne .Title .Site}} · {{.Site}}{{end}}</title>
+  <script src="{{asset "/pudl/pudl-theme.js"}}"></script>
+  <link rel="stylesheet" href="{{asset "/pudl/pudl.css"}}">
+  {{if .Desktop}}<link rel="stylesheet" href="{{asset "/pudl/pudl-windows.css"}}">{{end}}
+  {{range .Skins}}{{if .Stylesheet}}<link rel="stylesheet" href="{{asset (print "/pudl/" .Stylesheet)}}" data-pudl-skin="{{.ID}}">
+  {{end}}{{end}}{{range .Palettes}}{{if .Stylesheet}}<link rel="stylesheet" href="{{asset (print "/pudl/" .Stylesheet)}}">
+  {{end}}{{end}}<link rel="stylesheet" href="{{asset "/static/site.css"}}">
+  <script src="{{asset "/pudl/pudl-skins.js"}}"></script>
+  <link rel="icon" href="{{asset "/static/icon.svg"}}" type="image/svg+xml">
+</head>
+{{end}}
+
+{{/* The site's state for the scripts, then the scripts, in the order the
+     comments in parkscomputing.com's layout settle: snapshots and
+     continuity before the applet runtime; the host kit, then the host,
+     then the registry; the menu bar after the menu, window and applet
+     scripts. */}}
+{{define "scripts"}}
+  <script type="application/json" id="yavc-state">{{json .State}}</script>
+  <script type="application/json" id="yavc-config">{{json .Config}}</script>
+  <script type="application/json" id="yavc-appearance">{{json (dict "skins" .Skins "palettes" .Palettes "retention" .Retention)}}</script>
+  <script src="{{asset "/static/snapshot.js"}}"></script>
+  <script src="{{asset "/static/continuity.js"}}"></script>
+  <script src="{{asset "/static/desktop.js"}}"></script>
+  {{if .Desktop}}<script src="{{asset "/pudl/pudl-windows.js"}}" defer></script>
+  <script src="{{asset "/pudl/pudl-regions.js"}}" defer></script>
+  <script src="{{asset "/pudl/pudl-md.js"}}" defer></script>{{end}}
+  <script src="{{asset "/pudl/pudl-menu.js"}}" defer></script>
+  <script src="{{asset "/pudl/pudl-commands.js"}}" defer></script>
+  <script src="{{asset "/pudl/pudl-toolbar.js"}}" defer></script>
+  <script src="{{asset "/pudl/pudl-applets.js"}}" defer></script>
+  <script src="{{asset "/static/pudl-host-kit.js"}}" defer></script>
+  <script src="{{asset "/static/host.js"}}" defer></script>
+  <script src="/applets/registry.js" defer></script>
+  <script src="{{asset "/pudl/pudl-actions.js"}}" defer></script>
+  <script src="{{asset "/pudl/pudl-menubar.js"}}" defer></script>
+  <script src="{{asset "/pudl/pudl-dialog.js"}}" defer></script>
+  <script src="{{asset "/pudl/pudl-tooltip.js"}}" defer></script>
+  <script src="{{asset "/pudl/pudl-tabs.js"}}" defer></script>
+  <script src="{{asset "/pudl/pudl-fields.js"}}" defer></script>
+  <script src="{{asset "/pudl/pudl-combo.js"}}" defer></script>
+  <script src="{{asset "/pudl/pudl-code.js"}}" defer></script>
+  <script src="{{asset "/pudl/pudl-grid.js"}}" defer></script>
+{{end}}
+
+{{/* The site's menu bar, as parkscomputing.com draws it from sitenav:
+     the site's own title first, then Go, Applets, View, Window and Help.
+     On the desktop a link opens a window; on a page it goes to the page.
+     The site navigation file in XferLang replaces this in milestone 2. */}}
+{{define "menubar"}}
+      <nav class="site-menubar" data-menubar aria-label="{{.Site}}">
+        <ul data-menubar-source hidden>
+          <li data-menubar-id="site"><img src="{{asset "/static/icon.svg"}}" alt=""> {{.Site}}<ul>
+            <li><a href="{{.SiteURL}}">Desktop</a></li>
+            <li><a href="{{.SiteURL}}?open=settings&amp;top=settings"{{if .Desktop}} data-win-open="settings"{{end}}>Settings</a></li>
+            <li>-</li>
+            <li><a href="{{.SiteURL}}about" data-dialog="about-site">About yavc.app</a></li>
+          </ul></li>
+          <li data-menubar-id="go">Go<ul>
+            <li><a href="{{.SiteURL}}pages">Applications as pages</a></li>
+          </ul></li>
+          <li data-menubar-id="applets">Applets<ul>
+            {{range .Applets}}<li><a href="{{$.SiteURL}}?open={{.Name}}&amp;top={{.Name}}"{{if $.Desktop}} data-win-open="{{.Name}}"{{end}} title="{{.Description}}">{{if .Icon}}<img src="{{.Icon}}" alt=""> {{end}}{{.Title}}</a></li>
+            {{end}}
+          </ul></li>
+          <li data-menubar-id="view">View<ul>
+            {{if .Desktop}}<li><button type="button" data-site-command="sidebar" aria-checked="false">Hide the list</button></li>
+            <li>-</li>{{end}}
+            <li>Mode<ul data-menu-radio>
+              <li><button type="button" data-site-command="mode" data-args="light" {{checked .Appearance.Mode "light"}}>Light</button></li>
+              <li><button type="button" data-site-command="mode" data-args="dark" {{checked .Appearance.Mode "dark"}}>Dark</button></li>
+              <li><button type="button" data-site-command="mode" data-args="system" {{checked .Appearance.Mode "system"}}>Follow the system</button></li>
+            </ul></li>
+            <li>Skin<ul data-menu-radio>
+              {{range .Skins}}<li><button type="button" data-site-command="skin" data-args="{{.ID}}" {{checked $.Appearance.Skin .ID}}>{{.Label}}</button></li>
+              {{end}}
+            </ul></li>
+            <li>Colours<ul data-menu-radio>
+              {{range .Palettes}}<li><button type="button" data-site-command="palette" data-args="{{.ID}}" {{checked $.Appearance.Palette .ID}}>{{.Label}}</button></li>
+              {{end}}
+            </ul></li>
+          </ul></li>
+          {{if .Desktop}}<li data-menubar-if="windows" data-menubar-id="window" data-menubar-windows>Window<ul></ul></li>{{end}}
+          <li data-menubar-id="help">Help<ul>
+            <li><a href="{{.SiteURL}}about/pudl" data-dialog="about-pudl">About PUDL</a></li>
+          </ul></li>
+        </ul>
+        <a class="brand topbar-pill" href="{{.SiteURL}}" data-menubar-fallback><img src="{{asset "/static/icon.svg"}}" alt=""> <span class="site-menu-name">{{.Site}}</span></a>
+      </nav>
+{{end}}
+
+{{/* The desktop: parkscomputing.com's shell, after PUDL's article reader.
+     The list of applications at the left, the windows as the detail pane,
+     and the taskbar along the foot. */}}
+{{define "desktop"}}{{template "head" .}}
+<body class="desktop">
+  <header class="site-header">
+    <div class="topbar">
+      {{template "menubar" .}}
+      <nav class="seg view-seg" aria-label="View" data-seg-menu>
+        <a href="{{.SiteURL}}" aria-current="true"><span class="glyph" style="--glyph: var(--yavc-glyph-windowed)" aria-hidden="true"></span>Windowed</a>
+        <a href="{{.SiteURL}}pages"><span class="glyph" style="--glyph: var(--yavc-glyph-classic)" aria-hidden="true"></span>Pages</a>
+      </nav>
+    </div>
+  </header>
+  <div class="md-layout" data-md-persistent data-md-peek data-md-default-width="300" data-md-min="40">
+    <div class="md-body">
+      <nav class="md-sidebar" aria-label="Applications">
+        <div class="md-sidebar-head">
+          <input class="md-filter" type="search" placeholder="Filter the list…" aria-label="Filter the list" data-list-filter>
+        </div>
+        <div class="site-list">
+          <div class="md-section-label">Applications</div>
+          {{range .Applets}}<div class="md-row" id="row-{{.Name}}">
+            <a class="md-item" href="{{$.SiteURL}}?open={{.Name}}&amp;top={{.Name}}" data-win-open="{{.Name}}" title="{{.Description}}">{{if .Icon}}<img class="site-list-icon" src="{{.Icon}}" alt="">{{end}}{{.Title}}<span class="md-meta md-desc">{{.Description}}</span></a>
+          </div>
+          {{end}}
+        </div>
+      </nav>
+      <div class="md-resize" role="separator" tabindex="0" aria-orientation="vertical" aria-label="Application list"></div>
+      <div class="md-detail reader-stage" tabindex="0">
+        <div class="reader-col">
+          <main class="win-host">
+            <div class="reader-empty"><div class="card welcome-card">
+              <h1>Welcome to {{.Site}}</h1>
+              <p>Pick an application from the list and it opens as a floating window. Drag it by its title bar, resize it from any edge, snap it against the sides, or maximize it; open several and switch between them from the taskbar below.</p>
+              <p>Every application also runs on its own, at its own address, with the same game or document you left on the desktop. The ↗ button in a window's title bar takes you there.</p>
+              <p>The arrangement of windows lives in the page address, so it can be bookmarked and shared, and Back undoes the last thing you did.</p>
+              <p>This desktop is built with <a href="https://github.com/paulmooreparks/pudl" target="_blank" rel="noopener">PUDL</a>, the Pleasantly Usable Design Language. Skins and colours are in the View menu.</p>
+            </div></div>
+            <div class="win-layer" data-win-layer data-win-menu data-win-taskbar-reorder data-win-src="/win/{key}">{{.Windows}}</div>
+          </main>
+        </div>
+      </div>
+    </div>
+    <div class="win-bar">
+      <button class="icon-btn sidebar-toggle" type="button" data-md-action="toggle" aria-label="Show or hide the list" data-tooltip="Show or hide the list">
+        <span class="glyph" style="--glyph: var(--glyph-panel)" aria-hidden="true"></span>
+      </button>
+      <nav class="win-dock" data-win-dock aria-label="Open windows"></nav>
+      <a class="icon-btn" data-win-back href="{{.Bar.Back}}"{{if .Bar.NoneShown}} aria-disabled="true"{{end}} aria-label="Minimize all windows" data-tooltip="Minimize all windows"></a>
+      <a class="icon-btn" data-win-restore href="{{.Bar.Restore}}"{{if .Bar.NoneMinimized}} aria-disabled="true"{{end}} aria-label="Restore all windows" data-tooltip="Restore all windows"></a>
+      <a class="icon-btn" data-win-close-all href="{{.Bar.CloseAll}}"{{if .Bar.NoneOpen}} aria-disabled="true"{{end}} aria-label="Close all windows" data-tooltip="Close all windows"></a>
+    </div>
+  </div>
+  {{template "dialogs" .}}
+  {{template "scripts" .}}
+</body>
+</html>
+{{end}}
+
+{{/* A window: the applet's page body, as PUDL's windows fetch it by key
+     and as the desktop draws it for the windows the address names. */}}
+{{define "window"}}<section class="win" data-win="{{.Key}}"{{if .Applet.Icon}} data-window-icon="{{.Applet.IconURL}}"{{end}} data-win-mode="floating"{{if .Content}} data-win-size="content"{{end}}{{if .Applet.Min}} data-win-min="{{.Applet.Min}}"{{end}}{{if .Applet.Max}} data-win-max="{{.Applet.Max}}"{{end}} role="dialog" aria-labelledby="win-{{.Key}}-title"{{if .Style}} style="{{.Style}}"{{end}}>
+  <header class="win-head">
+    <button type="button" class="win-btn" data-win-action="menu" aria-label="Window menu" title="Window menu"></button>
+    <h2 class="win-title" id="win-{{.Key}}-title">{{.Title}}</h2>
+    <nav class="win-chrome" aria-label="Window">
+      <a class="win-btn" data-win-action="page" href="{{.Page}}" aria-label="Open as a page" title="Open as a page"></a>
+      <a class="win-btn" data-win-action="minimize" href="{{.Minimize}}" aria-label="Minimize" title="Minimize"></a>
+      <a class="win-btn" data-win-action="maximize" href="{{.Maximize}}" aria-label="Maximize" title="Maximize"></a>
+      <a class="win-btn" data-win-action="close" href="{{.Close}}" aria-label="Close" title="Close"></a>
+    </nav>
+  </header>
+  <div class="win-body"><div class="win-content">
+    <nav data-page-menu hidden aria-label="Page menu"><ul></ul></nav>
+    {{.Mount}}</div></div>
+</section>
+{{end}}
+
+{{/* An applet standalone at its own subdomain: no desktop, only the
+     applet's own menu bar, which PUDL draws from the applet's menus. */}}
+{{define "standalone"}}{{template "head" .}}
+<body class="standalone">
+  <header class="site-header">
+    <div class="topbar">
+      <nav class="site-menubar" data-menubar aria-label="{{.Title}}">
+        <ul data-menubar-source hidden>
+          <li data-menubar-id="site"><img src="{{asset "/static/icon.svg"}}" alt=""> {{.Site}}<ul>
+            <li><a href="{{.SiteURL}}">Desktop</a></li>
+            <li>-</li>
+            <li><a href="{{.SiteURL}}about" data-dialog="about-site">About yavc.app</a></li>
+          </ul></li>
+          <li data-menubar-id="go">Go<ul>
+            <li><a href="{{.SiteURL}}?open={{.Applet.Name}}&amp;top={{.Applet.Name}}">{{.Title}} on the desktop</a></li>
+          </ul></li>
+          <li data-menubar-id="view">View<ul>
+            <li>Mode<ul data-menu-radio>
+              <li><button type="button" data-site-command="mode" data-args="light" {{checked .Appearance.Mode "light"}}>Light</button></li>
+              <li><button type="button" data-site-command="mode" data-args="dark" {{checked .Appearance.Mode "dark"}}>Dark</button></li>
+              <li><button type="button" data-site-command="mode" data-args="system" {{checked .Appearance.Mode "system"}}>Follow the system</button></li>
+            </ul></li>
+            <li>Skin<ul data-menu-radio>
+              {{range .Skins}}<li><button type="button" data-site-command="skin" data-args="{{.ID}}" {{checked $.Appearance.Skin .ID}}>{{.Label}}</button></li>
+              {{end}}
+            </ul></li>
+            <li>Colours<ul data-menu-radio>
+              {{range .Palettes}}<li><button type="button" data-site-command="palette" data-args="{{.ID}}" {{checked $.Appearance.Palette .ID}}>{{.Label}}</button></li>
+              {{end}}
+            </ul></li>
+          </ul></li>
+          <li data-menubar-id="help">Help<ul></ul></li>
+        </ul>
+        <a class="brand topbar-pill" href="{{.SiteURL}}" data-menubar-fallback><img src="{{asset "/static/icon.svg"}}" alt=""> <span class="site-menu-name">{{.Site}}</span></a>
+      </nav>
+    </div>
+  </header>
+  <main class="standalone-main" data-applet-page>
+    <nav data-page-menu hidden aria-label="Page menu"><ul></ul></nav>
+    {{.Mount}}
+  </main>
+  {{template "dialogs" .}}
+  {{template "scripts" .}}
+</body>
+</html>
+{{end}}
+
+{{/* An applet as a page of the site, at /{name}, with the site's bar. */}}
+{{define "page"}}{{template "head" .}}
+<body>
+  <header class="site-header">
+    <div class="topbar">
+      {{template "menubar" .}}
+      <nav class="seg view-seg" aria-label="View" data-seg-menu>
+        <a href="{{.SiteURL}}?open={{.Applet.Name}}&amp;top={{.Applet.Name}}"><span class="glyph" style="--glyph: var(--yavc-glyph-windowed)" aria-hidden="true"></span>Windowed</a>
+        <a href="{{.SiteURL}}{{.Applet.Name}}" aria-current="true"><span class="glyph" style="--glyph: var(--yavc-glyph-classic)" aria-hidden="true"></span>Pages</a>
+      </nav>
+    </div>
+  </header>
+  <main class="site-main" id="main-content" tabindex="-1">
+    <nav data-page-menu hidden aria-label="Page menu"><ul></ul></nav>
+    {{.Mount}}
+  </main>
+  {{template "dialogs" .}}
+  {{template "scripts" .}}
+</body>
+</html>
+{{end}}
+
+{{/* The Classic view: the applications as a list of pages, for a reader
+     who prefers pages to windows, a browser without script, or an agent
+     following links. */}}
+{{define "list"}}{{template "head" .}}
+<body>
+  <header class="site-header">
+    <div class="topbar">
+      {{template "menubar" .}}
+      <nav class="seg view-seg" aria-label="View" data-seg-menu>
+        <a href="{{.SiteURL}}"><span class="glyph" style="--glyph: var(--yavc-glyph-windowed)" aria-hidden="true"></span>Windowed</a>
+        <a href="{{.SiteURL}}pages" aria-current="true"><span class="glyph" style="--glyph: var(--yavc-glyph-classic)" aria-hidden="true"></span>Pages</a>
+      </nav>
+    </div>
+  </header>
+  <main class="site-main" id="main-content" tabindex="-1">
+    <h1>Applications</h1>
+    <p>Each application is a page of this site and also runs at an address of its own. On the desktop it opens in a window.</p>
+    <div class="auto-grid gap-4 app-list">
+      {{range .Applets}}<section class="card">
+        <h2 class="card-title">{{if .Icon}}<img class="site-list-icon" src="{{.Icon}}" alt="">{{end}}<a href="{{$.SiteURL}}{{.Name}}">{{.Title}}</a></h2>
+        <p class="card-desc">{{.Description}}</p>
+        <p class="card-desc app-links"><a href="{{.Page}}">Standalone</a> · <a href="{{$.SiteURL}}?open={{.Name}}&amp;top={{.Name}}">Window</a></p>
+      </section>
+      {{end}}
+    </div>
+  </main>
+  {{template "dialogs" .}}
+  {{template "scripts" .}}
+</body>
+</html>
+{{end}}
+
+{{define "problem"}}{{template "head" .}}
+<body>
+  <header class="site-header"><div class="topbar">{{template "menubar" .}}</div></header>
+  <main class="site-main">
+    <h1>{{.Title}}</h1>
+    <p>{{.Message}}</p>
+    <p><a href="{{.SiteURL}}">Go to the desktop</a></p>
+  </main>
+  {{template "dialogs" .}}
+  {{template "scripts" .}}
+</body>
+</html>
+{{end}}
+
+{{/* The About dialogs, on every page. Each has an address of its own,
+     /about and /about/pudl, which draws the page with it open, so a link
+     to it works without script; with script the menu's link opens it in
+     place and the address follows (static/desktop.js). */}}
+{{define "dialogs"}}
+  <dialog class="dialog about-dialog" id="about-site" aria-labelledby="about-site-title"{{if eq .Dialog "about-site"}} open{{end}}>
+    <h3 class="dialog-title" id="about-site-title"><img src="{{asset "/static/icon.svg"}}" alt=""> About yavc.app</h3>
+    <div class="dialog-body">
+      <p>yavc.app is a desktop of applications, and every one of them also runs on its own at its own address, with the same game or document you left on the desktop. The name stands for "Yet Another Vibe-Coded", said with a straight face, since the applications are developed agentically, from written designs and with review.</p>
+      <p>The desktop, the windows and every control are PUDL's. Each application is a PUDL applet package, installed by copying its folder in, and most come from repositories of their own.</p>
+      <p>What this site keeps for you, your appearance and each application's state, lives under an anonymous session; Settings says more and can forget it.</p>
+      <p>The code is at <a href="https://github.com/paulmooreparks/yavc.app" target="_blank" rel="noopener">github.com/paulmooreparks/yavc.app</a>.</p>
+    </div>
+    <form class="dialog-actions" method="dialog">
+      <button class="btn btn-primary" value="close" autofocus>Close</button>
+    </form>
+  </dialog>
+  <dialog class="dialog about-dialog" id="about-pudl" aria-labelledby="about-pudl-title"{{if eq .Dialog "about-pudl"}} open{{end}}>
+    <h3 class="dialog-title" id="about-pudl-title">About PUDL</h3>
+    <div class="dialog-body">
+      <p>PUDL, the Pleasantly Usable Design Language, pronounced "puddle", gives every affordance one visual representation: what can be pressed is raised, what takes input is sunken, and what is read is flat. Somebody who has learned it once can use any application built with it.</p>
+      <p>Its web implementation is a stylesheet, a small theme script and a font, with optional scripts for menus, floating windows, applets and the rest, and no framework. Skins change the shape and depth of every control, and colour themes change the palette, in light and dark.</p>
+      <p>This site uses PUDL {{.PUDLVersion}}. The code and its reference page are at <a href="https://github.com/paulmooreparks/pudl" target="_blank" rel="noopener">github.com/paulmooreparks/pudl</a>.</p>
+    </div>
+    <form class="dialog-actions" method="dialog">
+      <button class="btn btn-primary" value="close" autofocus>Close</button>
+    </form>
+  </dialog>
+{{end}}

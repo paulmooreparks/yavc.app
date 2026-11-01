@@ -1,0 +1,17 @@
+{
+  "name": "sudoku",
+  "title": "Sudoku",
+  "version": "1.2.0",
+  "description": "A Sudoku game that lets you edit and share games.",
+  "license": "MIT",
+  "src": "sudoku.js",
+  "css": "sudoku.css",
+  "icon": "icon.svg",
+  "page": { "body": "page.html" },
+  "window": { "shape": "0.28,0.88" },
+  "handles": { "sudoku": { "param": "difficulty" } },
+  "actions": "actions.json",
+  "continuity": true,
+  "wants": ["snapshot"],
+  "tags": ["games", "puzzles"]
+}

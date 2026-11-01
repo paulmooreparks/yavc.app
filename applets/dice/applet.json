@@ -1,0 +1,13 @@
+{
+  "name": "dice",
+  "title": "Dice",
+  "version": "1.0.1",
+  "description": "Rolls up to three dice, fairly.",
+  "license": "Apache-2.0",
+  "src": "dice.js",
+  "css": "dice.css",
+  "icon": "icon.svg",
+  "page": { "body": "page.html" },
+  "actions": "actions.json",
+  "tags": ["web apps", "games"]
+}

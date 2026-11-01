@@ -1,0 +1,27 @@
+/* The games' shared look (splash-shell.js): the canvas and the bar under
+   it, the status line, the touch pad, and the High scores and Help
+   dialogs. A game's own stylesheet imports this and adds its own. The
+   canvas is scaled by the stylesheet: on a page it takes the width it
+   has, up to a limit the game sets; in a window the host gives the mount
+   a definite box (PUDL's fit "fill"), the stage takes what the bar leaves,
+   and the canvas fills it keeping its own shape. PUDL's tokens colour
+   everything, so the games follow the theme. */
+.splash { display: flex; flex-direction: column; align-items: center; gap: var(--space-3); outline: none; }
+.splash:focus-visible .splash-stage { box-shadow: var(--focus-ring); border-radius: var(--radius-sm); }
+.splash-stage { position: relative; width: 100%; max-width: 448px; }
+.splash canvas { display: block; width: 100%; height: auto; image-rendering: pixelated; background: var(--surface-alt); border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.splash[data-applet-fit="fill"] { flex: 1 1 auto; min-height: 0; }
+.splash[data-applet-fit="fill"] .splash-stage { flex: 1 1 auto; min-height: 0; max-width: none; display: flex; justify-content: center; }
+.splash[data-applet-fit="fill"] canvas { width: 100%; height: 100%; aspect-ratio: auto; object-fit: contain; }
+.splash-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: var(--space-2); }
+.splash-status { font-size: var(--text-sm); color: var(--text-muted); min-width: 8rem; }
+.splash-pad { display: none; gap: var(--space-3); touch-action: none; user-select: none; }
+.splash-touch .splash-pad { display: flex; }
+.splash-pad-btn { min-width: 4rem; min-height: 3rem; font-size: var(--text-xl); }
+.splash-scores { width: 100%; border-collapse: collapse; }
+.splash-scores th, .splash-scores td { text-align: left; padding: var(--space-1) var(--space-2); }
+.splash-scores td:first-child, .splash-scores td:nth-child(2) { font-variant-numeric: tabular-nums; text-align: right; }
+.splash-scores tr.splash-mine td { font-weight: 700; color: var(--accent); }
+.splash-keys { display: grid; grid-template-columns: auto 1fr; gap: var(--space-1) var(--space-4); margin: 0; }
+.splash-keys dt { font-family: var(--mono); }
+.splash-keys dd { margin: 0; }

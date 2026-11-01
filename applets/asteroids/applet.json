@@ -1,0 +1,35 @@
+{
+  "name": "asteroids",
+  "title": "Asteroids",
+  "version": "0.1.0",
+  "description": "The 1979 arcade game: turn, thrust and shoot the rocks into ever smaller pieces, and watch for the saucers.",
+  "license": "Apache-2.0",
+  "src": "asteroids.js",
+  "css": "asteroids.css",
+  "icon": "icon.svg",
+  "page": {
+    "body": "page.html"
+  },
+  "window": {
+    "shape": "0.55,0.75",
+    "min": "480,420"
+  },
+  "handles": {
+    "play": {
+      "param": "level"
+    }
+  },
+  "actions": "actions.json",
+  "continuity": false,
+  "wants": [
+    "fs",
+    "config"
+  ],
+  "shared": [
+    "../shared"
+  ],
+  "tags": [
+    "games",
+    "arcade"
+  ]
+}

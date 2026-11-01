@@ -1,0 +1,22 @@
+{
+  "name": "barcodes",
+  "title": "Barcode Tool",
+  "version": "1.2.0",
+  "description": "Make retail barcodes with embedded data, and read them back.",
+  "license": "Apache-2.0",
+  "src": "barcode-tool.js",
+  "css": "barcode-tool.css",
+  "icon": "icon.svg",
+  "page": {
+    "body": "page.html"
+  },
+  "actions": "actions.json",
+  "continuity": true,
+  "wants": [
+    "fs"
+  ],
+  "tags": [
+    "web apps",
+    "barcodes"
+  ]
+}

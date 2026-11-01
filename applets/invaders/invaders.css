@@ -1,0 +1,4 @@
+/* Space Invaders (invaders.js): the shared look, and the arcade's own
+   proportions, 224 by 256, scaled whole. */
+@import url(../shared/splash.css);
+.splash-invaders canvas { aspect-ratio: 224 / 256; }

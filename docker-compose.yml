@@ -1,0 +1,17 @@
+# yavc.app on this machine, behind the cloudflared tunnel, which routes
+# yavc.app, www.yavc.app and *.yavc.app to 127.0.0.1:8400 (the tunnel's
+# config.yml). The engine binds to the loopback address only.
+services:
+  yavc:
+    build: .
+    image: yavc-app:local
+    container_name: yavc-app
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8400:8400"
+    volumes:
+      - yavc-data:/data
+    command: ["-domain", "yavc.app", "-secure", "-title", "yavc.app"]
+
+volumes:
+  yavc-data:

@@ -1,0 +1,21 @@
+{
+  "name": "barcode-scanner",
+  "title": "Barcode Scanner",
+  "version": "1.0.1",
+  "description": "Scan camera images and decode retail layouts.",
+  "license": "Apache-2.0",
+  "src": "barcode-scanner.js",
+  "css": "barcode-scanner.css",
+  "icon": "icon.svg",
+  "page": {
+    "body": "page.html"
+  },
+  "wants": [
+    "fs"
+  ],
+  "tags": [
+    "web apps",
+    "barcodes",
+    "retail"
+  ]
+}

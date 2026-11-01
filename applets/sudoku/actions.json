@@ -1,0 +1,116 @@
+{
+  "id": "parks.sudoku",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "title": "Sudoku",
+  "description": "Solve and check 9 by 9 sudoku puzzles.",
+  "module": "actions.js",
+  "actions": [
+    {
+      "ref": "parks.sudoku/solve@1",
+      "title": "Solve Sudoku",
+      "description": "Solve a 9 by 9 sudoku. The puzzle is 81 characters read row by row, left to right, with a digit for each clue and 0 or . for each empty cell. Says whether the puzzle has no solution, exactly one, or more than one, and gives the solution only when there is exactly one.",
+      "inputSchema": {
+        "type": "object", "additionalProperties": false, "required": ["puzzle"],
+        "properties": { "puzzle": { "type": "string", "pattern": "^[0-9.]{81}$" } }
+      },
+      "outputSchema": {
+        "type": "object", "additionalProperties": false, "required": ["solutions", "solution"],
+        "properties": {
+          "solutions": { "enum": ["none", "one", "many"] },
+          "solution": { "type": ["string", "null"], "pattern": "^[1-9]{81}$" }
+        }
+      },
+      "capabilities": [],
+      "replay": "pure"
+    },
+    {
+      "ref": "parks.sudoku/new@1",
+      "title": "New Sudoku game",
+      "description": "Open Sudoku on the reader's desktop if it is not open, deal a fresh game at the difficulty given (easy, medium, hard or veryhard), and give the board. The reader watches the board, so play it with enter, a few cells at a time.",
+      "inputSchema": {
+        "type": "object", "additionalProperties": false,
+        "properties": { "difficulty": { "enum": ["easy", "medium", "hard", "veryhard"], "default": "medium" } }
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": ["difficulty", "puzzle", "board", "rows", "wrong", "marks", "empty", "complete"],
+        "properties": {
+          "difficulty": { "type": "string" },
+          "puzzle": { "type": "string", "pattern": "^[1-9.]{81}$" },
+          "board": { "type": "string", "pattern": "^[1-9.]{81}$" },
+          "rows": { "type": "array", "minItems": 9, "maxItems": 9, "items": { "type": "string" } },
+          "wrong": { "type": "array", "items": { "type": "object", "properties": { "row": { "type": "integer" }, "col": { "type": "integer" }, "digit": { "type": "integer" } } } },
+          "marks": { "type": "array", "items": { "type": "object", "properties": { "row": { "type": "integer" }, "col": { "type": "integer" }, "digits": { "type": "array", "items": { "type": "integer" } } } } },
+          "empty": { "type": "integer" },
+          "complete": { "type": "boolean" },
+          "entries": { "type": "array", "items": { "type": "object" } }
+        }
+      },
+      "capabilities": ["window.open"],
+      "replay": "once"
+    },
+    {
+      "ref": "parks.sudoku/board@1",
+      "title": "Look at the Sudoku board",
+      "description": "The Sudoku board as the reader sees it: the puzzle (the clues), the board with the entries so far, the rows as nine strings, the entries that are wrong, the pencil marks, and how many cells are empty.",
+      "inputSchema": { "type": "object", "additionalProperties": false, "properties": {} },
+      "outputSchema": {
+        "type": "object",
+        "required": ["difficulty", "puzzle", "board", "rows", "wrong", "marks", "empty", "complete"],
+        "properties": {
+          "difficulty": { "type": "string" },
+          "puzzle": { "type": "string", "pattern": "^[1-9.]{81}$" },
+          "board": { "type": "string", "pattern": "^[1-9.]{81}$" },
+          "rows": { "type": "array", "minItems": 9, "maxItems": 9, "items": { "type": "string" } },
+          "wrong": { "type": "array", "items": { "type": "object", "properties": { "row": { "type": "integer" }, "col": { "type": "integer" }, "digit": { "type": "integer" } } } },
+          "marks": { "type": "array", "items": { "type": "object", "properties": { "row": { "type": "integer" }, "col": { "type": "integer" }, "digits": { "type": "array", "items": { "type": "integer" } } } } },
+          "empty": { "type": "integer" },
+          "complete": { "type": "boolean" },
+          "entries": { "type": "array", "items": { "type": "object" } }
+        }
+      },
+      "capabilities": ["window.open"],
+      "replay": "once"
+    },
+    {
+      "ref": "parks.sudoku/enter@1",
+      "title": "Enter on the Sudoku board",
+      "description": "Play on the open Sudoku board: for each entry, put a digit in a cell (1 to 9; 0 clears it), or set the cell's pencil marks outright with marks. Rows and columns count from 1. A clue cell cannot be changed. The board marks a wrong digit and leaves it for you to correct; a right one erases its pencil marks from the row, column and box. Gives each entry's result and the board after them.",
+      "inputSchema": {
+        "type": "object", "additionalProperties": false, "required": ["entries"],
+        "properties": {
+          "entries": {
+            "type": "array", "minItems": 1, "maxItems": 20,
+            "items": {
+              "type": "object", "additionalProperties": false, "required": ["row", "col"],
+              "properties": {
+                "row": { "type": "integer", "minimum": 1, "maximum": 9 },
+                "col": { "type": "integer", "minimum": 1, "maximum": 9 },
+                "digit": { "type": "integer", "minimum": 0, "maximum": 9 },
+                "marks": { "type": "array", "maxItems": 9, "items": { "type": "integer", "minimum": 1, "maximum": 9 } }
+              }
+            }
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": ["difficulty", "puzzle", "board", "rows", "wrong", "marks", "empty", "complete"],
+        "properties": {
+          "difficulty": { "type": "string" },
+          "puzzle": { "type": "string", "pattern": "^[1-9.]{81}$" },
+          "board": { "type": "string", "pattern": "^[1-9.]{81}$" },
+          "rows": { "type": "array", "minItems": 9, "maxItems": 9, "items": { "type": "string" } },
+          "wrong": { "type": "array", "items": { "type": "object", "properties": { "row": { "type": "integer" }, "col": { "type": "integer" }, "digit": { "type": "integer" } } } },
+          "marks": { "type": "array", "items": { "type": "object", "properties": { "row": { "type": "integer" }, "col": { "type": "integer" }, "digits": { "type": "array", "items": { "type": "integer" } } } } },
+          "empty": { "type": "integer" },
+          "complete": { "type": "boolean" },
+          "entries": { "type": "array", "items": { "type": "object" } }
+        }
+      },
+      "capabilities": ["window.open"],
+      "replay": "once"
+    }
+  ]
+}
