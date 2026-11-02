@@ -13,6 +13,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"strings"
 	"sync"
 	"time"
 )
@@ -53,6 +54,8 @@ type Record struct {
 	ID        string
 	Session   string
 	Page      string
+	inv       Invocation
+	tried     map[string]bool
 	Status    string
 	View      json.RawMessage
 	Artifacts map[string]Artifact
@@ -192,7 +195,7 @@ func (h *Hub) Invoke(session string, inv Invocation) (*Record, error) {
 	}
 	now := time.Now()
 	view, _ := json.Marshal(map[string]any{"id": inv.ID, "action": inv.Action, "owner": inv.Owner, "status": "sent", "input": inv.Input, "created": now.UTC().Format(time.RFC3339Nano)})
-	rec := &Record{ID: inv.ID, Session: session, Page: p.id, Status: "sent", View: view, Artifacts: map[string]Artifact{}, Created: now, Updated: now, done: make(chan struct{})}
+	rec := &Record{ID: inv.ID, Session: session, Page: p.id, inv: inv, tried: map[string]bool{p.id: true}, Status: "sent", View: view, Artifacts: map[string]Artifact{}, Created: now, Updated: now, done: make(chan struct{})}
 	select {
 	case p.ch <- Event{Name: "invoke", Data: inv}:
 	default:
@@ -207,6 +210,7 @@ func (h *Hub) Invoke(session string, inv Invocation) (*Record, error) {
 func (h *Hub) Report(session, id string, view json.RawMessage, artifacts map[string]Artifact) error {
 	var v struct {
 		Status string `json:"status"`
+		Error  string `json:"error"`
 	}
 	if err := json.Unmarshal(view, &v); err != nil || v.Status == "" {
 		return errors.New("the report is not a record")
@@ -219,6 +223,26 @@ func (h *Hub) Report(session, id string, view json.RawMessage, artifacts map[str
 	}
 	if !rec.Finished.IsZero() {
 		return nil
+	}
+	// A live action is answered by the open applet; a page without it
+	// says so, and the invocation goes on to another page of the session
+	// that has not been asked, since the applet may be open there
+	// (docs/agents-design.md, decision 7).
+	if v.Status == "failed" && strings.HasPrefix(v.Error, "no open ") {
+		if sh := h.sessions[session]; sh != nil {
+			for _, id := range sh.order {
+				if p := sh.pages[id]; p != nil && !rec.tried[id] {
+					select {
+					case p.ch <- Event{Name: "invoke", Data: rec.inv}:
+						rec.tried[id] = true
+						rec.Page = id
+						rec.Updated = time.Now()
+						return nil
+					default:
+					}
+				}
+			}
+		}
 	}
 	rec.View = view
 	rec.Status = v.Status
