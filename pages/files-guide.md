@@ -1,6 +1,6 @@
 # Files Guide
 
-[Files](/files) lets you browse yavc.app as folders and keep personal text files in your browser. It shares those personal files with the site's Editor and Terminal. In the Windowed view, you can keep these applications open beside one another; in the Pages view, Files has its own page at `yavc.app/files`, and it also runs standalone at `files.yavc.app`.
+[Files](/files) lets you browse yavc.app as folders and keep personal files in your browser. It shares those personal files with the site's Editor and Terminal. In the Windowed view, you can keep these applications open beside one another; in the Pages view, Files has its own page at `yavc.app/files`, and it also runs standalone at `files.yavc.app`.
 
 ## Your data and privacy
 
@@ -64,14 +64,14 @@ Open your home directory or a folder inside it to use these operations.
 | --- | --- |
 | New file | Asks for a name, creates an empty text file, and selects it in the list. |
 | New folder | Asks for a name and creates a folder in the current directory. |
-| Upload | Lets you choose text files from your computer and imports them into the current browser folder. You can also drop files onto the list. |
+| Upload | Lets you choose files from your computer and imports them into the current browser folder. You can also drop files onto the list. |
 | Rename | Changes the selected entry's name after you confirm the new name. |
 | Move to | Asks for a destination path for the selected entry. You can also drag a personal entry onto a writable folder. |
 | Delete | Asks for confirmation before deleting the selected entry. Deleting a folder also deletes its contents. Deletion cannot be undone. |
 
 Names cannot contain `/` or be `.` or `..`. A new file or folder cannot use a name already present in the destination. Read any error shown below the list before trying again. Some special files have fewer operations because another application manages them.
 
-Your home directory accepts text files, such as notes, Markdown, JSON, CSV, and scripts. It is not a general binary-file store for photographs or archives. The per-file limit is 256 KB, and the whole home directory has a total limit of 2 MB, including storage overhead. Uploads or saves that exceed these limits report an error.
+Your home directory accepts text files, such as notes, Markdown, JSON, CSV, and scripts, and pictures or other files of bytes. A text file is kept in the browser's local storage, with a per-file limit of 256 KB and a total of 2 MB for all of them, including storage overhead. A picture or any other file that is not text is kept in the browser's database instead, with a limit of 8 MB each, and does not count against the 2 MB. Uploads or saves that exceed these limits report an error. The Editor and the Terminal do not open a file of bytes; a picture opens in a tab of its own, and anything else downloads.
 
 The Editor saves into the same personal filesystem that Files and Terminal use. Changes appear across open applications and other tabs at the same address. Download makes an independent copy on your computer; editing that downloaded copy does not automatically change the browser copy.
 

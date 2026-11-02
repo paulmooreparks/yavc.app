@@ -31,11 +31,15 @@ Text Colour wraps the selected words in `{{color:…}}…{{/color}}`, with one o
 
 On an empty line in Visual view, type `/` for a menu of everything Insert offers: headings, lists, a quote, a checklist, a table, a code block, and the shortcodes. Typing narrows it, Enter inserts. Insert, on the toolbar and under Format, offers the same list.
 
+## Pictures
+
+Insert, Picture opens a dialog for the picture: its address, with Browse for one already in your home folder or on the site and Upload for one from your computer, what it shows, its largest width and a caption. An uploaded picture is kept beside the document when the document is saved under `~`, and otherwise in `~/Pictures`; either way it lives in this browser, as your files do. In Visual view, a click on a picture opens the same dialog to change it or remove it.
+
 ## Shortcodes
 
 A shortcode is `{{name:args}}`, or `{{name}}` … `{{/name}}` around content. The Editor draws them in Visual view and Preview as the site does. The ones most used:
 
-- `{{figure:/path/to/picture.png alt="What it shows" width=60% caption="…"}}`, a picture
+- `{{figure:cat.png alt="What it shows" width=60% caption="…"}}`, a picture: one beside the document, one in your home folder (`~/Pictures/cat.png`), one of the site's (`/static/shots/desktop.jpg`) or one on the web
 - `{{columns}}` … `{{column}}` … `{{/columns}}`, content side by side
 - `{{tip:A title}}` … `{{/tip}}`, and `note`, `info`, `warning`, notices
 - `{{expand:The title}}` … `{{/expand}}`, a section that opens and closes

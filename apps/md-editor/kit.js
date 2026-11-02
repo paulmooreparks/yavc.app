@@ -11,12 +11,18 @@
                                         the paragraph style and Insert
      yavcMdEditor.textFormat(view, name, ctx)   a format on a CodeMirror view
      yavcMdEditor.textInsert(view, markdown)    Markdown into a CodeMirror view
-     yavcMdEditor.inserts(extra)        the / menu's items, for the page host
+     yavcMdEditor.inserts(extra, pictures)   the / menu's items, for the page host
      yavcMdEditor.askText / askChoice / askColour / askColours   PUDL dialogs
+     yavcMdEditor.askFigure(existing, pictures)   the picture dialog
+     yavcMdEditor.editBlock(src, pictures)   a drawn block pressed on the page
+     yavcMdEditor.loadImages(el, pictures)   pictures of the home folder, read
 
    ctx says where a format goes: { page(): the page view's handle or null,
    text(): the CodeMirror view or null, onPage(): whether the page takes
-   it, readOnly(): whether nothing may change, say(text, isError) }. The
+   it, readOnly(): whether nothing may change, say(text, isError),
+   pictures(): where the document's pictures are }. pictures is { site():
+   a promise of { F, FB }, the site file system and its dialogs; root: the
+   applet's element; dir(): the document's folder as a path, or null }. The
    command ids are the names the Editor's key bindings use: bold, italic,
    strike, code, link, bullets, numbers, color, paragraph, h1 to h6, and
    insert-… for the blocks. Loaded with the site's static version, as
@@ -106,8 +112,9 @@
             return v ? '{{video:' + v.replace(/[\s}]/g, '') + ' title="Video"}}' : null;
         });
     }
-    function markdownFor(item) {
+    function markdownFor(item, ctx) {
         if (item.name === 'video') { return askVideo(); }
+        if (item.name === 'figure') { return askFigure(null, ctx && ctx.pictures ? ctx.pictures() : null); }
         return Promise.resolve(item.markdown);
     }
 
@@ -209,7 +216,7 @@
     }
     function insertItem(item, ctx) {
         if (ctx.readOnly && ctx.readOnly()) { if (ctx.say) { ctx.say('This is read-only, so nothing can be added to it.', true); } return; }
-        markdownFor(item).then(function (md) {
+        markdownFor(item, ctx).then(function (md) {
             if (!md) { return; }
             var page = ctx.page && ctx.page();
             if (page && ctx.onPage()) {
@@ -248,10 +255,13 @@
 
     /* The / menu's items, for the page host's inserts(): the shortcodes,
        and the host's own after them. */
-    function inserts(extra) {
+    function inserts(extra, pictures) {
+        function onPage(md) { if (md && window.yavcMdEditor._page) { window.yavcMdEditor._page.insertMarkdown(md); } }
         var out = SHORTCODES.map(function (i) {
             var it = { id: i.id, label: i.label.replace(/…$/, ''), words: i.name + ' ' + i.label.toLowerCase() };
-            if (i.name === 'video') { it.run = function () { askVideo().then(function (md) { if (md && window.yavcMdEditor._page) { window.yavcMdEditor._page.insertMarkdown(md); } }); }; } else { it.markdown = i.markdown; }
+            if (i.name === 'video') { it.run = function () { askVideo().then(onPage); }; }
+            else if (i.name === 'figure') { it.run = function () { askFigure(null, pictures ? pictures() : null).then(onPage); }; }
+            else { it.markdown = i.markdown; }
             return it;
         });
         return out.concat((extra || []).map(function (i) { return { id: i.id, label: i.label, words: (i.words || i.label || '').toLowerCase(), markdown: i.markdown, run: i.run }; }));
@@ -353,12 +363,199 @@
         });
     }
 
+    /* === Pictures ========================================================
+       A picture in a document is a {{figure}} shortcode (or a plain
+       Markdown image), asked for and changed as a form: its address, with
+       Browse for one in the home folder or on the site and Upload for one
+       from the computer, what it shows, its largest width and a caption
+       (DESIGN.md, decision 14). A picture uploaded goes beside the document
+       when the document is saved under ~, else into ~/Pictures, and is
+       written as a path the page reads from the home folder. */
+
+    /* A shortcode's call taken apart: {{name:positional key=value
+       key="a value"}}, with \" inside quotes, as the engine reads it. */
+    function parseShortcode(src) {
+        var m = /^\{\{(\/?)([a-z][a-z0-9-]*)(?::([\s\S]*?))?\}\}$/.exec((src || '').trim());
+        if (!m) { return null; }
+        var out = { name: m[2], positional: [], named: {} }, t = m[3] || '', i = 0;
+        while (i < t.length) {
+            while (i < t.length && /\s/.test(t[i])) { i++; }
+            if (i >= t.length) { break; }
+            var key = null, start = i;
+            while (i < t.length && /[A-Za-z0-9_-]/.test(t[i])) { i++; }
+            if (t[i] === '=' && i > start) { key = t.slice(start, i); i++; } else { i = start; }
+            var value = '';
+            if (t[i] === '"') {
+                i++;
+                while (i < t.length && t[i] !== '"') { if (t[i] === '\\' && i + 1 < t.length) { i++; } value += t[i]; i++; }
+                i++;
+            } else {
+                while (i < t.length && !/\s/.test(t[i])) { value += t[i]; i++; }
+            }
+            if (key === null) { out.positional.push(value); } else { out.named[key] = value; }
+        }
+        return out;
+    }
+    function quoteArg(v) { return /[\s"]/.test(v) || v === '' ? '"' + v.replace(/(["\\])/g, '\\$1') + '"' : v; }
+    function buildFigure(f) {
+        var parts = ['{{figure:' + quoteArg(f.src), 'alt=' + quoteArg(f.alt || '')];
+        if (f.width) { parts.push('width=' + quoteArg(f.width)); }
+        if (f.caption) { parts.push('caption=' + quoteArg(f.caption)); }
+        return parts.join(' ') + '}}';
+    }
+    /* The picture a block is, as { src, alt, width, caption }, or null for
+       a block that is not one picture: a {{figure}} on its own, or a
+       Markdown image on its own. */
+    function parseFigure(src) {
+        var t = (src || '').trim();
+        if (!t || t.indexOf('\n') >= 0) { return null; }
+        var sc = parseShortcode(t);
+        if (sc) {
+            if (sc.name !== 'figure') { return null; }
+            return { src: sc.named.src || sc.positional[0] || '', alt: sc.named.alt || '', width: sc.named.width || '', caption: sc.named.caption || '' };
+        }
+        var m = /^!\[([^\]]*)\]\(\s*<?([^\s)>]+)>?(?:\s+"[^"]*")?\s*\)$/.exec(t);
+        if (m) { return { src: m[2], alt: m[1], width: '', caption: '' }; }
+        return null;
+    }
+    var PICTURE_EXT = /\.(png|jpe?g|gif|webp|svg|avif|bmp)$/i;
+    /* How a picture is written in the document: by name when it sits in
+       the document's folder, by its ~ path elsewhere in the home folder,
+       and by its address on the site otherwise. */
+    function addressOf(F, node, dirPath) {
+        var display = F.displayPath(node), dir = dirPath ? dirPath.replace(/\/$/, '') + '/' : null;
+        if (dir && display.indexOf(dir) === 0) { return display.slice(dir.length); }
+        if (display.indexOf('~/') === 0) { return display; }
+        var url = F.publicUrl(node);
+        if (url) { try { return new URL(url).pathname; } catch (err) { } }
+        return display;
+    }
+    /* The picture dialog: a promise of the {{figure}} to write, '' to take
+       the picture out, or null for no change. existing is the block being
+       changed, or null for a new picture. */
+    function askFigure(existing, pictures) {
+        var f = existing ? parseFigure(existing) : null, n = ++dlgCount, id = 'md-fig-' + n + '-';
+        var dlg = document.createElement('dialog');
+        dlg.className = 'dialog md-editor-dialog md-figure';
+        dlg.setAttribute('aria-labelledby', id + 'title');
+        dlg.innerHTML = '<form method="dialog"><h3 class="dialog-title" id="' + id + 'title">' + (f ? 'Change the picture' : 'Insert a picture') + '</h3>' +
+            '<div class="dialog-body md-figure-fields">' +
+            '<label class="form-label" for="' + id + 'src">Picture</label>' +
+            '<div class="md-figure-src"><input class="form-input" id="' + id + 'src" data-key="src" value="' + esc(f ? f.src : '') + '" autocomplete="off" spellcheck="false" placeholder="cat.png, ~/Pictures/cat.png or https://…" required>' +
+            (pictures ? '<button type="button" class="btn" data-act="browse">Browse…</button><button type="button" class="btn" data-act="upload">Upload…</button>' : '') + '</div>' +
+            '<p class="form-help">A picture beside the document, one in your home folder, one of the site\'s, or an address on the web.</p>' +
+            '<label class="form-label" for="' + id + 'alt">What it shows</label>' +
+            '<input class="form-input" id="' + id + 'alt" data-key="alt" value="' + esc(f ? f.alt : '') + '" autocomplete="off">' +
+            '<p class="form-help">For someone who can\'t see it. Leave it empty for a picture that only decorates.</p>' +
+            '<label class="form-label" for="' + id + 'width">Largest width</label>' +
+            '<input class="form-input" id="' + id + 'width" data-key="width" value="' + esc(f ? f.width : '') + '" autocomplete="off" spellcheck="false" placeholder="80%">' +
+            '<p class="form-help">Such as 80% or 600px; the column\'s width if empty.</p>' +
+            '<label class="form-label" for="' + id + 'caption">Caption</label>' +
+            '<input class="form-input" id="' + id + 'caption" data-key="caption" value="' + esc(f ? f.caption : '') + '" autocomplete="off">' +
+            '<p class="form-help">Under the picture, in Markdown.</p>' +
+            '<p class="form-error" data-role="error" hidden></p>' +
+            '<input type="file" accept="image/*" hidden data-role="file">' +
+            '</div><div class="dialog-actions">' +
+            (f ? '<button type="button" class="btn" data-act="remove">Remove</button>' : '') +
+            '<button type="button" class="btn" data-act="cancel">Cancel</button>' +
+            '<button type="submit" class="btn btn-primary">' + (f ? 'Change' : 'Insert') + '</button></div></form>';
+        document.body.appendChild(dlg);
+        var form = dlg.querySelector('form'), field = function (k) { return dlg.querySelector('[data-key="' + k + '"]'); };
+        var errorLine = dlg.querySelector('[data-role="error"]'), file = dlg.querySelector('[data-role="file"]');
+        function problem(text, focus) { errorLine.textContent = text; errorLine.hidden = false; if (focus) { focus.focus(); } }
+        return new Promise(function (resolve) {
+            var done = false;
+            function finish(v) { if (done) { return; } done = true; if (dlg.open) { dlg.close(); } resolve(v); setTimeout(function () { dlg.remove(); }, 0); }
+            form.addEventListener('submit', function (e) {
+                e.preventDefault();
+                var src = field('src').value.trim(), width = field('width').value.trim();
+                if (!src) { problem('The picture needs an address, such as cat.png or ~/Pictures/cat.png.', field('src')); return; }
+                if (width && !/^\d+(\.\d+)?(%|px|rem|em|ch)$/.test(width)) { problem('The width is a number with %, px, rem, em or ch, such as 80%.', field('width')); return; }
+                finish(buildFigure({ src: src, alt: field('alt').value.trim(), width: width, caption: field('caption').value.trim() }));
+            });
+            dlg.addEventListener('click', function (e) {
+                var b = e.target.closest('[data-act]');
+                if (!b) { return; }
+                var act = b.getAttribute('data-act');
+                if (act === 'cancel') { finish(null); }
+                else if (act === 'remove') { finish(''); }
+                else if (act === 'browse') { browse(); }
+                else if (act === 'upload') { file.value = ''; file.click(); }
+            });
+            dlg.addEventListener('close', function () { finish(null); });
+            function browse() {
+                pictures.site().then(function (site) {
+                    var F = site.F, FB = site.FB, dir = pictures.dir ? pictures.dir() : null;
+                    return FB.pick(F, {
+                        mode: 'open', title: 'Choose a picture', host: pictures.root, start: dir && F.resolve(null, dir) ? dir : '~',
+                        check: function (r) { return PICTURE_EXT.test(r.name) ? null : r.name + ' isn\'t a picture.'; },
+                        commit: function (c) {
+                            var node = c.path ? F.resolve(null, c.path) : null;
+                            if (!node) { return 'Choose a picture.'; }
+                            field('src').value = addressOf(F, node, dir);
+                            return true;
+                        }
+                    });
+                }).then(function (res) { if (res) { errorLine.hidden = true; field('alt').focus(); } }).catch(function (err) { problem(err && err.message || String(err)); });
+            }
+            file.addEventListener('change', function () {
+                var picked = file.files && file.files[0];
+                if (!picked) { return; }
+                var F = null, dir = pictures.dir ? pictures.dir() : null, into = null;
+                pictures.site().then(function (site) {
+                    F = site.F;
+                    into = dir ? F.resolve(null, dir) : null;
+                    if (into && F.realOf(into).home) { return null; }
+                    /* An unsaved document, or one on the site: the picture goes to ~/Pictures. */
+                    dir = '~/Pictures';
+                    return F.mkdir(null, dir, true).then(function (err) { if (err) { throw new Error(err); } into = F.resolve(null, dir); });
+                }).then(function () { return F.upload(into, picked); }).then(function (res) {
+                    if (res.error) { throw new Error(res.error); }
+                    field('src').value = addressOf(F, res.node, dir);
+                    errorLine.hidden = true;
+                    if (pictures.say) { pictures.say('Uploaded ' + picked.name + ' to ' + F.displayPath(into) + '.'); }
+                    field('alt').focus();
+                }).catch(function (err) { problem(err && err.message || String(err)); });
+            });
+            dlg.showModal();
+            (f ? field('caption') : field('src')).focus();
+        });
+    }
+    /* A drawn block pressed on the page: a picture opens its dialog, and
+       resolves to the block's new source, '' to take it out, or null to
+       leave it; any other block is undefined, for the page to edit as its
+       Markdown. */
+    function editBlock(src, pictures) {
+        if (!parseFigure(src)) { return undefined; }
+        return askFigure(src, pictures);
+    }
+    /* The pictures of the home folder in drawn HTML (the engine marks each
+       with data-attachment, its path from the document's folder), read
+       from the folder and shown; one not found is marked. */
+    function loadImages(target, pictures) {
+        var imgs = target.querySelectorAll('img[data-attachment]');
+        if (!imgs.length) { return; }
+        if (!pictures || !pictures.site) { imgs.forEach(function (img) { img.classList.add('ed-missing-image'); }); return; }
+        pictures.site().then(function (site) {
+            var F = site.F, dir = pictures.dir ? pictures.dir() : null, base = (dir && F.resolve(null, dir)) || F.home();
+            imgs.forEach(function (img) {
+                var name = img.dataset.attachment, node = base ? F.resolve(base, name) : null;
+                if (!node || node.children) { img.classList.add('ed-missing-image'); img.alt = img.alt || name; return; }
+                F.readBytes(node).then(function (bytes) {
+                    /* The address stays until the picture is drawn again, so an export can read it. */
+                    img.src = URL.createObjectURL(new Blob([bytes], { type: (F.typeOf && F.typeOf(node)) || '' }));
+                }).catch(function () { img.classList.add('ed-missing-image'); });
+            });
+        }).catch(function () { imgs.forEach(function (img) { img.classList.add('ed-missing-image'); }); });
+    }
+
     window.yavcMdEditor = {
         here: HERE, stamp: STAMP, placeholder: PLACEHOLDER,
         libs: libs, pageView: pageView, mermaid: mermaid, loadScript: loadScript,
         FORMATS: FORMATS, STYLES: STYLES, INSERTS: INSERTS, SHORTCODES: SHORTCODES, MENU: MENU,
         commands: commands, apply: apply, classesOf: classesOf, insertItem: insertItem, inserts: inserts, textFormat: textFormat, textInsert: textInsert,
         askText: askText, askChoice: askChoice, askColour: askColour, askColours: askColours, askClass: askClass,
+        askFigure: askFigure, editBlock: editBlock, loadImages: loadImages, parseFigure: parseFigure, buildFigure: buildFigure, parseShortcode: parseShortcode,
         _page: null
     };
 })();

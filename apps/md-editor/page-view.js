@@ -175,6 +175,12 @@ var schemaCache = null;
        draw(el, html, diagrams) draws preview HTML into el, diagrams and images included
        keys()                   [{ key, run }], the Editor's key table in ProseMirror's spelling
        say(text, warn)          the Editor's status line
+       editBlock(src)           optional: a drawn block pressed; a promise of its new
+                                source, '' to take it out, or null; undefined to edit it here
+       editBlock(src)           optional: a drawn block pressed; a promise of its new
+                                source, '' to take it out, or null; undefined to edit it here
+       editBlock(src)           optional: a drawn block pressed; a promise of its new
+                                source, '' to take it out, or null; undefined to edit it here
        changed()                the Editor's commands may have changed
        failed(text)             the page could not be built; the Editor leaves Page view
      } */
@@ -888,8 +894,13 @@ var schemaCache = null;
       }
       function done() {
         if (!box) return;
-        var value = box.value, was = shownNode.attrs.src || '';
+        var value = box.value;
         box = null;
+        take(value);
+      }
+      /* The block's new source, drawn again; the same source is only redrawn. */
+      function take(value) {
+        var was = shownNode.attrs.src || '';
         if (value === was) { draw(shownNode); return; }
         var pos = getPos();
         if (typeof pos !== 'number') return;
@@ -906,7 +917,18 @@ var schemaCache = null;
       dom.addEventListener('mousedown', function (e) {
         if (box || e.button !== 0 || e.target.closest('a[href]') && e.ctrlKey) return;
         e.preventDefault();
-        edit();
+        /* The host may take the block as a form, a picture's say; its
+           answer is the new source, '' to take the block out, or null. */
+        var asked = o.editBlock ? o.editBlock(shownNode.attrs.src || '') : undefined;
+        if (asked === undefined) { edit(); return; }
+        Promise.resolve(asked).then(function (value) {
+          if (value == null) { v.focus(); return; }
+          var pos = getPos();
+          if (typeof pos !== 'number') return;
+          if (value === '') { v.dispatch(v.state.tr.delete(pos, pos + shownNode.nodeSize)); v.focus(); return; }
+          take(value);
+          v.focus();
+        }).catch(function (err) { o.say(String(err && err.message || err), true); });
       });
       draw(node);
       // Inserting a code block opens its Markdown at once, the code selected.

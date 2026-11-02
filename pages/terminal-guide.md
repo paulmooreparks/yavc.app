@@ -152,7 +152,7 @@ You can have up to four terminals open in the Windowed view, titled Terminal, Te
 | `cp <file> <destination>` | Copy a file into your home directory. The file can be one of yours or any page of the site, which is copied as text: `cp /site/pages/author ~/`. The destination can be a directory or a new name. |
 | `mv <path> <destination>` | Move or rename a file or directory within your home directory. |
 | `download <file>` | Save a file to your computer through the browser's usual download. A page downloads as a `.txt` file. |
-| `upload [directory]` | Choose text files on your computer and copy them into your home directory. A file with the same name is replaced. |
+| `upload [directory]` | Choose files on your computer and copy them into your home directory. A file with the same name is replaced. |
 
 All of these change only your home directory. Anything that would change the site, like `rm /site/pages/author` or `edit /site/pages/privacy`, is refused with a message saying so.
 

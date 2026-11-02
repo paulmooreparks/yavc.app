@@ -49,6 +49,8 @@ Slides opens with the deck's slides down the left (the filmstrip) and the curren
 
 The formatting commands under Format, and on the toolbar, work in either view: Bold, Italic, Strike Through, Code, Link, Text Colour, Style, lists, and Paragraph Style, which is Paragraph or Heading 1 to 4 (Ctrl+0 to Ctrl+4). On an empty line, typing `/` opens a menu of everything Insert offers; typing narrows it.
 
+Insert, Picture opens a dialog for a picture: its address, with Browse for one in your home folder or on the site and Upload for one from your computer, what it shows, its largest width and a caption. An uploaded picture goes beside the deck when the deck is saved under `~`, else into `~/Pictures`. On the canvas, a click on a picture opens the same dialog to change it or remove it.
+
 Between slides: Page Up and Page Down, or the filmstrip, or Slide, Previous Slide and Next Slide. Slides are added, duplicated, deleted and moved from the Slide menu and the toolbar.
 
 Open decks sit in tabs across the top once there is more than one. Save is Ctrl+S; a new deck asks where to go, starting in `~/Documents`. Unsaved changes survive a reload.

@@ -244,6 +244,7 @@
             Object.keys(vars).forEach(function (k) { if (vars[k]) { section.style.setProperty(k, vars[k]); } else { section.style.removeProperty(k); } });
             section.style.background = s.background || f.background || '';
             section.style.backgroundImage = s.image ? 'url("' + s.image.replace(/"/g, '') + '")' : '';
+            if (s.image && !/^(\/|https?:)/i.test(s.image) && s.image.indexOf('//') !== 0) { localPicture(s.image).then(function (url) { if (url && section.isConnected) { section.style.backgroundImage = 'url("' + url + '")'; } }); }
         }
         /* Draws a slide's blocks into an element, as the Editor's preview
            draws them: safe, diagrams drawn, pictures read beside the file. */
@@ -264,6 +265,7 @@
                 });
             });
             if (window.pudlApplets && window.pudlApplets.boot && target.querySelector('[data-applet]')) { try { window.pudlApplets.boot(target); } catch (err) { } }
+            loadPictures(target);
         }
         var mermaidReady = null, mermaidCount = 0;
         function drawMermaid(place, source) {
@@ -282,6 +284,32 @@
 
         /* === The page view on the canvas ============================== */
 
+        /* Where the deck's pictures are, for the kit's picture dialog and
+           its loader: beside the deck when it is saved under ~. */
+        function picturesHost() {
+            return {
+                site: function () { return H.fs && H.fs.site ? H.fs.site() : Promise.reject(new Error('there is no file service here')); },
+                root: root, say: say,
+                dir: function () { return path ? (path.replace(/\/[^\/]*$/, '') || '~') : null; }
+            };
+        }
+        /* A picture of the home folder as an address this page can draw,
+           kept while the deck is open; '' for one not found. */
+        var pictureURLs = {};
+        function localPicture(src) {
+            if (pictureURLs[src] !== undefined) { return Promise.resolve(pictureURLs[src]); }
+            var ph = picturesHost();
+            return ph.site().then(function (site) {
+                var F = site.F, dir = ph.dir(), base = (dir && F.resolve(null, dir)) || F.home(), node = base ? F.resolve(base, src) : null;
+                if (!node || node.children) { return ''; }
+                return F.readBytes(node).then(function (bytes) { return URL.createObjectURL(new Blob([bytes], { type: (F.typeOf && F.typeOf(node)) || '' })); });
+            }).catch(function () { return ''; }).then(function (url) { pictureURLs[src] = url; return url; });
+        }
+        function loadPictures(target) {
+            if (!target.querySelector('img[data-attachment]')) { return; }
+            kit().then(function (k) { k.loadImages(target, picturesHost()); }).catch(function () { });
+        }
+
         function pageHost() {
             return {
                 root: root, page: el.body, scroll: el.stagebox,
@@ -289,12 +317,15 @@
                 setText: function (text) { fromPage = true; try { takeText(text, 'page'); } finally { fromPage = false; } },
                 docOf: function (text) { return engine().then(function (m) { return m.doc(text); }); },
                 /* The / menu on the canvas offers the Insert menu's items. */
-                inserts: function () { return window.yavcMdEditor ? window.yavcMdEditor.inserts(DECK_INSERTS) : []; },
+                inserts: function () { return window.yavcMdEditor ? window.yavcMdEditor.inserts(DECK_INSERTS, picturesHost) : []; },
+                /* A picture pressed on the canvas opens the picture dialog. */
+                editBlock: function (src) { return window.yavcMdEditor ? window.yavcMdEditor.editBlock(src, picturesHost()) : undefined; },
                 markdownOf: function (doc) { return engine().then(function (m) { return m.markdown(doc); }); },
                 sourceOf: function (src) { return engine().then(function (m) { return m.source(src); }); },
                 blocksOf: function (text) { return engine().then(function (m) { return m.blocks(text); }); },
                 draw: function (target, html, diagrams) {
                     target.replaceChildren(window.yavcHTML.fragment(html));
+                    loadPictures(target);
                     (diagrams || []).forEach(function (d) { var place = target.querySelector('[data-preview-diagram="' + CSS.escape(d.id) + '"]'); if (place && d.language === 'mermaid') { drawMermaid(place, d.source); } });
                     if (window.pudlApplets && window.pudlApplets.boot && target.querySelector('[data-applet]')) { try { window.pudlApplets.boot(target); } catch (err) { } }
                 },
@@ -338,6 +369,7 @@
         function drawIntoQuiet(target, text) {
             var p = md.preview(text);
             (p.blocks || []).forEach(function (b) { var block = document.createElement('div'); block.replaceChildren(window.yavcHTML.fragment(b.html)); target.appendChild(block); });
+            loadPictures(target);
         }
 
         /* === The text pane (CodeMirror, as the Editor's) ================ */

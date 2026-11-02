@@ -36,6 +36,43 @@
     var FILE_MAX = 256 * 1024;
     var HOME_MAX = 2 * 1024 * 1024;
     var SERVER_MAX = 10 * 1024 * 1024;
+    /* A file that is not text, such as a picture, is kept as bytes in the
+       browser's database under an id the home record points to, so the
+       record's 2 MB is not spent on it (DESIGN.md, decision 14). */
+    var BLOB_DB = 'yavc-home-blobs', BLOB_STORE = 'blobs', BLOB_MAX = 8 * 1024 * 1024;
+    var blobDb = null;
+    function blobs() {
+        if (blobDb) { return blobDb; }
+        blobDb = new Promise(function (resolve, reject) {
+            if (!window.indexedDB) { reject(new Error('this browser has no database for pictures')); return; }
+            var r = indexedDB.open(BLOB_DB, 1);
+            r.onupgradeneeded = function () { r.result.createObjectStore(BLOB_STORE); };
+            r.onsuccess = function () { resolve(r.result); };
+            r.onerror = function () { reject(r.error || new Error('the browser would not open its database')); };
+        });
+        blobDb.catch(function () { blobDb = null; });
+        return blobDb;
+    }
+    function blobOp(mode, fn) {
+        return blobs().then(function (db) {
+            return new Promise(function (resolve, reject) {
+                var tx = db.transaction(BLOB_STORE, mode), req = fn(tx.objectStore(BLOB_STORE));
+                tx.oncomplete = function () { resolve(req ? req.result : undefined); };
+                tx.onerror = function () { reject(tx.error || new Error('the database failed')); };
+                tx.onabort = function () { reject(tx.error || new Error('the database failed')); };
+            });
+        });
+    }
+    function blobGet(id) { return blobOp('readonly', function (st) { return st.get(id); }); }
+    function blobPut(id, bytes) { return blobOp('readwrite', function (st) { return st.put(bytes, id); }); }
+    function blobDel(id) { return blobOp('readwrite', function (st) { return st.delete(id); }).catch(function () { }); }
+    function newBlobId() { return 'b' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10); }
+    /* The blobs under a node, a file's own or a directory's throughout. */
+    function blobsUnder(n, out) {
+        out = out || [];
+        if (n.children) { n.children.forEach(function (c) { blobsUnder(c, out); }); } else if (n.bin && n.blob) { out.push(n.blob); }
+        return out;
+    }
 
     function meta(name) { var m = document.querySelector('meta[name="' + name + '"]'); return m ? m.getAttribute('content') || '' : ''; }
     /* The admin mount's API, on the edit origin only. */
@@ -284,6 +321,7 @@
         var name = parts[parts.length - 1];
         if (childNamed(d, name)) { return; }
         if (e.t === 'd') { mkDirNode(d, name, e.m); return; }
+        if (e.t === 'b') { d.children.push({ name: name, kind: 'file', home: true, bin: true, blob: String(e.id || ''), size: e.s || 0, type: String(e.y || ''), mtime: new Date(e.m || Date.now()), parent: d }); return; }
         d.children.push({ name: name, kind: 'file', home: true, content: String(e.c || ''), mtime: new Date(e.m || Date.now()), parent: d });
     }
 
@@ -306,6 +344,7 @@
             d.children.forEach(function (c) {
                 var p = prefix + '/' + c.name;
                 if (c.children) { files[p] = { t: 'd', m: +c.mtime }; walk(c, p); }
+                else if (c.bin) { files[p] = { t: 'b', id: c.blob, s: c.size, y: c.type, m: +c.mtime }; }
                 else { files[p] = { t: 'f', c: c.content, m: +c.mtime }; }
             });
         })(home.dir, '');
@@ -526,7 +565,7 @@
        text, or a server file's once it has been read. read() fetches it. */
     function readHome(n) {
         if (n.server) { return n.content != null ? n.content : ''; }
-        return n.content;
+        return n.bin ? '' : n.content;
     }
 
     function isServerRoot(n) { return !!n.server && n.rel === ''; }
@@ -556,6 +595,7 @@
         }
         if (full.length > FILE_MAX) { return { error: path + ': too large (the limit is 256 KB)' }; }
         if (n) {
+            if (n.bin) { blobDel(n.blob); delete n.bin; delete n.blob; delete n.size; delete n.type; }
             n.content = full;
             n.mtime = new Date();
         } else {
@@ -567,20 +607,66 @@
         return err ? { error: err } : { node: n };
     }
 
+    /* Writes a file of bytes, such as a picture, creating it if need be;
+       in ~ the bytes go to the browser's database. Resolves to { error }
+       or { node }. */
+    async function writeBytes(base, path, bytes, type) {
+        var n = resolve(base, path);
+        if (n) { n = realOf(n); }
+        if (n && n.children) { return { error: path + ': is a directory' }; }
+        if (n && !n.home) { return { error: path + ' is part of the site, which is read-only' }; }
+        var d = n ? n.parent : null, name = n ? n.name : null;
+        if (!n) {
+            var sp = splitPath(path);
+            d = resolve(base, sp.dir);
+            name = sp.base;
+            if (!d || !d.children) { return { error: sp.dir + ': no such directory' }; }
+            if (!d.home) { return { error: 'files can only be created in your home directory (~)' + (MOUNT ? ', /wwwroot or /etc' : '') }; }
+            if (!validName(name)) { return { error: name + ' is not a valid file name' }; }
+        }
+        if (bytes instanceof Blob) { bytes = await bytes.arrayBuffer(); }
+        if (d.server) {
+            if (bytes.byteLength > SERVER_MAX) { return { error: path + ': too large (the limit is 10 MB)' }; }
+            return serverPut(d, name, bytes, path, null);
+        }
+        if (bytes.byteLength > BLOB_MAX) { return { error: path + ': too large (the limit for a picture is 8 MB)' }; }
+        var id = newBlobId();
+        try { await blobPut(id, bytes); } catch (err) { return { error: path + ': ' + (err && err.message || 'the browser would not store it') }; }
+        var was = n && n.bin ? n.blob : null;
+        if (n) {
+            delete n.content;
+            n.bin = true; n.blob = id; n.size = bytes.byteLength; n.type = type || ''; n.mtime = new Date();
+        } else {
+            n = { name: name, kind: 'file', home: true, bin: true, blob: id, size: bytes.byteLength, type: type || '', mtime: new Date(), parent: d };
+            d.children.push(n);
+            sortKids(d);
+        }
+        var err = homeSave();
+        if (err) { blobDel(id); return { error: err }; }
+        if (was) { blobDel(was); }
+        return { node: n };
+    }
+
     /* Puts a file from the computer into a directory. A server directory
-       takes any file as it is, pictures included; ~ in this browser takes
-       text only. Resolves to { error } or { node }. */
+       takes any file as it is; ~ in this browser takes text as text and
+       anything else, a picture say, as bytes in its database. Resolves to
+       { error } or { node }. */
     async function upload(dir, file) {
         dir = realOf(dir);
         if (!dir.home || !dir.children) { return { error: 'files can only be uploaded into your home directory (~)' + (MOUNT ? ', /wwwroot or /etc' : '') }; }
         if (!validName(file.name)) { return { error: file.name + ' is not a valid file name' }; }
-        if (file.size > limitFor(dir)) { return { error: file.name + ' is larger than ' + limitText(dir) }; }
         var existing = childNamed(dir, file.name);
         if (existing && existing.children) { return { error: file.name + ' is a directory here' }; }
-        if (dir.server) { return serverPut(dir, file.name, file, file.name, null); }
-        var text = await file.text();
-        if (text.indexOf('\0') >= 0) { return { error: file.name + ' is not a text file' }; }
-        return write(dir, file.name, text, false);
+        if (dir.server) {
+            if (file.size > SERVER_MAX) { return { error: file.name + ' is larger than 10 MB' }; }
+            return serverPut(dir, file.name, file, file.name, null);
+        }
+        var binary = /^(image|audio|video|font)\//.test(file.type) || /^application\/(pdf|zip|octet-stream)/.test(file.type);
+        if (!binary && file.size <= FILE_MAX) {
+            var text = await file.text();
+            if (text.indexOf('\0') < 0) { return write(dir, file.name, text, false); }
+        }
+        return writeBytes(dir, file.name, file, file.type);
     }
 
     /* Copies a file to a new path or into a directory. A server file goes
@@ -598,6 +684,11 @@
         if (!d.home) { return { error: 'files can only be copied into your home directory (~)' + (MOUNT ? ', /wwwroot or /etc' : '') }; }
         if (!validName(name)) { return { error: name + ' is not a valid file name' }; }
         if (r.server && d.server) { return serverPut(d, name, await serverBytes(r), dest, null); }
+        if (r.bin || (r.server && !isText(r))) {
+            var bytes;
+            try { bytes = r.bin ? await blobGet(r.blob) : await serverBytes(r); } catch (err) { return { error: err.message }; }
+            return writeBytes(d, name, bytes || new ArrayBuffer(0), r.bin ? r.type : '');
+        }
         var text;
         try { text = await read(r); } catch (err) { return { error: err.message }; }
         return write(d, name, text, false);
@@ -647,8 +738,11 @@
             changed(n.server);
             return null;
         }
+        var gone = blobsUnder(n);
         n.parent.children.splice(n.parent.children.indexOf(n), 1);
-        return homeSave();
+        var saved = homeSave();
+        if (!saved) { gone.forEach(blobDel); }
+        return saved;
     }
 
     /* Moves or renames a file or directory. dest may be a directory to move
@@ -691,10 +785,12 @@
         }
         if (n.server || parent.server) {
             if (n.children) { return label + ': a directory can\'t be moved between ~ and /wwwroot; move its files one at a time'; }
-            var body = n.server ? await serverBytes(n) : new TextEncoder().encode(readHome(n));
+            var body = n.server ? await serverBytes(n) : n.bin ? (await blobGet(n.blob) || new ArrayBuffer(0)) : new TextEncoder().encode(readHome(n));
             var put = parent.server
                 ? await serverPut(parent, name, body, label, null)
-                : await write(parent, name, new TextDecoder('utf-8').decode(body), false);
+                : (n.bin || !isText(n))
+                    ? await writeBytes(parent, name, body, n.type || '')
+                    : await write(parent, name, new TextDecoder('utf-8').decode(body), false);
             if (put.error) { return put.error; }
             return remove(n, false, label);
         }
@@ -733,6 +829,7 @@
        address. */
     function read(n) {
         var r = realOf(n);
+        if (r.bin) { return Promise.reject(new Error(r.name + ' is not a text file')); }
         if (r.server) { return serverRead(r); }
         if (r.home) { return Promise.resolve(readHome(r)); }
         if (r.kind === 'script' || r.kind === 'command') { return Promise.resolve(r.source || ''); }
@@ -794,6 +891,7 @@
         var r = realOf(n);
         if (r.children) { return null; }
         if (r.server) { return r.size; }
+        if (r.bin) { return r.size; }
         return r.home ? readHome(r).length : null;
     }
 
@@ -819,7 +917,7 @@
     function isText(n) {
         var r = realOf(n);
         if (r.children) { return false; }
-        if (!r.server) { return true; }
+        if (!r.server) { return !r.bin; }
         /* No extension counts as text, and a dotfile's leading dot, as in
            ~/.history, isn't one. */
         return TEXT_EXT.test(r.name) || r.name.lastIndexOf('.') <= 0;
@@ -849,6 +947,7 @@
         read: read,
         readHome: readHome,
         write: write,
+        writeBytes: writeBytes,
         upload: upload,
         copy: copy,
         mkdir: mkdir,
@@ -863,7 +962,9 @@
         publicUrl: publicUrl,
         sourceOf: sourceOf,
         isText: isText,
-        readBytes: function (n) { var r = realOf(n); return r.server ? serverBytes(r) : Promise.resolve(new TextEncoder().encode(readHome(r)).buffer); },
+        readBytes: function (n) { var r = realOf(n); return r.server ? serverBytes(r) : r.bin ? blobGet(r.blob).then(function (b) { return b || new ArrayBuffer(0); }) : Promise.resolve(new TextEncoder().encode(readHome(r)).buffer); },
+        /* The media type a file was uploaded with, for a picture. */
+        typeOf: function (n) { var r = realOf(n); return r.bin ? r.type || '' : ''; },
         limitFor: limitFor,
         prefetch: prefetch,
         userBin: userBin,
@@ -873,7 +974,7 @@
         scriptSummary: scriptSummary,
         defineCommands: defineCommands,
         upgradePath: upgradePath,
-        limits: { file: FILE_MAX, home: HOME_MAX },
+        limits: { file: FILE_MAX, home: HOME_MAX, blob: BLOB_MAX },
         onChange: function (fn) {
             var h = function (e) { fn(e.detail || {}); };
             document.addEventListener('pc:fs-change', h);

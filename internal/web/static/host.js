@@ -122,9 +122,11 @@
             }
         },
         fs: {
-            /* The site's own Open and Save as (static/filebrowser.js). A
-               reader's ~ in this browser keeps text only, so there a
-               picture is offered as a download. */
+            /* The site file system and its dialogs themselves, for a kit
+               that browses and uploads on its own, such as the editing
+               kit's picture dialog. */
+            site: function () { return withDialog().then(function (x) { return { F: x[0], FB: x[1] }; }); },
+            /* The site's own Open and Save as (static/filebrowser.js). */
             open: function (o) {
                 o = o || {};
                 return withDialog().then(function (x) {
@@ -148,8 +150,7 @@
                 return withDialog().then(function (x) {
                     var F = x[0], FB = x[1];
                     return FB.pick(F, {
-                        mode: 'save', title: o.title, name: o.name, host: o.host, start: startIn(F, o.start), computer: true,
-                        canSaveIn: text ? null : function (dir) { return dir.server ? null : 'Pictures can\'t be kept in ~ in this browser, which keeps only text. Download it instead.'; }
+                        mode: 'save', title: o.title, name: o.name, host: o.host, start: startIn(F, o.start), computer: true
                     }).then(function (res) {
                         if (!res) { return null; }
                         if (res.download) { return { download: res.download }; }

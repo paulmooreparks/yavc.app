@@ -221,34 +221,6 @@
                 '</div>' +
                 '<div class="dialog-actions" data-role="dialog-actions"></div>' +
               '</form>' +
-            '</dialog>' +
-            /* The figure dialog: a {{figure}} shortcode's settings as a form,
-               for a new figure from the Insert menu and for one pressed in
-               the visual view (Architecture/wysiwyg-editor-design.md). */
-            '<dialog class="dialog ed-dialog ed-figure" data-role="figure" aria-labelledby="ed-fig-title-' + n + '">' +
-              '<form method="dialog" data-role="figure-form">' +
-                '<h3 class="dialog-title" id="ed-fig-title-' + n + '" data-role="figure-title">Figure</h3>' +
-                '<div class="dialog-body ed-figure-fields">' +
-                  '<label class="form-label" for="ed-fig-src-' + n + '">Picture</label>' +
-                  '<div class="ed-figure-src"><input class="form-input" id="ed-fig-src-' + n + '" data-role="figure-src" autocomplete="off" spellcheck="false" placeholder="/images/picture.png" required />' +
-                  '<button type="button" class="btn" data-action="figure-browse">Browse…</button></div>' +
-                  '<label class="form-label" for="ed-fig-alt-' + n + '">What it shows</label>' +
-                  '<input class="form-input" id="ed-fig-alt-' + n + '" data-role="figure-alt" autocomplete="off" />' +
-                  '<p class="form-help">For someone who can\'t see it. Leave it empty for a picture that only decorates.</p>' +
-                  '<label class="form-label" for="ed-fig-width-' + n + '">Largest width</label>' +
-                  '<input class="form-input" id="ed-fig-width-' + n + '" data-role="figure-width" autocomplete="off" spellcheck="false" placeholder="80%" />' +
-                  '<p class="form-help">Such as 80% or 600px; the column\'s width if empty.</p>' +
-                  '<label class="form-label" for="ed-fig-caption-' + n + '">Caption</label>' +
-                  '<input class="form-input" id="ed-fig-caption-' + n + '" data-role="figure-caption" autocomplete="off" />' +
-                  '<p class="form-help">Under the picture, in Markdown.</p>' +
-                  '<p class="form-error" data-role="figure-error" hidden></p>' +
-                '</div>' +
-                '<div class="dialog-actions">' +
-                  '<button type="button" class="btn" data-action="figure-remove" hidden>Remove</button>' +
-                  '<button type="button" class="btn" data-action="figure-cancel">Cancel</button>' +
-                  '<button type="submit" class="btn btn-primary" data-role="figure-ok">Insert</button>' +
-                '</div>' +
-              '</form>' +
             '</dialog>';
 
         var q = function (sel) { return root.querySelector(sel); };
@@ -260,11 +232,7 @@
             dialog: q('[data-role="dialog"]'), dlgForm: q('[data-role="dialog-form"]'), dlgTitle: q('[data-role="dialog-title"]'),
             dlgText: q('[data-role="dialog-text"]'), dlgInput: q('[data-role="dialog-input"]'), dlgError: q('[data-role="dialog-error"]'),
             dlgActions: q('[data-role="dialog-actions"]'),
-            explorer: q('[data-role="explorer"]'), explorerSplit: q('[data-role="explorer-split"]'),
-            figure: q('[data-role="figure"]'), figForm: q('[data-role="figure-form"]'), figTitle: q('[data-role="figure-title"]'),
-            figSrc: q('[data-role="figure-src"]'), figAlt: q('[data-role="figure-alt"]'), figWidth: q('[data-role="figure-width"]'),
-            figCaption: q('[data-role="figure-caption"]'), figError: q('[data-role="figure-error"]'), figOk: q('[data-role="figure-ok"]'),
-            figRemove: q('[data-action="figure-remove"]'), figCancel: q('[data-action="figure-cancel"]'), figBrowse: q('[data-action="figure-browse"]')
+            explorer: q('[data-role="explorer"]'), explorerSplit: q('[data-role="explorer-split"]')
         };
         var FB = null, explorer = null;
         /* What the toolbar's commands show (the command table below): lines
@@ -740,100 +708,6 @@
             });
         }
 
-        /* === Shortcodes as forms ========================================== */
-
-        /* A shortcode's call taken apart: {{name:positional key=value
-           key="a value"}}, with \" inside quotes, as the server reads it
-           (Pages/Services/Shortcodes.cs). */
-        function parseShortcode(src) {
-            var m = /^\{\{(\/?)([a-z][a-z0-9-]*)(?::([\s\S]*?))?\}\}$/.exec((src || '').trim());
-            if (!m) { return null; }
-            var out = { name: m[2], positional: [], named: {} }, s = m[3] || '', i = 0;
-            while (i < s.length) {
-                while (i < s.length && /\s/.test(s[i])) { i++; }
-                if (i >= s.length) { break; }
-                var key = null, start = i;
-                while (i < s.length && /[A-Za-z0-9_-]/.test(s[i])) { i++; }
-                if (s[i] === '=' && i > start) { key = s.slice(start, i); i++; } else { i = start; }
-                var value = '';
-                if (s[i] === '"') {
-                    i++;
-                    while (i < s.length && s[i] !== '"') { if (s[i] === '\\' && i + 1 < s.length) { i++; } value += s[i]; i++; }
-                    i++;
-                } else {
-                    while (i < s.length && !/\s/.test(s[i])) { value += s[i]; i++; }
-                }
-                if (key === null) { out.positional.push(value); } else { out.named[key] = value; }
-            }
-            return out;
-        }
-        function quoteArg(v) { return /[\s"]/.test(v) || v === '' ? '"' + v.replace(/(["\\])/g, '\\$1') + '"' : v; }
-        function buildFigure(f) {
-            var parts = ['{{figure:' + quoteArg(f.src), 'alt=' + quoteArg(f.alt || '')];
-            if (f.width) { parts.push('width=' + quoteArg(f.width)); }
-            if (f.caption) { parts.push('caption=' + quoteArg(f.caption)); }
-            return parts.join(' ') + '}}';
-        }
-
-        /* The figure dialog: a promise of the {{figure}} shortcode to write,
-           '' to remove the figure, or null for no change. existing is the
-           shortcode being changed, or null for a new one. */
-        function figureDialog(existing) {
-            var parsed = existing ? parseShortcode(existing) : null;
-            el.figTitle.textContent = parsed ? 'Change the figure' : 'Insert a figure';
-            el.figOk.textContent = parsed ? 'Change' : 'Insert';
-            el.figRemove.hidden = !parsed;
-            el.figSrc.value = parsed ? (parsed.named.src || parsed.positional[0] || '') : '';
-            el.figAlt.value = parsed ? (parsed.named.alt || '') : '';
-            el.figWidth.value = parsed ? (parsed.named.width || '') : '';
-            el.figCaption.value = parsed ? (parsed.named.caption || '') : '';
-            el.figError.hidden = true;
-            return new Promise(function (done) {
-                var finished = false;
-                function finish(v) { if (finished) { return; } finished = true; cleanup(); if (el.figure.open) { el.figure.close(); } done(v); }
-                function onSubmit(e) {
-                    e.preventDefault();
-                    var src = el.figSrc.value.trim(), width = el.figWidth.value.trim();
-                    if (!src) { el.figError.textContent = 'The picture needs an address, such as /images/picture.png.'; el.figError.hidden = false; el.figSrc.focus(); return; }
-                    if (width && !/^\d+(\.\d+)?(%|px|rem|em|ch)$/.test(width)) { el.figError.textContent = 'The width is a number with %, px, rem, em or ch, such as 80%.'; el.figError.hidden = false; el.figWidth.focus(); return; }
-                    finish(buildFigure({ src: src, alt: el.figAlt.value.trim(), width: width, caption: el.figCaption.value.trim() }));
-                }
-                function onCancel() { finish(null); }
-                function onRemove() { finish(''); }
-                async function onBrowse() {
-                    /* The standard Open dialog, for a picture on the site. */
-                    var res = await FB.pick(F, {
-                        mode: 'open', title: 'Choose a picture', host: root,
-                        start: F.resolve(null, '/wwwroot/images') ? '/wwwroot/images' : '~',
-                        check: function (r) { return /\.(png|jpe?g|gif|webp|svg|avif)$/i.test(r.name) ? null : r.name + ' isn\'t a picture.'; },
-                        commit: function (c) {
-                            var node = c.path ? F.resolve(null, c.path) : null;
-                            if (!node) { return 'Choose a picture on the site.'; }
-                            var url = F.publicUrl(node);
-                            el.figSrc.value = url ? new URL(url).pathname : c.path;
-                            return true;
-                        }
-                    });
-                    if (res) { el.figAlt.focus(); }
-                }
-                function onClose() { finish(null); }
-                function cleanup() {
-                    el.figForm.removeEventListener('submit', onSubmit);
-                    el.figCancel.removeEventListener('click', onCancel);
-                    el.figRemove.removeEventListener('click', onRemove);
-                    el.figBrowse.removeEventListener('click', onBrowse);
-                    el.figure.removeEventListener('close', onClose);
-                }
-                el.figForm.addEventListener('submit', onSubmit);
-                el.figCancel.addEventListener('click', onCancel);
-                el.figRemove.addEventListener('click', onRemove);
-                el.figBrowse.addEventListener('click', onBrowse);
-                el.figure.addEventListener('close', onClose);
-                el.figure.showModal();
-                (parsed ? el.figCaption : el.figSrc).focus();
-            });
-        }
-
         async function openDialog() {
             var t = current(), node = t && t.path ? F.resolve(F.home(), t.path) : null;
             /* It opens beside the file in front, or in ~. */
@@ -1039,8 +913,10 @@
                             extra.push({ id: 'insert-' + s.name, label: s.title, words: s.name + ' ' + s.title.toLowerCase(), markdown: s.example });
                         });
                     }
-                    return window.yavcMdEditor ? window.yavcMdEditor.inserts(extra) : [];
+                    return window.yavcMdEditor ? window.yavcMdEditor.inserts(extra, picturesHost) : [];
                 },
+                /* A picture pressed on the page opens the picture dialog. */
+                editBlock: function (src) { return window.yavcMdEditor.editBlock(src, picturesHost()); },
                 root: root, page: el.page, scroll: el.scroll,
                 text: function () { return view.state.doc.toString(); },
                 setText: takeVisualText,
@@ -1197,19 +1073,7 @@
                 place.title = 'The diagram could not be drawn: ' + (err && err.message || err);
             });
         }
-        function loadImages(target) {
-            var t = current(), dir = t && t.path ? F.splitPath(t.path).dir : '';
-            var base = dir ? F.resolve(F.home(), dir) : F.home();
-            target.querySelectorAll('img[data-attachment]').forEach(function (img) {
-                var name = img.dataset.attachment, node = base ? F.resolve(base, name) : null;
-                if (!node || node.children || !F.readBytes) { img.classList.add('ed-missing-image'); img.alt = img.alt || name; return; }
-                F.readBytes(node).then(function (bytes) {
-                    var url = URL.createObjectURL(new Blob([bytes]));
-                    img.addEventListener('load', function () { URL.revokeObjectURL(url); }, { once: true });
-                    img.src = url;
-                }).catch(function () { img.classList.add('ed-missing-image'); });
-            });
-        }
+        function loadImages(target) { if (window.yavcMdEditor) { window.yavcMdEditor.loadImages(target, picturesHost()); } }
         var INSERTS = window.yavcMdEditor ? window.yavcMdEditor.INSERTS : [], SHORTCODES = window.yavcMdEditor ? window.yavcMdEditor.SHORTCODES : [];
         /* Where a format or an insert goes: the page in Visual, the text
            in Text and Preview, and in Split whichever has the keyboard. */
@@ -1218,10 +1082,19 @@
                 page: function () { return visual.api; }, text: function () { return view; },
                 onPage: function () { return formatsThePage(); },
                 readOnly: function () { var t = current(); return !t || !!t.readOnly; },
-                blockStyle: blockStyle, say: say
+                blockStyle: blockStyle, say: say, pictures: picturesHost
             };
         }
         function insertBlock(item) { window.yavcMdEditor.insertItem(item, editCtx()); }
+        /* Where the document's pictures are, for the kit's picture dialog
+           and its loader: beside the document when it is saved under ~. */
+        function picturesHost() {
+            return {
+                site: function () { return Promise.resolve({ F: F, FB: FB }); },
+                root: root, say: say,
+                dir: function () { var t = current(); return t && t.path ? (F.splitPath(t.path).dir || '~') : null; }
+            };
+        }
 
         /* === Find and replace ===========================================
            One find bar for the text and the page, in PUDL's parts: the two
@@ -1496,7 +1369,7 @@
             if (!s) { return; }
             /* A figure is asked for as a form; the rest go in as their
                examples, into the page or into the text. */
-            var asked = s.name === 'figure' ? figureDialog(null) : Promise.resolve(s.example);
+            var asked = s.name === 'figure' ? window.yavcMdEditor.askFigure(null, picturesHost()) : Promise.resolve(s.example);
             asked.then(function (src) {
                 if (!src) { return; }
                 if (formatsThePage()) { visual.api.insertShortcode(s.name === 'figure' ? 'block' : s.kind === 'span' ? 'inline' : s.kind, src); }

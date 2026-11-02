@@ -90,7 +90,7 @@
         function build() {
             shell.innerHTML =
                 '<div class="fm-pathrow">' + FB.markup.pathBar() + '</div>' +
-                FB.markup.body({ drop: true, hint: mounted ? 'Drop files here to upload them' : 'Drop text files here to upload them' }) +
+                FB.markup.body({ drop: true, hint: 'Drop files here to upload them' }) +
                 '<div class="fm-detail" data-role="detail" aria-live="polite"></div>' +
                 '<p class="fm-status" data-role="status" role="status" aria-live="polite"></p>' +
                 '<dialog class="dialog fm-dialog" data-role="dialog" aria-labelledby="fm-dlg-title-' + n + '">' +
@@ -111,15 +111,15 @@
                   '<h3 class="dialog-title" id="fm-help-title-' + n + '">Files quick help</h3>' +
                   '<div class="dialog-body">' +
                     '<p>Browse the site in <code>/site</code>, or choose the home button to manage your own files in <code>~</code>. Select an entry to see its details; double-click or press Enter to open it.</p>' +
-                    '<p>The toolbar and the Folder menu offer commands for the current selection and folder. In your home directory you can create files and folders, upload text files, rename, move, and delete. Download saves a copy to your computer.</p>' +
+                    '<p>The toolbar and the Folder menu offer commands for the current selection and folder. In your home directory you can create files and folders, upload files, rename, move, and delete. Download saves a copy to your computer.</p>' +
                     '<p>Use View &gt; Files &gt; Show hidden files to reveal names starting with a dot. With the list focused, Backspace goes up a folder, F2 renames a selected personal file, and Delete asks before deleting it.</p>' +
-                    '<p>On yavc.app, your personal file contents are never sent to the servers. Files keeps your data in this browser&apos;s local storage. Upload imports a text file into that local storage. Other browsers and devices do not share it; clearing site data removes it. Download important files for safekeeping.</p>' +
+                    '<p>On yavc.app, your personal file contents are never sent to the servers. Files keeps your data in this browser&apos;s local storage. Upload imports a file into that storage: text into local storage, a picture or any other file into the browser&apos;s database. Other browsers and devices do not share it; clearing site data removes it. Download important files for safekeeping.</p>' +
                     (mounted ? '<p>You are using the admin site. Its mounted home and server folders are server-backed; changes there are sent to the server.</p>' : '') +
                     '<p><a href="/page/files-guide" data-action="help-guide">Read the complete Files guide</a> for commands, storage limits, and troubleshooting.</p>' +
                   '</div>' +
                   '<div class="dialog-actions"><button type="button" class="btn btn-primary" data-action="help-close">Close</button></div>' +
                 '</dialog>' +
-                '<input type="file" multiple hidden data-role="file-input"' + (mounted ? '' : ' accept=".txt,.md,.json,.cells,.sudoku,.csv,.xfer,.sh,text/*"') + ' />';
+                '<input type="file" multiple hidden data-role="file-input" />';
             var q = function (sel) { return root.querySelector(sel); };
             el = {
                 helpDialog: q('[data-role="help-dialog"]'), detail: q('[data-role="detail"]'), status: q('[data-role="status"]'),
@@ -203,7 +203,8 @@
            keys (onKey), so a key typed in a dialog never deletes a file. */
         function sel() {
             var c = b && F ? b.selected() : null, kind = c ? F.kindOf(c) : null, r = c ? F.realOf(c) : null;
-            return { c: c, kind: kind, r: r, editable: !!c && canOpen('open', kind) };
+            /* A picture or another file of bytes is not the Editor's to open. */
+            return { c: c, kind: kind, r: r, editable: !!c && canOpen('open', kind) && !(r && !r.children && !F.isText(r)) };
         }
         function here() { return !!(b && F) && inHome(cwd()); }
         function commandTable() {
@@ -274,11 +275,14 @@
             /* A built-in command, from /bin, is explained in a terminal. */
             if (kind === 'command') { openTerminal('man ' + r.name); return; }
             /* A picture or any other file an editor can't show: under
-               /wwwroot it opens as the public site serves it; elsewhere it
+               /wwwroot it opens as the public site serves it; a picture of
+               the home folder opens in a tab of its own; anything else
                downloads. */
             if ((kind === 'file' || kind === 'script') && !F.isText(r)) {
                 var seen = F.publicUrl(r);
-                if (seen) { window.open(seen, '_blank', 'noopener'); } else { download(c); }
+                if (seen) { window.open(seen, '_blank', 'noopener'); }
+                else if (r.home && /^image\//.test(F.typeOf ? F.typeOf(r) : '')) { showPicture(r); }
+                else { download(c); }
                 return;
             }
             if (kind === 'file' || kind === 'script') { openInEditor(c); return; }
@@ -414,11 +418,19 @@
             }
         }
 
+        async function showPicture(r) {
+            try {
+                var url = URL.createObjectURL(new Blob([await F.readBytes(r)], { type: F.typeOf(r) }));
+                var w = window.open(url, '_blank', 'noopener');
+                if (!w) { say('The browser blocked the picture\'s tab.', true); }
+                setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
+            } catch (err) { say(err.message, true); }
+        }
         async function download(c) {
             var r = F.realOf(c), blob;
-            /* A server file downloads byte for byte; anything else as its text. */
+            /* A file of bytes downloads byte for byte; anything else as its text. */
             try {
-                blob = r.server ? new Blob([await F.readBytes(r)], { type: 'application/octet-stream' })
+                blob = r.server || !F.isText(r) ? new Blob([await F.readBytes(r)], { type: (F.typeOf && F.typeOf(r)) || 'application/octet-stream' })
                     : new Blob([await F.read(r)], { type: 'text/plain;charset=utf-8' });
             } catch (err) { say(err.message, true); return; }
             var name = r.home ? r.name : r.name + '.txt';

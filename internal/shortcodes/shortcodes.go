@@ -462,7 +462,7 @@ func init() {
 				}
 				style = ` style="max-width:` + esc(w) + `"`
 			}
-			out := `<figure class="sc-figure"><img src="` + esc(s) + `" alt="` + esc(alt) + `"` + style + ` loading="lazy">`
+			out := `<figure class="sc-figure">` + imgTag(s, alt, style+` loading="lazy"`)
 			if cap, ok := c.Get("caption", -1); ok && strings.TrimSpace(cap) != "" {
 				out += `<figcaption>` + inlineHTML(cap) + `</figcaption>`
 			}
@@ -686,7 +686,9 @@ func splitKeys(s string) []string {
 	return append(out, s[start:])
 }
 
-// safeURL is a path on the site or an http or https address, never a script.
+// safeURL is a path on the site, a file of the home folder (cat.png beside
+// the document, or ~/Pictures/cat.png) or an http or https address, never a
+// script.
 func safeURL(u, what string) (string, error) {
 	u = strings.TrimSpace(u)
 	if strings.HasPrefix(u, "/") && !strings.HasPrefix(u, "//") {
@@ -696,7 +698,38 @@ func safeURL(u, what string) (string, error) {
 	if strings.HasPrefix(l, "http://") || strings.HasPrefix(l, "https://") {
 		return u, nil
 	}
-	return "", problem{what + " must be a path on this site, such as /images/x.png, or an http or https address."}
+	if isLocal(u) {
+		return u, nil
+	}
+	return "", problem{what + " must be a picture beside the document or in your home folder (cat.png, ~/Pictures/cat.png), a path on this site (/images/x.png), or an http or https address."}
+}
+
+// isLocal says whether an address is a file of the home folder: a path with
+// no scheme that does not start with / (a page of the site) or // (another
+// host).
+func isLocal(u string) bool {
+	if u == "" || strings.HasPrefix(u, "/") || strings.HasPrefix(u, "\\") {
+		return false
+	}
+	// A scheme is letters before the first colon, with no slash before it.
+	if i := strings.IndexAny(u, ":/"); i >= 0 && u[i] == ':' {
+		return false
+	}
+	return true
+}
+
+// imgTag is the <img> for a picture: one of the home folder is marked with
+// its path for the page to read (data-attachment), as internal/preview marks
+// a Markdown image; the rest load as they are. extra is further attributes.
+func imgTag(src, alt, extra string) string {
+	if isLocal(src) {
+		name := strings.ReplaceAll(src, `\`, "/")
+		for strings.HasPrefix(name, "./") {
+			name = name[2:]
+		}
+		return `<img class="dinah-attachment-image" data-attachment="` + esc(name) + `" alt="` + esc(alt) + `"` + extra + `>`
+	}
+	return `<img src="` + esc(src) + `" alt="` + esc(alt) + `"` + extra + `>`
 }
 
 var escaper = strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", `"`, "&quot;")
