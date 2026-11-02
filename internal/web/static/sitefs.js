@@ -90,7 +90,7 @@
         if (!treeReady) {
             treeReady = fetch('/api/site/tree', { headers: { Accept: 'application/json' } })
                 .then(function (r) { if (!r.ok) { throw new Error('HTTP ' + r.status); } return r.json(); })
-                .then(function (data) { root = buildFs(data); return MOUNT ? mountServer(root) : seedHome(); })
+                .then(function (data) { root = buildFs(data); return MOUNT ? mountServer(root) : Promise.all([seedHome(), loadSettings().then(migrateSettings)]); })
                 .then(function () { return root; })
                 .catch(function (err) { treeReady = null; throw err; });
         }
@@ -234,7 +234,10 @@
        as { seeded, files: { "/path": { t: "f"|"d", c, m } } }. The first
        visit seeds a few files so there is something to try. */
 
-    var home = { dir: null, raw: undefined };
+    /* home.settingsDir is ~/.config (below); home.legacy holds what an
+       older build kept under /.config in the browser's record, carried
+       through saves untouched until it has moved to the session. */
+    var home = { dir: null, raw: undefined, settingsDir: null, legacy: {} };
 
     /* The stock files come from the server (/api/site/home, from
        site/home). Each is seeded once: a reader who deletes one keeps it
@@ -302,6 +305,7 @@
         homes.children.push(guest);
         top.children.push(homes);
         home.dir = guest;
+        home.settingsDir = { name: '.config', kind: 'dir', home: true, settings: true, title: 'Settings', description: 'Your settings, which the site keeps for every page of yours', parent: guest, children: [], mtime: new Date() };
         homeLoad();
     }
 
@@ -337,7 +341,12 @@
            (performance review, 2026-11-03). */
         home.seeds = data.seeds && typeof data.seeds === 'object' ? data.seeds : {};
         home.dir.children = [];
-        Object.keys(data.files).sort().forEach(function (p) { homeInsert(p, data.files[p]); });
+        home.legacy = {};
+        Object.keys(data.files).sort().forEach(function (p) {
+            if (home.settingsDir && (p === '/.config' || p.indexOf('/.config/') === 0)) { home.legacy[p] = data.files[p]; return; }
+            homeInsert(p, data.files[p]);
+        });
+        if (home.settingsDir) { home.settingsDir.parent = home.dir; home.dir.children.push(home.settingsDir); }
         sortKids(home.dir);
         home.generation = (home.generation || 0) + 1;
     }
@@ -347,11 +356,13 @@
         (function walk(d, prefix) {
             d.children.forEach(function (c) {
                 var p = prefix + '/' + c.name;
+                if (c.settings) { return; }
                 if (c.children) { files[p] = { t: 'd', m: +c.mtime }; walk(c, p); }
                 else if (c.bin) { files[p] = { t: 'b', id: c.blob, s: c.size, y: c.type, m: +c.mtime }; }
                 else { files[p] = { t: 'f', c: c.content, m: +c.mtime }; }
             });
         })(home.dir, '');
+        Object.keys(home.legacy).forEach(function (p) { files[p] = home.legacy[p]; });
         return JSON.stringify({ seeds: home.seeds || {}, files: files });
     }
 
@@ -381,6 +392,138 @@
         if (MOUNT) { return; }
         if (e.key === HOME_KEY || e.key === null) { homeSync(); }
     });
+
+    /* === Settings, ~/.config ==============================================
+       An applet's settings are kept by the engine under the reader's
+       session, which every address of the site shares, so they follow the
+       reader from the desktop to every standalone page (DESIGN.md,
+       decision 22). ~/.config shows them as files, <name>.json, read and
+       written through the engine's /config routes: a person can still open
+       one in the Editor or cat it in the Terminal. The whole of it, at most
+       1 MB, comes in one answer, so a settings file's text is known at once
+       as a home file's is. */
+
+    var SETTINGS_MAX = 64 * 1024;
+    var SETTINGS_FILE = /^([a-z][a-z0-9-]{0,63})\.json$/;
+    var settingsChannel = null;
+    var settingsSeen = '';
+
+    /* Fetches the settings and fills ~/.config; resolves to the settings by
+       name, or null when they could not be had, when the folder keeps what
+       it showed. */
+    async function loadSettings() {
+        var d = home.settingsDir;
+        if (!d) { return null; }
+        var got;
+        try {
+            var r = await fetch('/config', { headers: { Accept: 'application/json' }, credentials: 'same-origin' });
+            if (!r.ok) { throw new Error('HTTP ' + r.status); }
+            got = (await r.json()).settings || {};
+        } catch (err) { return null; }
+        var text = JSON.stringify(got);
+        if (text === settingsSeen) { return got; }
+        settingsSeen = text;
+        d.children = Object.keys(got).sort().map(function (name) {
+            var s = got[name] || {};
+            return { name: name + '.json', kind: 'file', home: true, settings: true, content: String(s.text || ''), mtime: new Date(s.modified || Date.now()), parent: d };
+        });
+        if (window.BroadcastChannel && !settingsChannel) {
+            settingsChannel = new BroadcastChannel('yavc-settings');
+            settingsChannel.onmessage = function () { loadSettings().then(function (g) { if (g) { emit('settings'); } }); };
+            /* Another address may have changed a setting; a page coming back
+               into view looks again. */
+            document.addEventListener('visibilitychange', function () {
+                if (document.visibilityState !== 'visible') { return; }
+                var before = settingsSeen;
+                loadSettings().then(function () { if (settingsSeen !== before) { emit('settings'); } });
+            });
+        }
+        return got;
+    }
+
+    function settingsChanged() {
+        settingsSeen = JSON.stringify(home.settingsDir.children.map(function (c) { return [c.name, c.content]; }));
+        emit('settings');
+        if (settingsChannel) { settingsChannel.postMessage('changed'); }
+    }
+
+    async function settingsError(r, label) {
+        var why = r.status === 413 ? 'too large; the site keeps up to 64 KB of each setting and 1 MB in all'
+            : r.status === 400 ? 'settings must be a JSON object, such as { "wrap": true }'
+            : 'the site refused (' + r.status + ')';
+        return (label ? label + ': ' : '') + why;
+    }
+
+    /* Writes one setting; resolves to { error } or { node }. */
+    async function settingsPut(d, name, text, label) {
+        var m = SETTINGS_FILE.exec(name);
+        if (!m) { return { error: label + ': ~/.config holds only settings, each named like editor.json in lowercase letters, digits and -' }; }
+        if (new TextEncoder().encode(text).length > SETTINGS_MAX) { return { error: label + ': too large (the limit for a setting is 64 KB)' }; }
+        var r;
+        try {
+            r = await fetch('/config/' + m[1], { method: 'PUT', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: text });
+        } catch (err) { return { error: label + ': the site could not be reached' }; }
+        if (!r.ok) { return { error: await settingsError(r, label) }; }
+        var at = ((await r.json().catch(function () { return {}; })).modified) || Date.now();
+        var n = childNamed(d, name);
+        if (n) { n.content = text; n.mtime = new Date(at); }
+        else {
+            n = { name: name, kind: 'file', home: true, settings: true, content: text, mtime: new Date(at), parent: d };
+            d.children.push(n);
+            sortKids(d);
+        }
+        settingsChanged();
+        return { node: n };
+    }
+
+    /* Forgets one setting; resolves to an error or null. */
+    async function settingsDelete(n, label) {
+        var m = SETTINGS_FILE.exec(n.name), r;
+        if (m) {
+            try { r = await fetch('/config/' + m[1], { method: 'DELETE', credentials: 'same-origin' }); }
+            catch (err) { return label + ': the site could not be reached'; }
+            if (!r.ok) { return settingsError(r, label); }
+        }
+        n.parent.children.splice(n.parent.children.indexOf(n), 1);
+        settingsChanged();
+        return null;
+    }
+
+    /* Moves what an older build kept under /.config in this browser to the
+       session, once the session's settings are known. A setting the session
+       already has keeps the session's text. Anything that cannot become a
+       setting, or loses to the session's copy with different text, goes to
+       ~/.config-old, so nothing is lost without the reader seeing it. A
+       setting that could not be sent stays where it was, for the next load. */
+    async function migrateSettings(have) {
+        var paths = Object.keys(home.legacy);
+        if (!have || !paths.length) { return; }
+        var keep = {}, old = {}, sent = false;
+        for (var i = 0; i < paths.length; i++) {
+            var p = paths[i], e = home.legacy[p], rest = p.slice('/.config'.length);
+            if (!rest) { continue; }
+            var m = /^\/([^/]+)$/.exec(rest), name = m && SETTINGS_FILE.exec(m[1]), obj = null;
+            if (name && e.t === 'f') { try { obj = JSON.parse(e.c || ''); } catch (err) { obj = null; } }
+            var setting = name && obj && typeof obj === 'object' && !Array.isArray(obj);
+            if (setting && !have[name[1]]) {
+                var put = await settingsPut(home.settingsDir, m[1], String(e.c), '~/.config/' + m[1]).catch(function () { return { error: 'failed' }; });
+                if (put.error && /could not be reached/.test(put.error)) { keep[p] = e; continue; }
+                if (!put.error) { sent = true; continue; }
+            } else if (setting && String(have[name[1]].text) === String(e.c)) {
+                continue;
+            }
+            old['/.config-old' + rest] = e;
+        }
+        var data = null;
+        try { data = JSON.parse(localStorage.getItem(HOME_KEY) || 'null'); } catch (err) { data = null; }
+        if (!data || !data.files) { return; }
+        paths.forEach(function (p) { delete data.files[p]; });
+        Object.keys(keep).forEach(function (p) { data.files[p] = keep[p]; });
+        Object.keys(old).forEach(function (p) { ensureDirs(data, p); data.files[p] = old[p]; });
+        try { var out = JSON.stringify(data); localStorage.setItem(HOME_KEY, out); home.raw = out; } catch (err) { return; }
+        homeLoad();
+        if (sent || Object.keys(old).length) { emit('home'); }
+    }
 
     /* === The server directories ===========================================
        On the edit origin: /wwwroot and /home/<name>, the admin's ~. A node
@@ -590,6 +733,7 @@
             if (!validName(name)) { return { error: name + ' is not a valid file name' }; }
         }
         var full = append && n ? (n.server ? await serverRead(n) : readHome(n)) + content : content;
+        if (d.settings) { return settingsPut(d, name, full, path); }
         if (d.server) {
             var bytes = new TextEncoder().encode(full);
             if (bytes.length > SERVER_MAX) { return { error: path + ': too large (the limit is 10 MB)' }; }
@@ -626,6 +770,7 @@
             if (!d.home) { return { error: 'files can only be created in your home directory (~)' + (MOUNT ? ', /wwwroot or /etc' : '') }; }
             if (!validName(name)) { return { error: name + ' is not a valid file name' }; }
         }
+        if (d.settings) { return { error: path + ': ~/.config holds only settings, which are text' }; }
         if (bytes instanceof Blob) { bytes = await bytes.arrayBuffer(); }
         if (d.server) {
             if (bytes.byteLength > SERVER_MAX) { return { error: path + ': too large (the limit is 10 MB)' }; }
@@ -710,6 +855,7 @@
         if (!parent || !parent.children) { return sp.dir + ': no such directory'; }
         if (!parent.home) { return 'directories can only be made in your home directory (~)' + (MOUNT ? ', /wwwroot or /etc' : ''); }
         if (!validName(sp.base)) { return sp.base + ' is not a valid name'; }
+        if (parent.settings) { return path + ': ~/.config holds only settings, not folders'; }
         if (parent.server) {
             var rel = joinRel(parent.rel, sp.base);
             var r = await call('/mkdir', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ root: parent.server, path: rel }) });
@@ -730,8 +876,9 @@
         n = realOf(n);
         label = label || displayPath(n);
         if (!n.home) { return label + ' is part of the site, which is read-only'; }
-        if (n === home.dir || isServerRoot(n)) { return label + ' can\'t be removed'; }
+        if (n === home.dir || n === home.settingsDir || isServerRoot(n)) { return label + ' can\'t be removed'; }
         if (n.children && !recursive) { return label + ': is a directory (use rm -r)'; }
+        if (n.settings) { return settingsDelete(n, label); }
         if (n.server) {
             var r = await call('/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ root: n.server, path: n.rel, recursive: !!recursive }) });
             var err = await errorOf(r, label);
@@ -755,7 +902,7 @@
         n = realOf(n);
         label = label || displayPath(n);
         if (!n.home) { return label + ' is part of the site, which is read-only'; }
-        if (n === home.dir || isServerRoot(n)) { return label + ' can\'t be moved'; }
+        if (n === home.dir || n === home.settingsDir || isServerRoot(n)) { return label + ' can\'t be moved'; }
         var target = resolve(base, dest), parent, name;
         if (target && target.children) { parent = realOf(target); name = n.name; }
         else {
@@ -770,6 +917,18 @@
         var clash = childNamed(parent, name);
         if (clash === n) { return null; }
         if (clash && (clash.children || n.children)) { return displayPath(parent).replace(/\/$/, '') + '/' + name + ' already exists'; }
+
+        /* Into, out of or within ~/.config, a file is written where it goes
+           and then removed where it was. */
+        if (n.settings || parent.settings) {
+            if (n.children) { return label + ': ~/.config holds only settings, not folders'; }
+            if (n.bin || (n.server && !isText(n))) { return label + ': ~/.config holds only settings, which are text'; }
+            var text;
+            try { text = await read(n); } catch (err) { return err.message; }
+            var moved = await write(parent, name, text, false);
+            if (moved.error) { return moved.error; }
+            return remove(n, false, label);
+        }
 
         if (n.server && parent.server === n.server) {
             var to = joinRel(parent.rel, name);

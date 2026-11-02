@@ -1,10 +1,11 @@
 /* Copyright 2026 Paul Parks. SPDX-License-Identifier: Apache-2.0 */
 /* Settings files: each applet's settings, and the desktop's, kept as JSON
-   in ~/.config/<name>.json (Architecture/files-editor-design.md). On the
-   edit origin ~ is the admin's directory on the server, so the settings
-   follow the admin from device to device; on the public site ~ is in this
-   browser, like the rest of it. A settings file is an ordinary file, so it
-   can be read and edited in the terminal or the Editor too.
+   in ~/.config/<name>.json. On the public site the engine keeps them under
+   the reader's session, which every address of the site shares, and the
+   site file system shows them as the files of ~/.config (static/sitefs.js;
+   DESIGN.md, decision 22), so a setting chosen on the desktop holds on every
+   standalone page. A settings file reads like an ordinary file, so it can be
+   read and edited in the terminal or the Editor too.
 
      pcConfig.load(name, defaults)  resolves to the settings, the file's
                                      values over the defaults
@@ -35,9 +36,9 @@
        choose it, so it must be a plain word: no slash or dot that could
        lead out of the folder, and never something that is not a string
        (a page element once became "[object HTMLDivElement].json"). */
-    var NAME = /^[a-z0-9][a-z0-9_-]{0,63}$/i;
+    var NAME = /^[a-z][a-z0-9-]{0,63}$/;
     function pathOf(name) {
-        if (typeof name !== 'string' || !NAME.test(name)) { throw new TypeError('a settings name is a word of letters, digits, - and _'); }
+        if (typeof name !== 'string' || !NAME.test(name)) { throw new TypeError('a settings name is a word of lowercase letters, digits and -, starting with a letter'); }
         return '~/.config/' + name + '.json';
     }
     function plain(obj) { return !!obj && typeof obj === 'object' && !Array.isArray(obj); }

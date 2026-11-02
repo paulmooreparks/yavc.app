@@ -248,6 +248,8 @@ func New(s *Server) (*Server, error) {
 	m.HandleFunc("PUT /state/{key}", s.putState)
 	m.HandleFunc("GET /config/{name}", s.getConfig)
 	m.HandleFunc("PUT /config/{name}", s.putConfig)
+	m.HandleFunc("DELETE /config/{name}", s.deleteConfig)
+	m.HandleFunc("GET /config", s.listConfig)
 	m.HandleFunc("GET /appearance", s.getAppearance)
 	m.HandleFunc("PUT /appearance", s.putAppearance)
 	m.HandleFunc("DELETE /session", s.deleteSession)
@@ -950,13 +952,75 @@ func (s *Server) putConfig(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Settings must be a JSON object.", http.StatusBadRequest)
 		return
 	}
+	var at time.Time
 	_, err = s.update(w, r, func(sess *session.Session) error {
 		if err := withinBudget(sess.Config, name, text); err != nil {
 			return err
 		}
+		at = time.Now().UTC()
 		sess.Config[name] = text
+		sess.ConfigAt[name] = at
 		return nil
 	})
+	if err != nil {
+		s.done(w, err, "")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"modified": at})
+}
+
+// listConfig is every setting the session keeps, each with its text and
+// when it last changed: what the browser shows as the files of ~/.config
+// (DESIGN.md, decision 22). All of it is under the session's 1 MB budget,
+// so one answer carries it.
+func (s *Server) listConfig(w http.ResponseWriter, r *http.Request) {
+	if !s.own(w, r) {
+		return
+	}
+	type setting struct {
+		Text     string    `json:"text"`
+		Modified time.Time `json:"modified"`
+	}
+	out := map[string]setting{}
+	if sess := s.sessionOf(r); sess != nil {
+		for name, text := range sess.Config {
+			at := sess.ConfigAt[name]
+			if at.IsZero() {
+				at = sess.Created
+			}
+			out[name] = setting{Text: text, Modified: at}
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"settings": out})
+}
+
+// deleteConfig forgets one setting, as deleting its file does.
+func (s *Server) deleteConfig(w http.ResponseWriter, r *http.Request) {
+	if !s.own(w, r) {
+		return
+	}
+	name := r.PathValue("name")
+	if !appletName.MatchString(name) {
+		http.Error(w, "No such settings.", http.StatusNotFound)
+		return
+	}
+	sess, err := s.lookup(r)
+	if err != nil {
+		s.done(w, err, "")
+		return
+	}
+	if sess == nil {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	_, err = s.Sessions.Update(sess.ID, func(sess *session.Session) error {
+		delete(sess.Config, name)
+		delete(sess.ConfigAt, name)
+		return nil
+	})
+	if errors.Is(err, os.ErrNotExist) {
+		err = nil
+	}
 	s.done(w, err, "")
 }
 

@@ -46,7 +46,10 @@ type Session struct {
 	Appearance Appearance        `json:"appearance"`
 	State      map[string]string `json:"state,omitempty"`  // applet continuity, by instance key
 	Config     map[string]string `json:"config,omitempty"` // applet settings, by applet name
-	Agents     []Agent           `json:"agents,omitempty"` // the pairing tokens the reader made
+	// ConfigAt is when each of Config's settings last changed, which the
+	// browser shows as the modification time of ~/.config/<name>.json.
+	ConfigAt map[string]time.Time `json:"configAt,omitempty"`
+	Agents   []Agent              `json:"agents,omitempty"` // the pairing tokens the reader made
 }
 
 // TokenLife is how long a pairing token lasts from when it was made,
@@ -93,6 +96,7 @@ func (s *Session) clone() *Session {
 	c := *s
 	c.State = maps.Clone(s.State)
 	c.Config = maps.Clone(s.Config)
+	c.ConfigAt = maps.Clone(s.ConfigAt)
 	c.Agents = slices.Clone(s.Agents)
 	for i := range c.Agents {
 		c.Agents[i].Grant = slices.Clone(c.Agents[i].Grant)
@@ -102,6 +106,9 @@ func (s *Session) clone() *Session {
 	}
 	if c.Config == nil {
 		c.Config = map[string]string{}
+	}
+	if c.ConfigAt == nil {
+		c.ConfigAt = map[string]time.Time{}
 	}
 	return &c
 }

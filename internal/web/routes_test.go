@@ -133,8 +133,8 @@ func TestPersistenceThroughHTTP(t *testing.T) {
 		t.Fatalf("put state: %d", w.Code)
 	}
 	cookie := cookieOf(t, w)
-	if w := req(t, s, "PUT", site("/config/dice"), `{"sides":20}`, "Cookie", cookie); w.Code != http.StatusNoContent {
-		t.Fatalf("put config: %d", w.Code)
+	if w := req(t, s, "PUT", site("/config/dice"), `{"sides":20}`, "Cookie", cookie); w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"modified"`) {
+		t.Fatalf("put config: %d %q", w.Code, w.Body.String())
 	}
 	for _, bad := range []string{`[1,2]`, `"text"`, `null`, `12`, `{`} {
 		if w := req(t, s, "PUT", site("/config/dice"), bad, "Cookie", cookie); w.Code != http.StatusBadRequest {
