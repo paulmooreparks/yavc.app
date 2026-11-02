@@ -943,8 +943,8 @@
                     items: THEMES.map(function (t) { return { id: 'theme-' + t[0], label: t[1], choice: 'deck-theme', value: t[0], checked: function () { return (deck.front.theme || 'plain') === t[0]; }, run: function () { setFront('theme', t[0]); } }; }) },
                 { id: 'size', label: 'Slide Size', items: SIZES.map(function (t) { return { id: 'size-' + t[0].replace(':', '-'), label: t[1], choice: 'deck-size', value: t[0], checked: function () { return (deck.front.size || '16:9') === t[0]; }, run: function () { setFront('size', t[0]); } }; }) },
                 { id: 'deck-transition', label: 'Transition for Every Slide', items: TRANSITIONS.map(function (t) { return { id: 'deck-transition-' + t[0], label: t[1], choice: 'deck-transition', value: t[0], checked: function () { return (deck.front.transition || 'fade') === t[0]; }, run: function () { setFront('transition', t[0]); } }; }) },
-                cmd('present', 'Present from the Start', 'play', function () { present(0); }, { shortcut: 'F5', disabled: function () { return !ready || !!presenting; } }),
-                cmd('present-here', 'Present from This Slide', 'forward', function () { present(at); }, { shortcut: 'Shift+F5', disabled: function () { return !ready || !!presenting; } }),
+                cmd('present', 'Present from the Start', 'play', function () { present(0); }, { shortcut: 'Mod+Enter', disabled: function () { return !ready || !!presenting; } }),
+                cmd('present-here', 'Present from This Slide', 'forward', function () { present(at); }, { shortcut: 'Mod+Shift+Enter', disabled: function () { return !ready || !!presenting; } }),
                 cmd('leave', 'Leave the Show', 'stop', leave, { hidden: function () { return !presenting; } }),
                 cmd('presenter', 'Presenter Window', 'new-window', presenterWindow, { disabled: function () { return !path; } }),
                 cmd('insert', 'Insert', 'plus', null, { items: INSERTS.map(function (i) { return { id: 'insert-' + i[0].toLowerCase().replace(/[^a-z]+/g, '-'), label: i[0], run: function () {
@@ -983,7 +983,9 @@
             ], into: { view: ['view-visual', 'view-text', 'view-split', '-', 'dock', 'toggle-film'], help: ['help'] } };
         }
         root.addEventListener('keydown', function (e) {
-            if (e.key === 'F5') { e.preventDefault(); present(e.shiftKey ? at : 0); }
+            /* Ctrl+Enter presents, since F5 is the browser's reload; F5 still
+               works while the deck itself has the focus. */
+            if (e.key === 'F5' || ((e.ctrlKey || e.metaKey) && e.key === 'Enter')) { e.preventDefault(); present(e.shiftKey ? at : 0); }
             if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); save(); }
         });
         if (el.split && window.pudlSplit) { /* PUDL's splitter runs by markup. */ }
