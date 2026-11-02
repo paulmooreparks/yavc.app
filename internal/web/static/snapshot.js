@@ -86,12 +86,21 @@
             console.warn('snapshot: ' + j.key + ' is too large to keep');
         }
     }
+    /* A snapshot is taken once a run of changes pauses, and at least every
+       few seconds through a long one, rather than every half second while
+       typing goes on (performance review, 2026-11-03); leaving or hiding
+       the page still takes one at once (keepAll). */
+    var firstDirty = 0;
     function keepSoon() {
-        if (!timer) { timer = setTimeout(keepDirty, 500); }
+        var now = Date.now();
+        if (!firstDirty) { firstDirty = now; }
+        clearTimeout(timer);
+        timer = now - firstDirty >= 5000 ? (keepDirty(), null) : setTimeout(keepDirty, 800);
     }
     function keepDirty() {
         clearTimeout(timer);
         timer = null;
+        firstDirty = 0;
         joined.forEach(function (j) { if (j.dirty) { keepApplet(j); } });
     }
     function keepAll() {

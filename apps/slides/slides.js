@@ -262,37 +262,16 @@
             Object.keys(vars).forEach(function (k) { if (vars[k]) { section.style.setProperty(k, vars[k]); } else { section.style.removeProperty(k); } });
             section.style.background = s.background || f.background || '';
             section.style.backgroundImage = s.image ? 'url("' + s.image.replace(/"/g, '') + '")' : '';
-            if (s.image && !/^(\/|https?:)/i.test(s.image) && s.image.indexOf('//') !== 0) { localPicture(s.image).then(function (url) { if (url && section.isConnected) { section.style.backgroundImage = 'url("' + url + '")'; } }); }
+            if (s.image && !/^(\/|https?:)/i.test(s.image) && s.image.indexOf('//') !== 0) { window.yavcMdEditor.pictureFor(s.image, picturesHost()).then(function (url) { if (url && section.isConnected) { section.style.backgroundImage = 'url("' + url + '")'; } }); }
         }
-        /* Draws a slide's blocks into an element, as the Editor's preview
-           draws them: safe, diagrams drawn, pictures read beside the file. */
-        function drawInto(target, text) {
-            var m = md, p;
-            try { p = m.preview(text); } catch (err) { target.innerHTML = '<p class="deck-problem">' + esc(err.message) + '</p>'; return; }
-            if (window.pudlApplets && window.pudlApplets.destroy) { try { window.pudlApplets.destroy(target); } catch (err) { } }
-            target.replaceChildren();
-            (p.blocks || []).forEach(function (b) {
-                var block = document.createElement('div');
-                block.className = 'doc-block';
-                block.dataset.line = b.line;
-                block.replaceChildren(window.yavcHTML.fragment(b.html));
-                target.appendChild(block);
-                (b.diagrams || []).forEach(function (d) {
-                    var place = block.querySelector('[data-preview-diagram="' + CSS.escape(d.id) + '"]');
-                    if (place && d.language === 'mermaid') { drawMermaid(place, d.source); }
-                });
-            });
-            if (window.pudlApplets && window.pudlApplets.boot && target.querySelector('[data-applet]')) { try { window.pudlApplets.boot(target); } catch (err) { } }
-            loadPictures(target);
-        }
-        var mermaidReady = null, mermaidCount = 0;
-        function drawMermaid(place, source) {
-            if (!mermaidReady) { mermaidReady = kit().then(function (k) { return k.mermaid(); }); }
-            var id = 'deck-mermaid-' + n + '-' + (++mermaidCount);
-            mermaidReady.then(function () {
-                window.mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', suppressErrorRendering: true, theme: document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'default' });
-                return window.mermaid.render(id, source);
-            }).then(function (out) { if (place.isConnected) { place.replaceChildren(window.yavcHTML.fragment(out.svg, { diagram: true })); place.classList.add('ed-diagram'); } }).catch(function () { });
+        /* Draws a slide's blocks into an element with the kit's renderer
+           (apps/md-editor/kit.js drawBlocks), as the Editor's preview draws
+           them; quiet, for a thumbnail or the notes, leaves diagrams and
+           applets undrawn. */
+        function drawInto(target, text, quiet) {
+            var p;
+            try { p = md.preview(text); } catch (err) { target.innerHTML = '<p class="deck-problem">' + esc(err.message) + '</p>'; return; }
+            window.yavcMdEditor.drawBlocks(target, p.blocks, quiet ? { pictures: picturesHost(), diagrams: false, applets: false } : { pictures: picturesHost() });
         }
         /* The public site's address, from the page's meta tag. A window
            global would be replaced by any element in a document with that
@@ -325,23 +304,6 @@
                 dir: function () { return path ? (path.replace(/\/[^\/]*$/, '') || '~') : null; }
             };
         }
-        /* A picture of the home folder as an address this page can draw,
-           kept while the deck is open; '' for one not found. */
-        var pictureURLs = {};
-        function localPicture(src) {
-            if (pictureURLs[src] !== undefined) { return Promise.resolve(pictureURLs[src]); }
-            var ph = picturesHost();
-            return ph.site().then(function (site) {
-                var F = site.F, dir = ph.dir(), base = (dir && F.resolve(null, dir)) || F.home(), node = base ? F.resolve(base, src) : null;
-                if (!node || node.children) { return ''; }
-                return F.readBytes(node).then(function (bytes) { return URL.createObjectURL(new Blob([bytes], { type: (F.typeOf && F.typeOf(node)) || '' })); });
-            }).catch(function () { return ''; }).then(function (url) { pictureURLs[src] = url; return url; });
-        }
-        function loadPictures(target) {
-            if (!target.querySelector('img[data-attachment]')) { return; }
-            kit().then(function (k) { k.loadImages(target, picturesHost()); }).catch(function () { });
-        }
-
         function pageHost() {
             return {
                 root: root, page: el.body, scroll: el.stagebox,
@@ -358,10 +320,7 @@
                 inlineOf: function (src) { return engine().then(function (m) { return m.inline(src); }); },
                 blocksOf: function (text) { return engine().then(function (m) { return m.blocks(text); }); },
                 draw: function (target, html, diagrams) {
-                    target.replaceChildren(window.yavcHTML.fragment(html));
-                    loadPictures(target);
-                    (diagrams || []).forEach(function (d) { var place = target.querySelector('[data-preview-diagram="' + CSS.escape(d.id) + '"]'); if (place && d.language === 'mermaid') { drawMermaid(place, d.source); } });
-                    if (window.pudlApplets && window.pudlApplets.boot && target.querySelector('[data-applet]')) { try { window.pudlApplets.boot(target); } catch (err) { } }
+                    window.yavcMdEditor.drawBlocks(target, [{ line: 0, html: html, diagrams: diagrams }], { pictures: picturesHost() });
                 },
                 keys: function () { return [{ key: 'Mod-s', run: function () { save(); return true; } }]; },
                 say: say,
@@ -403,11 +362,7 @@
                 el.notesView.replaceChildren(label, notes);
             } else { el.notesView.replaceChildren(); }
         }
-        function drawIntoQuiet(target, text) {
-            var p = md.preview(text);
-            (p.blocks || []).forEach(function (b) { var block = document.createElement('div'); block.replaceChildren(window.yavcHTML.fragment(b.html)); target.appendChild(block); });
-            loadPictures(target);
-        }
+        function drawIntoQuiet(target, text) { drawInto(target, text, true); }
 
         /* === The text pane (CodeMirror, as the Editor's) ================ */
 
@@ -491,7 +446,14 @@
             el.floatBar.addEventListener('pointerup', up);
             e.preventDefault();
         });
-        var floatRO = 'ResizeObserver' in window ? new ResizeObserver(function () { if (el.stagebox.classList.contains('deck-float')) { keepFloat(); } }) : null;
+        /* A resize keeps the floating canvas's place once it stops, not on
+           every frame, since each keep writes the settings file and with it
+           the home folder (performance review, 2026-11-03). */
+        var floatTimer = 0;
+        var floatRO = 'ResizeObserver' in window ? new ResizeObserver(function () {
+            if (!el.stagebox.classList.contains('deck-float')) { return; }
+            clearTimeout(floatTimer); floatTimer = setTimeout(keepFloat, 400);
+        }) : null;
         if (floatRO) { floatRO.observe(el.stagebox); }
 
         async function setMode(next) {
@@ -536,7 +498,6 @@
             if (!b || !md) { return; }
             var section = b.querySelector('section'), body = section.querySelector('.deck-body');
             applySlideSettings(section, deck.slides[i]);
-            body.replaceChildren();
             try { drawIntoQuiet(body, deck.slides[i].text); } catch (err) { }
             body.querySelectorAll('.sc-notes').forEach(function (a) { a.remove(); });
             b.title = titleOf(deck.slides[i], i);
@@ -1504,12 +1465,13 @@
                 if (channel) { channel.close(); }
                 clearInterval(clockTimer);
                 clearTimeout(redrawTimer);
+                clearTimeout(floatTimer);
                 unguard();
                 /* Nothing outlives the applet: a document listener would keep
-                   the whole closed deck alive, and the pictures' addresses
-                   hold their bytes (performance review, 2026-11-03). */
+                   the whole closed deck alive (performance review, 2026-11-03).
+                   The pictures' addresses are the kit's, shared, and released
+                   when their files change. */
                 document.removeEventListener('fullscreenchange', onFullscreenChange);
-                Object.keys(pictureURLs).forEach(function (k) { if (pictureURLs[k]) { URL.revokeObjectURL(pictureURLs[k]); } });
             }
         };
     }

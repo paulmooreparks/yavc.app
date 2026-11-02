@@ -212,6 +212,12 @@ var schemaCache = null;
   function attach(o) {
     var PM = null, view = null, on = false, shown = null, loading = 0;
     var dirty = false, syncTimer = 0, syncing = null, reloadTimer = 0;
+    /* The top-level blocks exactly as they were read from the text: the
+       same node objects, which ProseMirror keeps for a block nobody
+       touched. Such a block's text is its src, so it need not be written
+       out again, nor read again when the text changes elsewhere
+       (performance review, 2026-11-03). */
+    var pristine = null;
 
     function enable(next) {
       next = !!next;
@@ -252,6 +258,8 @@ var schemaCache = null;
         }
         shown = text;
         dirty = false;
+        pristine = new WeakSet();
+        view.state.doc.forEach(function (n) { pristine.add(n); });
         // The suggestions are placed once the page is known to be the text.
         view.dispatch(view.state.tr.setMeta(suggestKey, true));
         o.scroll.scrollTop = top;
@@ -264,7 +272,7 @@ var schemaCache = null;
     function dispatch(tr) {
       if (!view) return;
       view.updateState(view.state.apply(tr));
-      if (tr.docChanged) {
+      if (tr.docChanged && !tr.getMeta('fromText')) {
         dirty = true;
         clearTimeout(syncTimer);
         syncTimer = setTimeout(sync, 300);
@@ -354,8 +362,7 @@ var schemaCache = null;
       if (syncing) return syncing.then(sync);
       if (!dirty || !view) return Promise.resolve();
       dirty = false;
-      var json = view.state.doc.toJSON();
-      syncing = Promise.resolve(o.markdownOf(json)).then(function (text) {
+      syncing = Promise.resolve(o.markdownOf(syncJSON())).then(function (text) {
         shown = text;
         o.setText(text);
       }).catch(function (err) {
@@ -365,14 +372,86 @@ var schemaCache = null;
       return syncing;
     }
 
-    /* The text changed other than from the page (an agent, a flow, a
-       suggestion taken): the page is read again from it. */
+    /* The page as the engine writes it back, with each block still as it
+       was read sent as its own Markdown (a source block of its src), so
+       only the blocks that changed are written out again. The engine
+       writes an untouched block back as its src anyway, so the text is the
+       same either way. */
+    function syncJSON() {
+      var doc = view.state.doc, out = { type: 'doc', attrs: doc.attrs, content: [] };
+      doc.forEach(function (node) {
+        if (pristine && pristine.has(node) && node.attrs.src != null && node.attrs.gap != null) {
+          out.content.push({ type: 'source_block', attrs: { uid: node.attrs.uid, gap: node.attrs.gap, src: node.attrs.src, kind: 'text', html: '' } });
+        } else out.content.push(node.toJSON());
+      });
+      return out;
+    }
+
+    /* The text changed other than from the page (the text pane in Split,
+       an agent, a suggestion taken): the blocks the change touched are
+       read again and put in place, or, where that cannot be done safely,
+       the whole page is read again. */
     function textChanged() {
       if (!on) return;
       clearTimeout(reloadTimer);
       reloadTimer = setTimeout(function () {
-        if (on && !dirty && !syncing && o.text() !== shown) load();
+        if (on && !dirty && !syncing && o.text() !== shown && !patchFromText(o.text())) load();
       }, 150);
+    }
+    /* Reads again only the blocks a change to the text touched, with one
+       block either side, since a change can join or split blocks; false
+       when the page is not exactly the text it was read from, or the
+       change reaches the front matter or what follows the last block. */
+    function patchFromText(text) {
+      if (!view || shown == null || !pristine) return false;
+      var doc = view.state.doc, attrs = doc.attrs, front = attrs.front || '', tail = attrs.tail == null ? '\n' : attrs.tail;
+      if (attrs.crlf) return false;
+      var at = front.length, spans = [], ok = true;
+      doc.forEach(function (node, offset) {
+        if (!ok) return;
+        var a = node.attrs || {};
+        if (!pristine.has(node) || a.src == null || a.gap == null) { ok = false; return; }
+        var start = at + a.gap.length, end = start + a.src.length;
+        spans.push({ start: start, end: end, pos: offset, size: node.nodeSize, gap: a.gap, src: a.src });
+        at = end;
+      });
+      if (!ok || !spans.length || at + tail.length !== shown.length) return false;
+      var p = 0, max = Math.min(shown.length, text.length);
+      while (p < max && shown.charCodeAt(p) === text.charCodeAt(p)) p++;
+      var q = 0;
+      while (q < max - p && shown.charCodeAt(shown.length - 1 - q) === text.charCodeAt(text.length - 1 - q)) q++;
+      var oldEnd = shown.length - q, delta = text.length - shown.length, last = spans.length - 1;
+      if (p < spans[0].start || oldEnd > spans[last].end) return false;
+      var i = 0; while (i < last && spans[i].end < p) i++;
+      var j = last; while (j > 0 && spans[j].start > oldEnd) j--;
+      if (j < i) j = i;
+      i = Math.max(0, i - 1); j = Math.min(last, j + 1);
+      for (var k = i; k <= j; k++) { if (shown.slice(spans[k].start, spans[k].end) !== spans[k].src) return false; }
+      var from = spans[i].start, toNew = spans[j].end + delta;
+      if (toNew <= from) return false;
+      var slice = text.slice(from, toNew);
+      // A slice starting --- would be read as front matter.
+      if (/^---[ \t]*(\n|$)/.test(slice)) return false;
+      var ticket = ++loading, before = shown, gap = spans[i].gap;
+      return Promise.resolve(o.docOf(slice)).then(function (json) {
+        if (ticket !== loading || !view || shown !== before || !on) return;
+        if (!json || (json.attrs && (json.attrs.front || json.attrs.crlf)) || (json.attrs && json.attrs.tail)) { load(); return; }
+        // Fresh ids above every one in the page, so no block takes another's place.
+        var top = 0;
+        view.state.doc.descendants(function (n) { if (n.attrs && typeof n.attrs.uid === 'number' && n.attrs.uid > top) top = n.attrs.uid; });
+        (function renumber(list) { (list || []).forEach(function (n) { if (n.attrs && n.attrs.uid != null) n.attrs.uid = ++top; renumber(n.content); }); })(json.content);
+        if (json.content && json.content[0] && json.content[0].attrs) json.content[0].attrs.gap = gap;
+        var schema = view.state.schema, nodes = (json.content || []).map(function (j) { return schema.nodeFromJSON(j); });
+        if (!nodes.length) { load(); return; }
+        var cur = view.state.doc, fromPos = 0, toPos = 0;
+        cur.forEach(function (n, offset, index) { if (index === i) fromPos = offset; if (index === j) toPos = offset + n.nodeSize; });
+        var tr = view.state.tr.replaceWith(fromPos, toPos, nodes).setMeta('addToHistory', false).setMeta('fromText', true);
+        view.dispatch(tr);
+        view.state.doc.forEach(function (n) { if (nodes.indexOf(n) >= 0) pristine.add(n); });
+        shown = text;
+        view.dispatch(view.state.tr.setMeta(suggestKey, true).setMeta('fromText', true));
+        o.changed();
+      }).catch(function () { if (ticket === loading) load(); });
     }
 
     /* ---- Suggestions on the page ------------------------------------

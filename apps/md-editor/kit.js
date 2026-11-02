@@ -19,6 +19,8 @@
      yavcMdEditor.boxCommand(ctx, opts, extra)   Box, which wraps the selection in a box
      yavcMdEditor.askProperties(front, opts)   the Properties dialog, for front matter
      yavcMdEditor.loadImages(el, pictures)   pictures of the home folder, read
+     yavcMdEditor.drawBlocks(el, blocks, opts)   the engine's preview blocks drawn, unchanged ones kept
+     yavcMdEditor.pictureFor(src, pictures)   a picture of the home folder as an address, cached
 
    ctx says where a format goes: { page(): the page view's handle or null,
    text(): the CodeMirror view or null, onPage(): whether the page takes
@@ -748,11 +750,45 @@
             }
         });
     }
+    /* === Drawing a page ===================================================
+       One renderer for the Editor's preview and page, and Slides' canvas,
+       filmstrip, notes and show (review of 2026-11-03: there were two). */
+
+    /* A picture of the home folder as an address this page can draw. The
+       address is made once for each version of the file and kept, so
+       drawing again (as typing does) makes no new copy of the bytes; when
+       the file changes, the old address is released (performance review,
+       2026-11-03). Resolves to '' for a file that is not there. */
+    var pictureCache = {}, picturePaths = {};
+    function pictureURL(node, F) {
+        var r = F.realOf(node), path = F.displayPath(r);
+        var version = path + '|' + (r.blob || '') + '|' + (r.mtime ? +r.mtime : '') + '|' + (r.size || '');
+        if (pictureCache[version]) { return pictureCache[version]; }
+        var made = F.readBytes(node).then(function (bytes) { return URL.createObjectURL(new Blob([bytes], { type: (F.typeOf && F.typeOf(node)) || '' })); });
+        var was = picturePaths[path];
+        if (was && was !== version && pictureCache[was]) {
+            pictureCache[was].then(function (u) { if (u) { URL.revokeObjectURL(u); } });
+            delete pictureCache[was];
+        }
+        picturePaths[path] = version;
+        pictureCache[version] = made.catch(function () { delete pictureCache[version]; return ''; });
+        return pictureCache[version];
+    }
+    /* A picture's address from a document's own words (cat.png beside the
+       document, ~/Pictures/cat.png), for a slide's background say. */
+    function pictureFor(src, pictures) {
+        if (!pictures || !pictures.site) { return Promise.resolve(''); }
+        return pictures.site().then(function (site) {
+            var F = site.F, dir = pictures.dir ? pictures.dir() : null, base = (dir && F.resolve(null, dir)) || F.home();
+            var node = base ? F.resolve(base, src) : null;
+            return node && !node.children ? pictureURL(node, F) : '';
+        }).catch(function () { return ''; });
+    }
     /* The pictures of the home folder in drawn HTML (the engine marks each
        with data-attachment, its path from the document's folder), read
        from the folder and shown; one not found is marked. */
     function loadImages(target, pictures) {
-        var imgs = target.querySelectorAll('img[data-attachment]');
+        var imgs = target.querySelectorAll('img[data-attachment]:not([src])');
         if (!imgs.length) { return; }
         if (!pictures || !pictures.site) { imgs.forEach(function (img) { img.classList.add('ed-missing-image'); }); return; }
         pictures.site().then(function (site) {
@@ -760,12 +796,81 @@
             imgs.forEach(function (img) {
                 var name = img.dataset.attachment, node = base ? F.resolve(base, name) : null;
                 if (!node || node.children) { img.classList.add('ed-missing-image'); img.alt = img.alt || name; return; }
-                F.readBytes(node).then(function (bytes) {
-                    /* The address stays until the picture is drawn again, so an export can read it. */
-                    img.src = URL.createObjectURL(new Blob([bytes], { type: (F.typeOf && F.typeOf(node)) || '' }));
-                }).catch(function () { img.classList.add('ed-missing-image'); });
+                pictureURL(node, F).then(function (url) { if (url) { img.src = url; } else { img.classList.add('ed-missing-image'); } });
             });
         }).catch(function () { imgs.forEach(function (img) { img.classList.add('ed-missing-image'); }); });
+    }
+    /* A listing ({{code:path}}) is fetched as the page draws: a path on the
+       site from /, or one of the reader's own files under ~. */
+    function loadListings(target) {
+        target.querySelectorAll('code[data-code-src]:not([data-code-loaded])').forEach(function (code) {
+            code.setAttribute('data-code-loaded', '');
+            var src = code.getAttribute('data-code-src'), pre = code.closest('pre');
+            if (pre) { pre.classList.add('code'); pre.setAttribute('data-code-filename', src.split('?')[0].split('/').pop()); }
+            var got = src.charAt(0) === '~'
+                ? window.yavcUtil.siteFs().then(function (F) { var n = F.resolve(null, src); if (!n || n.children) { throw new Error('no such file'); } return F.read(n); })
+                : fetch(src, { credentials: 'same-origin' }).then(function (r) { if (!r.ok) { throw new Error('HTTP ' + r.status); } return r.text(); });
+            got.then(function (text) { code.textContent = text; if (pre && window.pudlCode && window.pudlCode.enhance) { window.pudlCode.enhance(pre); } })
+               .catch(function (err) { code.textContent = 'The file could not be loaded: ' + (err && err.message || err); });
+        });
+    }
+    /* A Mermaid diagram drawn into its place, made safe with its own
+       stylesheet kept under its id (apps/md-engine/safe-html.js). */
+    var diagramCount = 0;
+    function drawDiagram(place, source) {
+        var id = 'md-diagram-' + (++diagramCount);
+        mermaid().then(function () {
+            window.mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', suppressErrorRendering: true,
+                theme: document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'default' });
+            return window.mermaid.render(id, source);
+        }).then(function (out) {
+            if (!place.isConnected) { return; }
+            place.replaceChildren(window.yavcHTML.fragment(out.svg, { diagram: true }));
+            place.classList.add('ed-diagram');
+        }).catch(function (err) { place.title = 'The diagram could not be drawn: ' + (err && err.message || err); });
+    }
+    /* Draws the engine's preview blocks into an element. A block whose
+       HTML is the same as one already there keeps its element, with its
+       diagram, its pictures, its listing and any applet in it running, so
+       typing redraws only the blocks it changed (performance review,
+       2026-11-03). opts: { pictures: the host's picture service,
+       diagrams: false to leave diagrams undrawn, applets: false to leave
+       applets unstarted, as a thumbnail does }. */
+    function drawBlocks(target, blocks, opts) {
+        opts = opts || {};
+        var old = Array.prototype.filter.call(target.children, function (c) { return c.classList && c.classList.contains('doc-block'); });
+        var byHtml = {};
+        old.forEach(function (c) { var k = c.__mdHtml; if (k != null) { (byHtml[k] = byHtml[k] || []).push(c); } });
+        var used = new Set(), fresh = [], order = [];
+        (blocks || []).forEach(function (b) {
+            var kept = (byHtml[b.html] || []).shift();
+            if (kept) { used.add(kept); kept.dataset.line = b.line; order.push(kept); return; }
+            var block = document.createElement('div');
+            block.className = 'doc-block';
+            block.dataset.line = b.line;
+            block.__mdHtml = b.html;
+            block.replaceChildren(window.yavcHTML.fragment(b.html));
+            order.push(block);
+            fresh.push({ el: block, diagrams: b.diagrams });
+        });
+        old.forEach(function (c) {
+            if (used.has(c)) { return; }
+            if (window.pudlApplets && window.pudlApplets.destroy && c.querySelector('[data-applet]')) { try { window.pudlApplets.destroy(c); } catch (err) { } }
+            c.remove();
+        });
+        Array.prototype.forEach.call(target.childNodes, function (c) { if (!(c.classList && c.classList.contains('doc-block'))) { c.remove(); } });
+        order.forEach(function (el, i) { if (target.children[i] !== el) { target.insertBefore(el, target.children[i] || null); } });
+        fresh.forEach(function (f) {
+            if (opts.diagrams !== false) {
+                (f.diagrams || []).forEach(function (d) {
+                    var place = f.el.querySelector('[data-preview-diagram="' + CSS.escape(d.id) + '"]');
+                    if (place && d.language === 'mermaid') { drawDiagram(place, d.source); }
+                });
+            }
+            if (opts.applets !== false && window.pudlApplets && window.pudlApplets.boot && f.el.querySelector('[data-applet]')) { try { window.pudlApplets.boot(f.el); } catch (err) { } }
+            loadImages(f.el, opts.pictures);
+            loadListings(f.el);
+        });
     }
 
     /* === Properties =======================================================
@@ -885,7 +990,7 @@
         FORMATS: FORMATS, STYLES: STYLES, INSERTS: INSERTS, SHORTCODES: SHORTCODES, MENU: MENU,
         commands: commands, apply: apply, classesOf: classesOf, insertItem: insertItem, inserts: inserts, textFormat: textFormat, textInsert: textInsert,
         askText: askText, askFields: askFields, askChoice: askChoice, askProperties: askProperties, STOCK: STOCK, askColour: askColour, askColours: askColours, askClass: askClass,
-        askFigure: askFigure, editBlock: editBlock, askShortcode: askShortcode, FORMS: FORMS, boxCommand: boxCommand, BOXES: BOXES, loadImages: loadImages, parseFigure: parseFigure, buildFigure: buildFigure, parseShortcode: parseShortcode,
+        askFigure: askFigure, editBlock: editBlock, drawBlocks: drawBlocks, drawDiagram: drawDiagram, pictureFor: pictureFor, askShortcode: askShortcode, FORMS: FORMS, boxCommand: boxCommand, BOXES: BOXES, loadImages: loadImages, parseFigure: parseFigure, buildFigure: buildFigure, parseShortcode: parseShortcode,
         _page: null
     };
 })();

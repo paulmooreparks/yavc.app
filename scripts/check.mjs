@@ -216,7 +216,8 @@ const SHARED_HOMES = [
   [/createElement\(\s*'dialog'\s*\)/g, 'internal/web/static/dialogs.js', "a dialog of its own; use yavcDialog (static/dialogs.js)"],
   [/window\.yavcMd\s*[.[]/g, 'apps/md-engine/loader.js', 'the Markdown engine called directly; go through its loader, whose calls throw on errors'],
   [/['"]\/(js|css)\//g, null, "a parkscomputing.com address (/js/, /css/) that this site does not serve"],
-  [/\.replace\(\s*'Mod-'\s*,/g, 'internal/web/static/yavc-util.js', 'a shortcut spelled by hand; use yavcUtil.shortcut']
+  [/\.replace\(\s*'Mod-'\s*,/g, 'internal/web/static/yavc-util.js', 'a shortcut spelled by hand; use yavcUtil.shortcut'],
+  [/mermaid\.render\(|data-preview-diagram/g, 'apps/md-editor/kit.js', "a renderer of its own; draw the engine's blocks with yavcMdEditor.drawBlocks"]
 ];
 rules.push({ id: 'one-shared-implementation', run() {
   for (const f of SITE) {

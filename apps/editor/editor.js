@@ -901,62 +901,10 @@
                 say((problems.length === 1 ? 'One problem' : problems.length + ' problems') + (problems[0].line ? ', line ' + problems[0].line : '') + ': ' + problems[0].message, false);
             } else { say(''); }
         }
-        /* Draws preview blocks into an element: each block's HTML made safe
-           (safe-html.js), its diagrams drawn, and its pictures read from
-           the file system beside the document. */
-        function drawBlocks(target, blocks) {
-            if (window.pudlApplets && window.pudlApplets.destroy) { try { window.pudlApplets.destroy(target); } catch (err) { } }
-            target.replaceChildren();
-            (blocks || []).forEach(function (b) {
-                var block = document.createElement('div');
-                block.className = 'doc-block';
-                block.dataset.line = b.line;
-                block.replaceChildren(window.yavcHTML.fragment(b.html));
-                target.appendChild(block);
-                (b.diagrams || []).forEach(function (d) {
-                    var place = block.querySelector('[data-preview-diagram="' + CSS.escape(d.id) + '"]');
-                    if (place && d.language === 'mermaid') { drawMermaid(place, d.source); }
-                });
-            });
-            loadImages(target);
-            loadListings(target);
-            /* An applet the page embeds ({{applet:name}}) runs in it. */
-            if (window.pudlApplets && window.pudlApplets.boot && target.querySelector('[data-applet]')) {
-                try { window.pudlApplets.boot(target); } catch (err) { }
-            }
-        }
-        /* A listing ({{code:path}}) is fetched as the page loads: a path
-           on the site from /, or one of the reader's own files under ~. */
-        function loadListings(target) {
-            target.querySelectorAll('code[data-code-src]:not([data-code-loaded])').forEach(function (code) {
-                code.setAttribute('data-code-loaded', '');
-                var src = code.getAttribute('data-code-src'), pre = code.closest('pre');
-                if (pre) { pre.classList.add('code'); pre.setAttribute('data-code-filename', src.split('?')[0].split('/').pop()); }
-                var got = src.charAt(0) === '~' ? Promise.resolve().then(function () { var n = F.resolve(null, src); if (!n || n.children) { throw new Error('no such file'); } return F.read(n); })
-                    : fetch(src, { credentials: 'same-origin' }).then(function (r) { if (!r.ok) { throw new Error('HTTP ' + r.status); } return r.text(); });
-                got.then(function (text) { code.textContent = text; if (pre && window.pudlCode && window.pudlCode.enhance) { window.pudlCode.enhance(pre); } })
-                   .catch(function (err) { code.textContent = 'The file could not be loaded: ' + (err && err.message || err); });
-            });
-        }
-        var mermaidReady = null, mermaidCount = 0;
-        function drawMermaid(place, source) {
-            if (!mermaidReady) {
-                mermaidReady = loadKit().then(function (k) { return k.mermaid(); });
-            }
-            var id = 'ed-mermaid-' + (++mermaidCount);
-            mermaidReady.then(function () {
-                window.mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', suppressErrorRendering: true,
-                    theme: document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'default' });
-                return window.mermaid.render(id, source);
-            }).then(function (out) {
-                if (!place.isConnected) { return; }
-                place.replaceChildren(window.yavcHTML.fragment(out.svg, { diagram: true }));
-                place.classList.add('ed-diagram');
-            }).catch(function (err) {
-                place.title = 'The diagram could not be drawn: ' + (err && err.message || err);
-            });
-        }
-        function loadImages(target) { if (window.yavcMdEditor) { window.yavcMdEditor.loadImages(target, picturesHost()); } }
+        /* Draws preview blocks into an element with the kit's renderer
+           (apps/md-editor/kit.js drawBlocks): made safe, diagrams, pictures,
+           listings and applets drawn, and blocks that did not change kept. */
+        function drawBlocks(target, blocks) { window.yavcMdEditor.drawBlocks(target, blocks, { pictures: picturesHost() }); }
         var INSERTS = window.yavcMdEditor ? window.yavcMdEditor.INSERTS : [], SHORTCODES = window.yavcMdEditor ? window.yavcMdEditor.SHORTCODES : [];
         /* Where a format or an insert goes: the page in Visual, the text
            in Text and Preview, and in Split whichever has the keyboard. */

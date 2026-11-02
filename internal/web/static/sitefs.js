@@ -332,6 +332,10 @@
         var data = null;
         try { data = raw ? JSON.parse(raw) : null; } catch (err) { data = null; }
         if (!data || !data.files || typeof data.files !== 'object') { data = { files: {} }; }
+        /* The record of what the site seeded is kept in memory, so a save
+           need not read the whole stored record back to keep it
+           (performance review, 2026-11-03). */
+        home.seeds = data.seeds && typeof data.seeds === 'object' ? data.seeds : {};
         home.dir.children = [];
         Object.keys(data.files).sort().forEach(function (p) { homeInsert(p, data.files[p]); });
         sortKids(home.dir);
@@ -348,9 +352,7 @@
                 else { files[p] = { t: 'f', c: c.content, m: +c.mtime }; }
             });
         })(home.dir, '');
-        var seeds = {};
-        try { var kept = home.raw ? JSON.parse(home.raw) : null; if (kept && kept.seeds) { seeds = kept.seeds; } } catch (err) { }
-        return JSON.stringify({ seeds: seeds, files: files });
+        return JSON.stringify({ seeds: home.seeds || {}, files: files });
     }
 
     /* Saves the home directory; on failure the stored copy is reloaded so
