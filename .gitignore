@@ -4,3 +4,5 @@
 /.local/
 /apps/md-engine/yavc-md.wasm
 /apps/md-engine/wasm_exec.js
+/.claude/worktrees/
+/.claude/settings.local.json
