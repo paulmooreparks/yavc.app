@@ -419,6 +419,13 @@
         return null;
     }
     var PICTURE_EXT = /\.(png|jpe?g|gif|webp|svg|avif|bmp)$/i;
+    /* A width such as 80% or 600px as its number and its unit, for the
+       dialog's number field and unit choice; % when there is none. */
+    var WIDTH_UNITS = ['%', 'px', 'rem', 'em', 'ch'];
+    function splitWidth(w) {
+        var m = /^(\d+(?:\.\d+)?)\s*(%|px|rem|em|ch)?$/.exec((w || '').trim());
+        return m ? { n: m[1], u: m[2] || '%' } : { n: '', u: '%' };
+    }
     /* How a picture is written in the document: by name when it sits in
        the document's folder, by its ~ path elsewhere in the home folder,
        and by its address on the site otherwise. */
@@ -434,7 +441,7 @@
        the picture out, or null for no change. existing is the block being
        changed, or null for a new picture. */
     function askFigure(existing, pictures) {
-        var f = existing ? parseFigure(existing) : null, n = ++dlgCount, id = 'md-fig-' + n + '-';
+        var f = existing ? parseFigure(existing) : null, n = ++dlgCount, id = 'md-fig-' + n + '-', width = splitWidth(f ? f.width : '');
         var dlg = document.createElement('dialog');
         dlg.className = 'dialog md-editor-dialog md-figure';
         dlg.setAttribute('aria-labelledby', id + 'title');
@@ -448,8 +455,9 @@
             '<input class="form-input" id="' + id + 'alt" data-key="alt" value="' + esc(f ? f.alt : '') + '" autocomplete="off">' +
             '<p class="form-help">For someone who can\'t see it. Leave it empty for a picture that only decorates.</p>' +
             '<label class="form-label" for="' + id + 'width">Largest width</label>' +
-            '<input class="form-input" id="' + id + 'width" data-key="width" value="' + esc(f ? f.width : '') + '" autocomplete="off" spellcheck="false" placeholder="80%">' +
-            '<p class="form-help">Such as 80% or 600px; the column\'s width if empty.</p>' +
+            '<div class="md-figure-width"><span class="number-field"><input class="form-input" type="number" id="' + id + 'width" data-key="width" value="' + esc(width.n) + '" min="1" step="1" placeholder="Column"></span>' +
+            '<select class="form-select" data-key="unit" aria-label="Unit of the width">' + WIDTH_UNITS.map(function (u) { return '<option value="' + u + '"' + (u === width.u ? ' selected' : '') + '>' + u + '</option>'; }).join('') + '</select></div>' +
+            '<p class="form-help">Of the column (%), or in px, rem, em or ch; empty takes the column\'s width.</p>' +
             '<label class="form-label" for="' + id + 'caption">Caption</label>' +
             '<input class="form-input" id="' + id + 'caption" data-key="caption" value="' + esc(f ? f.caption : '') + '" autocomplete="off">' +
             '<p class="form-help">Under the picture, in Markdown.</p>' +
@@ -460,6 +468,7 @@
             '<button type="button" class="btn" data-act="cancel">Cancel</button>' +
             '<button type="submit" class="btn btn-primary">' + (f ? 'Change' : 'Insert') + '</button></div></form>';
         document.body.appendChild(dlg);
+        if (window.pudlFields && window.pudlFields.enhance) { window.pudlFields.enhance(dlg); }
         var form = dlg.querySelector('form'), field = function (k) { return dlg.querySelector('[data-key="' + k + '"]'); };
         var errorLine = dlg.querySelector('[data-role="error"]'), file = dlg.querySelector('[data-role="file"]');
         function problem(text, focus) { errorLine.textContent = text; errorLine.hidden = false; if (focus) { focus.focus(); } }
@@ -468,10 +477,10 @@
             function finish(v) { if (done) { return; } done = true; if (dlg.open) { dlg.close(); } resolve(v); setTimeout(function () { dlg.remove(); }, 0); }
             form.addEventListener('submit', function (e) {
                 e.preventDefault();
-                var src = field('src').value.trim(), width = field('width').value.trim();
+                var src = field('src').value.trim(), number = field('width').value.trim(), unit = field('unit').value;
                 if (!src) { problem('The picture needs an address, such as cat.png or ~/Pictures/cat.png.', field('src')); return; }
-                if (width && !/^\d+(\.\d+)?(%|px|rem|em|ch)$/.test(width)) { problem('The width is a number with %, px, rem, em or ch, such as 80%.', field('width')); return; }
-                finish(buildFigure({ src: src, alt: field('alt').value.trim(), width: width, caption: field('caption').value.trim() }));
+                if (number && !(parseFloat(number) > 0)) { problem('The width is a number above zero, such as 80.', field('width')); return; }
+                finish(buildFigure({ src: src, alt: field('alt').value.trim(), width: number ? String(parseFloat(number)) + unit : '', caption: field('caption').value.trim() }));
             });
             dlg.addEventListener('click', function (e) {
                 var b = e.target.closest('[data-act]');
