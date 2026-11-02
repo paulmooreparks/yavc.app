@@ -41,6 +41,8 @@ func TestShortcodes(t *testing.T) {
 		{"A {{color:#c0392b}}red{{/color}} word.", `<span class="sc-colour" style="color:#c0392b">red</span>`},
 		{"Nested {{colour:tomato}}outer {{colour:navy}}inner{{/colour}} more{{/colour}}.", `<span class="sc-colour" style="color:tomato">outer <span class="sc-colour" style="color:navy">inner</span> more</span>`},
 		{"Unclosed {{colour:red}}words.", `needs {{/colour}}`},
+		{"# {{colour:accent}}yavc.app{{/colour}}", `<h1 id="colouraccentyavcappcolour"><span class="sc-colour" style="color:var(--deck-accent, var(--accent))">yavc.app</span></h1>`},
+		{"- {{colour:navy}}an item{{/colour}}", `<li><span class="sc-colour" style="color:navy">an item</span></li>`},
 		{"Bad {{colour:url(x)}}words{{/colour}}.", `is not a colour`},
 		{"{{code:~/bin/hello}}", `<pre><code data-code-src="~/bin/hello"></code></pre>`},
 		{"{{code:/applets/dice/dice.js}}", `class="language-javascript" data-code-src="/applets/dice/dice.js"`},

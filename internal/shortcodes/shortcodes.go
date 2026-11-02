@@ -754,6 +754,16 @@ func (r *htmlRenderer) inline(w util.BufWriter, src []byte, node ast.Node, enter
 	}
 	n := node.(*Inline)
 	d := table[n.Call.Name]
+	if (d != nil && d.kind == span) || n.Closing {
+		// Spans pair within the block they sit in, whatever it is: a
+		// paragraph, a heading, a table cell, a list item.
+		for b := node.Parent(); b != nil; b = b.Parent() {
+			if b.Type() == ast.TypeBlock {
+				matchSpans(b)
+				break
+			}
+		}
+	}
 	if n.Closing {
 		if n.Matched && d != nil && d.kind == span {
 			_, _ = w.WriteString("</span>")
@@ -818,9 +828,6 @@ func (r *htmlRenderer) block(w util.BufWriter, src []byte, node ast.Node, enteri
 // block, a {{column}} inside {{columns}} as the column break, and any
 // other paragraph as goldmark does.
 func (r *htmlRenderer) paragraph(w util.BufWriter, src []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
-	if entering {
-		matchSpans(node)
-	}
 	if sc := alone(node, src); sc != nil && !sc.Closing {
 		if d := table[sc.Call.Name]; d != nil && d.kind == block {
 			if entering {
