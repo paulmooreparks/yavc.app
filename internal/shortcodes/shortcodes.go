@@ -123,6 +123,9 @@ type Inline struct {
 	ast.BaseInline
 	Call    Call
 	Closing bool
+	// For a span shortcode, set as its paragraph is drawn: an opener that
+	// found its {{/name}} in the paragraph, and a closer that matched.
+	Matched bool
 }
 
 var KindInline = ast.NewNodeKind("ShortcodeInline")
@@ -213,6 +216,7 @@ const (
 	inline    kind = iota // written in a line of text, rendered in it
 	block                 // written alone in its paragraph, rendered as a block
 	container             // {{name}} ... {{/name}} around Markdown of its own
+	span                  // {{name}} ... {{/name}} around words in a line, Markdown inside
 )
 
 type problem struct{ why string }
@@ -250,6 +254,8 @@ func Definitions() []Definition {
 			k = "block"
 		} else if d.kind == container {
 			k = "container"
+		} else if d.kind == span {
+			k = "span"
 		}
 		out = append(out, Definition{Name: d.name, Title: d.title, Description: d.what, Example: d.example, Kind: k})
 	}
@@ -498,6 +504,21 @@ func init() {
 			}
 			return `<pre><code` + cls + ` data-code-src="` + esc(s) + `"></code></pre>`, nil
 		}})
+	add(&def{name: "colour", kind: span, title: "Colour", what: "Words in a colour: one of the site's (ink, muted, accent, danger, warn, positive), or any CSS colour such as #c0392b or tomato. Markdown works inside it.",
+		example: "{{colour:accent}}these words{{/colour}}",
+		wrap: func(c Call) (string, string, error) {
+			v, ok := c.Get("colour", 0)
+			if !ok || v == "" {
+				return "", "", problem{"colour needs a colour, such as accent or #c0392b."}
+			}
+			css, ok := cssColour(v)
+			if !ok {
+				return "", "", problem{v + " is not a colour: give one of ink, muted, accent, danger, warn, positive, a #hex, or a CSS colour name."}
+			}
+			return `<span class="sc-colour" style="color:` + css + `">`, `</span>`, nil
+		}})
+	add(&def{name: "color", kind: span, title: "Colour", what: "The same as colour.", example: "{{color:tomato}}these words{{/color}}",
+		wrap: func(c Call) (string, string, error) { return table["colour"].wrap(c) }})
 	add(&def{name: "kbd", kind: inline, title: "Keys", what: "Keys to press, each drawn as a key, joined by +.",
 		example: "{{kbd:Ctrl+Shift+P}}",
 		render: func(c Call, doc ast.Node, src []byte) (string, error) {
@@ -560,7 +581,7 @@ func init() {
 		wrap: func(c Call) (string, string, error) {
 			return `<aside class="sc-notes"><p class="sc-notes-label">Speaker notes</p>`, `</aside>`, nil
 		}})
-	for _, name := range []string{"expand", "status", "toc", "anchor", "page", "figure", "applet", "video", "code", "kbd", "glyph", "columns", "column", "draft-note", "slide", "notes"} {
+	for _, name := range []string{"expand", "status", "toc", "anchor", "page", "figure", "applet", "video", "code", "colour", "kbd", "glyph", "columns", "column", "draft-note", "slide", "notes"} {
 		order = append(order, name)
 	}
 }
@@ -698,19 +719,62 @@ func alone(p ast.Node, src []byte) *Inline {
 	return found
 }
 
+// matchSpans pairs each span shortcode in a paragraph with the {{/name}}
+// that closes it, in order and nesting as brackets do, so the renderer
+// needs no state of its own and the paragraph can be drawn from any
+// goroutine.
+func matchSpans(p ast.Node) {
+	var open []*Inline
+	var walk func(n ast.Node)
+	walk = func(n ast.Node) {
+		for ch := n.FirstChild(); ch != nil; ch = ch.NextSibling() {
+			if in, ok := ch.(*Inline); ok {
+				in.Matched = false
+				d := table[in.Call.Name]
+				if in.Closing {
+					if len(open) > 0 && open[len(open)-1].Call.Name == in.Call.Name {
+						open[len(open)-1].Matched = true
+						in.Matched = true
+						open = open[:len(open)-1]
+					}
+				} else if d != nil && d.kind == span {
+					open = append(open, in)
+				}
+				continue
+			}
+			walk(ch)
+		}
+	}
+	walk(p)
+}
+
 func (r *htmlRenderer) inline(w util.BufWriter, src []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
 	if !entering {
 		return ast.WalkContinue, nil
 	}
 	n := node.(*Inline)
+	d := table[n.Call.Name]
 	if n.Closing {
+		if n.Matched && d != nil && d.kind == span {
+			_, _ = w.WriteString("</span>")
+			return ast.WalkContinue, nil
+		}
 		_, _ = w.WriteString(problemHTML(n.Call, "This closes "+n.Call.Name+", which is not open."))
 		return ast.WalkContinue, nil
 	}
-	d := table[n.Call.Name]
 	switch {
 	case d == nil:
 		_, _ = w.WriteString(problemHTML(n.Call, "There is no shortcode called "+n.Call.Name+"."))
+	case d.kind == span:
+		if !n.Matched {
+			_, _ = w.WriteString(problemHTML(n.Call, n.Call.Name+" needs {{/"+n.Call.Name+"}} after the words it colours, in the same paragraph."))
+			return ast.WalkContinue, nil
+		}
+		open, _, err := d.wrap(n.Call)
+		if err != nil {
+			open = problemHTML(n.Call, err.Error()) + "<span>"
+		}
+		_, _ = w.WriteString(open)
 	case d.kind == container:
 		_, _ = w.WriteString(problemHTML(n.Call, n.Call.Name+" opens on a line of its own and closes with {{/"+n.Call.Name+"}}."))
 	default:
@@ -754,6 +818,9 @@ func (r *htmlRenderer) block(w util.BufWriter, src []byte, node ast.Node, enteri
 // block, a {{column}} inside {{columns}} as the column break, and any
 // other paragraph as goldmark does.
 func (r *htmlRenderer) paragraph(w util.BufWriter, src []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
+	if entering {
+		matchSpans(node)
+	}
 	if sc := alone(node, src); sc != nil && !sc.Closing {
 		if d := table[sc.Call.Name]; d != nil && d.kind == block {
 			if entering {
@@ -828,3 +895,34 @@ func videoOf(first, second string) (service, id string) {
 	}
 	return "", ""
 }
+
+// cssColour reads a colour as a person writes it: one of the site's
+// named colours, a #hex, rgb()/hsl(), or a CSS colour name, as a CSS
+// value safe to put in a style attribute.
+func cssColour(v string) (string, bool) {
+	v = strings.TrimSpace(v)
+	switch strings.ToLower(v) {
+	case "ink", "text":
+		return "var(--deck-ink, var(--dinah-ink, var(--text)))", true
+	case "muted":
+		return "var(--deck-muted, var(--dinah-muted-ink, var(--text-muted)))", true
+	case "accent":
+		return "var(--deck-accent, var(--accent))", true
+	case "danger":
+		return "var(--danger)", true
+	case "warn", "warning":
+		return "var(--warn)", true
+	case "positive", "ok":
+		return "var(--positive)", true
+	}
+	if hexColour.MatchString(v) || colourName.MatchString(v) || colourFunc.MatchString(v) {
+		return v, true
+	}
+	return "", false
+}
+
+var (
+	hexColour  = regexp.MustCompile(`^#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$`)
+	colourName = regexp.MustCompile(`^[a-zA-Z]{3,24}$`)
+	colourFunc = regexp.MustCompile(`^(?:rgb|rgba|hsl|hsla|oklch|oklab)\([0-9a-zA-Z%.,/ -]{1,60}\)$`)
+)

@@ -1195,6 +1195,7 @@
             ['columns', 'Columns', '{{columns}}\nThe first column.\n\n{{column}}\n\nThe second.\n{{/columns}}'],
             ['figure', 'Figure', '{{figure:/images/picture.png alt="What it shows" width=80% caption="The caption, in Markdown."}}'],
             ['video', 'Video', '{{video:https://youtu.be/dQw4w9WgXcQ title="What it is"}}'],
+            ['colour', 'Colour', '{{colour:accent}}these words{{/colour}}'],
             ['code-file', 'Code Listing from a File', '{{code:~/bin/hello}}'],
             ['applet', 'Applet', '{{applet:conway fit=flow}}'],
             ['toc', 'Contents', '{{toc}}'],
@@ -1546,8 +1547,8 @@
             var asked = s.name === 'figure' ? figureDialog(null) : Promise.resolve(s.example);
             asked.then(function (src) {
                 if (!src) { return; }
-                if (formatsThePage()) { visual.api.insertShortcode(s.name === 'figure' ? 'block' : s.kind, src); }
-                else { insertText(s.kind === 'inline' ? src : '\n' + src + '\n'); }
+                if (formatsThePage()) { visual.api.insertShortcode(s.name === 'figure' ? 'block' : s.kind === 'span' ? 'inline' : s.kind, src); }
+                else { insertText(s.kind === 'inline' || s.kind === 'span' ? src : '\n' + src + '\n'); }
             });
         }
 

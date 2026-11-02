@@ -23,6 +23,9 @@
 
     function colourOf(s) {
         s = String(s || '').trim();
+        var rgb = /^rgba?\((\d+)[, ]+(\d+)[, ]+(\d+)/.exec(s);
+        if (rgb) { return [rgb[1], rgb[2], rgb[3]].map(function (x) { return ('0' + (+x).toString(16)).slice(-2); }).join('').toUpperCase(); }
+        if (/^[a-z]{3,24}$/i.test(s)) { var probe = document.createElement('span'); probe.style.color = s; document.body.appendChild(probe); var got = getComputedStyle(probe).color; probe.remove(); return got && got !== 'rgb(0, 0, 0)' || s.toLowerCase() === 'black' ? colourOf(got) : null; }
         var m = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(s);
         if (!m) { return null; }
         var h = m[1];
@@ -45,11 +48,13 @@
             if (tag === 'em' || tag === 'i') { next.italic = true; }
             if (tag === 'code' || tag === 'kbd') { next.code = true; }
             if (tag === 'a' && c.getAttribute('href')) { next.href = c.getAttribute('href'); }
+            if (cls_has(c, 'sc-colour')) { var col = colourOf(c.style.color); if (col) { next.color = col; } }
             if (tag === 'img') { out.push({ text: c.getAttribute('alt') || '', italic: true }); return; }
             runsOf(c, next, out);
         });
         return out;
     }
+    function cls_has(el, name) { return el.classList && el.classList.contains(name); }
     function textOf(node) { return runsOf(node).map(function (r) { return r.text; }).join(''); }
 
     /* The slide's content as items, the wrappers the engine draws seen
@@ -132,7 +137,8 @@
             if (k > 0) { PARA.forEach(function (key) { delete o[key]; }); }
             if (r.bold) { o.bold = true; }
             if (r.italic) { o.italic = true; }
-            if (r.code) { o.fontFace = MONO; o.color = theme.accent; }
+            if (r.color) { o.color = r.color; }
+            if (r.code) { o.fontFace = MONO; if (!r.color) { o.color = theme.accent; } }
             if (r.href) { o.hyperlink = { url: r.href }; o.color = theme.accent; o.underline = { style: 'sng' }; }
             if (r.breakLine) { o.breakLine = true; }
             out.push({ text: r.text, options: o });
@@ -167,7 +173,9 @@
         var W = 10, H = wide ? 5.625 : 7.5;
         pptx.title = deck.front.title || 'A deck';
         if (deck.front.author) { pptx.author = deck.front.author; }
-        var theme = THEMES[deck.front.theme] || THEMES.plain;
+        var theme = Object.assign({}, THEMES[deck.front.theme] || THEMES.plain);
+        ['ink', 'muted', 'accent'].forEach(function (k) { var c = colourOf(deck.front[k]); if (c) { theme[k] = c; } });
+        if (colourOf(deck.front.background)) { theme.bg = colourOf(deck.front.background); }
         var ink = theme.ink;
         var text = function (name, type, x, y, w, h, more) { return { placeholder: { options: Object.assign({ name: name, type: type, x: x, y: y, w: w, h: h, color: ink, fontFace: FONT, margin: 4 }, more) } }; };
         pptx.defineSlideMaster({ title: 'TITLE', background: { color: theme.bg }, objects: [
@@ -208,6 +216,7 @@
             var slide = pptx.addSlide({ masterName: master });
             var bg = colourOf(st.background);
             if (bg) { slide.background = { color: bg }; }
+            var slideInk = colourOf(st.color) || ink;
             if (st.image) {
                 var bgImg = await imageData(st.image);
                 if (bgImg) { slide.background = { data: bgImg.data }; }
@@ -216,7 +225,7 @@
 
             if (master === 'TITLE' || master === 'SECTION') {
                 var sub = rest.filter(function (it) { return it.kind === 'heading' || it.kind === 'para'; });
-                slide.addText(heading ? toRuns(heading.runs, theme) : [{ text: ctx.titleOf(s, i) }], { placeholder: 'title', fit: 'shrink' });
+                slide.addText(heading ? toRuns(heading.runs, theme) : [{ text: ctx.titleOf(s, i) }], { placeholder: 'title', fit: 'shrink', color: slideInk });
                 if (master === 'TITLE' && sub.length) {
                     var subRuns = [];
                     sub.forEach(function (it, k) { var r = toRuns(it.runs, theme, { bullet: false }); if (k && r.length) { r[0].options.breakLine = true; } subRuns = subRuns.concat(r); });
@@ -224,7 +233,7 @@
                 }
                 continue;
             }
-            if (heading) { slide.addText(toRuns(heading.runs, theme), { placeholder: 'title', fit: 'shrink' }); }
+            if (heading) { slide.addText(toRuns(heading.runs, theme), { placeholder: 'title', fit: 'shrink', color: slideInk }); }
             var areaY = 1.5, areaH = H - 1.8;
             if (master === 'QUOTE') {
                 var q = rest.filter(function (it) { return it.kind === 'quote' || it.kind === 'para'; });
@@ -237,11 +246,11 @@
                 var colsItem = rest.find(function (it) { return it.kind === 'columns'; });
                 var cols = colsItem ? colsItem.columns : [rest, []];
                 var cw = (W - 1.4) / 2;
-                await placeItems(slide, pptx, cols[0] || [], { x: 0.5, y: areaY, w: cw, h: areaH, placeholder: 'left' }, theme, ink, 18);
-                await placeItems(slide, pptx, cols[1] || [], { x: 0.5 + cw + 0.4, y: areaY, w: cw, h: areaH, placeholder: 'right' }, theme, ink, 18);
+                await placeItems(slide, pptx, cols[0] || [], { x: 0.5, y: areaY, w: cw, h: areaH, placeholder: 'left' }, theme, slideInk, 18);
+                await placeItems(slide, pptx, cols[1] || [], { x: 0.5 + cw + 0.4, y: areaY, w: cw, h: areaH, placeholder: 'right' }, theme, slideInk, 18);
                 continue;
             }
-            await placeItems(slide, pptx, rest, { x: 0.5, y: areaY, w: W - 1, h: areaH, placeholder: master === 'CONTENT' ? 'body' : null }, theme, ink, layout === 'image' ? 16 : 20);
+            await placeItems(slide, pptx, rest, { x: 0.5, y: areaY, w: W - 1, h: areaH, placeholder: master === 'CONTENT' ? 'body' : null }, theme, slideInk, layout === 'image' ? 16 : 20);
         }
         return pptx.write({ outputType: 'blob' });
     }

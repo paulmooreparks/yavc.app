@@ -24,7 +24,7 @@
     var SIZES = [['16:9', 'Widescreen, 16:9'], ['4:3', 'Standard, 4:3']];
     var TRANSITIONS = [['none', 'None'], ['fade', 'Fade'], ['slide', 'Slide']];
     var FRONT = { title: '', author: '', theme: 'plain', size: '16:9', transition: 'fade' };
-    var SETTINGS = { view: 'visual', filmstrip: true, dock: 'left', float: null };
+    var SETTINGS = { view: 'visual', filmstrip: true, dock: 'left', float: null, presenterOnPresent: false };
     /* Where the canvas sits beside the Markdown: a side, or floating over it. */
     var DOCKS = [['left', 'Left'], ['right', 'Right'], ['top', 'Top'], ['bottom', 'Bottom'], ['float', 'Floating']];
     var NEW_DECK = '---\ntitle: A new deck\nauthor: \ntheme: plain\nsize: 16:9\ntransition: fade\n---\n\n{{slide:layout=title}}\n# A new deck\n## What it is about\n\n---\n\n{{slide}}\n## The first point\n\n- One thing\n- Another\n- A third\n\n{{notes}}\nWhat to say here.\n{{/notes}}\n';
@@ -238,7 +238,11 @@
             section.setAttribute('data-transition', s.transition || deck.front.transition || 'fade');
             if (s.reveal) { section.setAttribute('data-reveal', s.reveal); } else { section.removeAttribute('data-reveal'); }
             section.className = 'deck-slide' + (s['class'] ? ' ' + s['class'].replace(/[^A-Za-z0-9_ -]/g, '') : '');
-            section.style.background = s.background || '';
+            /* The deck's colours over the theme's, and the slide's over the
+               deck's (docs/slides-design.md, decision 15). */
+            var f = deck.front, vars = { '--deck-ink': s.color || f.ink, '--deck-muted': f.muted, '--deck-accent': s.accent || f.accent };
+            Object.keys(vars).forEach(function (k) { if (vars[k]) { section.style.setProperty(k, vars[k]); } else { section.style.removeProperty(k); } });
+            section.style.background = s.background || f.background || '';
             section.style.backgroundImage = s.image ? 'url("' + s.image.replace(/"/g, '') + '")' : '';
         }
         /* Draws a slide's blocks into an element, as the Editor's preview
@@ -528,7 +532,7 @@
             if (pageActive()) { applySlideSettings(el.slide, s); }
         }
         function setFront(key, value) {
-            deck.front[key] = value;
+            if (value == null || value === '') { delete deck.front[key]; } else { deck.front[key] = value; }
             modified = true;
             deck.slides.forEach(function (s, i) { drawThumb(i); });
             applySlideSettings(el.slide, current());
@@ -564,6 +568,92 @@
                 dialog.returnValue = '';
                 dialog.showModal();
             });
+        }
+        /* A dialog of colours: each a picker beside a field that takes any
+           CSS colour or nothing, for the theme's own. Resolves to the values
+           by key, or null. */
+        function askColours(title, fields) {
+            var dialog = q('[data-role="choice"]'), actions = q('[data-role="choice-actions"]'), body = q('[data-role="choice-body"]');
+            q('[data-role="choice-title"]').textContent = title;
+            body.innerHTML = fields.map(function (f, k) {
+                var id = 'deck-col-' + n + '-' + k, v = f.value || '';
+                return '<div class="form-group deck-colour-row"><label class="form-label" for="' + id + '">' + esc(f.label) + '</label>' +
+                    '<div class="deck-colour-pair"><input type="color" class="deck-colour-pick" aria-label="' + esc(f.label) + ' picker" data-for="' + id + '" value="' + esc(/^#[0-9a-f]{6}$/i.test(v) ? v : (f.fallback || '#000000')) + '">' +
+                    '<input class="form-input" id="' + id + '" data-key="' + esc(f.key) + '" value="' + esc(v) + '" placeholder="' + esc(f.placeholder || 'The theme\'s own') + '" autocomplete="off" spellcheck="false"></div></div>';
+            }).join('');
+            body.addEventListener('input', function (e) {
+                if (e.target.classList.contains('deck-colour-pick')) { var t = body.querySelector('#' + e.target.getAttribute('data-for')); if (t) { t.value = e.target.value; } }
+                else if (e.target.matches('.form-input') && /^#[0-9a-f]{6}$/i.test(e.target.value)) { var pk = body.querySelector('[data-for="' + e.target.id + '"]'); if (pk) { pk.value = e.target.value; } }
+            });
+            actions.innerHTML = '<button class="btn" type="button" data-choice="cancel">Cancel</button><button class="btn btn-primary" type="submit" value="ok">OK</button>';
+            actions.querySelector('[data-choice]').addEventListener('click', function () { dialog.close('cancel'); });
+            return new Promise(function (resolve) {
+                dialog.addEventListener('close', function () {
+                    if (dialog.returnValue !== 'ok') { body.innerHTML = ''; resolve(null); return; }
+                    var out = {};
+                    body.querySelectorAll('[data-key]').forEach(function (i) { out[i.getAttribute('data-key')] = i.value.trim(); });
+                    body.innerHTML = '';
+                    resolve(out);
+                }, { once: true });
+                dialog.returnValue = '';
+                dialog.showModal();
+                var firstField = body.querySelector('.form-input');
+                if (firstField) { firstField.focus(); }
+            });
+        }
+        var SWATCHES = [['ink', 'Text'], ['muted', 'Muted'], ['accent', 'Accent'], ['danger', 'Danger'], ['warn', 'Warning'], ['positive', 'Positive']];
+        /* The colour for some words: one of the site's, or any other. */
+        function askTextColour() {
+            var dialog = q('[data-role="choice"]'), actions = q('[data-role="choice-actions"]'), body = q('[data-role="choice-body"]');
+            q('[data-role="choice-title"]').textContent = 'Colour the words';
+            body.innerHTML = '<div class="form-group"><span class="form-label">The site\'s colours</span><div class="deck-swatches" role="group" aria-label="The site\'s colours">' +
+                SWATCHES.map(function (s) { return '<button type="button" class="btn deck-swatch" data-swatch="' + s[0] + '"><span class="deck-swatch-dot" style="background:' + swatchCSS(s[0]) + '" aria-hidden="true"></span>' + s[1] + '</button>'; }).join('') + '</div></div>' +
+                '<div class="form-group"><label class="form-label" for="deck-col-custom-' + n + '">Any colour</label><div class="deck-colour-pair"><input type="color" class="deck-colour-pick" data-for="deck-col-custom-' + n + '" aria-label="Colour picker" value="#c0392b"><input class="form-input" id="deck-col-custom-' + n + '" data-key="custom" value="" placeholder="#c0392b, tomato, hsl(200 60% 40%)" autocomplete="off" spellcheck="false"></div></div>';
+            body.addEventListener('input', function (e) {
+                if (e.target.classList.contains('deck-colour-pick')) { var t = body.querySelector('#' + e.target.getAttribute('data-for')); if (t) { t.value = e.target.value; } }
+            });
+            actions.innerHTML = '<button class="btn" type="button" data-choice="cancel">Cancel</button><button class="btn btn-primary" type="submit" value="ok">Use this colour</button>';
+            actions.querySelector('[data-choice]').addEventListener('click', function () { dialog.close('cancel'); });
+            body.addEventListener('click', function (e) { var b = e.target.closest('[data-swatch]'); if (b) { dialog.close('swatch:' + b.getAttribute('data-swatch')); } });
+            return new Promise(function (resolve) {
+                dialog.addEventListener('close', function () {
+                    var v = dialog.returnValue, custom = (body.querySelector('[data-key="custom"]') || {}).value;
+                    body.innerHTML = '';
+                    if (v && v.indexOf('swatch:') === 0) { resolve(v.slice(7)); return; }
+                    resolve(v === 'ok' && custom && custom.trim() ? custom.trim() : null);
+                }, { once: true });
+                dialog.returnValue = '';
+                dialog.showModal();
+            });
+        }
+        function swatchCSS(name) {
+            return { ink: 'var(--text)', muted: 'var(--text-muted)', accent: 'var(--accent)', danger: 'var(--danger)', warn: 'var(--warn)', positive: 'var(--positive)' }[name] || name;
+        }
+        function colourWords(colour) {
+            var open = '{{colour:' + colour.replace(/[{}\s]/g, '') + '}}', close = '{{/colour}}';
+            if (pageActive() && (mode === 'visual' || !(cm && cm.hasFocus))) {
+                var sel = (page.selectionText && page.selectionText()) || '';
+                page.insertMarkdown(open + (sel || 'these words') + close);
+                return;
+            }
+            if (!cm) { return; }
+            var state = cm.state, s = state.selection.main, text = state.doc.sliceString(s.from, s.to) || 'these words';
+            cm.dispatch({ changes: { from: s.from, to: s.to, insert: open + text + close }, selection: { anchor: s.from + open.length, head: s.from + open.length + text.length } });
+            cm.focus();
+        }
+        function deckColours() {
+            var f = deck.front;
+            askColours('The deck\'s colours', [
+                { key: 'ink', label: 'Text', value: f.ink, fallback: '#1a1a1a' }, { key: 'muted', label: 'Muted text', value: f.muted, fallback: '#5c6470' },
+                { key: 'accent', label: 'Accent', value: f.accent, fallback: '#1f5fbf' }, { key: 'background', label: 'Background', value: f.background, fallback: '#ffffff' }
+            ]).then(function (v) { if (!v) { return; } Object.keys(v).forEach(function (k) { setFront(k, v[k]); }); });
+        }
+        function slideColours() {
+            var st = settingsOf(current());
+            askColours('This slide\'s colours', [
+                { key: 'color', label: 'Text', value: st.color, fallback: '#1a1a1a', placeholder: 'The deck\'s own' }, { key: 'accent', label: 'Accent', value: st.accent, fallback: '#1f5fbf', placeholder: 'The deck\'s own' },
+                { key: 'background', label: 'Background', value: st.background, fallback: '#ffffff', placeholder: 'The deck\'s own' }
+            ]).then(function (v) { if (!v) { return; } Object.keys(v).forEach(function (k) { setSlideSetting(k, v[k]); }); });
         }
         /* Cancel is not a submit button, so Enter in the field is OK. */
         q('[data-role="dialog-cancel"]').addEventListener('click', function () { q('[data-role="dialog"]').close('cancel'); });
@@ -743,6 +833,7 @@
             fitShow(showStage);
             if (root.requestFullscreen && !document.fullscreenElement) { root.requestFullscreen().catch(function () { }); }
             showStage.focus();
+            if (settings.presenterOnPresent && path) { presenterWindow(); }
             commandsChanged();
         }
         async function leave() {
@@ -820,6 +911,11 @@
                 };
             }
             root.addEventListener('keydown', function (e) {
+            if ((e.key === 'PageUp' || e.key === 'PageDown') && !e.ctrlKey && !e.metaKey && !e.altKey && !presenting) {
+                e.preventDefault();
+                goTo(at + (e.key === 'PageUp' ? -1 : 1));
+                return;
+            }
                 var next = ['ArrowRight', 'ArrowDown', ' ', 'PageDown'].indexOf(e.key) >= 0, prev = ['ArrowLeft', 'ArrowUp', 'PageUp'].indexOf(e.key) >= 0;
                 if (!next && !prev) { return; }
                 e.preventDefault();
@@ -995,12 +1091,16 @@
                 cmd('slide-new', 'New Slide', 'plus', null, { items: LAYOUTS.map(function (l) { return { id: 'slide-new-' + l[0], label: l[1], run: function () { addSlide(l[0]); } }; }) }),
                 cmd('slide-duplicate', 'Duplicate Slide', 'copy', duplicateSlide),
                 cmd('slide-delete', 'Delete Slide', null, deleteSlide, { danger: true, disabled: function () { return deck.slides.length <= 1; } }),
+                cmd('slide-prev', 'Previous Slide', 'back', function () { goTo(at - 1); }, { shortcut: 'PageUp', disabled: function () { return at === 0; } }),
+                cmd('slide-next', 'Next Slide', 'forward', function () { goTo(at + 1); }, { shortcut: 'PageDown', disabled: function () { return at >= deck.slides.length - 1; } }),
                 cmd('slide-up', 'Move Slide Up', 'arrow-up', function () { moveSlide(-1); }, { disabled: function () { return at === 0; } }),
                 cmd('slide-down', 'Move Slide Down', 'arrow-down', function () { moveSlide(1); }, { disabled: function () { return at >= deck.slides.length - 1; } }),
                 { id: 'layout', label: 'Layout', glyph: 'board', current: function () { var f = LAYOUTS.find(function (x) { return x[0] === (st.layout || 'content'); }); return f ? f[1] : null; },
                     items: LAYOUTS.map(function (l) { return { id: 'layout-' + l[0], label: l[1], choice: 'deck-layout', value: l[0], checked: function () { return (settingsOf(current()).layout || 'content') === l[0]; }, run: function () { setSlideSetting('layout', l[0]); } }; }) },
                 cmd('reveal', 'Reveal Points One by One', 'list', function () { setSlideSetting('reveal', settingsOf(current()).reveal === 'steps' ? null : 'steps'); }, { checked: function () { return settingsOf(current()).reveal === 'steps'; } }),
-                cmd('background', 'Background Colour…', 'colour', function () { askText('Background colour', 'A colour, such as #1b2a41 or teal; empty for the theme\'s own', settingsOf(current()).background || '').then(function (v) { if (v != null) { setSlideSetting('background', v.trim()); } }); }),
+                cmd('slide-colours', 'Slide Colours…', 'colour', slideColours),
+                cmd('deck-colours', 'Colours…', 'colour', deckColours),
+                cmd('text-colour', 'Text Colour…', 'colour', function () { askTextColour().then(function (v) { if (v) { colourWords(v); } }); }),
                 cmd('background-image', 'Background Picture…', 'image', function () { askText('Background picture', 'The picture\'s address, such as /images/x.png; empty for none', settingsOf(current()).image || '').then(function (v) { if (v != null) { setSlideSetting('image', v.trim()); } }); }),
                 { id: 'slide-transition', label: 'Transition', items: TRANSITIONS.map(function (t) { return { id: 'slide-transition-' + t[0], label: t[1], choice: 'deck-slide-transition', value: t[0], checked: function () { return (settingsOf(current()).transition || deck.front.transition || 'fade') === t[0]; }, run: function () { setSlideSetting('transition', t[0] === (deck.front.transition || 'fade') ? null : t[0]); } }; }) },
                 cmd('deck-title', 'Title and Author…', 'tag', function () {
@@ -1014,6 +1114,7 @@
                 cmd('present-here', 'Present from This Slide', 'forward', function () { present(at); }, { shortcut: 'Mod+Shift+Enter', disabled: function () { return !ready || !!presenting; } }),
                 cmd('leave', 'Leave the Show', 'stop', leave, { hidden: function () { return !presenting; } }),
                 cmd('presenter', 'Presenter Window', 'new-window', presenterWindow, { disabled: function () { return !path; } }),
+                cmd('presenter-auto', 'Open the Presenter Window When a Show Starts', null, function () { settings.presenterOnPresent = !settings.presenterOnPresent; keepSetting('presenterOnPresent', settings.presenterOnPresent); commandsChanged(); }, { checked: function () { return !!settings.presenterOnPresent; } }),
                 cmd('insert', 'Insert', 'plus', null, { items: INSERTS.map(function (i) { return { id: 'insert-' + i[0].toLowerCase().replace(/[^a-z]+/g, '-'), label: i[0], run: function () {
                     /* An entry is Markdown, or a function that asks for it. */
                     if (typeof i[1] === 'function') { Promise.resolve(i[1]()).then(function (md) { if (md) { insertMarkdown(md); } }); } else { insertMarkdown(i[1]); }
@@ -1034,7 +1135,7 @@
             return [{ label: 'Slides', ribbon: 'hide', groups: [
                 { label: 'File', glyph: 'file', priority: 3, items: ['new-deck', 'open', 'save'] },
                 { label: 'Slide', glyph: 'plus', priority: 4, items: ['slide-new', 'slide-duplicate', 'slide-delete', 'slide-up', 'slide-down'] },
-                { label: 'Format', glyph: 'bold', priority: 2, items: ['layout', 'style', 'bold', 'italic', 'code', 'link', 'bullets', 'numbers', 'insert'] },
+                { label: 'Format', glyph: 'bold', priority: 2, items: ['layout', 'style', 'bold', 'italic', 'code', 'link', 'text-colour', 'bullets', 'numbers', 'insert'] },
                 { label: 'Show', glyph: 'play', priority: 5, items: ['present', 'presenter'] },
                 { label: 'View', glyph: 'panel', priority: 1, end: true, items: [{ choice: 'deck-view' }, 'dock', 'toggle-film'] }
             ] }];
@@ -1043,10 +1144,10 @@
             return { titles: [
                 { label: 'Slides', glyph: 'document', items: H.identity ? H.identity(root, []) : [] },
                 { id: 'file', label: 'File', glyph: 'file', items: ['new-deck', 'open', 'import-pptx', 'save', 'save-as', '-', 'edit-whole', '-', 'export-pptx', 'export-pdf', 'export-html', 'print'] },
-                { id: 'slide', label: 'Slide', glyph: 'plus', items: ['slide-new', 'slide-duplicate', 'slide-delete', '-', 'slide-up', 'slide-down', '-', 'layout', 'reveal', 'background', 'background-image', 'slide-transition'] },
-                { id: 'format', label: 'Format', glyph: 'paragraph', items: ['style', '-', 'bold', 'italic', 'code', 'link', '-', 'bullets', 'numbers', '-', 'insert'] },
-                { id: 'deck', label: 'Deck', glyph: 'gear', items: ['deck-title', 'theme', 'size', 'deck-transition'] },
-                { id: 'show', label: 'Show', glyph: 'play', items: ['present', 'present-here', 'leave', '-', 'presenter'] }
+                { id: 'slide', label: 'Slide', glyph: 'plus', items: ['slide-new', 'slide-duplicate', 'slide-delete', '-', 'slide-prev', 'slide-next', '-', 'slide-up', 'slide-down', '-', 'layout', 'reveal', 'slide-colours', 'background-image', 'slide-transition'] },
+                { id: 'format', label: 'Format', glyph: 'paragraph', items: ['style', '-', 'bold', 'italic', 'code', 'link', 'text-colour', '-', 'bullets', 'numbers', '-', 'insert'] },
+                { id: 'deck', label: 'Deck', glyph: 'gear', items: ['deck-title', 'theme', 'deck-colours', 'size', 'deck-transition'] },
+                { id: 'show', label: 'Show', glyph: 'play', items: ['present', 'present-here', 'leave', '-', 'presenter', 'presenter-auto'] }
             ], into: { view: ['view-visual', 'view-text', 'view-split', '-', 'dock', 'toggle-film'], help: ['help'] } };
         }
         root.addEventListener('keydown', function (e) {
@@ -1208,14 +1309,14 @@
             'set-slide@1': async function (input) {
                 await booted;
                 var i = await atSlide(input.index);
-                ['layout', 'background', 'image', 'reveal', 'transition', 'class'].forEach(function (k) {
+                ['layout', 'background', 'image', 'reveal', 'transition', 'class', 'color', 'accent'].forEach(function (k) {
                     if (input[k] != null) { setSlideSetting(k, String(input[k])); }
                 });
                 return { output: { index: i + 1, settings: settingsOf(current()) } };
             },
             'set-deck@1': async function (input) {
                 await booted;
-                ['title', 'author', 'theme', 'size', 'transition'].forEach(function (k) {
+                ['title', 'author', 'theme', 'size', 'transition', 'ink', 'muted', 'accent', 'background'].forEach(function (k) {
                     if (input[k] != null) { setFront(k, String(input[k])); }
                 });
                 return { output: { front: Object.assign({}, deck.front) } };
