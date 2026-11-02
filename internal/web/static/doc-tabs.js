@@ -1,0 +1,56 @@
+/* Copyright 2026 Paul Parks. SPDX-License-Identifier: Apache-2.0 */
+/* Document tabs for the site's applications, the Editor and Slides: a
+   PUDL .tablist.doc-tabs (pudl-tabs.js gives it the keyboard and fires
+   pudl:tab-close) drawn from the host's list of open documents. The row
+   shows only while more than one document is open (Paul, 2026-11-03).
+
+     var row = yavcDocTabs.attach(list, {
+       tabs: function () { return [{ name, path, modified, note }]; },
+       active: function () { return index; },
+       activate: function (i) { … },
+       close: function (i) { return promise; }   asks about unsaved changes itself
+     });
+     row.render();   after any change to the documents
+
+   Load with defer, after pudl-tabs.js and before the applets. */
+(function () {
+    'use strict';
+    if (window.yavcDocTabs) { return; }
+
+    function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+
+    function attach(list, host) {
+        function render() {
+            var tabs = host.tabs() || [], active = host.active();
+            list.hidden = tabs.length <= 1;
+            var had = list.contains(document.activeElement) ? +document.activeElement.getAttribute('data-tab') : -1;
+            list.innerHTML = tabs.map(function (t, i) {
+                var on = i === active;
+                return '<button type="button" role="tab" data-tab="' + i + '" aria-selected="' + on + '" tabindex="' + (on ? '0' : '-1') + '" title="' + esc(t.path || t.name) + '">' +
+                    esc(t.name) +
+                    (t.note ? '<span class="doc-tab-note">' + esc(t.note) + '</span>' : '') +
+                    (t.modified ? '<span class="doc-tab-dirty">unsaved</span>' : '') +
+                    '<span class="doc-tab-close" aria-hidden="true" title="Close"></span></button>';
+            }).join('');
+            if (had >= 0) {
+                var b = list.querySelector('[data-tab="' + Math.min(had, tabs.length - 1) + '"]');
+                if (b) { b.focus(); }
+            }
+        }
+        list.addEventListener('click', function (e) {
+            if (e.target.closest('.doc-tab-close')) { return; }
+            var b = e.target.closest('[data-tab]');
+            if (b) { host.activate(+b.getAttribute('data-tab')); }
+        });
+        list.addEventListener('pudl:tab-close', function (e) {
+            var fromList = list.contains(document.activeElement);
+            Promise.resolve(host.close(+e.target.getAttribute('data-tab'))).then(function () {
+                var b = list.querySelector('[aria-selected="true"]');
+                if (fromList && b) { b.focus(); }
+            });
+        });
+        return { render: render };
+    }
+
+    window.yavcDocTabs = Object.freeze({ attach: attach });
+})();

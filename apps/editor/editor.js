@@ -449,17 +449,16 @@
         /* PUDL's document tabs (pudl-tabs.js): the arrow keys move along
            them, and the close button or Delete asks, through
            pudl:tab-close, for the tab to close. */
+        /* The tab row is the site's document tabs (static/doc-tabs.js),
+           shown only while more than one document is open. */
+        var tabRow = window.yavcDocTabs ? window.yavcDocTabs.attach(el.tabs, {
+            tabs: function () { return tabs.map(function (t) { return { name: t.name, path: t.path, modified: t.modified, note: t.readOnly ? '(read-only)' : '' }; }); },
+            active: function () { return active; },
+            activate: function (i) { activate(i); view.focus(); },
+            close: closeTab
+        }) : null;
         function renderTabs() {
-            /* The tab row shows only when there is more than one document
-               in progress (Paul, 2026-11-03). */
-            el.tabs.hidden = tabs.length <= 1;
-            el.tabs.innerHTML = tabs.map(function (t, i) {
-                var on = i === active;
-                return '<button type="button" role="tab" data-tab="' + i + '" aria-selected="' + on + '" tabindex="' + (on ? '0' : '-1') + '" title="' + esc(t.path || t.name) + '">' +
-                    esc(t.name) + (t.readOnly ? '<span class="ed-ro-mark">(read-only)</span>' : '') +
-                    (t.modified ? '<span class="doc-tab-dirty">unsaved</span>' : '') +
-                    '<span class="doc-tab-close" aria-hidden="true" title="Close"></span></button>';
-            }).join('');
+            if (tabRow) { tabRow.render(); }
             var t = current();
             el.where.textContent = t ? (t.path || 'Not saved yet') : '';
             el.lang.textContent = t ? LANG_NAMES[t.lang] : '';
@@ -1871,13 +1870,6 @@
 
         /* A tab closed from the keyboard leaves the focus on the tab that
            takes its place, so Delete can close one after another. */
-        el.tabs.addEventListener('pudl:tab-close', function (e) {
-            var fromList = el.tabs.contains(document.activeElement);
-            closeTab(+e.target.getAttribute('data-tab')).then(function () {
-                var b = el.tabs.querySelector('[aria-selected="true"]');
-                if (fromList && b) { b.focus(); }
-            });
-        });
         /* Preview opens the page as it is on the site. In the window view it
            opens a page of this site as a window rather than a browser tab,
            and one already open comes to the front with its content fetched
@@ -1914,10 +1906,6 @@
             return true;
         }
 
-        root.addEventListener('click', function (e) {
-            var tabBtn = e.target.closest('.ed-tabs [data-tab]');
-            if (tabBtn) { activate(+tabBtn.getAttribute('data-tab')); view.focus(); }
-        });
         /* === Commands and their keys ===================================== */
 
         /* Every command a key can be bound to, by the name ~/.config/editor.json

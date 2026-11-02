@@ -138,6 +138,9 @@
         opts = opts || {};
         var n = ++count, H = window.pudlHost || {};
         var deck = parseDeck(NEW_DECK), path = null, modified = false, at = 0, destroyed = false;
+        /* The open decks, one tab each; deck, path, modified and at are the
+           front tab's, copied back into it by stash() before a switch. */
+        var tabs = [], active = -1;
         var settings = Object.assign({}, SETTINGS), mode = 'visual', md = null, page = null, cm = null, cmReady = null;
         var presenting = null, channel = null, presenterRole = null, fromPage = false, redrawTimer = 0;
         /* On a page of its own the deck and the presenter view come from the
@@ -149,6 +152,7 @@
         root.innerHTML =
             '<div class="deck-toolbar-slot" data-toolbar-slot></div>' +
             '<div class="notice danger deck-notice" data-role="notice" role="alert" hidden><div class="notice-content"><p class="notice-body" data-role="notice-body"></p></div><button class="notice-close" type="button" aria-label="Dismiss" data-role="notice-close"></button></div>' +
+            '<div class="tablist doc-tabs deck-tabs" role="tablist" aria-label="Open decks" data-role="tabs" hidden></div>' +
             '<div class="deck-main" data-role="main">' +
               '<div class="deck-film" data-role="film" role="listbox" aria-label="Slides"></div>' +
               '<div class="deck-work split" data-role="work" data-split-pane="first">' +
@@ -169,10 +173,17 @@
                 '</div></div>' +
                 '<div class="dialog-actions"><button class="btn" type="button" data-role="dialog-cancel">Cancel</button><button class="btn btn-primary" value="ok" type="submit">OK</button></div>' +
               '</form>' +
+            '</dialog>' +
+            '<dialog class="dialog deck-dialog" data-role="choice" aria-labelledby="deck-choice-title-' + n + '">' +
+              '<form method="dialog">' +
+                '<h3 class="dialog-title" id="deck-choice-title-' + n + '" data-role="choice-title"></h3>' +
+                '<p class="dialog-body" data-role="choice-body"></p>' +
+                '<div class="dialog-actions" data-role="choice-actions"></div>' +
+              '</form>' +
             '</dialog>';
         var q = function (sel) { return root.querySelector(sel); };
         var el = { film: q('[data-role="film"]'), work: q('[data-role="work"]'), stagebox: q('[data-role="stagebox"]'), stage: q('[data-role="stage"]'), canvas: q('[data-role="canvas"]'), slide: q('[data-role="slide"]'),
-            body: q('[data-role="body"]'), notesView: q('[data-role="notes-view"]'), split: q('[data-role="split"]'), text: q('[data-role="text"]'), notice: q('[data-role="notice"]'), noticeBody: q('[data-role="notice-body"]'), floatBar: q('[data-role="float-bar"]'), main: q('[data-role="main"]'), where: q('[data-role="where"]'), message: q('[data-role="message"]'), presenter: q('[data-role="presenter"]'), main: q('[data-role="main"]') };
+            body: q('[data-role="body"]'), notesView: q('[data-role="notes-view"]'), split: q('[data-role="split"]'), text: q('[data-role="text"]'), tabsEl: q('[data-role="tabs"]'), notice: q('[data-role="notice"]'), noticeBody: q('[data-role="notice-body"]'), floatBar: q('[data-role="float-bar"]'), main: q('[data-role="main"]'), where: q('[data-role="where"]'), message: q('[data-role="message"]'), presenter: q('[data-role="presenter"]'), main: q('[data-role="main"]') };
 
         /* The applet's settings, kept by the host under its name. */
         function keepSetting(key, value) {
@@ -196,7 +207,7 @@
             el.message.textContent = msg || '';
         }
         q('[data-role="notice-close"]').addEventListener('click', function () { el.notice.hidden = true; fit(); });
-        function commandsChanged() { if (opts.commandsChanged) { opts.commandsChanged(); } }
+        function commandsChanged() { if (opts.commandsChanged) { opts.commandsChanged(); } tabRow(); }
         function stateString() {
             var p = new URLSearchParams();
             if (path) { p.set('file', path); }
@@ -535,12 +546,86 @@
                 input.focus(); input.select();
             });
         }
+        /* A question with buttons, the last of them the one Enter presses. */
+        function askChoice(title, body, buttons) {
+            var dialog = q('[data-role="choice"]'), actions = q('[data-role="choice-actions"]');
+            q('[data-role="choice-title"]').textContent = title;
+            q('[data-role="choice-body"]').textContent = body;
+            actions.innerHTML = buttons.map(function (b) {
+                return b[2] ? '<button class="btn btn-primary" type="submit" value="' + esc(b[0]) + '">' + esc(b[1]) + '</button>'
+                    : '<button class="btn" type="button" data-choice="' + esc(b[0]) + '">' + esc(b[1]) + '</button>';
+            }).join('');
+            actions.querySelectorAll('[data-choice]').forEach(function (b) { b.addEventListener('click', function () { dialog.close(b.getAttribute('data-choice')); }); });
+            return new Promise(function (resolve) {
+                dialog.addEventListener('close', function () { resolve(dialog.returnValue || null); }, { once: true });
+                dialog.returnValue = '';
+                dialog.showModal();
+            });
+        }
         /* Cancel is not a submit button, so Enter in the field is OK. */
         q('[data-role="dialog-cancel"]').addEventListener('click', function () { q('[data-role="dialog"]').close('cancel'); });
 
         /* === Files ===================================================== */
 
         function fullText() { return serializeDeck(deck); }
+        /* === Tabs: one for each open deck ================================ */
+
+        function tabTitle(t) { return t.path ? t.path.replace(/^.*\//, '') : (t.deck.front.title || 'A new deck'); }
+        function stash() {
+            var t = active >= 0 ? tabs[active] : null;
+            if (t) { t.deck = deck; t.path = path; t.modified = modified; t.at = at; }
+        }
+        var tabRowApi = window.yavcDocTabs ? window.yavcDocTabs.attach(el.tabsEl, {
+            tabs: function () { stash(); return tabs.map(function (t) { return { name: tabTitle(t), path: t.path, modified: t.modified }; }); },
+            active: function () { return active; },
+            activate: function (i) { activateTab(i); },
+            close: function (i) { return closeTab(i); }
+        }) : null;
+        function tabRow() { if (tabRowApi) { tabRowApi.render(); } }
+        async function activateTab(i) {
+            if (!tabs[i]) { return; }
+            if (i === active) { tabRow(); return; }
+            stash();
+            if (presenting) { await leave(); }
+            active = i;
+            var t = tabs[i];
+            deck = t.deck; path = t.path; modified = t.modified; at = 0;
+            if (channel) { channel.close(); channel = null; }
+            drawFilm();
+            await goTo(t.at || 0);
+            if (cm) { setCM(current().text); }
+            listenForPresenter();
+            fit();
+            commandsChanged();
+            announce();
+        }
+        function untouched(t) { return !t.path && !t.modified; }
+        /* A deck opens in a tab of its own, unless the front tab is a new
+           deck nobody has touched, which it replaces. */
+        async function openInTab(text, newPath, slide) {
+            stash();
+            if (active >= 0 && tabs[active] && untouched(tabs[active])) { load(text, newPath, slide); return; }
+            tabs.push({ deck: parseDeck(text), path: newPath || null, modified: false, at: Math.max(0, (slide || 1) - 1) });
+            await activateTab(tabs.length - 1);
+        }
+        async function closeTab(i) {
+            var t = tabs[i];
+            if (!t) { return; }
+            if (t.modified) {
+                if (i !== active) { await activateTab(i); }
+                var choice = await askChoice('Save changes to ' + tabTitle(t) + '?', 'Your changes will be lost if you don\'t save them.', [['cancel', 'Cancel'], ['discard', 'Don\'t save'], ['save', 'Save', true]]);
+                if (choice !== 'discard' && choice !== 'save') { return; }
+                if (choice === 'save') { await save(); if (modified) { return; } }
+            }
+            var front = active;
+            tabs.splice(i, 1);
+            if (i < front) { front--; } else if (i === front) { front = Math.min(i, tabs.length - 1); }
+            if (!tabs.length) { tabs.push({ deck: parseDeck(NEW_DECK), path: null, modified: false, at: 0 }); front = 0; }
+            active = -1;
+            await activateTab(front);
+            keep();
+        }
+
         function load(text, newPath, slide) {
             deck = parseDeck(text);
             path = newPath || null;
@@ -550,12 +635,18 @@
             goTo(Math.max(0, Math.min(deck.slides.length - 1, (slide || 1) - 1)));
             if (cm) { setCM(current().text); }
             fit();
+            if (active < 0) { tabs.push({ deck: deck, path: path, modified: false, at: at }); active = tabs.length - 1; }
+            stash();
+            tabRow();
         }
         async function openPath(p, slide) {
+            for (var i = 0; i < tabs.length; i++) {
+                if (tabs[i].path === p) { await activateTab(i); if (slide) { await goTo(slide - 1); } return true; }
+            }
             if (!H.fs || !H.fs.readText) { say('There is no file service here.', true); return false; }
             var text = await H.fs.readText(p);
             if (text == null) { say('There is no file at ' + p + '.', true); return false; }
-            load(text, p, slide);
+            await openInTab(text, p, slide);
             say('Opened ' + p + '.');
             return true;
         }
@@ -563,8 +654,10 @@
             if (!H.fs || !H.fs.open) { return; }
             var res = await H.fs.open({ title: 'Open a deck', host: root, start: '~', accept: ['.md'] });
             if (!res) { return; }
-            if (res.path) { load(res.text, res.path); } else { load(res.text, null); }
-            say('Opened ' + (res.path || res.name) + '.');
+            if (res.path) { await openPath(res.path); return; }
+            await openInTab(res.text, null);
+            modified = true;
+            say('Opened ' + res.name + '.');
             announce();
         }
         async function save() {
@@ -584,10 +677,11 @@
             else { say('Downloaded ' + res.download + '.'); }
             commandsChanged();
         }
-        function newDeck() {
-            load(NEW_DECK, null);
+        async function newDeck() {
+            stash();
+            tabs.push({ deck: parseDeck(NEW_DECK), path: null, modified: false, at: 0 });
+            await activateTab(tabs.length - 1);
             say('This is a new deck. Save it to keep it.');
-            announce();
         }
         function editWhole() {
             if (!path) { say('Save the deck first, so the Editor can open it.'); return; }
@@ -781,7 +875,10 @@
 
         /* === Snapshots and continuity =================================== */
 
-        var snap = H.snapshot ? H.snapshot.join(root, function () { return { path: path, text: modified ? fullText() : null, slide: at, mode: mode }; }) : null;
+        var snap = H.snapshot ? H.snapshot.join(root, function () {
+            stash();
+            return { tabs: tabs.map(function (t) { return { path: t.path, text: t.modified ? serializeDeck(t.deck) : null, slide: t.at || 0 }; }), active: active, mode: mode };
+        }) : null;
         function keep() { if (snap) { snap.changed(); } }
 
         /* === Commands ================================================== */
@@ -904,10 +1001,19 @@
                 becomePresenter();
                 return;
             }
-            if (kept && kept.text) { load(kept.text, kept.path, (kept.slide || 0) + 1); modified = true; }
-            else if (file) { var ok = await openPath(file, parseInt(start.get('slide') || '1', 10)).catch(function (err) { say(err.message, true); return false; }); if (!ok) { load(NEW_DECK, null); } }
-            else if (kept && kept.path) { await openPath(kept.path, (kept.slide || 0) + 1).catch(function () { load(NEW_DECK, null); }); }
-            else { load(NEW_DECK, null); }
+            /* The tabs kept across a reload come back first, unsaved text
+               and all; then the address's file comes to the front. */
+            if (kept && kept.tabs) {
+                for (var ki = 0; ki < kept.tabs.length; ki++) {
+                    var kt = kept.tabs[ki], ktext = kt.text;
+                    if (ktext == null && kt.path && H.fs && H.fs.readText) { ktext = await H.fs.readText(kt.path).catch(function () { return null; }); }
+                    if (ktext == null) { continue; }
+                    tabs.push({ deck: parseDeck(ktext), path: kt.path || null, modified: kt.text != null, at: kt.slide || 0 });
+                }
+                if (tabs.length) { await activateTab(Math.max(0, Math.min(kept.active || 0, tabs.length - 1))); }
+            }
+            if (file) { await openPath(file, parseInt(start.get('slide') || '1', 10)).catch(function (err) { say(err.message, true); return false; }); }
+            if (!tabs.length) { load(NEW_DECK, null); }
             listenForPresenter();
             await setMode(kept && kept.mode ? kept.mode : settings.view);
             if (start.get('present')) { present(parseInt(start.get('slide') || '1', 10) - 1); }
@@ -923,7 +1029,7 @@
             return i - 1;
         }
         function deckView() {
-            return { path: path, modified: modified, slide: at + 1, count: deck.slides.length, front: Object.assign({}, deck.front),
+            return { index: active + 1, path: path, modified: modified, slide: at + 1, count: deck.slides.length, front: Object.assign({}, deck.front),
                 slides: deck.slides.map(function (s, i) { return { index: i + 1, title: titleOf(s, i), settings: settingsOf(s) }; }),
                 presenting: !!presenting, view: mode, dock: settings.dock };
         }
@@ -937,10 +1043,32 @@
             'load@1': async function (input) {
                 await booted;
                 if (presenting) { await leave(); }
-                load(String(input.text), input.path || null, input.slide);
+                await openInTab(String(input.text), input.path || null, input.slide);
                 modified = true;
+                stash();
+                commandsChanged();
                 announce();
-                return { output: { path: path, slide: at + 1, count: deck.slides.length } };
+                return { output: { index: active + 1, path: path, slide: at + 1, count: deck.slides.length } };
+            },
+            'decks@1': async function () {
+                await booted;
+                stash();
+                return { output: { active: active + 1, decks: tabs.map(function (t, i) { return { index: i + 1, title: t.deck.front.title || '', path: t.path, modified: !!t.modified, slide: (t.at || 0) + 1, count: t.deck.slides.length }; }) } };
+            },
+            'switch@1': async function (input) {
+                await booted;
+                var i = Math.floor(Number(input.index));
+                if (!(i >= 1 && i <= tabs.length)) { throw new Error('there is no deck ' + i + '; ' + tabs.length + ' are open'); }
+                await activateTab(i - 1);
+                return { output: { index: active + 1 } };
+            },
+            'close@1': async function (input) {
+                await booted;
+                var i = input.index == null ? active : Math.floor(Number(input.index)) - 1;
+                if (!tabs[i]) { throw new Error('there is no deck ' + (i + 1)); }
+                var n = tabs.length;
+                await closeTab(i);
+                return { output: { closed: tabs.length < n || n === 1, open: tabs.length } };
             },
             'open@1': async function (input) {
                 await booted;
