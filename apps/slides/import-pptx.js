@@ -24,12 +24,38 @@
     function first(node, ns, name) { return all(node, ns, name)[0] || null; }
     function children(node, ns, name) { return Array.prototype.filter.call(node.childNodes, function (c) { return c.nodeType === 1 && c.namespaceURI === NS[ns] && c.localName === name; }); }
 
-    function rels(zip, partPath) {
+    /* A part's text, counted as it is decompressed through JSZip's
+       documented stream, and stopped at a limit: a file a few kilobytes
+       long can hold gigabytes once inflated (security review, 2026-11-03).
+       budget is shared by every part one import reads. */
+    var PART_MAX = 16 * 1024 * 1024, TOTAL_MAX = 64 * 1024 * 1024, SLIDES_MAX = 1000;
+    function text(f, budget) {
+        return new Promise(function (resolve, reject) {
+            var chunks = [], n = 0, stopped = false, stream = f.internalStream('uint8array');
+            stream.on('data', function (c) {
+                if (stopped) { return; }
+                n += c.length; budget.used += c.length;
+                if (n > PART_MAX || budget.used > TOTAL_MAX) {
+                    stopped = true; stream.pause();
+                    reject(new Error('this file is far larger inside than a presentation can be, so it was not read'));
+                    return;
+                }
+                chunks.push(c);
+            }).on('error', function (err) { if (!stopped) { stopped = true; reject(err); } })
+              .on('end', function () {
+                if (stopped) { return; }
+                var all = new Uint8Array(n), at = 0;
+                chunks.forEach(function (c) { all.set(c, at); at += c.length; });
+                resolve(new TextDecoder('utf-8').decode(all));
+            }).resume();
+        });
+    }
+    function rels(zip, partPath, budget) {
         var dir = partPath.replace(/[^/]*$/, ''), name = partPath.replace(/^.*\//, '');
         var relPath = dir + '_rels/' + name + '.rels';
         var f = zip.file(relPath);
         if (!f) { return Promise.resolve({}); }
-        return f.async('string').then(function (xml) {
+        return text(f, budget).then(function (xml) {
             var doc = parse(xml), out = {};
             all(doc, 'rel', 'Relationship').forEach(function (r) {
                 var target = r.getAttribute('Target'), mode = r.getAttribute('TargetMode');
@@ -122,18 +148,20 @@
         var zip = await window.JSZip.loadAsync(buffer);
         var presFile = zip.file('ppt/presentation.xml');
         if (!presFile) { throw new Error('this is not a PowerPoint file: it has no presentation inside'); }
-        var pres = parse(await presFile.async('string'));
-        var presRels = await rels(zip, 'ppt/presentation.xml');
+        var budget = { used: 0 };
+        var pres = parse(await text(presFile, budget));
+        var presRels = await rels(zip, 'ppt/presentation.xml', budget);
         var size = first(pres, 'p', 'sldSz');
         var ratio = size ? (+size.getAttribute('cx') / +size.getAttribute('cy')) : 16 / 9;
         var ids = all(pres, 'p', 'sldId').map(function (s) { return s.getAttributeNS(NS.r, 'id'); });
+        if (ids.length > SLIDES_MAX) { throw new Error('this presentation has ' + ids.length + ' slides, more than the ' + SLIDES_MAX + ' a deck can take'); }
         var slides = [], pictures = 0, title = '';
 
         for (var i = 0; i < ids.length; i++) {
             var part = (presRels[ids[i]] || {}).target;
             var f = part && zip.file(part);
             if (!f) { continue; }
-            var doc = parse(await f.async('string')), links = await rels(zip, part);
+            var doc = parse(await text(f, budget)), links = await rels(zip, part, budget);
             var tree = first(doc, 'p', 'spTree');
             var titleText = '', subtitle = '', bodies = [], extras = [], notes = '';
             var shapes = tree ? Array.prototype.filter.call(tree.childNodes, function (c) { return c.nodeType === 1; }) : [];
@@ -161,7 +189,7 @@
                 if (links[id].type && /notesSlide$/.test(links[id].type)) {
                     var nf = zip.file(links[id].target);
                     if (nf) {
-                        var ndoc = parse(await nf.async('string'));
+                        var ndoc = parse(await text(nf, budget));
                         all(ndoc, 'p', 'sp').forEach(function (sp) {
                             if (phType(sp) === 'body') { var tb = first(sp, 'p', 'txBody'); if (tb) { notes = bodyMarkdown(tb, links, false); } }
                         });

@@ -281,7 +281,10 @@
             if ((kind === 'file' || kind === 'script') && !F.isText(r)) {
                 var seen = F.publicUrl(r);
                 if (seen) { window.open(seen, '_blank', 'noopener'); }
-                else if (r.home && /^image\//.test(F.typeOf ? F.typeOf(r) : '')) { showPicture(r); }
+                /* Only a picture the browser cannot run script in opens in a tab: a blob
+                   address is this site's origin, so an SVG opened that way would run
+                   its script as yavc.app (security review, 2026-11-03). An SVG downloads. */
+                else if (r.home && /^image\/(png|jpeg|gif|webp|avif|bmp)$/.test(F.typeOf ? F.typeOf(r) : '')) { showPicture(r); }
                 else { download(c); }
                 return;
             }

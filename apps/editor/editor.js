@@ -1069,7 +1069,7 @@
                 return window.mermaid.render(id, source);
             }).then(function (out) {
                 if (!place.isConnected) { return; }
-                place.replaceChildren(window.yavcHTML.fragment(out.svg));
+                place.replaceChildren(window.yavcHTML.fragment(out.svg, { diagram: true }));
                 place.classList.add('ed-diagram');
             }).catch(function (err) {
                 place.title = 'The diagram could not be drawn: ' + (err && err.message || err);
@@ -2078,6 +2078,10 @@
             'document@1': async function (input) { var i = docNo(input.index); return { output: docView(i, true) }; },
             'open-file@1': async function (input) { await openPath(String(input.path), true); return { output: docView(active, false) }; },
             'new@1': async function (input) {
+                /* A new document never takes the name of a file that exists,
+                   or the person's next Save would overwrite it unasked
+                   (security review, 2026-11-03). */
+                if (input.path && F.resolve(F.home(), String(input.path))) { throw new Error('there is already a file at ' + input.path + '; open it, or give the new document another name'); }
                 if (input.path) { newNamed(String(input.path)); } else { newTab(); }
                 if (input.text != null) { setDocText(active, input.text); }
                 return { output: docView(active, false) };

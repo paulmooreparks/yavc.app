@@ -311,7 +311,9 @@
           }
         }
       },
-      "capabilities": [],
+      "capabilities": [
+        "files.read"
+      ],
       "replay": "pure"
     },
     {
@@ -454,7 +456,9 @@
           }
         }
       },
-      "capabilities": [],
+      "capabilities": [
+        "files.read"
+      ],
       "replay": "pure"
     },
     {
@@ -498,7 +502,9 @@
           }
         }
       },
-      "capabilities": [],
+      "capabilities": [
+        "files.read"
+      ],
       "replay": "pure"
     },
     {
@@ -528,7 +534,9 @@
           }
         }
       },
-      "capabilities": [],
+      "capabilities": [
+        "files.read"
+      ],
       "replay": "pure"
     },
     {
@@ -791,7 +799,9 @@
           }
         }
       },
-      "capabilities": [],
+      "capabilities": [
+        "files.read"
+      ],
       "replay": "once"
     },
     {
@@ -1276,7 +1286,8 @@
         }
       },
       "capabilities": [
-        "artifact.create"
+        "artifact.create",
+        "files.read"
       ],
       "replay": "pure"
     },
@@ -1308,7 +1319,8 @@
         }
       },
       "capabilities": [
-        "artifact.create"
+        "artifact.create",
+        "files.read"
       ],
       "replay": "pure"
     },
@@ -1340,7 +1352,8 @@
         }
       },
       "capabilities": [
-        "artifact.create"
+        "artifact.create",
+        "files.read"
       ],
       "replay": "pure"
     },

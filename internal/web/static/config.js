@@ -46,7 +46,17 @@
 
     function pathOf(name) { return '~/.config/' + name + '.json'; }
 
-    function merged(e) { return Object.assign({}, e.defaults, e.values); }
+    /* Settings come from a file anyone could have edited, so only a
+       setting's own name is copied: never __proto__, constructor or
+       prototype, which would change what every setting inherits (security
+       review, 2026-11-03). */
+    var UNSAFE = ['__proto__', 'constructor', 'prototype'];
+    function own(obj) {
+        var out = {};
+        Object.keys(obj || {}).forEach(function (k) { if (UNSAFE.indexOf(k) < 0) { out[k] = obj[k]; } });
+        return out;
+    }
+    function merged(e) { return Object.assign({}, own(e.defaults), own(e.values)); }
 
     async function readValues(F, name) {
         var n = F.resolve(F.home(), pathOf(name));
@@ -92,7 +102,7 @@
     async function load(name, defaults) {
         var F = await fs();
         var e = entry(name);
-        e.defaults = Object.assign({}, e.defaults, defaults || {});
+        e.defaults = Object.assign({}, own(e.defaults), own(defaults));
         if (!e.loaded) {
             var got = await readValues(F, name);
             if (!e.loaded) { e.values = got.values; e.text = got.text; e.loaded = true; }
@@ -122,7 +132,7 @@
     }
 
     async function save(F, name, e, changes) {
-        var values = Object.assign({}, e.values, changes);
+        var values = Object.assign({}, own(e.values), own(changes));
         var text = JSON.stringify(values, null, 2) + '\n';
         var dir = F.resolve(F.home(), '~/.config');
         if (!dir) {

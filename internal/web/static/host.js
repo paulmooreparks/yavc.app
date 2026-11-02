@@ -118,7 +118,7 @@
         actions: {
             run: function (ref, input) {
                 if (!window.pudlApplets || !window.pudlApplets.run) { return Promise.reject(new Error('the page has no action broker')); }
-                return window.pudlApplets.run(ref, input, { owner: { kind: 'page' }, grant: 'all' });
+                return window.pudlApplets.run(ref, input, { owner: { kind: 'page' }, grant: 'all' }); // check-ignore(grant-all): an applet's own code in the page, which already holds the page's authority
             }
         },
         fs: {

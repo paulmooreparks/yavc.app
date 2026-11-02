@@ -325,12 +325,26 @@
             mermaidReady.then(function () {
                 window.mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', suppressErrorRendering: true, theme: document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'default' });
                 return window.mermaid.render(id, source);
-            }).then(function (out) { if (place.isConnected) { place.replaceChildren(window.yavcHTML.fragment(out.svg)); place.classList.add('ed-diagram'); } }).catch(function () { });
+            }).then(function (out) { if (place.isConnected) { place.replaceChildren(window.yavcHTML.fragment(out.svg, { diagram: true })); place.classList.add('ed-diagram'); } }).catch(function () { });
         }
-        function notesHTML(target) {
-            var out = [];
-            target.querySelectorAll('.sc-notes').forEach(function (a) { var c = a.cloneNode(true); var l = c.querySelector('.sc-notes-label'); if (l) { l.remove(); } out.push(c.innerHTML); });
-            return out.join('');
+        /* The public site's address, from the page's meta tag. A window
+           global would be replaced by any element in a document with that
+           id (security review, 2026-11-03). */
+        function publicOrigin() {
+            var m = document.querySelector('meta[name="pc-public-origin"]'), v = m && m.getAttribute('content');
+            return /^https?:\/\/[^/]+$/.test(v || '') ? v : location.origin.replace(/\/\/slides\./, '//');
+        }
+        /* A slide's speaker notes, as the nodes already drawn and made safe,
+           moved rather than written out as HTML and read again, which could
+           turn safe markup into something else (security review,
+           2026-11-03). */
+        function notesNodes(target) {
+            var out = document.createDocumentFragment();
+            target.querySelectorAll('.sc-notes').forEach(function (a) {
+                var l = a.querySelector('.sc-notes-label'); if (l) { l.remove(); }
+                while (a.firstChild) { out.appendChild(a.firstChild); }
+            });
+            return out;
         }
 
         /* === The page view on the canvas ============================== */
@@ -415,9 +429,12 @@
         function drawNotes() {
             var tmp = document.createElement('div');
             try { drawIntoQuiet(tmp, current().text); } catch (err) { }
-            var html = notesHTML(tmp);
-            el.notesView.hidden = !html;
-            el.notesView.innerHTML = html ? '<p class="deck-notes-label">Speaker notes</p>' + html : '';
+            var notes = notesNodes(tmp), has = !!notes.childNodes.length;
+            el.notesView.hidden = !has;
+            if (has) {
+                var label = document.createElement('p'); label.className = 'deck-notes-label'; label.textContent = 'Speaker notes';
+                el.notesView.replaceChildren(label, notes);
+            } else { el.notesView.replaceChildren(); }
         }
         function drawIntoQuiet(target, text) {
             var p = md.preview(text);
@@ -701,17 +718,32 @@
             /* The CSS is nested under :scope, so a selector such as h2 weighs
                as much as the theme's .deck-body h2 and, installed later,
                wins; a deck need not out-specify the theme to restyle it. */
-            var nest = function (css) { return ':scope {\n' + css + '\n}'; };
-            if (sheetText) { parts.push('@scope (' + scope + ') {\n' + nest(sheetText) + '\n}'); }
+            if (sheetText) { parts.push(scoped(scope, sheetText)); }
             deck.slides.forEach(function (sl, i) {
                 var m;
                 STYLE_RE.lastIndex = 0;
                 while ((m = STYLE_RE.exec(sl.text))) {
                     var own = /\bslide\b/.test(m[1] || '');
-                    parts.push('@scope (' + scope + (own ? '[data-slide-index="' + i + '"]' : '') + ') {\n' + nest(m[2].replace(/<\/style/gi, '')) + '\n}');
+                    parts.push(scoped(scope + (own ? '[data-slide-index="' + i + '"]' : ''), m[2]));
                 }
             });
-            return parts.join('\n');
+            return parts.filter(Boolean).join('\n');
+        }
+        /* A deck's CSS, nested under :scope inside @scope, as the browser
+           itself reads it: the CSS is parsed inside the :scope rule and only
+           that one rule is kept, so CSS that closes it early (as "} }" would)
+           to reach the rest of the page is dropped rather than applied
+           (security review, 2026-11-03). Its serialised text has balanced
+           braces by construction. */
+        function scoped(scope, css) {
+            var rule = null;
+            try {
+                var sheet = new CSSStyleSheet();
+                sheet.replaceSync(':scope {\n' + String(css) + '\n}');
+                var first = sheet.cssRules[0];
+                if (first && first.selectorText === ':scope') { rule = first.cssText; }
+            } catch (err) { rule = null; }
+            return rule ? '@scope (' + scope + ') {\n' + rule + '\n}' : '';
         }
         function installStyle() {
             var css = deckCSS();
@@ -935,7 +967,8 @@
                the applet's standalone page at /slides on the same host. */
             var url = new URL(opts.host === 'window' ? '/slides' : location.pathname, location.origin);
             url.search = '?file=' + encodeURIComponent(path).replace(/%2F/g, '/').replace(/%7E/g, '~') + '&presenter=1';
-            window.open(url.href, 'yavc-presenter-' + path, 'popup,width=960,height=600');
+            window.open(url.href, 'yavc-presenter-' + path, 'popup,width=960,height=600'); // check-ignore(window-open-noopener): the site's own page on this origin; the name lets a second press reuse the window
+
             channel = channel || channelFor();
             if (channel) { channel.postMessage({ type: 'at', slide: presenting ? presenting.position().slide : at, step: presenting ? presenting.position().step : 0 }); }
         }
@@ -968,7 +1001,9 @@
                 one(now, deck.slides[i]); one(nxt, deck.slides[i + 1]);
                 var tmp = document.createElement('div');
                 try { drawIntoQuiet(tmp, deck.slides[i] ? deck.slides[i].text : ''); } catch (err) { }
-                q('[data-role="pv-notes"]').innerHTML = notesHTML(tmp) || '<p class="deck-pv-none">No notes for this slide.</p>';
+                var pvNotes = notesNodes(tmp);
+                if (pvNotes.childNodes.length) { q('[data-role="pv-notes"]').replaceChildren(pvNotes); }
+                else { var none = document.createElement('p'); none.className = 'deck-pv-none'; none.textContent = 'No notes for this slide.'; q('[data-role="pv-notes"]').replaceChildren(none); }
                 q('[data-role="pv-count"]').textContent = 'Slide ' + (i + 1) + ' of ' + deck.slides.length + '.';
             }
             function tick() {
@@ -1026,6 +1061,11 @@
             stage.className = 'deck-show deck-export-stage';
             buildShow(stage);
             var theme = document.documentElement.getAttribute('data-theme') || 'dark';
+            /* No "<" reaches the page's <style> as itself, so nothing in a
+               deck's CSS, a string included, can close it and open markup;
+               \3C is the same character to CSS. */
+            pudlCSS = pudlCSS.replace(/</g, '\\3C ');
+            css = css.replace(/</g, '\\3C ');
             var html = '<!doctype html>\n<html lang="' + esc(deck.front.lang || 'en') + '" data-theme="' + esc(theme) + '">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n<title>' + esc(deck.front.title || 'A deck') + '</title>\n' +
                 '<style>\n' + pudlCSS + '\n' + css + '\nhtml, body { margin: 0; height: 100%; background: var(--bg); }\n.deck-export { position: fixed; inset: 0; }\n</style>\n</head>\n<body class="deck deck-showing">\n' +
                 '<div class="deck-show deck-export" tabindex="0" role="region" aria-label="' + esc(deck.front.title || 'The deck') + '">' + stage.innerHTML + '</div>\n<script>\n' + js + '\nyavcPresent.start(document.querySelector(".deck-show"));\n</script>\n</body>\n</html>\n';
@@ -1172,7 +1212,7 @@
                 cmd('slide-class', 'Slide Style…', 'tag', function () {
                     askText('This slide\'s style classes', 'Class names from the stylesheet, separated by spaces; empty for none', settingsOf(current())['class'] || '').then(function (v) { if (v != null) { setSlideSetting('class', v.trim()); } });
                 }),
-                cmd('styles-help', 'Styling a Deck', 'info', function () { window.open((window.pcPublicOrigin || location.origin.replace(/\/\/slides\./, '//')) + '/slides-styles', '_blank', 'noopener'); }),
+                cmd('styles-help', 'Styling a Deck', 'info', function () { window.open(publicOrigin() + '/slides-styles', '_blank', 'noopener'); }),
                 cmd('background-image', 'Background Picture…', 'image', function () { askText('Background picture', 'The picture\'s address, such as /images/x.png; empty for none', settingsOf(current()).image || '').then(function (v) { if (v != null) { setSlideSetting('image', v.trim()); } }); }),
                 { id: 'slide-transition', label: 'Transition', items: TRANSITIONS.map(function (t) { return { id: 'slide-transition-' + t[0], label: t[1], choice: 'deck-slide-transition', value: t[0], checked: function () { return (settingsOf(current()).transition || deck.front.transition || 'fade') === t[0]; }, run: function () { setSlideSetting('transition', t[0] === (deck.front.transition || 'fade') ? null : t[0]); } }; }) },
                 cmd('deck-title', 'Properties…', 'tag', function () {
@@ -1314,6 +1354,13 @@
             'go@1': async function (input) { await booted; await goTo(slideNo(input.index)); return { output: { index: at + 1 } }; },
             'load@1': async function (input) {
                 await booted;
+                /* A deck an agent gives never takes the name of a file that
+                   exists, or the person's next Save would overwrite it unasked
+                   (security review, 2026-11-03). */
+                if (input.path && H.fs && H.fs.readText) {
+                    var there = await H.fs.readText(String(input.path)).catch(function () { return ''; });
+                    if (there != null) { throw new Error('there is already a file at ' + input.path + '; open it, or give the deck another name'); }
+                }
                 if (presenting) { await leave(); }
                 await openInTab(String(input.text), input.path || null, input.slide);
                 modified = true;

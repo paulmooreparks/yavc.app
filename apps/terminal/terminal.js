@@ -857,8 +857,12 @@
     /* === Applets' actions ===================================================
        The actions applets publish (Architecture/applet-platform-design.md,
        P2), through PUDL's action broker (pudl-actions.js, PUDL 0.68.0), which
-       the page loads after this script. The terminal holds every capability
-       (grant "all"), because its reader could do all of it by hand. */
+       the page loads after this script. What the person types holds every
+       capability (grant "all"), because they could do all of it by hand. A
+       command an agent sends through run@1 runs as that agent with no
+       standing grant, so an action it calls asks the person first: one
+       "change your files" answer for run@1 must not become every
+       capability (security review, 2026-11-03). */
     function actionBroker() {
         if (window.pudlApplets && window.pudlApplets.invoke) { return Promise.resolve(window.pudlApplets); }
         return new Promise(function (resolve, reject) {
@@ -878,7 +882,8 @@
        so it can be cancelled before the broker answers. */
     async function runAction(ref, input, io, waitForEnd) {
         var A = await actionBroker(), id = invocationId(), stop = false;
-        var started = A.invoke(ref, input, { id: id, owner: { kind: 'terminal' }, grant: 'all' });
+        var who = io && io.caller ? { owner: io.caller, grant: [] } : { owner: { kind: 'terminal' }, grant: 'all' }; // check-ignore(grant-all): the person's own typing
+        var started = A.invoke(ref, input, { id: id, owner: who.owner, grant: who.grant });
         var ended = started.then(function (v) { return waitForEnd && (v.status === 'running' || v.status === 'waiting') ? A.wait(v.id) : v; });
         for (;;) {
             var tick = new Promise(function (resolve) { setTimeout(resolve, 200); });
@@ -1861,6 +1866,9 @@
             var io = {
                 cols: term.cols, rows: term.rows, interactive: interactive,
                 stdin: stdin,
+                /* Who the command runs for: the agent that sent it through
+                   run@1, or null for what the person typed. */
+                caller: relayedFor,
                 /* A long command checks this between steps and stops. */
                 interrupted: function () { return interrupted; },
                 /* For a command run at the prompt, the whole terminal:
@@ -2613,7 +2621,7 @@
 
         /* === The live actions (actions.json; docs/agents-design.md) ===== */
 
-        var capture = null;
+        var capture = null, relayedFor = null;
         function cwdPath() { try { return fs && cwd ? fs.displayPath(cwd) : '~'; } catch (err) { return '~'; } }
         function screenText() {
             if (!term || !term.buffer) { return ''; }
@@ -2622,7 +2630,7 @@
             return lines.join('\n').replace(/\n+$/, '');
         }
         var liveActions = {
-            'run@1': async function (input) {
+            'run@1': async function (input, ctx) {
                 if (!term) { throw new Error('the terminal is not ready'); }
                 if (busy) { throw new Error('the terminal is busy with another command'); }
                 var text = String(input.command).replace(/[\r\n]+/g, ' ').trim();
@@ -2630,7 +2638,8 @@
                 line = text; cursor = line.length;
                 term.write(text);
                 capture = [];
-                try { await submit(); } finally { var got = capture.join(''); capture = null; }
+                relayedFor = (ctx && ctx.owner) || { kind: 'agent' };
+                try { await submit(); } finally { relayedFor = null; var got = capture.join(''); capture = null; }
                 var out = got.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '').replace(/\r/g, '');
                 var p = prompt().replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '');
                 if (p && out.endsWith(p)) { out = out.slice(0, -p.length); }

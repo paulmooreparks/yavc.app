@@ -1,0 +1,213 @@
+#!/usr/bin/env node
+// Copyright 2026 Paul Parks. SPDX-License-Identifier: Apache-2.0
+//
+// The project's own checks on its browser code, stylesheets and text: the
+// rules that keep what a review fixed from coming back (docs/review.md).
+// scripts/check.sh runs it with the Go checks; CI runs that on every push.
+//
+//   node scripts/check.mjs            every rule over the whole tree
+//   node scripts/check.mjs --since R  also the rules that compare with git ref R
+//
+// Each rule has an id, says what it guards and why, and reports
+// file:line: message. A line may opt out of one rule with a comment that
+// gives the reason: check-ignore(rule-id): why.
+
+import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { join, relative, sep, extname } from 'node:path';
+import { execFileSync } from 'node:child_process';
+import vm from 'node:vm';
+
+const ROOT = new URL('..', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
+const args = process.argv.slice(2);
+const since = args.includes('--since') ? args[args.indexOf('--since') + 1] : null;
+
+// Code that is not the project's own: vendored libraries, built output.
+const SKIP = [/(^|\/)vendor\//, /^web\/pudl\//, /(^|\/)node_modules\//, /^\.git\//, /^data\//, /^\.local\//,
+  /^apps\/md-engine\/(yavc-md\.wasm|wasm_exec\.js)$/, /\.min\.js$/];
+const TEXT = new Set(['.js', '.mjs', '.go', '.css', '.html', '.md', '.json', '.sh', '.yml', '.yaml', '.xfer']);
+
+function walk(dir, out = []) {
+  for (const name of readdirSync(dir)) {
+    const full = join(dir, name), rel = relative(ROOT, full).split(sep).join('/');
+    if (SKIP.some((re) => re.test(rel + (statSync(full).isDirectory() ? '/' : '')))) continue;
+    if (statSync(full).isDirectory()) walk(full, out);
+    else if (TEXT.has(extname(name))) out.push(rel);
+  }
+  return out;
+}
+
+const files = walk(ROOT);
+const text = new Map(files.map((f) => [f, readFileSync(join(ROOT, f), 'utf8')]));
+const problems = [];
+function report(rule, file, index, message) {
+  const src = text.get(file) || '';
+  const line = index == null ? 0 : src.slice(0, index).split('\n').length;
+  const lineText = line ? src.split('\n')[line - 1] : '';
+  if (new RegExp('check-ignore\\(' + rule + '\\):\\s*\\S').test(lineText)) return;
+  problems.push({ rule, file, line, message });
+}
+function each(re, src, fn) { re.lastIndex = 0; let m; while ((m = re.exec(src))) fn(m); }
+const js = files.filter((f) => /\.m?js$/.test(f));
+const css = files.filter((f) => f.endsWith('.css'));
+
+const rules = [];
+
+// Every script parses. A syntax error in one applet's script stops only that
+// applet, silently, so it is caught here rather than in the browser.
+rules.push({ id: 'js-syntax', run() {
+  for (const f of js) {
+    try { new vm.Script(text.get(f).replace(/^#!.*/, ''), { filename: f }); }
+    catch (err) {
+      if (f.endsWith('.mjs') || /^\s*(import|export)\s/m.test(text.get(f))) continue; // modules are checked by node --check below
+      report('js-syntax', f, null, err.message);
+    }
+  }
+  for (const f of js.filter((f) => f.endsWith('.mjs') || /^\s*(import|export)\s/m.test(text.get(f)))) {
+    try { execFileSync(process.execPath, ['--check', join(ROOT, f)], { stdio: 'pipe' }); }
+    catch (err) { report('js-syntax', f, null, String(err.stderr || err.message).split('\n')[0]); }
+  }
+} });
+
+// Paul's standing style rule: no em-dash in anything committed
+// (C:\Users\paul\.claude\CLAUDE.md, "Output style: no em-dashes").
+rules.push({ id: 'no-em-dash', run() {
+  for (const f of files) each(/\u2014/g, text.get(f), (m) => report('no-em-dash', f, m.index, 'an em-dash; use a comma, colon, semicolon or parentheses'));
+} });
+
+// A glyph a command uses is drawn outside the applet too, in the menu bar,
+// the ribbon and context menus, which are popovers at the top of the page.
+// So it must be one of PUDL's glyphs or defined on the root of site.css,
+// not inside an applet's own rule or a theme-conditional block, where the
+// popover cannot see it and draws a blank square (review of 2026-11-03).
+function rootGlyphs() {
+  const defined = new Set();
+  each(/--glyph-([a-z0-9-]+)\s*:/g, readFileSync(join(ROOT, 'web/pudl/pudl.css'), 'utf8'), (m) => defined.add(m[1]));
+  // The site's stylesheet, and a package's own, which is loaded at page level.
+  for (const f of css) {
+    const src = text.get(f).replace(/\/\*[\s\S]*?\*\//g, '');
+    each(/(?<=^|\})\s*([^{}]+)\{([^{}]*)\}/g, src, (m) => {
+      if (m[1].trim() !== ':root') return;
+      each(/--(glyph|yavc-glyph)-([a-z0-9-]+)\s*:/g, m[2], (g) => defined.add((g[1] === 'yavc-glyph' ? 'yavc-' : '') + g[2]));
+    });
+  }
+  return defined;
+}
+rules.push({ id: 'glyph-defined', run() {
+  const defined = rootGlyphs();
+  const sources = js.filter((f) => /^(apps|applets|internal\/web\/static)\//.test(f));
+  for (const f of sources) {
+    each(/\bglyph:\s*'([a-z0-9-]+)'/g, text.get(f), (m) => {
+      if (!defined.has(m[1])) report('glyph-defined', f, m.index, `the command glyph "${m[1]}" is neither PUDL's nor defined on :root in site.css`);
+    });
+  }
+  for (const f of files.filter((f) => /\.(html|js)$/.test(f) && !f.startsWith('scripts/'))) {
+    each(/var\(--yavc-glyph-([a-z0-9-]+)\)/g, text.get(f), (m) => {
+      if (!defined.has('yavc-' + m[1])) report('glyph-defined', f, m.index, `--yavc-glyph-${m[1]} is used but not defined on :root in site.css`);
+    });
+  }
+} });
+
+// A new window opened from the page cannot reach back into it.
+rules.push({ id: 'window-open-noopener', run() {
+  // The call's line and the next, since an address may run long.
+  for (const f of js) each(/window\.open\(/g, text.get(f), (m) => {
+    const src = text.get(f), start = src.lastIndexOf('\n', m.index) + 1;
+    let end = src.indexOf('\n', m.index); end = src.indexOf('\n', end + 1); if (end < 0) end = src.length;
+    if (!/noopener/.test(src.slice(start, end))) report('window-open-noopener', f, m.index, 'window.open without noopener');
+  });
+  for (const f of files.filter((f) => /\.(html|js|md)$/.test(f))) each(/target=["\\']+_blank["\\']+(?![^>]*rel=["\\']+[^"']*noopener)/g, text.get(f), (m) => {
+    report('window-open-noopener', f, m.index, 'target="_blank" without rel="noopener"');
+  });
+} });
+
+// An applet's version changes with its files, so the registry and the
+// browser's cache take the new code (a standing rule of the repository).
+rules.push({ id: 'applet-version-bump', needsSince: true, run() {
+  const changed = execFileSync('git', ['diff', '--name-only', since, '--', 'apps', 'applets'], { cwd: ROOT, encoding: 'utf8' }).split('\n').filter(Boolean);
+  const folders = new Set(changed.map((f) => f.split('/').slice(0, 2).join('/')).filter((d) => {
+    try { return statSync(join(ROOT, d, 'applet.json')).isFile(); } catch { return false; }
+  }));
+  for (const d of folders) {
+    const files = changed.filter((f) => f.startsWith(d + '/'));
+    if (files.length === 1 && files[0] === d + '/applet.json') continue;
+    const was = (() => { try { return JSON.parse(execFileSync('git', ['show', `${since}:${d}/applet.json`], { cwd: ROOT, encoding: 'utf8' })).version; } catch { return null; } })();
+    const now = JSON.parse(readFileSync(join(ROOT, d, 'applet.json'), 'utf8')).version;
+    if (was && was === now) report('applet-version-bump', d + '/applet.json', null, `${d} changed since ${since} but its version is still ${now}`);
+  }
+} });
+
+// A PUDL component that needs its script works only if the layout loads
+// that script; without it the markup draws but does nothing (the
+// splitters were dead until 2026-11-03).
+rules.push({ id: 'pudl-script-loaded', run() {
+  const layout = text.get('internal/web/templates/layout.html') || '';
+  const needs = [
+    [/\bsplit-handle\b/, 'pudl-split.js'], [/\bdata-date\b/, 'pudl-date.js'], [/\bnumber-field\b/, 'pudl-fields.js'],
+    [/\bpudlToast\b/, 'pudl-toast.js'], [/\bcard disclosure\b|\bpudlDisclose\b/, 'pudl-disclose.js'], [/\brole=["\\']*tree\b/, 'pudl-tree.js'],
+    [/\bdata-code-actions\b/, 'pudl-code.js'], [/\bdata-combo\b/, 'pudl-combo.js']
+  ];
+  const sources = files.filter((f) => /^(apps|internal\/web)\//.test(f) && /\.(js|html|go)$/.test(f));
+  for (const [re, script] of needs) {
+    if (layout.includes('/pudl/' + script)) continue;
+    for (const f of sources) {
+      const m = re.exec(text.get(f));
+      if (m) { report('pudl-script-loaded', f, m.index, `uses a PUDL component that needs ${script}, which the layout does not load`); break; }
+    }
+  }
+} });
+
+// An action that hands back the person's own content (a document's text,
+// a slide, the notes, the Terminal's screen, a list of open files, an
+// export) declares files.read, so an agent without it is asked first
+// (security review, 2026-11-03). The few that only echo what the agent
+// itself just gave are listed with the reason.
+const ECHOES = {
+  'yavc.editor/set-text@1': 'returns the text the agent set',
+  'yavc.editor/new@1': 'a new, empty document',
+  'yavc.slides/set-text@1': 'returns the slide the agent wrote',
+  'yavc.slides/parse@1': 'parses text the agent gave',
+  'yavc.slides/make@1': 'makes a deck from what the agent gave'
+};
+rules.push({ id: 'action-reads-declare', run() {
+  for (const f of files.filter((f) => /^apps\/[^/]+\/actions\.json$/.test(f))) {
+    let m; try { m = JSON.parse(text.get(f)); } catch (err) { report('action-reads-declare', f, null, 'not valid JSON: ' + err.message); continue; }
+    for (const a of m.actions || []) {
+      const out = JSON.stringify((a.outputSchema || {}).properties || {});
+      const content = /"(text|notes|screen|documents|decks|html)"\s*:/.test(out) || (a.capabilities || []).includes('artifact.create');
+      if (content && !(a.capabilities || []).includes('files.read') && !ECHOES[a.ref]) {
+        report('action-reads-declare', f, text.get(f).indexOf('"' + a.ref + '"'), `${a.ref} returns the person's content but does not declare files.read`);
+      }
+    }
+  }
+} });
+
+// Only the person's own typing holds every capability; anything else that
+// passes grant: 'all' to the broker must say why on the same line.
+rules.push({ id: 'grant-all', run() {
+  for (const f of js.filter((f) => /^(apps|internal\/web\/static)\//.test(f))) {
+    each(/grant:\s*'all'/g, text.get(f), (m) => report('grant-all', f, m.index, "grant: 'all' gives every capability without asking"));
+  }
+} });
+
+// A document may embed the site's games and tools but never its own
+// applications, which hold the person's files and settings; the sanitizer
+// keeps the list, and every applet under apps/ must be on it.
+rules.push({ id: 'not-embedded-complete', run() {
+  const src = text.get('apps/md-engine/safe-html.js') || '';
+  const m = /NOT_EMBEDDED\s*=\s*\[([^\]]*)\]/.exec(src);
+  const listed = m ? m[1].split(',').map((x) => x.trim().replace(/^'|'$/g, '')).filter(Boolean) : [];
+  for (const f of files.filter((f) => /^apps\/[^/]+\/applet\.json$/.test(f))) {
+    const name = JSON.parse(text.get(f)).name || f.split('/')[1];
+    if (!listed.includes(name)) report('not-embedded-complete', 'apps/md-engine/safe-html.js', m ? m.index : null, `the site's own applet ${name} is missing from NOT_EMBEDDED`);
+  }
+} });
+
+let ran = 0;
+for (const r of rules) {
+  if (r.needsSince && !since) continue;
+  r.run();
+  ran++;
+}
+for (const p of problems) console.log(`${p.file}${p.line ? ':' + p.line : ''}: [${p.rule}] ${p.message}`);
+console.log(`${ran} rules over ${files.length} files: ${problems.length ? problems.length + ' problem' + (problems.length === 1 ? '' : 's') : 'clean'}`);
+process.exit(problems.length ? 1 : 0);

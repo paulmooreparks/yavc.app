@@ -252,8 +252,8 @@ body:has(.pc-sight-reader:not(.pc-sight-reader-fill)) .post-content { max-width:
 .sr-tabs.tabs > [role="tabpanel"] { grid-row: 2; grid-column: 1; min-width: 0; }
 .sr-tabs.tabs > [role="tabpanel"][hidden] { display: block !important; visibility: hidden; }
 
-/* The toolbar's own glyphs. PUDL has no media glyphs (its stop is a stop sign) and none for a loop, so these are the applet's, drawn on PUDL's 16-unit grid; the toolbar names them sr-play, sr-stop and sr-loop. The notes sounding are lit in blue on whichever instrument is shown. */
-.pc-sight-reader {
+/* The toolbar's own glyphs. PUDL has no media glyphs (its stop is a stop sign) and none for a loop, so these are the applet's, drawn on PUDL's 16-unit grid; the toolbar uses them as sr-play, sr-stop and sr-loop. They sit on the root because the menu bar, the ribbon and context menus draw the same commands outside the applet. The notes sounding are lit in blue on whichever instrument is shown. */
+:root {
   --glyph-sr-play: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4.5 2.6v10.8L13 8z' stroke='black' stroke-width='1.2' stroke-linejoin='round'/%3E%3C/svg%3E");
   --glyph-sr-stop: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect x='3.5' y='3.5' width='9' height='9' rx='1'/%3E%3C/svg%3E");
   --glyph-sr-loop: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 7.5V7a3 3 0 0 1 3-3h7M11 2l2 2-2 2M13 8.5V9a3 3 0 0 1-3 3H3M5 14l-2-2 2-2'/%3E%3C/svg%3E");

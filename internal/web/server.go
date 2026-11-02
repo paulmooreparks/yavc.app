@@ -228,8 +228,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		r.Body = http.MaxBytesReader(w, r.Body, limit)
 	}
-	w.Header().Set("X-Content-Type-Options", "nosniff")
-	w.Header().Set("Referrer-Policy", "same-origin")
+	securityHeaders(w.Header(), s.Secure)
 	s.mux.ServeHTTP(w, r)
 }
 

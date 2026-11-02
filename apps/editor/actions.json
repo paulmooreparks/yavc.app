@@ -117,7 +117,9 @@
           }
         }
       },
-      "capabilities": [],
+      "capabilities": [
+        "files.read"
+      ],
       "replay": "pure"
     },
     {
@@ -174,7 +176,9 @@
           }
         }
       },
-      "capabilities": [],
+      "capabilities": [
+        "files.read"
+      ],
       "replay": "pure"
     },
     {
@@ -412,7 +416,9 @@
           }
         }
       },
-      "capabilities": [],
+      "capabilities": [
+        "files.read"
+      ],
       "replay": "once"
     },
     {
@@ -527,7 +533,8 @@
         }
       },
       "capabilities": [
-        "files.write"
+        "files.write",
+        "files.read"
       ],
       "replay": "once"
     },
