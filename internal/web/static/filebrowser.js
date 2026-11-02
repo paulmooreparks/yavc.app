@@ -57,12 +57,12 @@
     if (!document.querySelector('link[data-fb-css]')) {
         var css = document.createElement('link');
         css.rel = 'stylesheet';
-        css.href = window.pcFileBrowserCss || '/css/filebrowser.css';
+        css.href = window.pcFileBrowserCss || window.yavcUtil.versioned('/static/filebrowser.css');
         css.setAttribute('data-fb-css', '');
         document.head.appendChild(css);
     }
 
-    function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+    var esc = window.yavcUtil.esc;
     function fmtDate(d) { return d && !isNaN(d) ? d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : ''; }
     function fmtSize(n) { return n == null ? '' : n < 1024 ? n + ' B' : n < 1024 * 1024 ? (n / 1024).toFixed(1) + ' KB' : (n / 1024 / 1024).toFixed(1) + ' MB'; }
 
@@ -580,7 +580,7 @@
         var save = o.mode === 'save', id = 'fb-pick-' + (++pickCount);
         var accept = (o.accept || []).map(function (x) { return x.toLowerCase(); });
         var fits = function (name) { return !accept.length || accept.some(function (x) { return name.toLowerCase().slice(-x.length) === x; }); };
-        var dlg = document.createElement('dialog');
+        var dlg = document.createElement('dialog'); // check-ignore(one-shared-implementation): the file picker is a whole file browser in a dialog, not a question
         dlg.className = 'dialog fb-picker';
         dlg.setAttribute('aria-labelledby', id + '-title');
         dlg.innerHTML =

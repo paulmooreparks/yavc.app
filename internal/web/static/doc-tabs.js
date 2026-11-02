@@ -17,7 +17,7 @@
     'use strict';
     if (window.yavcDocTabs) { return; }
 
-    function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+    var esc = window.yavcUtil.esc;
 
     function attach(list, host) {
         function render() {
@@ -66,5 +66,46 @@
         return { render: render };
     }
 
-    window.yavcDocTabs = Object.freeze({ attach: attach });
+    /* Unsaved documents, guarded: leaving the page asks the browser's own
+       question, and closing the application's window asks the site's (one
+       question for every application, static/dialogs.js askSave), unless
+       the changes are kept elsewhere and come back.
+
+         var off = yavcDocTabs.guard(root, {
+           changed: function () { return [names of unsaved documents]; },
+           keptOnReload: function () { return true when a reload keeps them; },
+           keptOnClose: function () { return true when closing the window keeps them; },
+           saveAll: function () { return a promise of true when every one saved; }
+         });
+         off();   when the application goes */
+    function guard(root, o) {
+        var win = root.closest('.win[data-win]'), agreed = false;
+        function unsaved() { return (o.changed() || []).length > 0; }
+        function onBeforeUnload(e) {
+            if (unsaved() && !(o.keptOnReload && o.keptOnReload())) { e.preventDefault(); e.returnValue = ''; }
+        }
+        function onClosing(e) {
+            if (e.target !== win || agreed) { return; }
+            var names = o.changed() || [];
+            if (!names.length || (o.keptOnClose && o.keptOnClose())) { return; }
+            e.preventDefault();
+            var key = win.getAttribute('data-win');
+            window.yavcDialog.askSave(names[0], { many: names.length > 1 }).then(function (choice) {
+                if (!choice) { return null; }
+                return choice === 'save' ? Promise.resolve(o.saveAll()) : true;
+            }).then(function (go) {
+                if (!go) { return; }
+                agreed = true;
+                window.pudlWindows.close(key);
+            });
+        }
+        window.addEventListener('beforeunload', onBeforeUnload);
+        if (win) { win.addEventListener('pudl:window-closing', onClosing); }
+        return function () {
+            window.removeEventListener('beforeunload', onBeforeUnload);
+            if (win) { win.removeEventListener('pudl:window-closing', onClosing); }
+        };
+    }
+
+    window.yavcDocTabs = Object.freeze({ attach: attach, guard: guard });
 })();

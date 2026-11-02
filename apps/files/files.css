@@ -28,11 +28,6 @@
 .pc-files .fm-status { margin: 0; min-height: 1.4em; color: var(--text-muted); }
 .pc-files .fm-status-error { color: var(--danger); }
 .pc-files .fm-failed, .pc-files .fm-loading { color: var(--text-muted); padding: var(--space-4); }
-.pc-files .fm-dialog .dialog-body .form-input { width: 100%; }
-/* A delete's confirmation: the warning glyph in the danger colour beside
-   the title, and the bin on the button (as in the Chat applet). */
-.pc-files .fm-dialog .dialog-title { display: flex; align-items: center; gap: var(--space-2); }
-.pc-files .fm-dlg-warn { --glyph-size: 20px; color: var(--danger); flex: none; }
 
 /* === Filling a window ==================================================== */
 .pc-files-fill { flex: 1 1 auto; height: auto; min-height: 0; container-type: inline-size; }

@@ -22,7 +22,7 @@ const args = process.argv.slice(2);
 const since = args.includes('--since') ? args[args.indexOf('--since') + 1] : null;
 
 // Code that is not the project's own: vendored libraries, built output.
-const SKIP = [/(^|\/)vendor\//, /^web\/pudl\//, /(^|\/)node_modules\//, /^\.git\//, /^data\//, /^\.local\//,
+const SKIP = [/^\.claude\//, /(^|\/)vendor\//, /^web\/pudl\//, /(^|\/)node_modules\//, /^\.git\//, /^data\//, /^\.local\//,
   /^apps\/md-engine\/(yavc-md\.wasm|wasm_exec\.js)$/, /\.min\.js$/];
 const TEXT = new Set(['.js', '.mjs', '.go', '.css', '.html', '.md', '.json', '.sh', '.yml', '.yaml', '.xfer']);
 
@@ -199,6 +199,31 @@ rules.push({ id: 'not-embedded-complete', run() {
   for (const f of files.filter((f) => /^apps\/[^/]+\/applet\.json$/.test(f))) {
     const name = JSON.parse(text.get(f)).name || f.split('/')[1];
     if (!listed.includes(name)) report('not-embedded-complete', 'apps/md-engine/safe-html.js', m ? m.index : null, `the site's own applet ${name} is missing from NOT_EMBEDDED`);
+  }
+} });
+
+// One shared implementation of each small thing (review of 2026-11-03):
+// the escaper, the script loader, the download and the dialogs live in
+// static/yavc-util.js and static/dialogs.js, and nothing else in the site's
+// own code makes its own. The installed packages under applets/ and the
+// workers and the exported presentation, which cannot reach the site's
+// scripts, are outside this rule.
+const SITE = js.filter((f) => /^(apps|internal\/web\/static)\//.test(f) && !/worker\.js$/.test(f) && !/^apps\/slides\/present\.js$/.test(f));
+const SHARED_HOMES = [
+  [/function\s+esc\s*\(/g, 'internal/web/static/yavc-util.js', 'an HTML escaper of its own; use yavcUtil.esc'],
+  [/createElement\(\s*'script'\s*\)/g, 'internal/web/static/yavc-util.js', 'a script loader of its own; use yavcUtil.loadScript'],
+  [/\.download\s*=\s*/g, 'internal/web/static/yavc-util.js', 'a download of its own; use yavcUtil.download'],
+  [/createElement\(\s*'dialog'\s*\)/g, 'internal/web/static/dialogs.js', "a dialog of its own; use yavcDialog (static/dialogs.js)"],
+  [/window\.yavcMd\s*[.[]/g, 'apps/md-engine/loader.js', 'the Markdown engine called directly; go through its loader, whose calls throw on errors'],
+  [/['"]\/(js|css)\//g, null, "a parkscomputing.com address (/js/, /css/) that this site does not serve"],
+  [/\.replace\(\s*'Mod-'\s*,/g, 'internal/web/static/yavc-util.js', 'a shortcut spelled by hand; use yavcUtil.shortcut']
+];
+rules.push({ id: 'one-shared-implementation', run() {
+  for (const f of SITE) {
+    for (const [re, home, why] of SHARED_HOMES) {
+      if (f === home) continue;
+      each(re, text.get(f), (m) => report('one-shared-implementation', f, m.index, why));
+    }
   }
 } });
 

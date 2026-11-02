@@ -17,9 +17,8 @@
 
     /* The site's shared scripts, at this build's version (written into
        this script's own address by the page). */
-    var V = (function () { var m = /[?&]v=([^&]+)/.exec((document.currentScript && document.currentScript.src) || ''); return m ? m[1] : '0'; })();
-    function versioned(path) { return path + '?v=' + encodeURIComponent(V); }
-    window.yavcStaticVersion = V;
+    var U = window.yavcUtil, versioned = U.versioned;
+    window.yavcStaticVersion = U.version;
     window.pcSiteFsSrc = versioned('/static/sitefs.js');
     window.pcConfigSrc = versioned('/static/config.js');
     window.pcFileBrowserSrc = versioned('/static/filebrowser.js');
@@ -30,26 +29,11 @@
     /* The terminal's extra commands, beside it in its package. */
     window.pcTerminalCommands = ['/applets/terminal/terminal-text.js', '/applets/terminal/terminal-lua.js', '/applets/terminal/terminal-sh.js'];
 
-    function loadScript(src) {
-        return new Promise(function (resolve, reject) {
-            var s = document.createElement('script');
-            s.src = src;
-            s.onload = resolve;
-            s.onerror = function () { reject(new Error(src + ' did not load')); };
-            document.head.appendChild(s);
-        });
-    }
-    /* A shared script's global, loading the script the first time. */
-    function shared(src, name) {
-        var loading = null;
-        return function () {
-            if (!loading) { loading = (window[name] ? Promise.resolve() : loadScript(src)).then(function () { return window[name]; }); }
-            return loading;
-        };
-    }
-    var siteFs = shared(window.pcSiteFsSrc, 'pcSiteFs'), config = shared(window.pcConfigSrc, 'pcConfig');
-    var fileBrowser = shared(window.pcFileBrowserSrc, 'pcFileBrowser');
-    function fs() { return siteFs().then(function (f) { return f.load().then(function () { return f; }); }); }
+    /* The site's shared scripts, each loaded once (static/yavc-util.js). */
+    function siteFs() { return U.loadGlobal(window.pcSiteFsSrc, 'pcSiteFs'); }
+    function config() { return U.loadGlobal(window.pcConfigSrc, 'pcConfig'); }
+    function fileBrowser() { return U.loadGlobal(window.pcFileBrowserSrc, 'pcFileBrowser'); }
+    var fs = U.siteFs;
     function withDialog() { return Promise.all([fs(), fileBrowser()]); }
     function isText(blob) { return /^text\/|json|xml|javascript/.test(blob.type || 'text/plain'); }
 

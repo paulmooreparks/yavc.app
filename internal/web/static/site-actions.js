@@ -25,25 +25,7 @@
     var A = window.pudlApplets;
     if (!A || !A.capability) { return; }
 
-    function loadScript(src) {
-        return new Promise(function (resolve, reject) {
-            var s = document.createElement('script');
-            s.src = src;
-            s.onload = function () { resolve(); };
-            s.onerror = function () { reject(new Error('could not load ' + src)); };
-            document.head.appendChild(s);
-        });
-    }
-
-    var fsReady = null;
-    function siteFs() {
-        if (!fsReady) {
-            fsReady = (window.pcSiteFs ? Promise.resolve() : loadScript(window.pcSiteFsSrc || '/static/sitefs.js'))
-                .then(function () { return window.pcSiteFs.load(); })
-                .then(function () { return window.pcSiteFs; }, function (err) { fsReady = null; throw err; });
-        }
-        return fsReady;
-    }
+    var siteFs = window.yavcUtil.siteFs;
 
     function filesService(writable) {
         function node(F, path) {
@@ -104,7 +86,7 @@
         'files.read': 'read your files', 'files.write': 'change your files', 'window.open': 'open windows',
         'attention.request': 'ask you questions', 'notification.post': 'post notices', 'artifact.create': 'make files for you'
     };
-    function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+    var esc = window.yavcUtil.esc;
     function ownerName(owner) {
         owner = owner || {};
         if (owner.kind === 'agent') { return owner.name ? 'The agent ' + owner.name : 'An agent'; }
@@ -176,38 +158,30 @@
     };
 
     function ask(q, missing, key, input) {
-        return new Promise(function (resolve) {
-            var dlg = document.createElement('dialog'), id = 'yavc-allow-' + Date.now(), standing = !alwaysAsk(input);
-            dlg.className = 'dialog yavc-allow';
-            dlg.setAttribute('aria-labelledby', id + '-title');
-            dlg.innerHTML =
-                '<form method="dialog">' +
-                  '<h3 class="dialog-title" id="' + id + '-title">' + esc(ownerName(q.owner)) + ' asks: ' + esc(q.action.title || q.action.ref) + '</h3>' +
-                  '<div class="dialog-body">' +
-                    (q.action.description ? '<p>' + esc(q.action.description) + '</p>' : '') +
-                    inputLines(input) +
-                    '<p>To do it, it would ' + esc(missing.map(function (c) { return WORDS[c] || c; }).join(' and ')) + '.</p>' +
-                    (standing ? '' : '<p class="form-help">This changes what runs later, so it is asked about every time.</p>') +
-                  '</div>' +
-                  '<div class="dialog-actions">' +
-                    '<button type="button" class="btn" data-answer="no">Refuse</button>' +
-                    (standing ? '<button type="submit" class="btn" value="page" disabled>Allow while this page is open</button>' : '') +
-                    '<button type="submit" class="btn btn-primary" value="once" disabled>Allow once</button>' +
-                  '</div>' +
-                '</form>';
-            dlg.querySelector('[data-answer="no"]').addEventListener('click', function () { dlg.close('no'); });
-            dlg.addEventListener('close', function () {
-                var v = dlg.returnValue;
-                dlg.remove();
-                if (v === 'page' && standing) { allowed[key] = allowed[key] || {}; missing.forEach(function (c) { allowed[key][grantKey(c, q.action.ref, input)] = true; }); }
-                resolve(v === 'page' || v === 'once');
-            });
-            document.body.appendChild(dlg);
-            dlg.showModal();
-            /* The allowing buttons wake after a moment, so a click meant for
-               what was under the pointer as the dialog opened is not taken
-               as an answer. Refuse is ready at once. */
-            setTimeout(function () { dlg.querySelectorAll('button[disabled]').forEach(function (b) { b.disabled = false; }); }, 700);
+        var standing = !alwaysAsk(input);
+        var body = (q.action.description ? '<p>' + esc(q.action.description) + '</p>' : '') +
+            inputLines(input) +
+            '<p>To do it, it would ' + esc(missing.map(function (c) { return WORDS[c] || c; }).join(' and ')) + '.</p>' +
+            (standing ? '' : '<p class="form-help">This changes what runs later, so it is asked about every time.</p>');
+        var buttons = [{ id: 'no', label: 'Refuse' }];
+        if (standing) { buttons.push({ id: 'page', label: 'Allow while this page is open', submit: true }); }
+        buttons.push({ id: 'once', label: 'Allow once', primary: true });
+        return window.yavcDialog.open({
+            title: ownerName(q.owner) + ' asks: ' + (q.action.title || q.action.ref), body: body, buttons: buttons, className: 'yavc-allow',
+            onOpen: function (api) {
+                /* The allowing buttons wake after a moment, so a click meant
+                   for what was under the pointer as the dialog opened is not
+                   taken as an answer. Refuse is ready at once, and has the
+                   focus. */
+                var allowing = api.dialog.querySelectorAll('button[type="submit"]');
+                allowing.forEach(function (b) { b.disabled = true; });
+                var refuse = api.dialog.querySelector('[data-choice="no"]');
+                if (refuse) { refuse.focus(); }
+                setTimeout(function () { allowing.forEach(function (b) { b.disabled = false; }); }, 700);
+            }
+        }).then(function (r) {
+            if (r.value === 'page' && standing) { allowed[key] = allowed[key] || {}; missing.forEach(function (c) { allowed[key][grantKey(c, q.action.ref, input)] = true; }); }
+            return r.value === 'page' || r.value === 'once';
         });
     }
 })();

@@ -35,6 +35,8 @@
   <script type="application/json" id="yavc-state">{{json .State}}</script>
   <script type="application/json" id="yavc-config">{{json .Config}}</script>
   <script type="application/json" id="yavc-appearance">{{json (dict "skins" .Skins "palettes" .Palettes "retention" .Retention "agents" .Agents)}}</script>
+  <script src="{{asset "/static/yavc-util.js"}}"></script>
+  <script src="{{asset "/static/dialogs.js"}}"></script>
   <script src="{{asset "/static/snapshot.js"}}"></script>
   <script src="{{asset "/static/continuity.js"}}"></script>
   <script src="{{asset "/static/desktop.js"}}"></script>

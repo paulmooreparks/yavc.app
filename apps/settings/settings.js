@@ -12,7 +12,7 @@
     'use strict';
     var count = 0;
 
-    function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+    var esc = window.yavcUtil.esc;
     function lists() {
         var node = document.getElementById('yavc-appearance');
         var data = { skins: [], palettes: [], retention: '' };

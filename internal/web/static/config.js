@@ -21,25 +21,10 @@
     'use strict';
     if (window.pcConfig) { return; }
 
-    function loadScript(src) {
-        return new Promise(function (resolve, reject) {
-            var s = document.createElement('script');
-            s.src = src;
-            s.onload = resolve;
-            s.onerror = function () { reject(new Error('could not load ' + src)); };
-            document.head.appendChild(s);
-        });
-    }
-
-    var fsReady = null;
+    /* The site file system (static/yavc-util.js), watched once it is here. */
+    var watching = null;
     function fs() {
-        if (!fsReady) {
-            fsReady = (window.pcSiteFs ? Promise.resolve() : loadScript(window.pcSiteFsSrc || '/js/sitefs.js'))
-                .then(function () { return window.pcSiteFs.load(); })
-                .then(function () { watch(); return window.pcSiteFs; })
-                .catch(function (err) { fsReady = null; throw err; });
-        }
-        return fsReady;
+        return window.yavcUtil.siteFs().then(function (F) { if (!watching) { watching = true; watch(); } return F; });
     }
 
     var entries = {};   /* name -> { defaults, values, text, listeners: [] } */

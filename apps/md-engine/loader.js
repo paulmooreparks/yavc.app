@@ -19,15 +19,7 @@
     var self = (document.currentScript && document.currentScript.src) || '/applets/md-engine/loader.js';
     var base = self.split('?')[0].replace(/[^/]*$/, ''), stamp = self.indexOf('?') >= 0 ? self.slice(self.indexOf('?')) : '';
     var ready = null;
-    function load(src) {
-        return new Promise(function (resolve, reject) {
-            var s = document.createElement('script');
-            s.src = src;
-            s.onload = resolve;
-            s.onerror = function () { reject(new Error('could not load ' + src)); };
-            document.head.appendChild(s);
-        });
-    }
+    var load = window.yavcUtil.loadScript;
     window.yavcMdEngine = function () {
         if (ready) { return ready; }
         ready = (async function () {
@@ -40,9 +32,20 @@
             if (!window.Go) { await load(base + 'wasm_exec.js' + stamp); }
             if (!window.yavcMd) {
                 var go = new window.Go();
-                var r = await fetch(base + 'yavc-md.wasm' + stamp, { credentials: 'same-origin' });
-                if (!r.ok) { throw new Error('the Markdown engine could not be fetched (' + r.status + ')'); }
-                var result = await WebAssembly.instantiate(await r.arrayBuffer(), go.importObject);
+                var url = base + 'yavc-md.wasm' + stamp, result;
+                /* Compiled as it downloads; instantiateStreaming needs the
+                   response served as application/wasm, which the engine
+                   does, and where it cannot stream the bytes are compiled
+                   once they are all here. */
+                if (WebAssembly.instantiateStreaming) {
+                    try { result = await WebAssembly.instantiateStreaming(fetch(url, { credentials: 'same-origin' }), go.importObject); }
+                    catch (err) { result = null; }
+                }
+                if (!result) {
+                    var r = await fetch(url, { credentials: 'same-origin' });
+                    if (!r.ok) { throw new Error('the Markdown engine could not be fetched (' + r.status + ')'); }
+                    result = await WebAssembly.instantiate(await r.arrayBuffer(), go.importObject);
+                }
                 go.run(result.instance);
             }
             function call(name) {

@@ -9,48 +9,22 @@
     'use strict';
 
     var SELF_SRC = document.currentScript && document.currentScript.src;
-    function beside(file) { return SELF_SRC ? SELF_SRC.replace(/editor\.js/, file) : '/js/' + file; }
-    function loadScript(src) {
-        return new Promise(function (resolve, reject) {
-            var s = document.createElement('script');
-            s.src = src;
-            s.onload = resolve;
-            s.onerror = function () { reject(new Error('could not load ' + src)); };
-            document.head.appendChild(s);
-        });
-    }
+    function beside(file) { return SELF_SRC ? SELF_SRC.replace(/editor\.js/, file) : '/applets/editor/' + file; }
+    /* The site's shared scripts load through static/yavc-util.js, each once. */
+    var loadScript = window.yavcUtil.loadScript;
     /* The editing kit (apps/md-editor): CodeMirror, the page view, Mermaid,
        the formats, Insert and the dialogs, shared with Slides. */
     var kitReady = null;
     function loadKit() {
         if (window.yavcMdEditor) { return Promise.resolve(window.yavcMdEditor); }
         if (!kitReady) {
-            var v = window.yavcStaticVersion ? '?v=' + encodeURIComponent(window.yavcStaticVersion) : '';
-            kitReady = loadScript('/applets/md-editor/kit.js' + v).then(function () { return window.yavcMdEditor; }).catch(function (err) { kitReady = null; throw err; });
+            kitReady = loadScript(window.yavcUtil.versioned('/applets/md-editor/kit.js')).then(function () { return window.yavcMdEditor; }).catch(function (err) { kitReady = null; throw err; });
         }
         return kitReady;
     }
     function loadCodeMirror() { return loadKit().then(function (k) { return k.libs(); }); }
-    var siteFsReady = null;
-    function loadSiteFs() {
-        if (window.pcSiteFs) { return Promise.resolve(window.pcSiteFs); }
-        if (!siteFsReady) {
-            siteFsReady = loadScript(window.pcSiteFsSrc || beside('sitefs.js'))
-                .then(function () { return window.pcSiteFs; })
-                .catch(function (err) { siteFsReady = null; throw err; });
-        }
-        return siteFsReady;
-    }
-    var browserReady = null;
-    function loadBrowser() {
-        if (window.pcFileBrowser) { return Promise.resolve(window.pcFileBrowser); }
-        if (!browserReady) {
-            browserReady = loadScript(window.pcFileBrowserSrc || beside('filebrowser.js'))
-                .then(function () { return window.pcFileBrowser; })
-                .catch(function (err) { browserReady = null; throw err; });
-        }
-        return browserReady;
-    }
+    function loadSiteFs() { return window.yavcUtil.loadGlobal(window.pcSiteFsSrc, 'pcSiteFs'); }
+    function loadBrowser() { return window.yavcUtil.loadGlobal(window.pcFileBrowserSrc, 'pcFileBrowser'); }
 
     /* Whether the Explorer pane shows, kept per browser; with no choice
        made, it shows on a wide screen, unless the page has a file tree of
@@ -97,32 +71,16 @@
         return !!last && parts.every(function (m) { return /^(cmd|meta|m|a|alt|c|ctrl|control|s|shift|mod)$/i.test(m); });
     }
 
-    /* A key as a menu shows it: Mod-Shift-; as Ctrl+Shift+;. */
-    function keyLabel(key) {
-        var mac = /Mac|iPhone|iPad/.test(navigator.platform || '');
-        var names = { mod: mac ? 'Cmd' : 'Ctrl', c: 'Ctrl', ctrl: 'Ctrl', control: 'Ctrl', a: 'Alt', alt: 'Alt', s: 'Shift', shift: 'Shift', m: mac ? 'Cmd' : 'Meta', meta: mac ? 'Cmd' : 'Meta', cmd: mac ? 'Cmd' : 'Meta' };
-        return String(key).split(/-(?!$)/).map(function (part, i, all) {
-            if (i === all.length - 1) { return part.length === 1 ? part.toUpperCase() : part; }
-            return names[part.toLowerCase()] || part;
-        }).join('+');
-    }
-    var configReady = null;
-    function loadConfig() {
-        if (window.pcConfig) { return Promise.resolve(window.pcConfig); }
-        if (!configReady) {
-            configReady = loadScript(window.pcConfigSrc || beside('config.js'))
-                .then(function () { return window.pcConfig; })
-                .catch(function (err) { configReady = null; throw err; });
-        }
-        return configReady;
-    }
+    /* A key as a command shows it, in PUDL's spelling (static/yavc-util.js). */
+    var keyLabel = window.yavcUtil.shortcut;
+    function loadConfig() { return window.yavcUtil.loadGlobal(window.pcConfigSrc, 'pcConfig'); }
     function explorerWanted(s) {
         if (s && typeof s.explorer === 'boolean') { return s.explorer; }
         if (document.querySelector('meta[name="pc-file-sidebar"]')) { return false; }
         return window.matchMedia('(min-width: 900px)').matches;
     }
 
-    function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+    var esc = window.yavcUtil.esc;
 
     /* Colours from PUDL's tokens, as CSS variables, so the editor follows
        the theme with no code of its own. */
@@ -211,17 +169,7 @@
               '<span data-role="where"></span><span data-role="lang"></span><span data-role="pos"></span>' +
               '<span class="ed-message" data-role="message" role="status" aria-live="polite"></span>' +
             '</div>' +
-            '<dialog class="dialog ed-dialog" data-role="dialog" aria-labelledby="ed-dlg-title-' + n + '">' +
-              '<form method="dialog" data-role="dialog-form">' +
-                '<h3 class="dialog-title" id="ed-dlg-title-' + n + '" data-role="dialog-title"></h3>' +
-                '<div class="dialog-body">' +
-                  '<p data-role="dialog-text"></p>' +
-                  '<input class="form-input" data-role="dialog-input" autocomplete="off" spellcheck="false" />' +
-                  '<p class="form-error" data-role="dialog-error" hidden></p>' +
-                '</div>' +
-                '<div class="dialog-actions" data-role="dialog-actions"></div>' +
-              '</form>' +
-            '</dialog>';
+            '';
 
         var q = function (sel) { return root.querySelector(sel); };
         var el = {
@@ -229,9 +177,6 @@
             panes: q('[data-role="panes"]'), pageBox: q('[data-role="page-box"]'), scroll: q('[data-role="scroll"]'), page: q('[data-role="page"]'), findPlace: q('[data-role="find-place"]'),
             lang: q('[data-role="lang"]'), pos: q('[data-role="pos"]'), message: q('[data-role="message"]'),
             readonly: q('[data-role="readonly"]'),
-            dialog: q('[data-role="dialog"]'), dlgForm: q('[data-role="dialog-form"]'), dlgTitle: q('[data-role="dialog-title"]'),
-            dlgText: q('[data-role="dialog-text"]'), dlgInput: q('[data-role="dialog-input"]'), dlgError: q('[data-role="dialog-error"]'),
-            dlgActions: q('[data-role="dialog-actions"]'),
             explorer: q('[data-role="explorer"]'), explorerSplit: q('[data-role="explorer-split"]')
         };
         var FB = null, explorer = null;
@@ -568,9 +513,8 @@
             if (!t) { return; }
             if (t.modified) {
                 if (active !== i) { activate(i); }
-                var choice = await ask('Save changes to ' + t.name + '?', 'Your changes will be lost if you don\'t save them.', null,
-                    [['cancel', 'Cancel'], ['discard', 'Don\'t save'], ['save', 'Save', true]]);
-                if (choice === 'cancel' || choice == null) { return; }
+                var choice = await window.yavcDialog.askSave(t.name);
+                if (choice == null) { return; }
                 if (choice === 'save' && !(await save())) { return; }
             }
             /* The editor's text belongs to the tab in front. Closing another
@@ -656,58 +600,12 @@
             return true;
         }
 
-        function download(name, blob) {
-            var a = document.createElement('a');
-            a.href = URL.createObjectURL(blob);
-            a.download = name;
-            document.body.appendChild(a);
-            a.click();
-            setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
-        }
+        var download = window.yavcUtil.download;
 
         /* === Dialogs ====================================================== */
 
         /* One dialog for questions and paths: resolves to the chosen
            button's name, or with an input, to the text entered. */
-        function ask(title, text, value, buttons, validate, withInput) {
-            return new Promise(function (done) {
-                el.dlgTitle.textContent = title;
-                el.dlgText.textContent = text || '';
-                el.dlgInput.hidden = !withInput;
-                el.dlgInput.value = value || '';
-                el.dlgError.hidden = true;
-                el.dlgActions.innerHTML = buttons.map(function (b) {
-                    return '<button type="' + (b[2] ? 'submit' : 'button') + '" class="btn' + (b[2] ? ' btn-primary' : '') + '" data-choice="' + b[0] + '">' + esc(b[1]) + '</button>';
-                }).join('');
-                var finished = false;
-                function finish(v) { if (finished) { return; } finished = true; cleanup(); if (el.dialog.open) { el.dialog.close(); } done(v); }
-                function onClick(e) {
-                    var b = e.target.closest('[data-choice]');
-                    if (!b || b.type === 'submit') { return; }
-                    finish(b.getAttribute('data-choice'));
-                }
-                function onSubmit(e) {
-                    e.preventDefault();
-                    if (!withInput) { finish(el.dlgActions.querySelector('[type="submit"]').getAttribute('data-choice')); return; }
-                    var v = el.dlgInput.value.trim(), err = validate ? validate(v) : null;
-                    if (err) { el.dlgError.textContent = err; el.dlgError.hidden = false; el.dlgInput.focus(); return; }
-                    finish(v);
-                }
-                function onClose() { finish(null); }
-                function cleanup() {
-                    el.dlgActions.removeEventListener('click', onClick);
-                    el.dlgForm.removeEventListener('submit', onSubmit);
-                    el.dialog.removeEventListener('close', onClose);
-                }
-                el.dlgActions.addEventListener('click', onClick);
-                el.dlgForm.addEventListener('submit', onSubmit);
-                el.dialog.addEventListener('close', onClose);
-                el.dialog.showModal();
-                if (withInput) { el.dlgInput.focus(); el.dlgInput.select(); }
-                else { el.dlgActions.querySelector('[type="submit"]').focus(); }
-            });
-        }
-
         async function openDialog() {
             var t = current(), node = t && t.path ? F.resolve(F.home(), t.path) : null;
             /* It opens beside the file in front, or in ~. */
@@ -872,22 +770,6 @@
            reading. The Markdown goes to and from the page through the
            Markdown engine, md/yavc-md.wasm, which runs here in the browser,
            so the text never leaves it. */
-        /* Loads a script or stylesheet into the page, once. */
-        var assetWaits = {};
-        function into(doc, tag, url) {
-            /* A second ask for an asset still loading waits for the first,
-               rather than finding its element and going on too soon. */
-            if (assetWaits[url]) { return assetWaits[url]; }
-            return assetWaits[url] = new Promise(function (resolve, reject) {
-                if (doc.querySelector('[data-ed-asset="' + url + '"]')) { resolve(); return; }
-                var e = doc.createElement(tag);
-                e.setAttribute('data-ed-asset', url);
-                if (tag === 'link') { e.rel = 'stylesheet'; e.href = url; } else { e.src = url; }
-                e.onload = function () { resolve(); };
-                e.onerror = function () { reject(new Error('could not load ' + url)); };
-                (tag === 'link' ? doc.head : doc.body).appendChild(e);
-            });
-        }
         /* The page view's files sit beside this one and take its version,
            so a change to them ships with the Editor's own. */
         var HERE = (SELF_SRC || '/applets/editor/editor.js').split('?')[0].replace(/editor\.js$/, '');
@@ -895,8 +777,7 @@
         /* The Markdown engine is shared with Slides: apps/md-engine/loader.js
            loads it once for the page. */
         function mdEngine() {
-            var v = window.yavcStaticVersion ? '?v=' + encodeURIComponent(window.yavcStaticVersion) : STAMP;
-            return into(document, 'script', '/applets/md-engine/loader.js' + v).then(function () { return window.yavcMdEngine(); });
+            return loadScript(window.yavcUtil.versioned('/applets/md-engine/loader.js')).then(function () { return window.yavcMdEngine(); });
         }
         async function pageParts() {
             await mdEngine();
@@ -1683,42 +1564,22 @@
         }
 
         /* Unsaved text kept in the session comes back with the Editor, so
-           leaving or closing asks only when the session could not keep it. */
-        function onBeforeUnload(e) {
-            if (tabs.some(function (t) { return t.modified; }) && !(ownsSession && keepSession())) { e.preventDefault(); e.returnValue = ''; }
-        }
-        window.addEventListener('beforeunload', onBeforeUnload);
-
-        /* Closing the editor's window with unsaved changes that the session
-           could not keep asks first (pudl:window-closing, PUDL 0.28.0); when
-           the session keeps them, the window closes and they come back with
-           it. The question's Cancel keeps the window,
-           Don't save closes it, and Save all saves every changed file and
-           then closes, unless a save fails. */
-        var win = root.closest('.win[data-win]'), closeAgreed = false;
-        function onWindowClosing(e) {
-            if (e.target !== win || closeAgreed) { return; }
-            var changed = tabs.filter(function (t) { return t.modified; });
-            if (!changed.length || (ownsSession && keepSession())) { return; }
-            e.preventDefault();
-            var key = win.getAttribute('data-win');
-            var names = changed.map(function (t) { return t.name; });
-            ask('Save changes before closing?',
-                (names.length === 1 ? names[0] + ' has' : names.length + ' files have') + ' unsaved changes, which are lost if you close without saving.' +
-                (names.length > 1 ? ' (' + names.join(', ') + ')' : ''), null,
-                [['cancel', 'Cancel'], ['discard', 'Don\'t save'], ['save', 'Save all', true]]).then(async function (choice) {
-                    if (choice === 'save') {
-                        for (var i = 0; i < tabs.length; i++) {
-                            if (!tabs[i].modified) { continue; }
-                            activate(i);
-                            if (!(await save())) { return; }
-                        }
-                    } else if (choice !== 'discard') { return; }
-                    closeAgreed = true;
-                    window.pudlWindows.close(key);
-                });
-        }
-        if (win) { win.addEventListener('pudl:window-closing', onWindowClosing); }
+           leaving the page or closing the window asks only when the session
+           could not keep it (static/doc-tabs.js guard). Save All saves every
+           changed file, and the window stays if a save fails. */
+        var unguard = window.yavcDocTabs.guard(root, {
+            changed: function () { return tabs.filter(function (t) { return t.modified; }).map(function (t) { return t.name; }); },
+            keptOnReload: function () { return ownsSession && keepSession(); },
+            keptOnClose: function () { return ownsSession && keepSession(); },
+            saveAll: async function () {
+                for (var i = 0; i < tabs.length; i++) {
+                    if (!tabs[i].modified) { continue; }
+                    activate(i);
+                    if (!(await save())) { return false; }
+                }
+                return true;
+            }
+        });
 
         /* === Controls ===================================================== */
 
@@ -2133,9 +1994,7 @@
                 if (snap) { snap.leave(); }
                 if (unsubscribe) { unsubscribe(); }
                 if (unConfig) { unConfig(); }
-                window.removeEventListener('beforeunload', onBeforeUnload);
-                if (win) { win.removeEventListener('pudl:window-closing', onWindowClosing); }
-                if (el.dialog.open) { el.dialog.close(); }
+                unguard();
                 if (explorer) { explorer.destroy(); }
                 if (view) { view.destroy(); }
             },

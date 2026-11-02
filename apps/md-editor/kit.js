@@ -38,18 +38,7 @@
     var STAMP = (function () { var s = (document.currentScript && document.currentScript.src) || ''; return s.indexOf('?') >= 0 ? s.slice(s.indexOf('?')) : ''; })();
     var PLACEHOLDER = 'Type here.';
 
-    function loadScript(src) {
-        return new Promise(function (resolve, reject) {
-            var had = document.querySelector('script[data-md-editor="' + src + '"]');
-            if (had) { if (had.dataset.loaded) { resolve(); } else { had.addEventListener('load', function () { resolve(); }); had.addEventListener('error', function () { reject(new Error('could not load ' + src)); }); } return; }
-            var s = document.createElement('script');
-            s.src = src;
-            s.setAttribute('data-md-editor', src);
-            s.onload = function () { s.dataset.loaded = '1'; resolve(); };
-            s.onerror = function () { reject(new Error('could not load ' + src)); };
-            document.head.appendChild(s);
-        });
-    }
+    var loadScript = window.yavcUtil.loadScript;
     var cmReady = null, pvReady = null, mmReady = null;
     function libs() {
         if (window.CM && window.CM.EditorView) { return Promise.resolve(window.CM); }
@@ -245,11 +234,11 @@
     function commands(ctx, extra) {
         var out = [];
         FORMATS.forEach(function (f) {
-            out.push({ id: f[0], label: f[1], glyph: f[2], shortcut: f[3] ? f[3].replace('Mod-', 'Mod+') : undefined, run: function () { apply(f[0], ctx); }, glyphOnly: f[0] !== 'link' && f[0] !== 'color' });
+            out.push({ id: f[0], label: f[1], glyph: f[2], shortcut: window.yavcUtil.shortcut(f[3]), run: function () { apply(f[0], ctx); }, glyphOnly: f[0] !== 'link' && f[0] !== 'color' });
         });
         out.push({ id: 'style', label: 'Paragraph Style', glyph: 'paragraph',
             current: function () { var s = ctx.blockStyle ? ctx.blockStyle() : null, f = STYLES.find(function (x) { return x[0] === s; }); return f ? f[1] : null; },
-            items: STYLES.map(function (st) { return { id: st[0], label: st[1], shortcut: st[2].replace('Mod-', 'Mod+'), choice: 'md-style', value: st[0], checked: function () { return ctx.blockStyle ? ctx.blockStyle() === st[0] : false; }, run: function () { apply(st[0], ctx); } }; }) });
+            items: STYLES.map(function (st) { return { id: st[0], label: st[1], shortcut: window.yavcUtil.shortcut(st[2]), choice: 'md-style', value: st[0], checked: function () { return ctx.blockStyle ? ctx.blockStyle() === st[0] : false; }, run: function () { apply(st[0], ctx); } }; }) });
         var items = INSERTS.map(function (i) { return { id: i.id, label: i.label, run: function () { insertItem(i, ctx); } }; });
         items.push('-');
         SHORTCODES.forEach(function (i) { items.push({ id: i.id, label: i.label, run: function () { insertItem(i, ctx); } }); });
@@ -311,30 +300,16 @@
 
     /* === Dialogs ========================================================== */
 
+    /* The kit's questions are the site's dialogs (static/dialogs.js), with
+       the kit's own bodies: swatches, colour pickers, several fields. */
     var dlgCount = 0;
-    function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
-    /* One PUDL dialog, made for each question and removed after it. */
-    function dialog(title, bodyHTML, buttons) {
-        var n = ++dlgCount, dlg = document.createElement('dialog');
-        dlg.className = 'dialog md-editor-dialog';
-        dlg.setAttribute('aria-labelledby', 'md-dlg-title-' + n);
-        dlg.innerHTML = '<form method="dialog"><h3 class="dialog-title" id="md-dlg-title-' + n + '">' + esc(title) + '</h3><div class="dialog-body">' + bodyHTML + '</div>' +
-            '<div class="dialog-actions">' + buttons.map(function (b) { return b.primary ? '<button class="btn btn-primary" type="submit" value="' + esc(b.id) + '">' + esc(b.label) + '</button>' : '<button class="btn" type="button" data-choice="' + esc(b.id) + '">' + esc(b.label) + '</button>'; }).join('') + '</div></form>';
-        dlg.querySelectorAll('[data-choice]').forEach(function (b) { b.addEventListener('click', function () { dlg.close(b.getAttribute('data-choice')); }); });
-        document.body.appendChild(dlg);
-        return new Promise(function (resolve) {
-            dlg.addEventListener('close', function () { var v = dlg.returnValue; var body = dlg.querySelector('.dialog-body'); resolve({ value: v, body: body }); setTimeout(function () { dlg.remove(); }, 0); }, { once: true });
-            dlg.returnValue = '';
-            dlg.showModal();
-            var f = dlg.querySelector('input, select, textarea');
-            if (f) { f.focus(); if (f.select) { f.select(); } }
-        });
+    var esc = window.yavcUtil.esc;
+    function dialog(title, bodyHTML, buttons, onOpen) {
+        dlgCount++;
+        return window.yavcDialog.open({ title: title, body: bodyHTML, buttons: buttons, className: 'md-editor-dialog', onOpen: onOpen });
     }
-    function askText(title, label, value) {
-        var id = 'md-dlg-field-' + (dlgCount + 1);
-        return dialog(title, '<div class="form-group"><label class="form-label" for="' + id + '">' + esc(label) + '</label><input class="form-input" id="' + id + '" value="' + esc(value || '') + '" autocomplete="off" spellcheck="false"></div>',
-            [{ id: 'cancel', label: 'Cancel' }, { id: 'ok', label: 'OK', primary: true }]).then(function (r) { return r.value === 'ok' ? r.body.querySelector('input').value : null; });
-    }
+    function askText(title, label, value) { return window.yavcDialog.askText(title, label, value); }
+    function askChoice(title, body, buttons) { return window.yavcDialog.askChoice(title, body, buttons); }
     /* Several text fields in one dialog: fields is [{ key, label, value,
        placeholder, help }]; resolves to the values by key, or null. */
     function askFields(title, fields, okLabel) {
@@ -351,9 +326,6 @@
             r.body.querySelectorAll('[data-key]').forEach(function (i) { out[i.getAttribute('data-key')] = i.value.trim(); });
             return out;
         });
-    }
-    function askChoice(title, body, buttons) {
-        return dialog(title, '<p>' + esc(body) + '</p>', buttons.map(function (b) { return { id: b[0], label: b[1], primary: !!b[2] }; })).then(function (r) { return r.value || null; });
     }
     var SWATCHES = [['ink', 'Text'], ['muted', 'Muted'], ['accent', 'Accent'], ['danger', 'Danger'], ['warn', 'Warning'], ['positive', 'Positive']];
     function swatchCSS(name) {
@@ -374,19 +346,18 @@
             else if (e.target.matches('.form-input') && /^#[0-9a-f]{6}$/i.test(e.target.value)) { var pk = body.querySelector('[data-for="' + e.target.id + '"]'); if (pk) { pk.value = e.target.value; } }
         });
     }
+    /* A swatch pressed answers the dialog with its name. */
+    function wireSwatches(api) {
+        api.body.addEventListener('click', function (e) { var b = e.target.closest('[data-swatch]'); if (b) { api.close('swatch:' + b.getAttribute('data-swatch')); } });
+    }
     /* The colour for some words: a swatch, or anything typed; '' takes the
        colour off; null is Cancel. */
     function askColour() {
         var html = '<div class="form-group"><span class="form-label">The site\'s colours</span><div class="md-swatches" role="group" aria-label="The site\'s colours">' +
             SWATCHES.map(function (s) { return '<button type="button" class="btn md-swatch" data-swatch="' + s[0] + '"><span class="md-swatch-dot" style="background:' + swatchCSS(s[0]) + '" aria-hidden="true"></span>' + s[1] + '</button>'; }).join('') + '</div></div>' +
             pickerRows([{ key: 'custom', label: 'Any colour', value: '', fallback: '#c0392b', placeholder: '#c0392b, tomato, hsl(200 60% 40%); empty takes the colour off' }]);
-        var p = dialog('Colour the words', html, [{ id: 'cancel', label: 'Cancel' }, { id: 'ok', label: 'Use this colour', primary: true }]);
-        var dlg = document.querySelector('.md-editor-dialog:last-of-type');
-        if (dlg) {
-            wirePickers(dlg.querySelector('.dialog-body'));
-            dlg.querySelector('.dialog-body').addEventListener('click', function (e) { var b = e.target.closest('[data-swatch]'); if (b) { dlg.close('swatch:' + b.getAttribute('data-swatch')); } });
-        }
-        return p.then(function (r) {
+        return dialog('Colour the words', html, [{ id: 'cancel', label: 'Cancel' }, { id: 'ok', label: 'Use this colour', primary: true }],
+            function (api) { wirePickers(api.body); wireSwatches(api); }).then(function (r) {
             if (r.value && r.value.indexOf('swatch:') === 0) { return r.value.slice(7); }
             if (r.value !== 'ok') { return null; }
             return (r.body.querySelector('[data-key="custom"]') || { value: '' }).value.trim().replace(/[{}\s]/g, '');
@@ -399,10 +370,7 @@
         var html = (names && names.length ? '<div class="form-group"><span class="form-label">The stylesheet\'s classes</span><div class="md-swatches" role="group" aria-label="Classes">' +
             names.map(function (c) { return '<button type="button" class="btn md-swatch" data-swatch="' + esc(c) + '">' + esc(c) + '</button>'; }).join('') + '</div></div>' : '<p class="form-help">The deck has no stylesheet classes yet. A {{style}} block defines them, as .callout { … }.</p>') +
             '<div class="form-group"><label class="form-label" for="' + id + '">Any class</label><input class="form-input" id="' + id + '" autocomplete="off" spellcheck="false" placeholder="callout; empty takes the class off"></div>';
-        var p = dialog('Style the words', html, [{ id: 'cancel', label: 'Cancel' }, { id: 'ok', label: 'Use this style', primary: true }]);
-        var dlg = document.querySelector('.md-editor-dialog:last-of-type');
-        if (dlg) { dlg.querySelector('.dialog-body').addEventListener('click', function (e) { var b = e.target.closest('[data-swatch]'); if (b) { dlg.close('swatch:' + b.getAttribute('data-swatch')); } }); }
-        return p.then(function (r) {
+        return dialog('Style the words', html, [{ id: 'cancel', label: 'Cancel' }, { id: 'ok', label: 'Use this style', primary: true }], wireSwatches).then(function (r) {
             if (r.value && r.value.indexOf('swatch:') === 0) { return r.value.slice(7); }
             if (r.value !== 'ok') { return null; }
             return (r.body.querySelector('input') || { value: '' }).value.trim().replace(/[^A-Za-z0-9-]/g, '');
@@ -411,15 +379,36 @@
     /* Several colours at once, by key: { key, label, value, fallback,
        placeholder }; resolves to the values by key, or null. */
     function askColours(title, fields) {
-        var p = dialog(title, pickerRows(fields), [{ id: 'cancel', label: 'Cancel' }, { id: 'ok', label: 'OK', primary: true }]);
-        var dlg = document.querySelector('.md-editor-dialog:last-of-type');
-        if (dlg) { wirePickers(dlg.querySelector('.dialog-body')); }
-        return p.then(function (r) {
+        return dialog(title, pickerRows(fields), [{ id: 'cancel', label: 'Cancel' }, { id: 'ok', label: 'OK', primary: true }],
+            function (api) { wirePickers(api.body); }).then(function (r) {
             if (r.value !== 'ok') { return null; }
             var out = {};
             r.body.querySelectorAll('[data-key]').forEach(function (i) { out[i.getAttribute('data-key')] = i.value.trim(); });
             return out;
         });
+    }
+
+    /* A form in the site's dialog: the kit's own fields as the body, a
+       Remove button drawn as destructive when something exists to remove,
+       Cancel, and the action. setup(api) wires the body once it shows;
+       submit(api) gives the answer, or undefined to keep the dialog open
+       (it shows its own problem). Resolves to the answer, '' for Remove, or
+       null for Cancel. */
+    function ownForm(o) {
+        var answer, api = null;
+        dlgCount++;
+        return window.yavcDialog.open({
+            title: o.title, className: 'md-editor-dialog ' + (o.className || ''), body: o.body,
+            buttons: (o.remove ? [{ id: 'remove', label: 'Remove', danger: true, submit: false }] : []).concat([{ id: 'cancel', label: 'Cancel' }, { id: 'ok', label: o.okLabel || 'OK', primary: true }]),
+            onOpen: function (a) { api = a; if (o.setup) { o.setup(a); } },
+            check: function (v) {
+                if (v !== 'ok') { return null; }
+                var out = o.submit(api);
+                if (out === undefined) { return 'kept open'; }
+                answer = out;
+                return null;
+            }
+        }).then(function (r) { return r.value === 'ok' ? answer : r.value === 'remove' ? '' : null; });
     }
 
     /* === Pictures ========================================================
@@ -500,12 +489,8 @@
        the picture out, or null for no change. existing is the block being
        changed, or null for a new picture. */
     function askFigure(existing, pictures) {
-        var f = existing ? parseFigure(existing) : null, n = ++dlgCount, id = 'md-fig-' + n + '-', width = splitWidth(f ? f.width : '');
-        var dlg = document.createElement('dialog');
-        dlg.className = 'dialog md-editor-dialog md-figure';
-        dlg.setAttribute('aria-labelledby', id + 'title');
-        dlg.innerHTML = '<form method="dialog"><h3 class="dialog-title" id="' + id + 'title">' + (f ? 'Change the picture' : 'Insert a picture') + '</h3>' +
-            '<div class="dialog-body md-figure-fields">' +
+        var f = existing ? parseFigure(existing) : null, id = 'md-fig-' + (dlgCount + 1) + '-', width = splitWidth(f ? f.width : '');
+        var body = '<div class="md-figure-fields">' +
             '<label class="form-label" for="' + id + 'src">Picture</label>' +
             '<div class="md-figure-src"><input class="form-input" id="' + id + 'src" data-key="src" value="' + esc(f ? f.src : '') + '" autocomplete="off" spellcheck="false" placeholder="cat.png, ~/Pictures/cat.png or https://…" required>' +
             (pictures ? '<button type="button" class="btn" data-act="browse">Browse…</button><button type="button" class="btn" data-act="upload">Upload…</button>' : '') + '</div>' +
@@ -515,78 +500,71 @@
             '<p class="form-help">For someone who can\'t see it. Leave it empty for a picture that only decorates.</p>' +
             '<label class="form-label" for="' + id + 'width">Largest width</label>' +
             '<div class="md-figure-width"><span class="number-field"><input class="form-input" type="number" id="' + id + 'width" data-key="width" value="' + esc(width.n) + '" min="1" step="1" placeholder="Column"></span>' +
-            '<select class="form-select" data-key="unit" aria-label="Unit of the width">' + WIDTH_UNITS.map(function (u) { return '<option value="' + u + '"' + (u === width.u ? ' selected' : '') + '>' + u + '</option>'; }).join('') + '</select></div>' +
+            '<span class="form-select-wrap"><select class="form-select" data-key="unit" aria-label="Unit of the width">' + WIDTH_UNITS.map(function (u) { return '<option value="' + u + '"' + (u === width.u ? ' selected' : '') + '>' + u + '</option>'; }).join('') + '</select></span></div>' +
             '<p class="form-help">Of the column (%), or in px, rem, em or ch; empty takes the column\'s width.</p>' +
             '<label class="form-label" for="' + id + 'caption">Caption</label>' +
             '<input class="form-input" id="' + id + 'caption" data-key="caption" value="' + esc(f ? f.caption : '') + '" autocomplete="off">' +
             '<p class="form-help">Under the picture, in Markdown.</p>' +
             '<p class="form-error" data-role="error" hidden></p>' +
             '<input type="file" accept="image/*" hidden data-role="file">' +
-            '</div><div class="dialog-actions">' +
-            (f ? '<button type="button" class="btn" data-act="remove">Remove</button>' : '') +
-            '<button type="button" class="btn" data-act="cancel">Cancel</button>' +
-            '<button type="submit" class="btn btn-primary">' + (f ? 'Change' : 'Insert') + '</button></div></form>';
-        document.body.appendChild(dlg);
-        if (window.pudlFields && window.pudlFields.enhance) { window.pudlFields.enhance(dlg); }
-        var form = dlg.querySelector('form'), field = function (k) { return dlg.querySelector('[data-key="' + k + '"]'); };
-        var errorLine = dlg.querySelector('[data-role="error"]'), file = dlg.querySelector('[data-role="file"]');
+            '</div>';
+        var dlg = null, errorLine = null;
+        function field(k) { return dlg.querySelector('[data-key="' + k + '"]'); }
         function problem(text, focus) { errorLine.textContent = text; errorLine.hidden = false; if (focus) { focus.focus(); } }
-        return new Promise(function (resolve) {
-            var done = false;
-            function finish(v) { if (done) { return; } done = true; if (dlg.open) { dlg.close(); } resolve(v); setTimeout(function () { dlg.remove(); }, 0); }
-            form.addEventListener('submit', function (e) {
-                e.preventDefault();
+        function browse() {
+            pictures.site().then(function (site) {
+                var F = site.F, FB = site.FB, dir = pictures.dir ? pictures.dir() : null;
+                return FB.pick(F, {
+                    mode: 'open', title: 'Choose a picture', host: pictures.root, start: dir && F.resolve(null, dir) ? dir : '~',
+                    check: function (r) { return PICTURE_EXT.test(r.name) ? null : r.name + ' isn\'t a picture.'; },
+                    commit: function (c) {
+                        var node = c.path ? F.resolve(null, c.path) : null;
+                        if (!node) { return 'Choose a picture.'; }
+                        field('src').value = addressOf(F, node, dir);
+                        return true;
+                    }
+                });
+            }).then(function (res) { if (res) { errorLine.hidden = true; field('alt').focus(); } }).catch(function (err) { problem(err && err.message || String(err)); });
+        }
+        function upload(file) {
+            var picked = file.files && file.files[0];
+            if (!picked) { return; }
+            var F = null, dir = pictures.dir ? pictures.dir() : null, into = null;
+            pictures.site().then(function (site) {
+                F = site.F;
+                into = dir ? F.resolve(null, dir) : null;
+                if (into && F.realOf(into).home) { return null; }
+                /* An unsaved document, or one on the site: the picture goes to ~/Pictures. */
+                dir = '~/Pictures';
+                return F.mkdir(null, dir, true).then(function (err) { if (err) { throw new Error(err); } into = F.resolve(null, dir); });
+            }).then(function () { return F.upload(into, picked); }).then(function (res) {
+                if (res.error) { throw new Error(res.error); }
+                field('src').value = addressOf(F, res.node, dir);
+                errorLine.hidden = true;
+                if (pictures.say) { pictures.say('Uploaded ' + picked.name + ' to ' + F.displayPath(into) + '.'); }
+                field('alt').focus();
+            }).catch(function (err) { problem(err && err.message || String(err)); });
+        }
+        return ownForm({
+            title: f ? 'Change the picture' : 'Insert a picture', className: 'md-figure', body: body, remove: !!f, okLabel: f ? 'Change' : 'Insert',
+            setup: function (api) {
+                dlg = api.dialog; errorLine = dlg.querySelector('[data-role="error"]');
+                var file = dlg.querySelector('[data-role="file"]');
+                api.body.addEventListener('click', function (e) {
+                    var b = e.target.closest('[data-act]');
+                    if (!b) { return; }
+                    if (b.getAttribute('data-act') === 'browse') { browse(); }
+                    else if (b.getAttribute('data-act') === 'upload') { file.value = ''; file.click(); }
+                });
+                file.addEventListener('change', function () { upload(file); });
+                if (f) { field('caption').focus(); }
+            },
+            submit: function () {
                 var src = field('src').value.trim(), number = field('width').value.trim(), unit = field('unit').value;
-                if (!src) { problem('The picture needs an address, such as cat.png or ~/Pictures/cat.png.', field('src')); return; }
-                if (number && !(parseFloat(number) > 0)) { problem('The width is a number above zero, such as 80.', field('width')); return; }
-                finish(buildFigure({ src: src, alt: field('alt').value.trim(), width: number ? String(parseFloat(number)) + unit : '', caption: field('caption').value.trim() }));
-            });
-            dlg.addEventListener('click', function (e) {
-                var b = e.target.closest('[data-act]');
-                if (!b) { return; }
-                var act = b.getAttribute('data-act');
-                if (act === 'cancel') { finish(null); }
-                else if (act === 'remove') { finish(''); }
-                else if (act === 'browse') { browse(); }
-                else if (act === 'upload') { file.value = ''; file.click(); }
-            });
-            dlg.addEventListener('close', function () { finish(null); });
-            function browse() {
-                pictures.site().then(function (site) {
-                    var F = site.F, FB = site.FB, dir = pictures.dir ? pictures.dir() : null;
-                    return FB.pick(F, {
-                        mode: 'open', title: 'Choose a picture', host: pictures.root, start: dir && F.resolve(null, dir) ? dir : '~',
-                        check: function (r) { return PICTURE_EXT.test(r.name) ? null : r.name + ' isn\'t a picture.'; },
-                        commit: function (c) {
-                            var node = c.path ? F.resolve(null, c.path) : null;
-                            if (!node) { return 'Choose a picture.'; }
-                            field('src').value = addressOf(F, node, dir);
-                            return true;
-                        }
-                    });
-                }).then(function (res) { if (res) { errorLine.hidden = true; field('alt').focus(); } }).catch(function (err) { problem(err && err.message || String(err)); });
+                if (!src) { problem('The picture needs an address, such as cat.png or ~/Pictures/cat.png.', field('src')); return undefined; }
+                if (number && !(parseFloat(number) > 0)) { problem('The width is a number above zero, such as 80.', field('width')); return undefined; }
+                return buildFigure({ src: src, alt: field('alt').value.trim(), width: number ? String(parseFloat(number)) + unit : '', caption: field('caption').value.trim() });
             }
-            file.addEventListener('change', function () {
-                var picked = file.files && file.files[0];
-                if (!picked) { return; }
-                var F = null, dir = pictures.dir ? pictures.dir() : null, into = null;
-                pictures.site().then(function (site) {
-                    F = site.F;
-                    into = dir ? F.resolve(null, dir) : null;
-                    if (into && F.realOf(into).home) { return null; }
-                    /* An unsaved document, or one on the site: the picture goes to ~/Pictures. */
-                    dir = '~/Pictures';
-                    return F.mkdir(null, dir, true).then(function (err) { if (err) { throw new Error(err); } into = F.resolve(null, dir); });
-                }).then(function () { return F.upload(into, picked); }).then(function (res) {
-                    if (res.error) { throw new Error(res.error); }
-                    field('src').value = addressOf(F, res.node, dir);
-                    errorLine.hidden = true;
-                    if (pictures.say) { pictures.say('Uploaded ' + picked.name + ' to ' + F.displayPath(into) + '.'); }
-                    field('alt').focus();
-                }).catch(function (err) { problem(err && err.message || String(err)); });
-            });
-            dlg.showModal();
-            (f ? field('caption') : field('src')).focus();
         });
     }
     /* A drawn block pressed on the page: a picture opens its dialog, and
@@ -716,72 +694,58 @@
         if (!form) { return Promise.resolve(null); }
         var sc = existing ? parseShortcode(existing) : null;
         var values = form.read(sc || { name: name, args: '', positional: [], named: {} });
-        var n = ++dlgCount, id = 'md-sc-' + n + '-';
-        var dlg = document.createElement('dialog');
-        dlg.className = 'dialog md-editor-dialog md-form';
-        dlg.setAttribute('aria-labelledby', id + 'title');
-        dlg.innerHTML = '<form method="dialog"><h3 class="dialog-title" id="' + id + 'title">' + esc(existing ? 'Change ' + form.title.replace(/^(A|An) /, 'the ') : 'Insert ' + form.title.replace(/^(A|An) /, 'a ').replace(/^a a/, 'an a')) + '</h3>' +
-            '<div class="dialog-body md-form-fields">' + form.fields.map(function (f) {
+        var id = 'md-sc-' + (dlgCount + 1) + '-';
+        var body = '<div class="md-form-fields">' + form.fields.map(function (f) {
                 var fid = id + f.key, v = values[f.key] == null ? '' : values[f.key], help = f.help ? '<p class="form-help">' + esc(f.help) + '</p>' : '';
                 var control;
-                if (f.kind === 'select') { control = '<select class="form-select" id="' + fid + '" data-key="' + f.key + '" data-value="' + esc(v) + '"><option value="' + esc(v) + '">' + esc(v || 'Loading…') + '</option></select>'; }
+                if (f.kind === 'select') { control = '<span class="form-select-wrap"><select class="form-select" id="' + fid + '" data-key="' + f.key + '" data-value="' + esc(v) + '"><option value="' + esc(v) + '">' + esc(v || 'Loading…') + '</option></select></span>'; }
                 else if (f.kind === 'number') { control = '<span class="number-field"><input class="form-input" type="number" id="' + fid + '" data-key="' + f.key + '" value="' + esc(v) + '" min="' + f.min + '" max="' + f.max + '" step="1"></span>'; }
                 else { control = '<input class="form-input" id="' + fid + '" data-key="' + f.key + '" value="' + esc(v) + '" autocomplete="off" spellcheck="false"' + (f.placeholder ? ' placeholder="' + esc(f.placeholder) + '"' : '') + '>'; }
                 if (f.browse && host && host.site) { control = '<div class="md-figure-src">' + control + '<button type="button" class="btn" data-act="browse" data-for="' + f.key + '">Browse…</button></div>'; }
                 return '<label class="form-label" for="' + fid + '">' + esc(f.label) + '</label>' + control + help;
-            }).join('') + '<p class="form-error" data-role="error" hidden></p></div>' +
-            '<div class="dialog-actions">' + (existing ? '<button type="button" class="btn" data-act="remove">Remove</button>' : '') +
-            '<button type="button" class="btn" data-act="cancel">Cancel</button><button type="submit" class="btn btn-primary">' + (existing ? 'Change' : 'Insert') + '</button></div></form>';
-        document.body.appendChild(dlg);
-        if (window.pudlFields && window.pudlFields.enhance) { window.pudlFields.enhance(dlg); }
-        var field = function (k) { return dlg.querySelector('[data-key="' + k + '"]'); }, errorLine = dlg.querySelector('[data-role="error"]');
-        /* A choice fills from its list; a value it does not list is kept as a choice of its own. */
-        form.fields.forEach(function (f) {
-            if (f.kind !== 'select') { return; }
-            var sel = field(f.key), want = sel.getAttribute('data-value') || '';
-            Promise.resolve(typeof f.options === 'function' ? f.options(host) : f.options).then(function (list) {
-                if (!list) {
-                    /* No list to choose from: a text field takes the choice's place. */
-                    var input = document.createElement('input');
-                    input.className = 'form-input'; input.id = sel.id; input.setAttribute('data-key', f.key); input.value = want; input.autocomplete = 'off'; input.spellcheck = false;
-                    if (f.placeholder) { input.placeholder = f.placeholder; }
-                    sel.replaceWith(input);
-                    return;
-                }
-                var opts = list.slice();
-                if (want && !opts.some(function (o) { return o[0] === want; })) { opts.unshift([want, want]); }
-                sel.innerHTML = (want ? '' : '<option value="">Choose…</option>') + opts.map(function (o) { return '<option value="' + esc(o[0]) + '"' + (o[0] === want ? ' selected' : '') + '>' + esc(o[1]) + '</option>'; }).join('');
-            }).catch(function () { });
-        });
-        return new Promise(function (resolve) {
-            var done = false;
-            function finish(v) { if (done) { return; } done = true; if (dlg.open) { dlg.close(); } resolve(v); setTimeout(function () { dlg.remove(); }, 0); }
-            dlg.querySelector('form').addEventListener('submit', function (e) {
-                e.preventDefault();
-                var v = {};
-                form.fields.forEach(function (f) { var el = field(f.key); v[f.key] = el ? el.value : ''; });
-                var out = form.write(v);
-                if (typeof out !== 'string') { errorLine.textContent = out.problem; errorLine.hidden = false; var bad = field(out.field); if (bad) { bad.focus(); } return; }
-                finish(out);
-            });
-            dlg.addEventListener('click', function (e) {
-                var b = e.target.closest('[data-act]');
-                if (!b) { return; }
-                var act = b.getAttribute('data-act');
-                if (act === 'cancel') { finish(null); }
-                else if (act === 'remove') { finish(''); }
-                else if (act === 'browse') {
+            }).join('') + '<p class="form-error" data-role="error" hidden></p></div>';
+        var dlg = null, errorLine = null;
+        function field(k) { return dlg.querySelector('[data-key="' + k + '"]'); }
+        return ownForm({
+            title: existing ? 'Change ' + form.title.replace(/^(A|An) /, 'the ') : 'Insert ' + form.title.replace(/^(A|An) /, 'a ').replace(/^a a/, 'an a'),
+            className: 'md-form', body: body, remove: !!existing, okLabel: existing ? 'Change' : 'Insert',
+            setup: function (api) {
+                dlg = api.dialog; errorLine = dlg.querySelector('[data-role="error"]');
+                /* A choice fills from its list; a value it does not list is kept as a choice of its own. */
+                form.fields.forEach(function (f) {
+                    if (f.kind !== 'select') { return; }
+                    var sel = field(f.key), want = sel.getAttribute('data-value') || '';
+                    Promise.resolve(typeof f.options === 'function' ? f.options(host) : f.options).then(function (list) {
+                        if (!list) {
+                            /* No list to choose from: a text field takes the choice's place. */
+                            var input = document.createElement('input');
+                            input.className = 'form-input'; input.id = sel.id; input.setAttribute('data-key', f.key); input.value = want; input.autocomplete = 'off'; input.spellcheck = false;
+                            if (f.placeholder) { input.placeholder = f.placeholder; }
+                            (sel.closest('.form-select-wrap') || sel).replaceWith(input);
+                            return;
+                        }
+                        var opts = list.slice();
+                        if (want && !opts.some(function (o) { return o[0] === want; })) { opts.unshift([want, want]); }
+                        sel.innerHTML = (want ? '' : '<option value="">Choose…</option>') + opts.map(function (o) { return '<option value="' + esc(o[0]) + '"' + (o[0] === want ? ' selected' : '') + '>' + esc(o[1]) + '</option>'; }).join('');
+                    }).catch(function () { });
+                });
+                api.body.addEventListener('click', function (e) {
+                    var b = e.target.closest('[data-act="browse"]');
+                    if (!b) { return; }
                     var key = b.getAttribute('data-for');
                     host.site().then(function (site) {
                         return site.FB.pick(site.F, { mode: 'open', title: 'Choose a file', host: host.root, start: '~',
                             commit: function (c) { var node = c.path ? site.F.resolve(null, c.path) : null; if (!node || node.children) { return 'Choose a file.'; } field(key).value = site.F.displayPath(site.F.realOf(node)); return true; } });
                     }).catch(function (err) { errorLine.textContent = err && err.message || String(err); errorLine.hidden = false; });
-                }
-            });
-            dlg.addEventListener('close', function () { finish(null); });
-            dlg.showModal();
-            var first = dlg.querySelector('.md-form-fields input, .md-form-fields select');
-            if (first) { first.focus(); }
+                });
+            },
+            submit: function () {
+                var v = {};
+                form.fields.forEach(function (f) { var el = field(f.key); v[f.key] = el ? el.value : ''; });
+                var out = form.write(v);
+                if (typeof out !== 'string') { errorLine.textContent = out.problem; errorLine.hidden = false; var bad = field(out.field); if (bad) { bad.focus(); } return undefined; }
+                return out;
+            }
         });
     }
     /* The pictures of the home folder in drawn HTML (the engine marks each
@@ -860,29 +824,23 @@
             '<button type="button" class="btn" data-act="add-row">Add a Property</button>' +
             '<p class="form-help">Any name and value of your own, kept in the front matter.' + (opts.hidden && opts.hidden.length ? ' ' + esc(opts.hiddenNote || '') : '') + '</p></div>' +
             '<p class="form-error" data-role="error" hidden></p>';
-        var dlg = document.createElement('dialog');
-        dlg.className = 'dialog md-editor-dialog md-props';
-        dlg.setAttribute('aria-labelledby', id + 'title');
-        dlg.innerHTML = '<form method="dialog"><h3 class="dialog-title" id="' + id + 'title">' + esc(opts.title || 'Properties') + '</h3><div class="dialog-body">' + html + '</div>' +
-            '<div class="dialog-actions"><button type="button" class="btn" data-act="cancel">Cancel</button><button type="submit" class="btn btn-primary">OK</button></div></form>';
-        document.body.appendChild(dlg);
-        if (window.pudlDate && window.pudlDate.enhance) { window.pudlDate.enhance(dlg); }
-        var list = dlg.querySelector('[data-role="custom"]'), errorLine = dlg.querySelector('[data-role="error"]');
+        var dlg = null, list = null, errorLine = null;
         function problem(text, focus) { errorLine.textContent = text; errorLine.hidden = false; if (focus) { focus.focus(); } }
-        return new Promise(function (resolve) {
-            var done = false;
-            function finish(v) { if (done) { return; } done = true; if (dlg.open) { dlg.close(); } resolve(v); setTimeout(function () { dlg.remove(); }, 0); }
-            dlg.addEventListener('click', function (e) {
-                var b = e.target.closest('[data-act]');
-                if (!b) { return; }
-                var act = b.getAttribute('data-act');
-                if (act === 'cancel') { finish(null); }
-                else if (act === 'add-row') { list.insertAdjacentHTML('beforeend', customRow(null)); list.lastElementChild.querySelector('[data-name]').focus(); }
-                else if (act === 'remove-row') { var row = b.closest('[data-row]'); var next = row.nextElementSibling || row.previousElementSibling; row.remove(); (next ? next.querySelector('input') : dlg.querySelector('[data-act="add-row"]')).focus(); }
-            });
-            dlg.addEventListener('close', function () { finish(null); });
-            dlg.querySelector('form').addEventListener('submit', function (e) {
-                e.preventDefault();
+        return ownForm({
+            title: opts.title || 'Properties', className: 'md-props', body: html,
+            setup: function (api) {
+                dlg = api.dialog; list = dlg.querySelector('[data-role="custom"]'); errorLine = dlg.querySelector('[data-role="error"]');
+                api.body.addEventListener('click', function (e) {
+                    var b = e.target.closest('[data-act]');
+                    if (!b) { return; }
+                    var act = b.getAttribute('data-act');
+                    if (act === 'add-row') { list.insertAdjacentHTML('beforeend', customRow(null)); list.lastElementChild.querySelector('[data-name]').focus(); }
+                    else if (act === 'remove-row') { var row = b.closest('[data-row]'); var next = row.nextElementSibling || row.previousElementSibling; row.remove(); (next ? next.querySelector('input') : dlg.querySelector('[data-act="add-row"]')).focus(); }
+                });
+                var first = dlg.querySelector('.md-props-stock input:not([readonly])');
+                if (first) { first.focus(); }
+            },
+            submit: function () {
                 errorLine.hidden = true;
                 var set = {}, order = [], names = {};
                 for (var i = 0; i < STOCK.length; i++) {
@@ -890,9 +848,9 @@
                     if (input.readOnly) { continue; }
                     if (f.kind === 'date' && !v && was && !/^\d{4}-\d{2}-\d{2}$/.test(was.value)) { continue; }
                     var bad = v ? propProblem(f.key, v) : null;
-                    if (bad) { problem(bad, input); return; }
-                    if (f.key === 'lang' && v && !/^[A-Za-z]{2,3}(-[A-Za-z0-9]{1,8})*$/.test(v)) { problem('The language is a code such as en, en-GB or pt-BR.', input); return; }
-                    if (f.key === 'date' && v && !/^\d{4}-\d{2}-\d{2}$/.test(v)) { problem('The date is a day, such as 2026-11-03.', input); return; }
+                    if (bad) { problem(bad, input); return undefined; }
+                    if (f.key === 'lang' && v && !/^[A-Za-z]{2,3}(-[A-Za-z0-9]{1,8})*$/.test(v)) { problem('The language is a code such as en, en-GB or pt-BR.', input); return undefined; }
+                    if (f.key === 'date' && v && !/^\d{4}-\d{2}-\d{2}$/.test(v)) { problem('The date is a day, such as 2026-11-03.', input); return undefined; }
                     if (v !== (was ? was.value : '')) { set[f.key] = v ? v : null; order.push(f.key); }
                 }
                 var rows = list.querySelectorAll('[data-row]'), kept = {};
@@ -901,12 +859,12 @@
                     var name = nameEl.value.trim(), value = valueEl.value.trim(), wasKey = row.getAttribute('data-was');
                     if (row.hasAttribute('data-locked')) { kept[wasKey] = true; names[wasKey] = true; continue; }
                     if (!name && !value) { continue; }
-                    if (!name) { problem('A property needs a name.', nameEl); return; }
-                    if (stockKeys[name]) { problem(name + ' has its own field above.', nameEl); return; }
-                    if (hidden[name]) { problem(name + ' is set elsewhere' + (opts.hiddenWhere ? ', ' + opts.hiddenWhere : '') + '.', nameEl); return; }
-                    if (names[name]) { problem('There are two properties called ' + name + '.', nameEl); return; }
+                    if (!name) { problem('A property needs a name.', nameEl); return undefined; }
+                    if (stockKeys[name]) { problem(name + ' has its own field above.', nameEl); return undefined; }
+                    if (hidden[name]) { problem(name + ' is set elsewhere' + (opts.hiddenWhere ? ', ' + opts.hiddenWhere : '') + '.', nameEl); return undefined; }
+                    if (names[name]) { problem('There are two properties called ' + name + '.', nameEl); return undefined; }
                     var bad2 = propProblem(name, value);
-                    if (bad2) { problem(bad2, PROP_NAME.test(name) ? valueEl : nameEl); return; }
+                    if (bad2) { problem(bad2, PROP_NAME.test(name) ? valueEl : nameEl); return undefined; }
                     names[name] = true;
                     if (!value) { continue; }
                     if (wasKey && wasKey === name) { kept[wasKey] = true; }
@@ -916,11 +874,8 @@
                 custom.forEach(function (c) {
                     if (!kept[c.key] && !(c.key in set)) { set[c.key] = null; order.push(c.key); }
                 });
-                finish({ set: set, order: order });
-            });
-            dlg.showModal();
-            var first = dlg.querySelector('.md-props-stock input:not([readonly])');
-            if (first) { first.focus(); }
+                return { set: set, order: order };
+            }
         });
     }
 

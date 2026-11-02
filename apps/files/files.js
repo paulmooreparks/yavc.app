@@ -11,51 +11,17 @@
     'use strict';
 
     var SELF_SRC = document.currentScript && document.currentScript.src;
-    function beside(file) { return SELF_SRC ? SELF_SRC.replace(/files\.js/, file) : '/js/' + file; }
-    function loadScript(src) {
-        return new Promise(function (resolve, reject) {
-            var s = document.createElement('script');
-            s.src = src;
-            s.onload = resolve;
-            s.onerror = function () { reject(new Error('could not load ' + src)); };
-            document.head.appendChild(s);
-        });
-    }
-    var siteFsReady = null;
-    function loadSiteFs() {
-        if (window.pcSiteFs) { return Promise.resolve(window.pcSiteFs); }
-        if (!siteFsReady) {
-            siteFsReady = loadScript(window.pcSiteFsSrc || beside('sitefs.js'))
-                .then(function () { return window.pcSiteFs; })
-                .catch(function (err) { siteFsReady = null; throw err; });
-        }
-        return siteFsReady;
-    }
+    function beside(file) { return SELF_SRC ? SELF_SRC.replace(/files\.js/, file) : '/applets/files/' + file; }
+    /* The site's shared scripts load through static/yavc-util.js, each once. */
+    var loadScript = window.yavcUtil.loadScript;
+    function loadSiteFs() { return window.yavcUtil.loadGlobal(window.pcSiteFsSrc, 'pcSiteFs'); }
     /* Files' one setting, whether names starting with a dot show, lives in
        ~/.config/files.json (js/config.js) and is toggled from its menu. */
-    var configReady = null;
-    function loadConfig() {
-        if (window.pcConfig) { return Promise.resolve(window.pcConfig); }
-        if (!configReady) {
-            configReady = loadScript(window.pcConfigSrc || beside('config.js'))
-                .then(function () { return window.pcConfig; })
-                .catch(function (err) { configReady = null; throw err; });
-        }
-        return configReady;
-    }
+    function loadConfig() { return window.yavcUtil.loadGlobal(window.pcConfigSrc, 'pcConfig'); }
 
-    var browserReady = null;
-    function loadBrowser() {
-        if (window.pcFileBrowser) { return Promise.resolve(window.pcFileBrowser); }
-        if (!browserReady) {
-            browserReady = loadScript(window.pcFileBrowserSrc || beside('filebrowser.js'))
-                .then(function () { return window.pcFileBrowser; })
-                .catch(function (err) { browserReady = null; throw err; });
-        }
-        return browserReady;
-    }
+    function loadBrowser() { return window.yavcUtil.loadGlobal(window.pcFileBrowserSrc, 'pcFileBrowser'); }
 
-    function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+    var esc = window.yavcUtil.esc;
 
     var uid = 0;
 
@@ -93,20 +59,6 @@
                 FB.markup.body({ drop: true, hint: 'Drop files here to upload them' }) +
                 '<div class="fm-detail" data-role="detail" aria-live="polite"></div>' +
                 '<p class="fm-status" data-role="status" role="status" aria-live="polite"></p>' +
-                '<dialog class="dialog fm-dialog" data-role="dialog" aria-labelledby="fm-dlg-title-' + n + '">' +
-                  '<form method="dialog" data-role="dialog-form">' +
-                    '<h3 class="dialog-title" id="fm-dlg-title-' + n + '" data-role="dialog-title"></h3>' +
-                    '<div class="dialog-body">' +
-                      '<p data-role="dialog-text"></p>' +
-                      '<input class="form-input" data-role="dialog-input" autocomplete="off" spellcheck="false" />' +
-                      '<p class="form-error" data-role="dialog-error" hidden></p>' +
-                    '</div>' +
-                    '<div class="dialog-actions">' +
-                      '<button type="button" class="btn" data-role="dialog-cancel">Cancel</button>' +
-                      '<button type="submit" class="btn btn-primary" data-role="dialog-ok">OK</button>' +
-                    '</div>' +
-                  '</form>' +
-                '</dialog>' +
                 '<dialog class="dialog" data-role="help-dialog" aria-labelledby="fm-help-title-' + n + '">' +
                   '<h3 class="dialog-title" id="fm-help-title-' + n + '">Files quick help</h3>' +
                   '<div class="dialog-body">' +
@@ -123,10 +75,7 @@
             var q = function (sel) { return root.querySelector(sel); };
             el = {
                 helpDialog: q('[data-role="help-dialog"]'), detail: q('[data-role="detail"]'), status: q('[data-role="status"]'),
-                fileInput: q('[data-role="file-input"]'), main: q('[data-fb="main"]'),
-                dialog: q('[data-role="dialog"]'), dlgForm: q('[data-role="dialog-form"]'), dlgTitle: q('[data-role="dialog-title"]'),
-                dlgText: q('[data-role="dialog-text"]'), dlgInput: q('[data-role="dialog-input"]'), dlgError: q('[data-role="dialog-error"]'),
-                dlgOk: q('[data-role="dialog-ok"]'), dlgCancel: q('[data-role="dialog-cancel"]')
+                fileInput: q('[data-role="file-input"]'), main: q('[data-fb="main"]')
             };
         }
 
@@ -300,47 +249,6 @@
 
         /* === Dialogs ====================================================== */
 
-        /* A small prompt: resolves to the text entered, or null. validate
-           returns an error message to keep the dialog open. */
-        function prompt(title, text, value, okLabel, validate, withInput) {
-            return new Promise(function (done) {
-                /* A delete is PUDL's danger confirmation: the warning glyph
-                   in the danger colour beside the title, and the button
-                   btn-danger alone, with the bin glyph. */
-                var danger = okLabel === 'Delete';
-                el.dlgTitle.innerHTML = (danger ? '<span class="glyph fm-dlg-warn" style="--glyph: var(--glyph-warning)" aria-hidden="true"></span>' : '') + esc(title);
-                el.dlgText.textContent = text || '';
-                el.dlgText.hidden = !text;
-                el.dlgInput.hidden = withInput === false;
-                el.dlgInput.value = value || '';
-                el.dlgError.hidden = true;
-                el.dlgOk.innerHTML = (danger ? '<span class="glyph" style="--glyph: var(--glyph-bin)" aria-hidden="true"></span>' : '') + esc(okLabel || 'OK');
-                el.dlgOk.classList.toggle('btn-danger', danger);
-                el.dlgOk.classList.toggle('btn-primary', !danger);
-                var finished = false;
-                function finish(v) { if (finished) { return; } finished = true; cleanup(); if (el.dialog.open) { el.dialog.close(); } done(v); }
-                function onSubmit(e) {
-                    e.preventDefault();
-                    var v = withInput === false ? true : el.dlgInput.value.trim();
-                    var err = validate ? validate(v) : null;
-                    if (err) { el.dlgError.textContent = err; el.dlgError.hidden = false; el.dlgInput.focus(); return; }
-                    finish(v);
-                }
-                function onCancel() { finish(null); }
-                function onClose() { finish(null); }
-                function cleanup() {
-                    el.dlgForm.removeEventListener('submit', onSubmit);
-                    el.dlgCancel.removeEventListener('click', onCancel);
-                    el.dialog.removeEventListener('close', onClose);
-                }
-                el.dlgForm.addEventListener('submit', onSubmit);
-                el.dlgCancel.addEventListener('click', onCancel);
-                el.dialog.addEventListener('close', onClose);
-                el.dialog.showModal();
-                if (withInput === false) { el.dlgOk.focus(); } else { el.dlgInput.focus(); el.dlgInput.select(); }
-            });
-        }
-
         function nameCheck(v) {
             if (!v) { return 'Give it a name.'; }
             if (!F.validName(v)) { return 'A name can\'t contain / or be . or ..'; }
@@ -368,7 +276,7 @@
                 case 'download': if (c) { download(c); } return;
                 case 'copy': if (c) { await copyHome(c); } return;
                 case 'new-file': {
-                    var name = await prompt('New file', 'In ' + F.displayPath(dir), '', 'Create', nameCheck);
+                    var name = await window.yavcDialog.askText('New file', 'Name', '', { text: 'In ' + F.displayPath(dir), okLabel: 'Create', validate: nameCheck });
                     if (name == null) { return; }
                     var res = await F.write(dir, name, '', false);
                     if (res.error) { say(res.error, true); return; }
@@ -376,7 +284,7 @@
                     return;
                 }
                 case 'new-folder': {
-                    var dname = await prompt('New folder', 'In ' + F.displayPath(dir), '', 'Create', nameCheck);
+                    var dname = await window.yavcDialog.askText('New folder', 'Name', '', { text: 'In ' + F.displayPath(dir), okLabel: 'Create', validate: nameCheck });
                     if (dname == null) { return; }
                     var e1 = await F.mkdir(dir, dname, false);
                     if (e1) { say(e1, true); return; }
@@ -386,7 +294,7 @@
                 case 'upload': el.fileInput.value = ''; el.fileInput.click(); return;
                 case 'rename': {
                     if (!c) { return; }
-                    var nn = await prompt('Rename', 'Rename ' + c.name + ' to:', c.name, 'Rename', function (v) { return v === c.name ? null : nameCheck(v); });
+                    var nn = await window.yavcDialog.askText('Rename', 'New name for ' + c.name, c.name, { okLabel: 'Rename', validate: function (v) { return v === c.name ? null : nameCheck(v); } });
                     if (nn == null || nn === c.name) { return; }
                     var e2 = await F.move(dir, c, nn);
                     if (e2) { say(e2, true); return; }
@@ -395,12 +303,12 @@
                 }
                 case 'move': {
                     if (!c) { return; }
-                    var dest = await prompt('Move', 'Move ' + c.name + ' to which folder? For example ~/notes', F.displayPath(dir), 'Move', function (v) {
+                    var dest = await window.yavcDialog.askText('Move ' + c.name, 'To the folder', F.displayPath(dir), { help: 'For example ~/notes', okLabel: 'Move', validate: function (v) {
                         var d = F.resolve(dir, v);
                         if (!d || !d.children) { return 'There\'s no folder at ' + v + '.'; }
                         if (!d.home) { return 'Only folders in your home directory (~)' + (F.mounted ? ' or under /wwwroot' : '') + ' can take it.'; }
                         return null;
-                    });
+                    } });
                     if (dest == null) { return; }
                     var e3 = await F.move(dir, c, dest);
                     if (e3) { say(e3, true); return; }
@@ -411,7 +319,7 @@
                     if (!c) { return; }
                     var many = c.children ? ' and everything in it (' + c.children.length + (c.children.length === 1 ? ' item' : ' items') + ')' : '';
                     var where = F.realOf(c).server ? '. A copy is kept in the history for 30 days.' : ' from this browser. It can\'t be undone.';
-                    var ok = await prompt('Delete ' + c.name + '?', 'This deletes ' + F.displayPath(c) + many + where, '', 'Delete', null, false);
+                    var ok = await window.yavcDialog.confirm('Delete ' + c.name + '?', 'This deletes ' + F.displayPath(c) + many + where, { okLabel: 'Delete', danger: true });
                     if (!ok) { return; }
                     var e4 = await F.remove(c, true);
                     if (e4) { say(e4, true); return; }
@@ -437,11 +345,7 @@
                     : new Blob([await F.read(r)], { type: 'text/plain;charset=utf-8' });
             } catch (err) { say(err.message, true); return; }
             var name = r.home ? r.name : r.name + '.txt';
-            var url = URL.createObjectURL(blob);
-            var a = document.createElement('a');
-            a.href = url; a.download = name;
-            document.body.appendChild(a); a.click(); a.remove();
-            setTimeout(function () { URL.revokeObjectURL(url); }, 10000);
+            window.yavcUtil.download(name, blob);
             say('Downloaded ' + name + '.');
         }
 
@@ -589,7 +493,6 @@
                 if (b) { b.destroy(); }
                 root.removeEventListener('click', onClick);
                 if (el && el.helpDialog.open) { el.helpDialog.close(); }
-                if (el && el.dialog.open) { el.dialog.close(); }
             },
             ready: boot
         };

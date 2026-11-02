@@ -16,16 +16,9 @@
     'use strict';
 
     var SELF_SRC = document.currentScript && document.currentScript.src;
-    function beside(file) { return SELF_SRC ? SELF_SRC.replace(/terminal\.js/, file) : '/js/' + file; }
-    function loadScript(src) {
-        return new Promise(function (resolve, reject) {
-            var s = document.createElement('script');
-            s.src = src;
-            s.onload = resolve;
-            s.onerror = function () { reject(new Error('could not load ' + src)); };
-            document.head.appendChild(s);
-        });
-    }
+    function beside(file) { return SELF_SRC ? SELF_SRC.replace(/terminal\.js/, file) : '/applets/terminal/' + file; }
+    /* The site's shared scripts load through static/yavc-util.js, each once. */
+    var loadScript = window.yavcUtil.loadScript;
     var xtermReady = null;
     function loadXterm() {
         if (window.Terminal && window.FitAddon && window.SerializeAddon && window.UnicodeGraphemesAddon) { return Promise.resolve(); }
@@ -118,28 +111,10 @@
        terminal's own names for its operations. */
 
     var F = null;
-    var siteFsReady = null;
-    function loadSiteFs() {
-        if (window.pcSiteFs) { F = window.pcSiteFs; return Promise.resolve(F); }
-        if (!siteFsReady) {
-            siteFsReady = loadScript(window.pcSiteFsSrc || beside('sitefs.js'))
-                .then(function () { F = window.pcSiteFs; return F; })
-                .catch(function (err) { siteFsReady = null; throw err; });
-        }
-        return siteFsReady;
-    }
+    function loadSiteFs() { return window.yavcUtil.loadGlobal(window.pcSiteFsSrc, 'pcSiteFs').then(function (api) { F = api; return F; }); }
 
     /* The settings files (js/config.js), from the address js/applets.js names. */
-    var configReady = null;
-    function loadConfig() {
-        if (window.pcConfig) { return Promise.resolve(window.pcConfig); }
-        if (!configReady) {
-            configReady = loadScript(window.pcConfigSrc || beside('config.js'))
-                .then(function () { return window.pcConfig; })
-                .catch(function (err) { configReady = null; throw err; });
-        }
-        return configReady;
-    }
+    function loadConfig() { return window.yavcUtil.loadGlobal(window.pcConfigSrc, 'pcConfig'); }
     var SETTINGS = { fontSize: 14 };
     var FONT_SIZES = [11, 12, 13, 14, 15, 16, 18, 20, 22];
     var instanceCount = 0;
@@ -1765,16 +1740,7 @@
         function remove(n, recursive, label) { return F.remove(n, recursive, label); }
         function move(n, dest, label) { return F.move(cwd, n, dest, label); }
 
-        function download(name, text) {
-            var url = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' }));
-            var a = document.createElement('a');
-            a.href = url;
-            a.download = name;
-            document.body.appendChild(a);
-            a.click();
-            a.remove();
-            setTimeout(function () { URL.revokeObjectURL(url); }, 10000);
-        }
+        function download(name, text) { window.yavcUtil.download(name, new Blob([text], { type: 'text/plain;charset=utf-8' })); }
 
         /* Asks for files with a hidden file input. It must start while the
            keypress that ran the command is still being handled, which it is:
@@ -2135,7 +2101,7 @@
                     .then(function (r) { return r.ok ? r.text() : ''; }).catch(function () { return ''; });
             }
             var bundled = await bundledModules[rel];
-            return bundled ? '/js/terminal-lib/lua/' + rel + '.lua\n' + bundled : '';
+            return bundled ? '/applets/terminal/terminal-lib/lua/' + rel + '.lua\n' + bundled : '';
         }
 
         /* The host every interpreter's scripts use: files, directories,

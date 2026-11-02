@@ -74,7 +74,8 @@
     function plainText(txBody) {
         return children(txBody, 'a', 'p').map(function (p) { return all(p, 'a', 't').map(function (t) { return t.textContent; }).join('').trim(); }).filter(Boolean).join(' ');
     }
-    function esc(s) { return String(s).replace(/([\\`*_\[\]#])/g, '\\$1').replace(/\{\{/g, '\\{\\{'); }
+    /* Text made safe as Markdown: its markup characters and {{ escaped. */
+    function escMarkdown(s) { return String(s).replace(/([\\`*_\[\]#])/g, '\\$1').replace(/\{\{/g, '\\{\\{'); }
 
     /* A paragraph's Markdown, with its runs' emphasis and links. */
     function runText(p, links) {
@@ -87,7 +88,7 @@
                 if (!text) { return; }
                 var pr = first(c, 'a', 'rPr'), bold = pr && pr.getAttribute('b') === '1', italic = pr && pr.getAttribute('i') === '1';
                 var link = pr ? first(pr, 'a', 'hlinkClick') : null, href = link ? (links[link.getAttributeNS(NS.r, 'id')] || {}).target : null;
-                var s = esc(text);
+                var s = escMarkdown(text);
                 if (s.trim()) {
                     var lead = /^\s*/.exec(s)[0], trail = /\s*$/.exec(s)[0], core = s.trim();
                     if (bold && italic) { core = '***' + core + '***'; } else if (bold) { core = '**' + core + '**'; } else if (italic) { core = '*' + core + '*'; }
@@ -180,7 +181,7 @@
                 } else if (sp.localName === 'pic') {
                     var name = (first(sp, 'p', 'cNvPr') || {}).getAttribute ? first(sp, 'p', 'cNvPr').getAttribute('descr') || first(sp, 'p', 'cNvPr').getAttribute('name') : 'picture';
                     pictures++;
-                    extras.push('_[Picture: ' + esc(name || 'picture') + ']_');
+                    extras.push('_[Picture: ' + escMarkdown(name || 'picture') + ']_');
                 } else if (sp.localName === 'grpSp') {
                     all(sp, 'p', 'txBody').forEach(function (tb) { var md = bodyMarkdown(tb, links, false); if (md) { bodies.push({ text: md, x: 0, placeholder: false }); } });
                 }

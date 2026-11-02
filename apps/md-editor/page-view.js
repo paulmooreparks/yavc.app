@@ -29,11 +29,8 @@
           link.href = BASE + 'vendor/prosemirror-1.42/' + name;
           document.head.appendChild(link);
         });
-        var script = document.createElement('script');
-        script.src = BASE + 'vendor/prosemirror-1.42/prosemirror.js';
-        script.onload = function () { resolve(window.PM); };
-        script.onerror = function () { pmReady = null; reject(new Error('The page editor could not be loaded.')); };
-        document.head.appendChild(script);
+        window.yavcUtil.loadScript(BASE + 'vendor/prosemirror-1.42/prosemirror.js').then(function () { resolve(window.PM); },
+          function () { pmReady = null; reject(new Error('The page editor could not be loaded.')); });
       });
     }
     return pmReady;
@@ -1266,29 +1263,20 @@ var schemaCache = null;
       v.focus();
       return true;
     }
+    /* The link for the selection, asked in the site's dialog
+       (static/dialogs.js): an address, or none to take the link away. */
     function linkDialog() {
       var v = view, s = v.state, mark = s.schema.marks.link, current = '';
       s.doc.nodesBetween(s.selection.from, Math.max(s.selection.to, s.selection.from + 1), function (node) {
         var m = mark.isInSet(node.marks);
         if (m) current = m.attrs.href;
       });
-      var dialog = document.createElement('dialog');
-      dialog.className = 'dialog editor-dialog';
-      dialog.innerHTML = '<h2 class="dialog-title">Link</h2><div class="dialog-body">' +
-        '<div class="form-group"><label class="form-label">Address<input class="form-input" placeholder="https://"></label></div>' +
-        '<p class="form-help">Leave the address empty to take the link away.</p></div>' +
-        '<div class="dialog-actions"><button type="button" class="btn" data-no>Cancel</button><button type="button" class="btn btn-primary" data-yes>Set the Link</button></div>';
-      var url = dialog.querySelector('input');
-      url.value = current;
-      o.root.appendChild(dialog);
-      function done() { dialog.close(); }
-      dialog.addEventListener('close', function () { dialog.remove(); if (view === v) v.focus(); });
-      dialog.querySelector('[data-no]').addEventListener('click', done);
-      function set() {
-        var address = url.value.trim(), st = v.state, from = st.selection.from, to = st.selection.to;
-        done();
+      var from = s.selection.from, to = s.selection.to;
+      window.yavcDialog.askText('Link', 'Address', current, { placeholder: 'https://', help: 'Leave the address empty to take the link away.', okLabel: 'Set the Link' }).then(function (address) {
         if (view !== v) return;
-        var tr = st.tr;
+        v.focus();
+        if (address == null) return;
+        var tr = v.state.tr;
         if (from === to) {
           if (!address) return;
           tr.insertText(address, from).addMark(from, from + address.length, mark.create({ href: address }));
@@ -1297,11 +1285,7 @@ var schemaCache = null;
           if (address) tr.addMark(from, to, mark.create({ href: address }));
         }
         v.dispatch(tr);
-      }
-      dialog.querySelector('[data-yes]').addEventListener('click', set);
-      url.addEventListener('keydown', function (ev) { if (ev.key === 'Enter' && !ev.isComposing) { ev.preventDefault(); set(); } });
-      dialog.showModal();
-      url.focus();
+      });
     }
 
     // A link on the page is followed with Ctrl+click; a plain click places the caret.

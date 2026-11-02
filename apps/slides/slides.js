@@ -23,8 +23,7 @@
     var KIT = '/applets/md-editor/';
     function kit() {
         if (window.yavcMdEditor) { return Promise.resolve(window.yavcMdEditor); }
-        var v = window.yavcStaticVersion ? '?v=' + encodeURIComponent(window.yavcStaticVersion) : '';
-        return loadScript(KIT + 'kit.js' + v).then(function () { return window.yavcMdEditor; });
+        return loadScript(window.yavcUtil.versioned(KIT + 'kit.js')).then(function () { return window.yavcMdEditor; });
     }
     var LAYOUTS = [['content', 'Content'], ['title', 'Title'], ['section', 'Section'], ['two-column', 'Two Columns'], ['image', 'Picture'], ['quote', 'Quote'], ['blank', 'Blank']];
     var THEMES = [['plain', 'Plain, the site\'s own'], ['paper', 'Paper'], ['midnight', 'Midnight']];
@@ -42,21 +41,13 @@
         quote: '{{slide:layout=quote}}\n> Something said.\n>\n> Who said it\n', blank: '{{slide:layout=blank}}\n' };
     var count = 0;
 
-    function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
-    function loadScript(src) {
-        return new Promise(function (resolve, reject) {
-            if (document.querySelector('script[data-ed-asset="' + src + '"], script[src="' + src + '"]')) { resolve(); return; }
-            var s = document.createElement('script');
-            s.src = src;
-            s.setAttribute('data-ed-asset', src);
-            s.onload = resolve;
-            s.onerror = function () { reject(new Error('could not load ' + src)); };
-            document.head.appendChild(s);
-        });
-    }
+    var esc = window.yavcUtil.esc, loadScript = window.yavcUtil.loadScript;
+    /* The Markdown engine, through its loader (apps/md-engine/loader.js),
+       whose calls throw on the engine's errors. ENGINE is it once loaded. */
+    var ENGINE = null;
     function engine() {
-        var v = window.yavcStaticVersion ? '?v=' + encodeURIComponent(window.yavcStaticVersion) : '';
-        return loadScript('/applets/md-engine/loader.js' + v).then(function () { return window.yavcMdEngine(); });
+        return loadScript(window.yavcUtil.versioned('/applets/md-engine/loader.js')).then(function () { return window.yavcMdEngine(); })
+            .then(function (m) { ENGINE = m; return m; });
     }
     function pageView() { return engine().then(kit).then(function (k) { return k.pageView(); }); }
     function codeMirror() { return kit().then(function (k) { return k.libs(); }); }
@@ -69,22 +60,14 @@
        its properties as read (frontRead) beside the ones in use (front,
        with the defaults filled in). The Markdown engine reads it with a
        real YAML parser and writes back only what changed
-       (internal/frontmatter; DESIGN.md, decision 17); until the engine has
-       loaded, a plain reading of name: value lines stands in. */
-    function engineJSON(name, arg) { return JSON.parse(window.yavcMd[name](typeof arg === 'string' ? arg : JSON.stringify(arg))); }
+       (internal/frontmatter; DESIGN.md, decision 17). Before the engine has
+       loaded nothing is read (unread), and Slides reads every deck again
+       once it has, so no second reading of YAML exists. */
     function readFront(frontText) {
-        var read = {}, problem = null;
-        if (window.yavcMd) {
-            var f = engineJSON('front', frontText);
-            problem = f.problem || null;
-            (f.entries || []).forEach(function (e) { read[e.key] = e.value; });
-        } else {
-            frontText.split('\n').slice(1, -2).forEach(function (l) {
-                var m = /^([A-Za-z][A-Za-z0-9_-]*):\s*(.*)$/.exec(l);
-                if (m) { read[m[1]] = m[2].trim().replace(/^["']|["']$/g, ''); }
-            });
-        }
-        return { read: read, problem: problem };
+        if (!ENGINE) { return { read: {}, problem: null, unread: true }; }
+        var read = {}, f = ENGINE.front(frontText);
+        (f.entries || []).forEach(function (e) { read[e.key] = e.value; });
+        return { read: read, problem: f.problem || null };
     }
     function parseDeck(text) {
         var lines = text.replace(/\r\n/g, '\n').split('\n'), i = 0, frontText = '';
@@ -106,7 +89,7 @@
         }
         slides.push(cur.join('\n'));
         if (slides.length > 1 && slides[0].trim() === '') { slides.shift(); }
-        return { front: front, frontRead: got.read, frontText: frontText, frontProblem: got.problem, slides: slides.map(function (t) { return { text: t.replace(/^\n+/, '').replace(/\s+$/, '') + '\n' }; }) };
+        return { front: front, frontRead: got.read, frontText: frontText, frontProblem: got.problem, frontUnread: !!got.unread, slides: slides.map(function (t) { return { text: t.replace(/^\n+/, '').replace(/\s+$/, '') + '\n' }; }) };
     }
     /* The changes to the front matter: each property now different from
        what was read, null for one taken out; a default never written
@@ -125,9 +108,9 @@
     function frontTextOf(deck) {
         var ch = frontChanges(deck);
         if (!ch.order.length) { return deck.frontText || ''; }
-        if (!window.yavcMd || deck.frontProblem) { return deck.frontText || ''; }
-        var res = engineJSON('frontset', { text: deck.frontText || '', set: ch.set, order: ch.order });
-        if (res.error) { return deck.frontText || ''; }
+        if (!ENGINE || deck.frontProblem || deck.frontUnread) { return deck.frontText || ''; }
+        var res;
+        try { res = ENGINE.frontset({ text: deck.frontText || '', set: ch.set, order: ch.order }); } catch (err) { return deck.frontText || ''; }
         takeFront(deck, res.text);
         return deck.frontText;
     }
@@ -138,6 +121,7 @@
         deck.frontText = text;
         deck.frontRead = got.read;
         deck.frontProblem = got.problem;
+        deck.frontUnread = !!got.unread;
         deck.front = Object.assign({}, FRONT, got.read);
     }
     function serializeDeck(deck) {
@@ -214,24 +198,7 @@
               '</div>' +
             '</div>' +
             '<div class="deck-status" data-role="status"><span data-role="where"></span><span class="deck-message" data-role="message" role="status" aria-live="polite"></span></div>' +
-            '<div class="deck-presenter" data-role="presenter" hidden></div>' +
-            '<dialog class="dialog deck-dialog" data-role="dialog" aria-labelledby="deck-dlg-title-' + n + '">' +
-              '<form method="dialog" data-role="dialog-form">' +
-                '<h3 class="dialog-title" id="deck-dlg-title-' + n + '" data-role="dialog-title"></h3>' +
-                '<div class="dialog-body"><div class="form-group">' +
-                  '<label class="form-label" for="deck-dlg-input-' + n + '" data-role="dialog-label"></label>' +
-                  '<input class="form-input" id="deck-dlg-input-' + n + '" data-role="dialog-input" autocomplete="off" spellcheck="false">' +
-                '</div></div>' +
-                '<div class="dialog-actions"><button class="btn" type="button" data-role="dialog-cancel">Cancel</button><button class="btn btn-primary" value="ok" type="submit">OK</button></div>' +
-              '</form>' +
-            '</dialog>' +
-            '<dialog class="dialog deck-dialog" data-role="choice" aria-labelledby="deck-choice-title-' + n + '">' +
-              '<form method="dialog">' +
-                '<h3 class="dialog-title" id="deck-choice-title-' + n + '" data-role="choice-title"></h3>' +
-                '<p class="dialog-body" data-role="choice-body"></p>' +
-                '<div class="dialog-actions" data-role="choice-actions"></div>' +
-              '</form>' +
-            '</dialog>';
+            '<div class="deck-presenter" data-role="presenter" hidden></div>';
         var q = function (sel) { return root.querySelector(sel); };
         var el = { film: q('[data-role="film"]'), work: q('[data-role="work"]'), stagebox: q('[data-role="stagebox"]'), stage: q('[data-role="stage"]'), canvas: q('[data-role="canvas"]'), slide: q('[data-role="slide"]'),
             body: q('[data-role="body"]'), notesView: q('[data-role="notes-view"]'), split: q('[data-role="split"]'), text: q('[data-role="text"]'), tabsEl: q('[data-role="tabs"]'), notice: q('[data-role="notice"]'), noticeBody: q('[data-role="notice-body"]'), floatBar: q('[data-role="float-bar"]'), main: q('[data-role="main"]'), where: q('[data-role="where"]'), message: q('[data-role="message"]'), presenter: q('[data-role="presenter"]'), main: q('[data-role="main"]') };
@@ -653,34 +620,9 @@
             keep();
         }
         /* A question with one field, as PUDL's dialog asks it. */
-        function askText(title, label, value) {
-            var dialog = q('[data-role="dialog"]'), input = q('[data-role="dialog-input"]');
-            q('[data-role="dialog-title"]').textContent = title;
-            q('[data-role="dialog-label"]').textContent = label;
-            input.value = value || '';
-            return new Promise(function (resolve) {
-                dialog.addEventListener('close', function () { resolve(dialog.returnValue === 'ok' ? input.value : null); }, { once: true });
-                dialog.returnValue = '';
-                dialog.showModal();
-                input.focus(); input.select();
-            });
-        }
-        /* A question with buttons, the last of them the one Enter presses. */
-        function askChoice(title, body, buttons) {
-            var dialog = q('[data-role="choice"]'), actions = q('[data-role="choice-actions"]');
-            q('[data-role="choice-title"]').textContent = title;
-            q('[data-role="choice-body"]').textContent = body;
-            actions.innerHTML = buttons.map(function (b) {
-                return b[2] ? '<button class="btn btn-primary" type="submit" value="' + esc(b[0]) + '">' + esc(b[1]) + '</button>'
-                    : '<button class="btn" type="button" data-choice="' + esc(b[0]) + '">' + esc(b[1]) + '</button>';
-            }).join('');
-            actions.querySelectorAll('[data-choice]').forEach(function (b) { b.addEventListener('click', function () { dialog.close(b.getAttribute('data-choice')); }); });
-            return new Promise(function (resolve) {
-                dialog.addEventListener('close', function () { resolve(dialog.returnValue || null); }, { once: true });
-                dialog.returnValue = '';
-                dialog.showModal();
-            });
-        }
+        /* The site's dialogs (static/dialogs.js). */
+        function askText(title, label, value) { return window.yavcDialog.askText(title, label, value); }
+        function askChoice(title, body, buttons) { return window.yavcDialog.askChoice(title, body, buttons); }
         function deckColours() {
             var f = deck.front;
             window.yavcMdEditor.askColours('The deck\'s colours', [
@@ -701,7 +643,6 @@
             ]).then(function (v) { if (!v) { return; } Object.keys(v).forEach(function (k) { setSlideSetting(k, v[k]); }); });
         }
         /* Cancel is not a submit button, so Enter in the field is OK. */
-        q('[data-role="dialog-cancel"]').addEventListener('click', function () { q('[data-role="dialog"]').close('cancel'); });
 
         /* === Files ===================================================== */
 
@@ -810,7 +751,7 @@
             if (!t) { return; }
             if (t.modified) {
                 if (i !== active) { await activateTab(i); }
-                var choice = await askChoice('Save changes to ' + tabTitle(t) + '?', 'Your changes will be lost if you don\'t save them.', [['cancel', 'Cancel'], ['discard', 'Don\'t save'], ['save', 'Save', true]]);
+                var choice = await window.yavcDialog.askSave(tabTitle(t));
                 if (choice !== 'discard' && choice !== 'save') { return; }
                 if (choice === 'save') { await save(); if (modified) { return; } }
             }
@@ -869,10 +810,13 @@
         async function saveAs() {
             if (!H.fs || !H.fs.save) { return; }
             var name = (deck.front.title || 'deck').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'deck';
-            var res = await H.fs.save({ title: 'Save the deck as', name: name + '.slides.md', host: root, start: '~/Documents', blob: new Blob([fullText()], { type: 'text/markdown' }) }).catch(function (e) { say(e.message, true); return null; });
+            var blob = new Blob([fullText()], { type: 'text/markdown' });
+            var res = await H.fs.save({ title: 'Save the deck as', name: name + '.slides.md', host: root, start: '~/Documents', blob: blob }).catch(function (e) { say(e.message, true); return null; });
             if (!res) { return; }
             if (res.path) { path = res.path; modified = false; say('Saved ' + path + '.'); announce(); }
-            else { say('Downloaded ' + res.download + '.'); }
+            /* "Download instead": the dialog leaves the download to the
+               applet (pudl-applet-packages README, fs.save). */
+            else if (res.download) { window.yavcUtil.download(res.download, blob); say('Downloaded ' + res.download + '.'); }
             commandsChanged();
         }
         async function newDeck() {
@@ -957,7 +901,8 @@
             await goTo(at);
             commandsChanged();
         }
-        document.addEventListener('fullscreenchange', function () { if (!document.fullscreenElement && presenting && !presenterRole) { leave(); } });
+        function onFullscreenChange() { if (!document.fullscreenElement && presenting && !presenterRole) { leave(); } }
+        document.addEventListener('fullscreenchange', onFullscreenChange);
         function presenterWindow() {
             if (!path) { say('Save the deck first, so the presenter window can open it.'); return; }
             /* The presenter opens on this page's own origin, since the show
@@ -1073,13 +1018,9 @@
             return { name: name + '.html', html: html };
         }
         async function exportHTML() {
-            var page = await exportPage(), html = page.html;
-            var a = document.createElement('a');
-            a.href = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
-            a.download = page.name;
-            document.body.appendChild(a); a.click(); a.remove();
-            setTimeout(function () { URL.revokeObjectURL(a.href); }, 2000);
-            say('Downloaded ' + a.download + '.');
+            var page = await exportPage();
+            window.yavcUtil.download(page.name, new Blob([page.html], { type: 'text/html' }));
+            say('Downloaded ' + page.name + '.');
         }
         /* === PowerPoint and PDF (export-pptx.js, export-pdf.js, import-pptx.js) === */
 
@@ -1087,14 +1028,7 @@
             return { deck: deck, settingsOf: settingsOf, titleOf: titleOf, notesOf: notesOf, drawInto: drawIntoQuiet, buildShow: buildShow, sizeOf: sizeOf, loadScript: loadScript, here: HERE, stamp: STAMP, deckCSS: deckCSS };
         }
         function fileStem() { return (deck.front.title || 'deck').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'deck'; }
-        function download(name, blob) {
-            var a = document.createElement('a');
-            a.href = URL.createObjectURL(blob);
-            a.download = name;
-            document.body.appendChild(a); a.click(); a.remove();
-            setTimeout(function () { URL.revokeObjectURL(a.href); }, 2000);
-            say('Downloaded ' + name + '.');
-        }
+        function download(name, blob) { window.yavcUtil.download(name, blob); say('Downloaded ' + name + '.'); }
         async function pptxBlob() {
             await loadScript(HERE + 'export-pptx.js' + STAMP);
             return window.yavcSlidesPptx.build(officeContext());
@@ -1151,6 +1085,23 @@
 
         /* === Snapshots and continuity =================================== */
 
+        /* Unsaved decks, guarded (static/doc-tabs.js): a reload keeps them in
+           the snapshot, so leaving the page asks only when there is none;
+           closing the window discards the snapshot, so closing asks. */
+        var unguard = window.yavcDocTabs.guard(root, {
+            changed: function () { stash(); return tabs.filter(function (t) { return t.modified; }).map(tabTitle); },
+            keptOnReload: function () { return !!H.snapshot; },
+            keptOnClose: function () { return false; },
+            saveAll: async function () {
+                for (var i = 0; i < tabs.length; i++) {
+                    if (!tabs[i].modified) { continue; }
+                    await activateTab(i);
+                    await save();
+                    if (modified) { return false; }
+                }
+                return true;
+            }
+        });
         var snap = H.snapshot ? H.snapshot.join(root, function () {
             stash();
             return { tabs: tabs.map(function (t) { return { path: t.path, text: t.modified ? serializeDeck(t.deck) : null, slide: t.at || 0 }; }), active: active, mode: mode };
@@ -1216,16 +1167,16 @@
                 cmd('background-image', 'Background Picture…', 'image', function () { askText('Background picture', 'The picture\'s address, such as /images/x.png; empty for none', settingsOf(current()).image || '').then(function (v) { if (v != null) { setSlideSetting('image', v.trim()); } }); }),
                 { id: 'slide-transition', label: 'Transition', items: TRANSITIONS.map(function (t) { return { id: 'slide-transition-' + t[0], label: t[1], choice: 'deck-slide-transition', value: t[0], checked: function () { return (settingsOf(current()).transition || deck.front.transition || 'fade') === t[0]; }, run: function () { setSlideSetting('transition', t[0] === (deck.front.transition || 'fade') ? null : t[0]); } }; }) },
                 cmd('deck-title', 'Properties…', 'tag', function () {
-                    if (!window.yavcMd) { return; }
+                    if (!ENGINE) { return; }
                     serializeDeck(deck);
-                    var front = deck.frontProblem ? { problem: deck.frontProblem } : engineJSON('front', deck.frontText || '');
+                    var front = deck.frontProblem ? { problem: deck.frontProblem } : ENGINE.front(deck.frontText || '');
                     kit().then(function (k) {
                         return k.askProperties(front, { title: 'Deck properties', hidden: DECK_KEYS, hiddenWhere: 'in the Deck menu',
                             hiddenNote: 'The theme, slide size, transition, colours and stylesheet are set from the Deck menu.' });
                     }).then(function (r) {
                         if (!r || !r.order.length) { return; }
-                        var res = engineJSON('frontset', { text: deck.frontText || '', set: r.set, order: r.order });
-                        if (res.error) { say(res.error, true); return; }
+                        var res;
+                        try { res = ENGINE.frontset({ text: deck.frontText || '', set: r.set, order: r.order }); } catch (err) { say(err.message, true); return; }
                         takeFront(deck, res.text);
                         frontChanged();
                     });
@@ -1304,6 +1255,9 @@
             md = await engine();
             await kit();
             if (destroyed) { return; }
+            /* Decks parsed before the engine came read their front matter now. */
+            if (deck.frontUnread) { takeFront(deck, deck.frontText); }
+            tabs.forEach(function (t) { if (t.deck && t.deck.frontUnread) { takeFront(t.deck, t.deck.frontText); } });
             if (H.config && H.config.load) { try { var c = await H.config.load('slides', SETTINGS); Object.assign(settings, c || {}); } catch (err) { } }
             if (settings.filmstrip === false) { el.film.hidden = true; }
             var kept = snap && snap.kept;
@@ -1473,8 +1427,7 @@
                 });
                 if (order.length) {
                     serializeDeck(deck);
-                    var res = engineJSON('frontset', { text: deck.frontText || '', set: set, order: order });
-                    if (res.error) { throw new Error(res.error); }
+                    var res = (await engine()).frontset({ text: deck.frontText || '', set: set, order: order });
                     takeFront(deck, res.text);
                     frontChanged();
                 }
@@ -1550,6 +1503,13 @@
                 if (snap) { snap.leave(); }
                 if (channel) { channel.close(); }
                 clearInterval(clockTimer);
+                clearTimeout(redrawTimer);
+                unguard();
+                /* Nothing outlives the applet: a document listener would keep
+                   the whole closed deck alive, and the pictures' addresses
+                   hold their bytes (performance review, 2026-11-03). */
+                document.removeEventListener('fullscreenchange', onFullscreenChange);
+                Object.keys(pictureURLs).forEach(function (k) { if (pictureURLs[k]) { URL.revokeObjectURL(pictureURLs[k]); } });
             }
         };
     }
