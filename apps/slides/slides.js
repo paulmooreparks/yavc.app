@@ -146,7 +146,10 @@
         /* On a page of its own the deck and the presenter view come from the
            address; in a window, from the state the host kept. */
         var start = new URLSearchParams(String(opts.state || '').replace(/^\?/, ''));
-        if (opts.host !== 'window' && !start.get('file')) { start = new URLSearchParams(location.search); }
+        if (opts.host !== 'window') {
+            var own = new URLSearchParams(location.search);
+            if (own.get('file') || own.get('presenter') || own.get('present')) { start = own; }
+        }
         root.classList.add('deck', 'deck-' + (opts.fit === 'fill' ? 'fill' : 'flow'));
         root.tabIndex = -1;
         root.innerHTML =
