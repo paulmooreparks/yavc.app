@@ -1114,7 +1114,7 @@
                 cmd('present-here', 'Present from This Slide', 'forward', function () { present(at); }, { shortcut: 'Mod+Shift+Enter', disabled: function () { return !ready || !!presenting; } }),
                 cmd('leave', 'Leave the Show', 'stop', leave, { hidden: function () { return !presenting; } }),
                 cmd('presenter', 'Presenter Window', 'new-window', presenterWindow, { disabled: function () { return !path; } }),
-                cmd('presenter-auto', 'Open the Presenter Window When a Show Starts', null, function () { settings.presenterOnPresent = !settings.presenterOnPresent; keepSetting('presenterOnPresent', settings.presenterOnPresent); commandsChanged(); }, { checked: function () { return !!settings.presenterOnPresent; } }),
+                cmd('presenter-auto', 'Presenter Window on Present', null, function () { settings.presenterOnPresent = !settings.presenterOnPresent; keepSetting('presenterOnPresent', settings.presenterOnPresent); commandsChanged(); }, { checked: function () { return !!settings.presenterOnPresent; } }),
                 cmd('insert', 'Insert', 'plus', null, { items: INSERTS.map(function (i) { return { id: 'insert-' + i[0].toLowerCase().replace(/[^a-z]+/g, '-'), label: i[0], run: function () {
                     /* An entry is Markdown, or a function that asks for it. */
                     if (typeof i[1] === 'function') { Promise.resolve(i[1]()).then(function (md) { if (md) { insertMarkdown(md); } }); } else { insertMarkdown(i[1]); }
