@@ -1088,6 +1088,28 @@
             };
         }
         function insertBlock(item) { window.yavcMdEditor.insertItem(item, editCtx()); }
+        /* File, Properties: the front matter read by the engine, changed in
+           the kit's dialog, and written back by the engine, which changes
+           only the lines of the properties that changed and reads the
+           result back before it is used. The text takes it as one change,
+           which Undo takes back. */
+        async function editProperties() {
+            var t = current();
+            if (!t || t.readOnly || !view) { return; }
+            try {
+                if (pageActive() && visual.api.sync) { await visual.api.sync(); }
+                var m = await mdEngine(), text = view.state.doc.toString();
+                var front = m.front(text);
+                var r = await window.yavcMdEditor.askProperties(front, { title: 'Properties of ' + (t.name || 'the document') });
+                if (!r || !r.order.length) { return; }
+                if (view.state.doc.toString() !== text) { say('The document changed while the dialog was open, so the properties were not written. Try again.', true); return; }
+                var next = m.frontset({ text: text, set: r.set, order: r.order }).text;
+                var a = 0;
+                while (a < text.length && a < next.length && text[text.length - 1 - a] === next[next.length - 1 - a]) { a++; }
+                view.dispatch({ changes: { from: 0, to: text.length - a, insert: next.slice(0, next.length - a) }, userEvent: 'input' });
+                say('The properties were changed.');
+            } catch (err) { say(String(err && err.message || err), true); }
+        }
         /* Where the document's pictures are, for the kit's picture dialog
            and its loader: beside the document when it is saved under ~. */
         function picturesHost() {
@@ -1928,6 +1950,10 @@
                         run: function () { applyFormat(s[0]); } };
                 }) });
             if (window.yavcMdEditor) { table.push(window.yavcMdEditor.boxCommand(editCtx(), { hidden: unformatted, disabled: noEdit })); }
+            /* The document's front matter as a form (DESIGN.md, decision 17). */
+            table.push(cmd('properties', 'Properties…', 'tag', editProperties, {
+                hidden: function () { var t = current(); return !(t && t.lang === 'markdown'); },
+                disabled: function () { var t = current(); return !ready || !t || !!t.readOnly; } }));
             table.push({ id: 'md-default', label: 'Open Markdown As', hidden: function () { return !viewsOffered; },
                 current: function () { var f = MARKDOWN_VIEWS.find(function (x) { return x[0] === markdownDefault(); }); return f ? f[1] : null; },
                 items: MARKDOWN_VIEWS.map(function (v) {
@@ -1971,7 +1997,7 @@
         function menus() {
             var titles = [
                 { label: 'Editor', glyph: 'document', items: window.pcAppletIdentity(root) },
-                { id: 'file', label: 'File', glyph: 'file', items: ['new', 'open', 'save', 'save-as', '-', 'close-document'] },
+                { id: 'file', label: 'File', glyph: 'file', items: ['new', 'open', 'save', 'save-as', '-', 'properties', '-', 'close-document'] },
                 { id: 'edit', label: 'Edit', glyph: 'pencil', items: ['undo', 'redo', '-', 'find', 'go-to-line', '-', 'key-bindings'] },
                 { id: 'insert', label: 'Insert', glyph: 'plus', items: ['link', 'insert', 'box', '-', 'insert-timestamp', 'insert-date', 'stamp-modified'] }
             ];

@@ -31,6 +31,8 @@
     var SIZES = [['16:9', 'Widescreen, 16:9'], ['4:3', 'Standard, 4:3']];
     var TRANSITIONS = [['none', 'None'], ['fade', 'Fade'], ['slide', 'Slide']];
     var FRONT = { title: '', author: '', theme: 'plain', size: '16:9', transition: 'fade' };
+    /* The front matter's names the Deck menu sets, kept out of Properties. */
+    var DECK_KEYS = ['theme', 'size', 'transition', 'ink', 'heading', 'muted', 'accent', 'background', 'stylesheet'];
     var SETTINGS = { view: 'visual', filmstrip: true, dock: 'left', float: null, presenterOnPresent: false };
     /* Where the canvas sits beside the Markdown: a side, or floating over it. */
     var DOCKS = [['left', 'Left'], ['right', 'Right'], ['top', 'Top'], ['bottom', 'Bottom'], ['float', 'Floating']];
@@ -63,20 +65,38 @@
 
     /* A deck's text: the front matter, then slides divided by --- lines
        outside fenced code. Each slide keeps its own text. */
+    /* A deck's front matter is kept as it was written (frontText), and
+       its properties as read (frontRead) beside the ones in use (front,
+       with the defaults filled in). The Markdown engine reads it with a
+       real YAML parser and writes back only what changed
+       (internal/frontmatter; DESIGN.md, decision 17); until the engine has
+       loaded, a plain reading of name: value lines stands in. */
+    function engineJSON(name, arg) { return JSON.parse(window.yavcMd[name](typeof arg === 'string' ? arg : JSON.stringify(arg))); }
+    function readFront(frontText) {
+        var read = {}, problem = null;
+        if (window.yavcMd) {
+            var f = engineJSON('front', frontText);
+            problem = f.problem || null;
+            (f.entries || []).forEach(function (e) { read[e.key] = e.value; });
+        } else {
+            frontText.split('\n').slice(1, -2).forEach(function (l) {
+                var m = /^([A-Za-z][A-Za-z0-9_-]*):\s*(.*)$/.exec(l);
+                if (m) { read[m[1]] = m[2].trim().replace(/^["']|["']$/g, ''); }
+            });
+        }
+        return { read: read, problem: problem };
+    }
     function parseDeck(text) {
-        var lines = text.replace(/\r\n/g, '\n').split('\n'), i = 0, front = Object.assign({}, FRONT), frontLines = [];
+        var lines = text.replace(/\r\n/g, '\n').split('\n'), i = 0, frontText = '';
         if (lines[0] === '---') {
             var j = 1;
-            while (j < lines.length && lines[j] !== '---') { j++; }
+            while (j < lines.length && lines[j].replace(/[ \t]+$/, '') !== '---') { j++; }
             if (j < lines.length) {
-                frontLines = lines.slice(0, j + 1);
-                lines.slice(1, j).forEach(function (l) {
-                    var m = /^([A-Za-z][A-Za-z0-9_-]*):\s*(.*)$/.exec(l);
-                    if (m) { front[m[1]] = m[2].trim().replace(/^["']|["']$/g, ''); }
-                });
+                frontText = lines.slice(0, j + 1).join('\n') + '\n';
                 i = j + 1;
             }
         }
+        var got = readFront(frontText), front = Object.assign({}, FRONT, got.read);
         var slides = [], cur = [], fence = null;
         for (; i < lines.length; i++) {
             var l = lines[i], f = /^\s{0,3}(`{3,}|~{3,})/.exec(l);
@@ -86,13 +106,43 @@
         }
         slides.push(cur.join('\n'));
         if (slides.length > 1 && slides[0].trim() === '') { slides.shift(); }
-        return { front: front, frontLines: frontLines, slides: slides.map(function (t) { return { text: t.replace(/^\n+/, '').replace(/\s+$/, '') + '\n' }; }) };
+        return { front: front, frontRead: got.read, frontText: frontText, frontProblem: got.problem, slides: slides.map(function (t) { return { text: t.replace(/^\n+/, '').replace(/\s+$/, '') + '\n' }; }) };
+    }
+    /* The changes to the front matter: each property now different from
+       what was read, null for one taken out; a default never written
+       stays unwritten. */
+    function frontChanges(deck) {
+        var set = {}, order = [], read = deck.frontRead || {};
+        Object.keys(deck.front).forEach(function (k) {
+            var v = deck.front[k] == null ? '' : String(deck.front[k]);
+            if (!(k in read)) { if (v !== '' && v !== FRONT[k]) { set[k] = v; order.push(k); } return; }
+            if (v !== read[k]) { set[k] = v === '' ? null : v; order.push(k); }
+        });
+        Object.keys(read).forEach(function (k) { if (!(k in deck.front)) { set[k] = null; order.push(k); } });
+        return { set: set, order: order };
+    }
+    /* The front matter as it is to be written, the deck taking it as read. */
+    function frontTextOf(deck) {
+        var ch = frontChanges(deck);
+        if (!ch.order.length) { return deck.frontText || ''; }
+        if (!window.yavcMd || deck.frontProblem) { return deck.frontText || ''; }
+        var res = engineJSON('frontset', { text: deck.frontText || '', set: ch.set, order: ch.order });
+        if (res.error) { return deck.frontText || ''; }
+        takeFront(deck, res.text);
+        return deck.frontText;
+    }
+    function takeFront(deck, text) {
+        text = text.replace(/\n+$/, '\n');
+        if (!text.trim()) { text = ''; }
+        var got = readFront(text);
+        deck.frontText = text;
+        deck.frontRead = got.read;
+        deck.frontProblem = got.problem;
+        deck.front = Object.assign({}, FRONT, got.read);
     }
     function serializeDeck(deck) {
-        var front = ['---'];
-        Object.keys(deck.front).forEach(function (k) { front.push(k + ': ' + deck.front[k]); });
-        front.push('---');
-        return front.join('\n') + '\n\n' + deck.slides.map(function (s) { return s.text.replace(/\s+$/, ''); }).join('\n\n---\n\n') + '\n';
+        var front = frontTextOf(deck);
+        return (front ? front + '\n' : '') + deck.slides.map(function (s) { return s.text.replace(/\s+$/, ''); }).join('\n\n---\n\n') + '\n';
     }
     /* A slide's settings, from its {{slide}} line, and that line set. */
     function parseArgs(args) {
@@ -235,6 +285,7 @@
             section.setAttribute('data-deck', String(n));
             section.setAttribute('data-slide-index', String(deck.slides.indexOf(slide)));
             section.setAttribute('data-theme-name', deck.front.theme || 'plain');
+            if (deck.front.lang) { section.setAttribute('lang', deck.front.lang); } else { section.removeAttribute('lang'); }
             section.setAttribute('data-transition', s.transition || deck.front.transition || 'fade');
             if (s.reveal) { section.setAttribute('data-reveal', s.reveal); } else { section.removeAttribute('data-reveal'); }
             section.className = 'deck-slide' + (s['class'] ? ' ' + s['class'].replace(/[^A-Za-z0-9_ -]/g, '') : '');
@@ -569,7 +620,13 @@
             if (pageActive()) { applySlideSettings(el.slide, s); }
         }
         function setFront(key, value) {
+            if (deck.frontProblem) { say('The front matter cannot be changed here: ' + deck.frontProblem, true); return; }
             if (value == null || value === '') { delete deck.front[key]; } else { deck.front[key] = value; }
+            /* Written at once, so a change the engine refuses is known now. */
+            serializeDeck(deck);
+            frontChanged();
+        }
+        function frontChanged() {
             installStyle();
             modified = true;
             deck.slides.forEach(function (s, i) { drawThumb(i); });
@@ -969,7 +1026,7 @@
             stage.className = 'deck-show deck-export-stage';
             buildShow(stage);
             var theme = document.documentElement.getAttribute('data-theme') || 'dark';
-            var html = '<!doctype html>\n<html lang="en" data-theme="' + esc(theme) + '">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n<title>' + esc(deck.front.title || 'A deck') + '</title>\n' +
+            var html = '<!doctype html>\n<html lang="' + esc(deck.front.lang || 'en') + '" data-theme="' + esc(theme) + '">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n<title>' + esc(deck.front.title || 'A deck') + '</title>\n' +
                 '<style>\n' + pudlCSS + '\n' + css + '\nhtml, body { margin: 0; height: 100%; background: var(--bg); }\n.deck-export { position: fixed; inset: 0; }\n</style>\n</head>\n<body class="deck deck-showing">\n' +
                 '<div class="deck-show deck-export" tabindex="0" role="region" aria-label="' + esc(deck.front.title || 'The deck') + '">' + stage.innerHTML + '</div>\n<script>\n' + js + '\nyavcPresent.start(document.querySelector(".deck-show"));\n</script>\n</body>\n</html>\n';
             var name = (deck.front.title || 'deck').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'deck';
@@ -1118,12 +1175,20 @@
                 cmd('styles-help', 'Styling a Deck', 'info', function () { window.open((window.pcPublicOrigin || location.origin.replace(/\/\/slides\./, '//')) + '/slides-styles', '_blank', 'noopener'); }),
                 cmd('background-image', 'Background Picture…', 'image', function () { askText('Background picture', 'The picture\'s address, such as /images/x.png; empty for none', settingsOf(current()).image || '').then(function (v) { if (v != null) { setSlideSetting('image', v.trim()); } }); }),
                 { id: 'slide-transition', label: 'Transition', items: TRANSITIONS.map(function (t) { return { id: 'slide-transition-' + t[0], label: t[1], choice: 'deck-slide-transition', value: t[0], checked: function () { return (settingsOf(current()).transition || deck.front.transition || 'fade') === t[0]; }, run: function () { setSlideSetting('transition', t[0] === (deck.front.transition || 'fade') ? null : t[0]); } }; }) },
-                cmd('deck-title', 'Title and Author…', 'tag', function () {
+                cmd('deck-title', 'Properties…', 'tag', function () {
+                    if (!window.yavcMd) { return; }
+                    serializeDeck(deck);
+                    var front = deck.frontProblem ? { problem: deck.frontProblem } : engineJSON('front', deck.frontText || '');
                     kit().then(function (k) {
-                        return k.askFields('Title and author', [
-                            { key: 'title', label: 'Title', value: deck.front.title },
-                            { key: 'author', label: 'Author', value: deck.front.author, help: 'Kept in the deck\'s front matter and written into its PowerPoint and PDF files.' }]);
-                    }).then(function (v) { if (!v) { return; } setFront('title', v.title); setFront('author', v.author); });
+                        return k.askProperties(front, { title: 'Deck properties', hidden: DECK_KEYS, hiddenWhere: 'in the Deck menu',
+                            hiddenNote: 'The theme, slide size, transition, colours and stylesheet are set from the Deck menu.' });
+                    }).then(function (r) {
+                        if (!r || !r.order.length) { return; }
+                        var res = engineJSON('frontset', { text: deck.frontText || '', set: r.set, order: r.order });
+                        if (res.error) { say(res.error, true); return; }
+                        takeFront(deck, res.text);
+                        frontChanged();
+                    });
                 }),
                 { id: 'theme', label: 'Theme', glyph: 'theme', current: function () { var f = THEMES.find(function (x) { return x[0] === deck.front.theme; }); return f ? f[1] : null; },
                     items: THEMES.map(function (t) { return { id: 'theme-' + t[0], label: t[1], choice: 'deck-theme', value: t[0], checked: function () { return (deck.front.theme || 'plain') === t[0]; }, run: function () { setFront('theme', t[0]); } }; }) },
@@ -1350,9 +1415,22 @@
             },
             'set-deck@1': async function (input) {
                 await booted;
-                ['title', 'author', 'theme', 'size', 'transition', 'ink', 'heading', 'muted', 'accent', 'background', 'stylesheet'].forEach(function (k) {
-                    if (input[k] != null) { setFront(k, String(input[k])); }
+                if (deck.frontProblem) { throw new Error('the front matter cannot be changed here: ' + deck.frontProblem); }
+                var set = {}, order = [];
+                ['title', 'author', 'subject', 'keywords', 'lang', 'date', 'theme', 'size', 'transition', 'ink', 'heading', 'muted', 'accent', 'background', 'stylesheet'].forEach(function (k) {
+                    if (input[k] != null) { set[k] = String(input[k]) || null; order.push(k); }
                 });
+                Object.keys(input.properties || {}).forEach(function (k) {
+                    var v = input.properties[k];
+                    set[k] = v == null || v === '' ? null : String(v); order.push(k);
+                });
+                if (order.length) {
+                    serializeDeck(deck);
+                    var res = engineJSON('frontset', { text: deck.frontText || '', set: set, order: order });
+                    if (res.error) { throw new Error(res.error); }
+                    takeFront(deck, res.text);
+                    frontChanged();
+                }
                 return { output: { front: Object.assign({}, deck.front) } };
             },
             'view@1': async function (input) {

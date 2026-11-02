@@ -173,6 +173,7 @@
         var W = 10, H = wide ? 5.625 : 7.5;
         pptx.title = deck.front.title || 'A deck';
         if (deck.front.author) { pptx.author = deck.front.author; }
+        if (deck.front.subject) { pptx.subject = deck.front.subject; }
         var theme = Object.assign({}, THEMES[deck.front.theme] || THEMES.plain);
         ['ink', 'muted', 'accent', 'heading'].forEach(function (k) { var c = colourOf(deck.front[k]); if (c) { theme[k] = c; } });
         if (colourOf(deck.front.background)) { theme.bg = colourOf(deck.front.background); }

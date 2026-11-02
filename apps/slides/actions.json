@@ -142,6 +142,22 @@
                   "fade",
                   "slide"
                 ]
+              },
+              "subject": {
+                "type": "string",
+                "maxLength": 2000
+              },
+              "keywords": {
+                "type": "string",
+                "maxLength": 2000
+              },
+              "lang": {
+                "type": "string",
+                "pattern": "^([A-Za-z]{2,3}(-[A-Za-z0-9]{1,8})*)?$"
+              },
+              "date": {
+                "type": "string",
+                "pattern": "^(\\d{4}-\\d{2}-\\d{2})?$"
               }
             }
           },
@@ -1016,8 +1032,8 @@
     },
     {
       "ref": "yavc.slides/set-deck@1",
-      "title": "Set the Deck's Front Matter",
-      "description": "Change the deck's title, author, theme, slide size, the transition every slide uses, or its colours over the theme's: ink (text), heading, muted (secondary text), accent and background, each any CSS colour or empty for the theme's own. Fields left out keep their values. stylesheet is a CSS file of the person's applied to every slide.",
+      "title": "Set the Deck's Properties",
+      "description": "Change the deck's properties: title, author, subject, keywords (separated by commas), lang (a language code such as en-GB) and date (YYYY-MM-DD), its theme, slide size, the transition every slide uses, or its colours over the theme's: ink (text), heading, muted (secondary text), accent and background, each any CSS colour or empty for the theme's own. stylesheet is a CSS file of the person's applied to every slide. properties sets any other property by name; an empty value takes one out. Fields left out keep their values. The front matter is changed line by line, keeping everything else as written, and front matter that is not valid YAML is refused.",
       "live": true,
       "inputSchema": {
         "type": "object",
@@ -1075,6 +1091,33 @@
             "type": "string",
             "maxLength": 1024,
             "description": "A CSS file of the person's, such as ~/themes/mine.css, scoped to the deck's slides; empty for none."
+          },
+          "subject": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "keywords": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "lang": {
+            "type": "string",
+            "pattern": "^([A-Za-z]{2,3}(-[A-Za-z0-9]{1,8})*)?$"
+          },
+          "date": {
+            "type": "string",
+            "pattern": "^(\\d{4}-\\d{2}-\\d{2})?$"
+          },
+          "properties": {
+            "type": "object",
+            "description": "Other properties by name (letters, digits, - and _), each a one-line value; empty takes the property out.",
+            "propertyNames": {
+              "pattern": "^[A-Za-z_][A-Za-z0-9_-]{0,63}$"
+            },
+            "additionalProperties": {
+              "type": "string",
+              "maxLength": 2000
+            }
           }
         }
       },

@@ -130,6 +130,14 @@
 .md-form-fields .form-help { margin: 0; }
 .md-form-fields .form-input, .md-form-fields .form-select { width: 100%; }
 
+/* The editing kit's Properties dialog. */
+.md-props { width: min(38rem, calc(100vw - 32px)); }
+.md-props .form-input { width: 100%; }
+.md-props-custom { display: grid; gap: var(--space-2); margin-bottom: var(--space-2); }
+.md-props-custom:empty { display: none; }
+.md-prop-row { display: grid; grid-template-columns: minmax(6rem, 1fr) minmax(8rem, 2fr) auto; gap: var(--space-2); align-items: center; }
+.md-prop-note { font-size: var(--text-xs); color: var(--text-muted); }
+
 /* A picture never widens the page: it scales to the column, as a figure's
    does; code and tables scroll within themselves (DESIGN.md, decision 15). */
 .doc-page img { max-width: 100%; height: auto; }

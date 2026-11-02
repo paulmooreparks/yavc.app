@@ -8,6 +8,8 @@ The Editor edits text and Markdown files: your own under `~`, and the site's pag
 
 File, Open opens one of your files or a page of the site; New starts an untitled document; the Files button shows the file pane on the left, where a click opens a file. Open documents sit in tabs across the top once there is more than one; a tab with unsaved changes says so, and closing it asks. Save is Ctrl+S; Save As asks where, starting in `~/Documents`. Unsaved changes survive a reload.
 
+File, Properties edits a Markdown file's front matter, the block between two lines of three dashes at its top: the title, author, subject, keywords, language and date, and any property of your own. Only the lines of the properties you change are rewritten, and front matter that is not valid YAML is reported rather than changed.
+
 A file of the site opens read-only; Save As keeps an editable copy under `~`. A file named `something.slides.md` is a deck, and File, Present the Deck opens it in Slides.
 
 ## Views

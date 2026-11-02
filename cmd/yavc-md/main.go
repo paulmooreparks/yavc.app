@@ -20,8 +20,10 @@ package main
 
 import (
 	"encoding/json"
+	"strings"
 	"syscall/js"
 
+	"yavc.app/internal/frontmatter"
 	"yavc.app/internal/pageview"
 	"yavc.app/internal/preview"
 	"yavc.app/internal/shortcodes"
@@ -105,6 +107,21 @@ func main() {
 	}))
 	api.Set("glyphs", fn(func(string) string {
 		return out(shortcodes.GlyphNames(), nil)
+	}))
+	api.Set("front", fn(func(text string) string {
+		return out(frontmatter.Read(strings.ReplaceAll(text, "\r\n", "\n")), nil)
+	}))
+	api.Set("frontset", fn(func(req string) string {
+		var r struct {
+			Text  string             `json:"text"`
+			Set   map[string]*string `json:"set"`
+			Order []string           `json:"order"`
+		}
+		if err := json.Unmarshal([]byte(req), &r); err != nil {
+			return out(nil, err)
+		}
+		text, err := frontmatter.Set(strings.ReplaceAll(r.Text, "\r\n", "\n"), r.Set, r.Order)
+		return out(map[string]string{"text": text}, err)
 	}))
 	api.Set("source", fn(func(src string) string {
 		blocks, _ := render(src)

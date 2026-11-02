@@ -17,6 +17,7 @@
      yavcMdEditor.editBlock(src, pictures)   a drawn block or inline shortcode pressed on the page
      yavcMdEditor.askShortcode(name, existing, host)   a standalone shortcode's form
      yavcMdEditor.boxCommand(ctx, opts, extra)   Box, which wraps the selection in a box
+     yavcMdEditor.askProperties(front, opts)   the Properties dialog, for front matter
      yavcMdEditor.loadImages(el, pictures)   pictures of the home folder, read
 
    ctx says where a format goes: { page(): the page view's handle or null,
@@ -803,12 +804,132 @@
         }).catch(function () { imgs.forEach(function (img) { img.classList.add('ed-missing-image'); }); });
     }
 
+    /* === Properties =======================================================
+       A document's front matter as a form (DESIGN.md, decision 17): the
+       stock properties, then any others, each a name and a value, which
+       may be added, changed and taken out. front is the engine's reading
+       of the front matter (internal/frontmatter): { entries: [{ key,
+       value, kind, editable }], problem }. opts.hidden are names the host
+       edits elsewhere, such as a deck's theme, left out of the form and
+       left as they are. Resolves to { set: { name: value, or null to take
+       it out }, order: [names] } with only what changed, or null. The
+       engine checks every name and value again, and reads the result back,
+       before anything is written. */
+    var STOCK = [
+        { key: 'title', label: 'Title' },
+        { key: 'author', label: 'Author' },
+        { key: 'subject', label: 'Subject', help: 'What it is about, in a line.' },
+        { key: 'keywords', label: 'Keywords', help: 'Words to find it by, separated by commas.' },
+        { key: 'lang', label: 'Language', placeholder: 'en-GB', help: 'The language it is written in, as a code such as en-GB or fr, for spelling and for screen readers.' },
+        { key: 'date', label: 'Date', kind: 'date', help: 'When it was written or is for.' }
+    ];
+    var PROP_NAME = /^[A-Za-z_][A-Za-z0-9_-]{0,63}$/;
+    var PROP_MAX = 2000;
+    function propProblem(name, value) {
+        if (!PROP_NAME.test(name)) { return '"' + name + '" is not a property name: use letters, digits, - and _, starting with a letter or _, up to 64 of them.'; }
+        if (value.length > PROP_MAX) { return 'The value of ' + name + ' is longer than ' + PROP_MAX + ' characters.'; }
+        if (/[\u0000-\u0008\u000a-\u001f\u007f]/.test(value)) { return 'The value of ' + name + ' holds a character that cannot be kept, such as a line break.'; }
+        return null;
+    }
+    function askProperties(front, opts) {
+        opts = opts || {};
+        if (front && front.problem) {
+            return askChoice('Properties', front.problem + ' Fix it in the text, and the properties can be edited here again.', [['ok', 'OK', true]]).then(function () { return null; });
+        }
+        var hidden = {}; (opts.hidden || []).forEach(function (k) { hidden[k] = true; });
+        var byKey = {}; ((front && front.entries) || []).forEach(function (e) { byKey[e.key] = e; });
+        var stockKeys = {}; STOCK.forEach(function (f) { stockKeys[f.key] = true; });
+        var custom = ((front && front.entries) || []).filter(function (e) { return !stockKeys[e.key] && !hidden[e.key]; });
+        var n = ++dlgCount, id = 'md-props-' + n + '-';
+        function customRow(e, k) {
+            var locked = e && !e.editable;
+            return '<div class="md-prop-row" data-row data-was="' + esc(e ? e.key : '') + '"' + (locked ? ' data-locked' : '') + '>' +
+                '<input class="form-input" data-name aria-label="Name" placeholder="name" value="' + esc(e ? e.key : '') + '" autocomplete="off" spellcheck="false"' + (locked ? ' readonly' : '') + '>' +
+                '<input class="form-input" data-value aria-label="Value" placeholder="value" value="' + esc(e ? e.value : '') + '" autocomplete="off"' + (locked ? ' readonly title="Written in a form this dialog does not change; edit it in the text."' : '') + '>' +
+                (locked ? '<span class="md-prop-note">In the text</span>' : '<button type="button" class="btn" data-act="remove-row" aria-label="Take out this property">Remove</button>') + '</div>';
+        }
+        var html = '<div class="md-props-stock">' + STOCK.map(function (f) {
+            var e = byKey[f.key], v = e ? e.value : '', locked = e && !e.editable, fid = id + f.key;
+            var input = f.kind === 'date' && !locked
+                ? '<input class="form-input" type="date" data-date id="' + fid + '" data-key="' + f.key + '" value="' + esc(/^\d{4}-\d{2}-\d{2}$/.test(v) ? v : '') + '">'
+                : '<input class="form-input" id="' + fid + '" data-key="' + f.key + '" value="' + esc(v) + '" autocomplete="off"' + (f.placeholder ? ' placeholder="' + esc(f.placeholder) + '"' : '') + (locked ? ' readonly' : '') + '>';
+            var help = locked ? 'Written in a form this dialog does not change; edit it in the text.' : (f.kind === 'date' && v && !/^\d{4}-\d{2}-\d{2}$/.test(v) ? 'It is now "' + v + '", which is not a date this field reads; choosing one replaces it.' : f.help);
+            return '<div class="form-group"><label class="form-label" for="' + fid + '">' + esc(f.label) + '</label>' + input + (help ? '<p class="form-help">' + esc(help) + '</p>' : '') + '</div>';
+        }).join('') + '</div>' +
+            '<div class="form-group"><span class="form-label">Other properties</span><div class="md-props-custom" data-role="custom">' + custom.map(customRow).join('') + '</div>' +
+            '<button type="button" class="btn" data-act="add-row">Add a Property</button>' +
+            '<p class="form-help">Any name and value of your own, kept in the front matter.' + (opts.hidden && opts.hidden.length ? ' ' + esc(opts.hiddenNote || '') : '') + '</p></div>' +
+            '<p class="form-error" data-role="error" hidden></p>';
+        var dlg = document.createElement('dialog');
+        dlg.className = 'dialog md-editor-dialog md-props';
+        dlg.setAttribute('aria-labelledby', id + 'title');
+        dlg.innerHTML = '<form method="dialog"><h3 class="dialog-title" id="' + id + 'title">' + esc(opts.title || 'Properties') + '</h3><div class="dialog-body">' + html + '</div>' +
+            '<div class="dialog-actions"><button type="button" class="btn" data-act="cancel">Cancel</button><button type="submit" class="btn btn-primary">OK</button></div></form>';
+        document.body.appendChild(dlg);
+        if (window.pudlDate && window.pudlDate.enhance) { window.pudlDate.enhance(dlg); }
+        var list = dlg.querySelector('[data-role="custom"]'), errorLine = dlg.querySelector('[data-role="error"]');
+        function problem(text, focus) { errorLine.textContent = text; errorLine.hidden = false; if (focus) { focus.focus(); } }
+        return new Promise(function (resolve) {
+            var done = false;
+            function finish(v) { if (done) { return; } done = true; if (dlg.open) { dlg.close(); } resolve(v); setTimeout(function () { dlg.remove(); }, 0); }
+            dlg.addEventListener('click', function (e) {
+                var b = e.target.closest('[data-act]');
+                if (!b) { return; }
+                var act = b.getAttribute('data-act');
+                if (act === 'cancel') { finish(null); }
+                else if (act === 'add-row') { list.insertAdjacentHTML('beforeend', customRow(null)); list.lastElementChild.querySelector('[data-name]').focus(); }
+                else if (act === 'remove-row') { var row = b.closest('[data-row]'); var next = row.nextElementSibling || row.previousElementSibling; row.remove(); (next ? next.querySelector('input') : dlg.querySelector('[data-act="add-row"]')).focus(); }
+            });
+            dlg.addEventListener('close', function () { finish(null); });
+            dlg.querySelector('form').addEventListener('submit', function (e) {
+                e.preventDefault();
+                errorLine.hidden = true;
+                var set = {}, order = [], names = {};
+                for (var i = 0; i < STOCK.length; i++) {
+                    var f = STOCK[i], input = dlg.querySelector('[data-key="' + f.key + '"]'), was = byKey[f.key], v = input.value.trim();
+                    if (input.readOnly) { continue; }
+                    if (f.kind === 'date' && !v && was && !/^\d{4}-\d{2}-\d{2}$/.test(was.value)) { continue; }
+                    var bad = v ? propProblem(f.key, v) : null;
+                    if (bad) { problem(bad, input); return; }
+                    if (f.key === 'lang' && v && !/^[A-Za-z]{2,3}(-[A-Za-z0-9]{1,8})*$/.test(v)) { problem('The language is a code such as en, en-GB or pt-BR.', input); return; }
+                    if (f.key === 'date' && v && !/^\d{4}-\d{2}-\d{2}$/.test(v)) { problem('The date is a day, such as 2026-11-03.', input); return; }
+                    if (v !== (was ? was.value : '')) { set[f.key] = v ? v : null; order.push(f.key); }
+                }
+                var rows = list.querySelectorAll('[data-row]'), kept = {};
+                for (var r = 0; r < rows.length; r++) {
+                    var row = rows[r], nameEl = row.querySelector('[data-name]'), valueEl = row.querySelector('[data-value]');
+                    var name = nameEl.value.trim(), value = valueEl.value.trim(), wasKey = row.getAttribute('data-was');
+                    if (row.hasAttribute('data-locked')) { kept[wasKey] = true; names[wasKey] = true; continue; }
+                    if (!name && !value) { continue; }
+                    if (!name) { problem('A property needs a name.', nameEl); return; }
+                    if (stockKeys[name]) { problem(name + ' has its own field above.', nameEl); return; }
+                    if (hidden[name]) { problem(name + ' is set elsewhere' + (opts.hiddenWhere ? ', ' + opts.hiddenWhere : '') + '.', nameEl); return; }
+                    if (names[name]) { problem('There are two properties called ' + name + '.', nameEl); return; }
+                    var bad2 = propProblem(name, value);
+                    if (bad2) { problem(bad2, PROP_NAME.test(name) ? valueEl : nameEl); return; }
+                    names[name] = true;
+                    if (!value) { continue; }
+                    if (wasKey && wasKey === name) { kept[wasKey] = true; }
+                    var before = byKey[name];
+                    if (!before || before.value !== value) { set[name] = value; order.push(name); }
+                }
+                custom.forEach(function (c) {
+                    if (!kept[c.key] && !(c.key in set)) { set[c.key] = null; order.push(c.key); }
+                });
+                finish({ set: set, order: order });
+            });
+            dlg.showModal();
+            var first = dlg.querySelector('.md-props-stock input:not([readonly])');
+            if (first) { first.focus(); }
+        });
+    }
+
     window.yavcMdEditor = {
         here: HERE, stamp: STAMP, placeholder: PLACEHOLDER,
         libs: libs, pageView: pageView, mermaid: mermaid, loadScript: loadScript,
         FORMATS: FORMATS, STYLES: STYLES, INSERTS: INSERTS, SHORTCODES: SHORTCODES, MENU: MENU,
         commands: commands, apply: apply, classesOf: classesOf, insertItem: insertItem, inserts: inserts, textFormat: textFormat, textInsert: textInsert,
-        askText: askText, askFields: askFields, askChoice: askChoice, askColour: askColour, askColours: askColours, askClass: askClass,
+        askText: askText, askFields: askFields, askChoice: askChoice, askProperties: askProperties, STOCK: STOCK, askColour: askColour, askColours: askColours, askClass: askClass,
         askFigure: askFigure, editBlock: editBlock, askShortcode: askShortcode, FORMS: FORMS, boxCommand: boxCommand, BOXES: BOXES, loadImages: loadImages, parseFigure: parseFigure, buildFigure: buildFigure, parseShortcode: parseShortcode,
         _page: null
     };

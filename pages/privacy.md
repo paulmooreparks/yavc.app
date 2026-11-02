@@ -1,10 +1,10 @@
 # Privacy policy
 
-*Last updated 2 November 2026.*
+*Last updated 3 November 2026.*
 
 yavc.app is a desktop of applications at yavc.app, and each application also runs on its own at its subdomain, such as sudoku.yavc.app. Paul Parks runs the site as an individual in Singapore, and he decides what it does with your data. You can reach him about anything on this page at [paul@parkscomputing.com](mailto:paul@parkscomputing.com).
 
-The site keeps as little about you as it can. It has no advertising, it does not track you across other sites, it does not sell your data, and it shares your data with no one except the network service listed below, which it needs in order to work.
+The site keeps as little about you as it can. It has no advertising, it does not track you across other sites, it does not sell your data, and it shares your data with no one except the two services listed below: the network service it needs in order to work, and a visitor counter that keeps no personal data.
 
 ## The session cookie
 
@@ -22,11 +22,13 @@ Files you make in the editor, in the terminal or through an application's saves 
 
 The server sees each request your browser makes, as every web server does. It keeps ordinary access logs, which record the requesting address, the time and the page requested, for a short period and only for operating the site. Those logs are not joined to your session.
 
-The site loads no third-party scripts, fonts, analytics or advertising. Every page is served from yavc.app, and the fonts come with the site.
+Every page is served from yavc.app, and the fonts come with the site. The one script loaded from elsewhere is Plausible's visitor counter, described below. The site loads no advertising and no other third-party scripts or fonts.
 
 ## Services the site uses
 
 Cloudflare passes all traffic between your browser and the server, so it sees each request, including your IP address, as any network carrier does. The site uses Cloudflare under its standard data protection terms, which require it to protect your data to a standard comparable to Singapore's.
+
+Plausible Analytics counts visits, so Paul can see which pages and applications people use. Each page loads its script from plausible.io, which records the page's address, the site that linked to it, the browser, operating system and kind of device, and the country the visit came from. It sets no cookie, stores nothing in your browser, does not keep your IP address, and does not follow you from one site to another, so the counts cannot be tied to you. Plausible keeps the counts on servers in the European Union. A content blocker that stops the script stops the counting, and the site works the same either way.
 
 ## Accounts
 

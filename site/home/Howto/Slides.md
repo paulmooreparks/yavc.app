@@ -31,7 +31,7 @@ What I will say here.
 {{/notes}}
 ```
 
-The front matter's keys are `title`, `author`, `theme` (`plain`, which follows the site's own look, `paper` or `midnight`), `size` (`16:9` or `4:3`), `transition` (`none`, `fade` or `slide`), the colour overrides `ink`, `heading`, `muted`, `accent` and `background`, and `stylesheet`, a CSS file of yours.
+Deck, Properties edits the title, author, subject, keywords, language and date, and any property of your own; the front matter is changed line by line and everything else in it is kept as you wrote it. The front matter's keys are `title`, `author`, `subject`, `keywords`, `lang`, `date`, `theme` (`plain`, which follows the site's own look, `paper` or `midnight`), `size` (`16:9` or `4:3`), `transition` (`none`, `fade` or `slide`), the colour overrides `ink`, `heading`, `muted`, `accent` and `background`, and `stylesheet`, a CSS file of yours.
 
 A slide's first line may be `{{slide:…}}` with its settings: `layout`, `background` (a colour), `image` (a picture's address, drawn behind the slide), `color` and `heading` and `accent` (this slide's colours), `reveal=steps` (its top-level points appear one by one), `transition`, and `class` (classes from the stylesheet). `{{notes}}` … `{{/notes}}` anywhere in a slide is for the speaker and is never shown on the slide.
 

@@ -153,7 +153,12 @@
         var pngs = await pictures(ctx, progress);
         var pdf = await window.PDFLib.PDFDocument.create();
         pdf.setTitle(ctx.deck.front.title || 'A deck');
-        if (ctx.deck.front.author) { pdf.setAuthor(ctx.deck.front.author); }
+        var fm = ctx.deck.front;
+        if (fm.author) { pdf.setAuthor(fm.author); }
+        if (fm.subject) { pdf.setSubject(fm.subject); }
+        if (fm.keywords) { pdf.setKeywords(String(fm.keywords).split(',').map(function (k) { return k.trim(); }).filter(Boolean)); }
+        if (fm.lang) { pdf.setLanguage(fm.lang); }
+        if (/^\d{4}-\d{2}-\d{2}$/.test(fm.date || '')) { pdf.setCreationDate(new Date(fm.date + 'T00:00:00')); }
         for (var i = 0; i < pngs.length; i++) {
             var image = await pdf.embedPng(pngs[i]);
             var page = pdf.addPage([w, h]);
