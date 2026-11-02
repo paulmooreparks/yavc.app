@@ -1,0 +1,49 @@
+# yavc.app in production, on the Linode (docs/deploy.md). The engine
+# publishes no port at all. cloudflared connects out to Cloudflare and
+# reaches the engine over the compose network, so the server's firewall
+# accepts nothing but SSH.
+#
+# The engine's image is pulled at the exact tag in .env (YAVC_TAG), built
+# by .github/workflows/image.yml, so a release is a tag and a rollback is
+# the tag before it. The tunnel's token is in .env too, and .env is never
+# committed.
+#
+# Both containers run read-only, with no Linux capabilities, no way to gain
+# privileges, and a memory limit. The engine writes only the sessions, in
+# the yavc-data volume.
+services:
+  yavc:
+    image: ghcr.io/paulmooreparks/yavc.app:${YAVC_TAG:?set YAVC_TAG in .env}
+    container_name: yavc-app
+    restart: unless-stopped
+    volumes:
+      - yavc-data:/data
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 512m
+    command: ["-domain", "yavc.app", "-secure", "-title", "yavc.app"]
+
+  tunnel:
+    image: cloudflare/cloudflared:2026.10.7
+    container_name: yavc-tunnel
+    restart: unless-stopped
+    command: ["tunnel", "--no-autoupdate", "run"]
+    environment:
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN:?set TUNNEL_TOKEN in .env}
+    depends_on:
+      - yavc
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 256m
+
+volumes:
+  yavc-data:
+    name: yavc-data
