@@ -361,7 +361,8 @@ func (p parser) walk(n ast.Node, marks []Mark, out *[]*Node) error {
 				}
 				marks = marks[:len(marks)-1]
 			} else {
-				marks = withMark(marks, Mark{Type: "color", Attrs: map[string]any{"value": value}})
+				// The spelling used is kept, so the text writes back as it was.
+				marks = withMark(marks, Mark{Type: "color", Attrs: map[string]any{"value": value, "name": name}})
 			}
 		case *ast.AutoLink:
 			if err := flush(); err != nil {
@@ -587,7 +588,11 @@ func delimiters(m Mark) (string, string) {
 		return "<u>", "</u>"
 	case "color":
 		v, _ := m.Attrs["value"].(string)
-		return "{{color:" + strings.ReplaceAll(strings.TrimSpace(v), "}", "") + "}}", "{{/color}}"
+		name, _ := m.Attrs["name"].(string)
+		if name != "colour" {
+			name = "color"
+		}
+		return "{{" + name + ":" + strings.ReplaceAll(strings.TrimSpace(v), "}", "") + "}}", "{{/" + name + "}}"
 	case "strike":
 		return "~~", "~~"
 	case "link":
@@ -689,7 +694,7 @@ func sameMark(a, b Mark) bool {
 	case "link":
 		return a.Attrs["href"] == b.Attrs["href"] && isAuto(a) == isAuto(b)
 	case "color":
-		return a.Attrs["value"] == b.Attrs["value"]
+		return a.Attrs["value"] == b.Attrs["value"] && a.Attrs["name"] == b.Attrs["name"]
 	}
 	return true
 }

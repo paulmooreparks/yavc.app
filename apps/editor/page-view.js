@@ -151,7 +151,7 @@ var schemaCache = null;
         code: { parseDOM: [{ tag: 'code' }], toDOM: function () { return ['code', 0]; } },
         /* Words in a colour, {{color:…}}…{{/color}}: the value as written,
            one of the site's names or any CSS colour. */
-        color: { attrs: { value: { default: 'accent' } },
+        color: { attrs: { value: { default: 'accent' }, name: { default: 'color' } },
           parseDOM: [{ tag: 'span.sc-colour', getAttrs: function (d) { return { value: d.getAttribute('data-value') || d.style.color || 'accent' }; } }],
           toDOM: function (m) { return ['span', { class: 'sc-colour', 'data-value': m.attrs.value, style: 'color:' + colorCSS(m.attrs.value) }, 0]; } }
       }
