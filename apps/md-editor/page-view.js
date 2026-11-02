@@ -153,7 +153,12 @@ var schemaCache = null;
            one of the site's names or any CSS colour. */
         color: { attrs: { value: { default: 'accent' }, name: { default: 'color' } },
           parseDOM: [{ tag: 'span.sc-colour', getAttrs: function (d) { return { value: d.getAttribute('data-value') || d.style.color || 'accent' }; } }],
-          toDOM: function (m) { return ['span', { class: 'sc-colour', 'data-value': m.attrs.value, style: 'color:' + colorCSS(m.attrs.value) }, 0]; } }
+          toDOM: function (m) { return ['span', { class: 'sc-colour', 'data-value': m.attrs.value, style: 'color:' + colorCSS(m.attrs.value) }, 0]; } },
+        /* A class of the document's stylesheet, {{class:name}}…{{/class}},
+           drawn as u-name as the engine draws it. */
+        class: { attrs: { value: { default: '' }, name: { default: 'class' } },
+          parseDOM: [{ tag: 'span[data-class]', getAttrs: function (d) { return { value: d.getAttribute('data-class') }; } }],
+          toDOM: function (m) { var c = String(m.attrs.value).replace(/[^A-Za-z0-9-]/g, ''); return ['span', { class: c, 'data-class': c }, 0]; } }
       }
     });
     return schemaCache;
@@ -973,11 +978,12 @@ var schemaCache = null;
         case 'bullets': cmd = list(n.bullet_list); break;
         case 'numbers': cmd = list(n.ordered_list); break;
         case 'link': linkDialog(); return true;
-        case 'color':
-          /* With a value, the selection takes that colour (or the next
-             words typed, when nothing is selected); without, it loses it. */
+        case 'color': case 'class':
+          /* With a value, the selection takes that colour or class (or the
+             next words typed, when nothing is selected); without, it loses
+             it. */
           cmd = function (state, dispatch) {
-            var sel = state.selection, type = s.marks.color;
+            var sel = state.selection, type = s.marks[name];
             if (!arg) {
               if (dispatch) dispatch(sel.empty ? state.tr.removeStoredMark(type) : state.tr.removeMark(sel.from, sel.to, type).scrollIntoView());
               return true;
@@ -1081,7 +1087,7 @@ var schemaCache = null;
       marks: function () {
         if (!view) return {};
         var st = view.state, s = st.schema, out = {}, $f = st.selection.$from;
-        ['strong', 'em', 'code', 'underline', 'strike', 'link', 'color'].forEach(function (m) {
+        ['strong', 'em', 'code', 'underline', 'strike', 'link', 'color', 'class'].forEach(function (m) {
           var type = s.marks[m];
           out[m] = st.selection.empty ? !!type.isInSet(st.storedMarks || $f.marks()) : st.doc.rangeHasMark(st.selection.from, st.selection.to, type);
         });

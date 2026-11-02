@@ -731,7 +731,7 @@
     {
       "ref": "yavc.slides/insert@1",
       "title": "Add to a Slide",
-      "description": "Append Markdown to the end of a slide, or of the current one: a paragraph, a list, a picture ({{figure:…}}), a hosted video ({{video:https://youtu.be/ID}}), columns, a note. Words in a colour are {{color:accent}}words{{/color}}, with one of ink, muted, accent, danger, warn, positive or any CSS colour.",
+      "description": "Append Markdown to the end of a slide, or of the current one: a paragraph, a list, a picture ({{figure:…}}), a hosted video ({{video:https://youtu.be/ID}}), columns, a note. Words in a colour are {{color:accent}}words{{/color}}, with one of ink, muted, accent, danger, warn, positive or any CSS colour. A {{style}}…{{/style}} block holds CSS for the deck ({{style:slide}} for that slide); {{class:name}}words{{/class}} applies a class the CSS defines.",
       "live": true,
       "inputSchema": {
         "type": "object",
@@ -1017,7 +1017,7 @@
     {
       "ref": "yavc.slides/set-deck@1",
       "title": "Set the Deck's Front Matter",
-      "description": "Change the deck's title, author, theme, slide size, the transition every slide uses, or its colours over the theme's: ink (text), heading, muted (secondary text), accent and background, each any CSS colour or empty for the theme's own. Fields left out keep their values.",
+      "description": "Change the deck's title, author, theme, slide size, the transition every slide uses, or its colours over the theme's: ink (text), heading, muted (secondary text), accent and background, each any CSS colour or empty for the theme's own. Fields left out keep their values. stylesheet is a CSS file of the person's applied to every slide.",
       "live": true,
       "inputSchema": {
         "type": "object",
@@ -1070,6 +1070,11 @@
           "heading": {
             "type": "string",
             "maxLength": 64
+          },
+          "stylesheet": {
+            "type": "string",
+            "maxLength": 1024,
+            "description": "A CSS file of the person's, such as ~/themes/mine.css, scoped to the deck's slides; empty for none."
           }
         }
       },

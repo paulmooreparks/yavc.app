@@ -8,6 +8,7 @@ func TestColorMarkRoundTrip(t *testing.T) {
 		"# {{color:accent}}yavc.app{{/color}}",
 		"A {{color:#c0392b}}red **and bold**{{/color}} word.",
 		"- {{color:navy}}an item{{/color}}",
+		"A {{class:callout}}boxed **thing**{{/class}} here.",
 	} {
 		doc, err := Parse(src)
 		if err != nil {
@@ -17,7 +18,7 @@ func TestColorMarkRoundTrip(t *testing.T) {
 		var walk func(n *Node)
 		walk = func(n *Node) {
 			for _, m := range n.Marks {
-				if m.Type == "color" {
+				if m.Type == "color" || m.Type == "class" {
 					marks++
 				}
 			}

@@ -232,6 +232,8 @@
         function applySlideSettings(section, slide) {
             var s = settingsOf(slide);
             section.setAttribute('data-layout', s.layout || 'content');
+            section.setAttribute('data-deck', String(n));
+            section.setAttribute('data-slide-index', String(deck.slides.indexOf(slide)));
             section.setAttribute('data-theme-name', deck.front.theme || 'plain');
             section.setAttribute('data-transition', s.transition || deck.front.transition || 'fade');
             if (s.reveal) { section.setAttribute('data-reveal', s.reveal); } else { section.removeAttribute('data-reveal'); }
@@ -310,6 +312,7 @@
             if (s.text === text) { return; }
             s.text = text;
             modified = true;
+            installStyle();
             if (from !== 'text' && cm) { setCM(text); }
             if (from !== 'page' && pageActive()) { page.textChanged(); }
             if (!pageActive()) { scheduleRedraw(); }
@@ -533,6 +536,7 @@
         }
         function setFront(key, value) {
             if (value == null || value === '') { delete deck.front[key]; } else { deck.front[key] = value; }
+            installStyle();
             modified = true;
             deck.slides.forEach(function (s, i) { drawThumb(i); });
             applySlideSettings(el.slide, current());
@@ -594,6 +598,49 @@
         /* === Files ===================================================== */
 
         function fullText() { return serializeDeck(deck); }
+        /* === The deck's stylesheet (docs/slides-design.md, decision 17) ===
+           CSS from every {{style}} block, and from the front matter's
+           stylesheet file, scoped to this deck's slides with @scope, so it
+           reaches the canvas, the thumbnails, the show and the exports and
+           nothing else on the page. {{style:slide}} is scoped to its slide. */
+        var styleEl = null, sheetText = '', sheetPath = null, sheetLoading = null;
+        var STYLE_RE = /\{\{style(?::([^}]*))?\}\}([\s\S]*?)\{\{\/style\}\}/g;
+        function deckCSS() {
+            var scope = '.deck-slide[data-deck="' + n + '"]', parts = [];
+            /* The CSS is nested under :scope, so a selector such as h2 weighs
+               as much as the theme's .deck-body h2 and, installed later,
+               wins; a deck need not out-specify the theme to restyle it. */
+            var nest = function (css) { return ':scope {\n' + css + '\n}'; };
+            if (sheetText) { parts.push('@scope (' + scope + ') {\n' + nest(sheetText) + '\n}'); }
+            deck.slides.forEach(function (sl, i) {
+                var m;
+                STYLE_RE.lastIndex = 0;
+                while ((m = STYLE_RE.exec(sl.text))) {
+                    var own = /\bslide\b/.test(m[1] || '');
+                    parts.push('@scope (' + scope + (own ? '[data-slide-index="' + i + '"]' : '') + ') {\n' + nest(m[2].replace(/<\/style/gi, '')) + '\n}');
+                }
+            });
+            return parts.join('\n');
+        }
+        function installStyle() {
+            var css = deckCSS();
+            if (!styleEl) { styleEl = document.createElement('style'); styleEl.setAttribute('data-deck-style', String(n)); document.head.appendChild(styleEl); }
+            if (styleEl.textContent !== css) { styleEl.textContent = css; }
+            if (deck.front.stylesheet && deck.front.stylesheet !== sheetPath) { loadSheet(deck.front.stylesheet); }
+            if (!deck.front.stylesheet && sheetPath) { sheetPath = null; sheetText = ''; installStyle(); }
+        }
+        function loadSheet(path) {
+            sheetPath = path;
+            if (!H.fs || !H.fs.readText) { return; }
+            sheetLoading = H.fs.readText(path).then(function (text) {
+                if (destroyed || sheetPath !== path) { return; }
+                if (text == null) { say('There is no stylesheet at ' + path + '.', true); sheetText = ''; } else { sheetText = text; }
+                installStyle();
+            }).catch(function () { });
+        }
+        function deckClasses() { return window.yavcMdEditor ? window.yavcMdEditor.classesOf(deckCSS()) : []; }
+        var sheetWatch = H.fs && H.fs.onChange ? H.fs.onChange(function () { if (sheetPath) { loadSheet(sheetPath); } }) : null;
+
         /* === Tabs: one for each open deck ================================ */
 
         function tabTitle(t) { return t.path ? t.path.replace(/^.*\//, '') : (t.deck.front.title || 'A new deck'); }
@@ -616,6 +663,7 @@
             active = i;
             var t = tabs[i];
             deck = t.deck; path = t.path; modified = t.modified; at = 0;
+            installStyle();
             if (channel) { channel.close(); channel = null; }
             drawFilm();
             await goTo(t.at || 0);
@@ -657,6 +705,7 @@
             path = newPath || null;
             modified = false;
             at = 0;
+            installStyle();
             drawFilm();
             goTo(Math.max(0, Math.min(deck.slides.length - 1, (slide || 1) - 1)));
             if (cm) { setCM(current().text); }
@@ -874,7 +923,7 @@
 
         async function exportPage() {
             await loadScript(HERE + 'present.js' + STAMP);
-            var css = await fetch('/applets/md-engine/page.css').then(function (r) { return r.text(); }) + '\n' + await fetch(HERE + 'slides.css' + STAMP).then(function (r) { return r.text(); });
+            var css = await fetch('/applets/md-engine/page.css').then(function (r) { return r.text(); }) + '\n' + await fetch(HERE + 'slides.css' + STAMP).then(function (r) { return r.text(); }) + '\n' + deckCSS();
             var js = await fetch(HERE + 'present.js' + STAMP).then(function (r) { return r.text(); });
             var pudl = document.querySelector('link[href*="/pudl/pudl.css"]');
             var pudlHref = pudl ? new URL(pudl.getAttribute('href'), location.href).href : 'https://yavc.app/pudl/pudl.css';
@@ -904,7 +953,7 @@
         /* === PowerPoint and PDF (export-pptx.js, export-pdf.js, import-pptx.js) === */
 
         function officeContext() {
-            return { deck: deck, settingsOf: settingsOf, titleOf: titleOf, notesOf: notesOf, drawInto: drawIntoQuiet, buildShow: buildShow, sizeOf: sizeOf, loadScript: loadScript, here: HERE, stamp: STAMP };
+            return { deck: deck, settingsOf: settingsOf, titleOf: titleOf, notesOf: notesOf, drawInto: drawIntoQuiet, buildShow: buildShow, sizeOf: sizeOf, loadScript: loadScript, here: HERE, stamp: STAMP, deckCSS: deckCSS };
         }
         function fileStem() { return (deck.front.title || 'deck').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'deck'; }
         function download(name, blob) {
@@ -993,6 +1042,7 @@
                 page: function () { return page; }, text: function () { return cm; },
                 onPage: function () { return pageActive() && (mode === 'visual' || !(cm && cm.hasFocus)); },
                 blockStyle: function () { if (pageActive() && page.marks) { return page.marks().block || null; } if (!cm) { return null; } var m = /^\s{0,3}(#{1,6})(\s|$)/.exec(cm.state.doc.lineAt(cm.state.selection.main.head).text); return m ? 'h' + m[1].length : 'paragraph'; },
+                classes: deckClasses,
                 say: say, append: function (md) { takeText(current().text.replace(/\s*$/, '') + '\n\n' + md + '\n', 'command'); }
             };
         }
@@ -1024,6 +1074,14 @@
                 cmd('reveal', 'Reveal Points One by One', 'list', function () { setSlideSetting('reveal', settingsOf(current()).reveal === 'steps' ? null : 'steps'); }, { checked: function () { return settingsOf(current()).reveal === 'steps'; } }),
                 cmd('slide-colours', 'Slide Colours…', 'colour', slideColours),
                 cmd('deck-colours', 'Colours…', 'colour', deckColours),
+                cmd('deck-stylesheet', 'Stylesheet File…', 'file', function () {
+                    askText('The deck\'s stylesheet', 'A CSS file of yours, such as ~/themes/mine.css; empty for none', deck.front.stylesheet || '').then(function (v) { if (v != null) { setFront('stylesheet', v.trim()); } });
+                }),
+                cmd('deck-style-block', 'Add a Style Block', 'code', function () { insertMarkdown('{{style}}\n.deck-body h2 { letter-spacing: 0.02em; }\n{{/style}}'); }),
+                cmd('slide-class', 'Slide Style…', 'tag', function () {
+                    askText('This slide\'s style classes', 'Class names from the stylesheet, separated by spaces; empty for none', settingsOf(current())['class'] || '').then(function (v) { if (v != null) { setSlideSetting('class', v.trim()); } });
+                }),
+                cmd('styles-help', 'Styling a Deck', 'info', function () { window.open((window.pcPublicOrigin || location.origin.replace(/\/\/slides\./, '//')) + '/slides-styles', '_blank', 'noopener'); }),
                 cmd('background-image', 'Background Picture…', 'image', function () { askText('Background picture', 'The picture\'s address, such as /images/x.png; empty for none', settingsOf(current()).image || '').then(function (v) { if (v != null) { setSlideSetting('image', v.trim()); } }); }),
                 { id: 'slide-transition', label: 'Transition', items: TRANSITIONS.map(function (t) { return { id: 'slide-transition-' + t[0], label: t[1], choice: 'deck-slide-transition', value: t[0], checked: function () { return (settingsOf(current()).transition || deck.front.transition || 'fade') === t[0]; }, run: function () { setSlideSetting('transition', t[0] === (deck.front.transition || 'fade') ? null : t[0]); } }; }) },
                 cmd('deck-title', 'Title and Author…', 'tag', function () {
@@ -1062,11 +1120,11 @@
             return { titles: [
                 { label: 'Slides', glyph: 'document', items: H.identity ? H.identity(root, []) : [] },
                 { id: 'file', label: 'File', glyph: 'file', items: ['new-deck', 'open', 'import-pptx', 'save', 'save-as', '-', 'edit-whole', '-', 'export-pptx', 'export-pdf', 'export-html', 'print'] },
-                { id: 'slide', label: 'Slide', glyph: 'plus', items: ['slide-new', 'slide-duplicate', 'slide-delete', '-', 'slide-prev', 'slide-next', '-', 'slide-up', 'slide-down', '-', 'layout', 'reveal', 'slide-colours', 'background-image', 'slide-transition'] },
+                { id: 'slide', label: 'Slide', glyph: 'plus', items: ['slide-new', 'slide-duplicate', 'slide-delete', '-', 'slide-prev', 'slide-next', '-', 'slide-up', 'slide-down', '-', 'layout', 'reveal', 'slide-colours', 'slide-class', 'background-image', 'slide-transition'] },
                 { id: 'format', label: 'Format', glyph: 'paragraph', items: window.yavcMdEditor ? window.yavcMdEditor.MENU.format : [] },
-                { id: 'deck', label: 'Deck', glyph: 'gear', items: ['deck-title', 'theme', 'deck-colours', 'size', 'deck-transition'] },
+                { id: 'deck', label: 'Deck', glyph: 'gear', items: ['deck-title', 'theme', 'deck-colours', '-', 'deck-stylesheet', 'deck-style-block', '-', 'size', 'deck-transition'] },
                 { id: 'show', label: 'Show', glyph: 'play', items: ['present', 'present-here', 'leave', '-', 'presenter', 'presenter-auto'] }
-            ], into: { view: ['view-visual', 'view-text', 'view-split', '-', 'dock', 'toggle-film'], help: ['help'] } };
+            ], into: { view: ['view-visual', 'view-text', 'view-split', '-', 'dock', 'toggle-film'], help: ['help', 'styles-help'] } };
         }
         root.addEventListener('keydown', function (e) {
             /* Ctrl+Enter presents, since F5 is the browser's reload; F5 still
@@ -1235,7 +1293,7 @@
             },
             'set-deck@1': async function (input) {
                 await booted;
-                ['title', 'author', 'theme', 'size', 'transition', 'ink', 'heading', 'muted', 'accent', 'background'].forEach(function (k) {
+                ['title', 'author', 'theme', 'size', 'transition', 'ink', 'heading', 'muted', 'accent', 'background', 'stylesheet'].forEach(function (k) {
                     if (input[k] != null) { setFront(k, String(input[k])); }
                 });
                 return { output: { front: Object.assign({}, deck.front) } };
@@ -1300,6 +1358,8 @@
             destroy: function () {
                 destroyed = true;
                 if (detachLive) { detachLive(); }
+                if (styleEl) { styleEl.remove(); }
+                if (sheetWatch) { sheetWatch(); }
                 if (presenting) { presenting.destroy(); }
                 if (page) { try { page.enable(false); } catch (err) { } }
                 if (cm) { cm.destroy(); }

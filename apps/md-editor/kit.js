@@ -63,8 +63,14 @@
     var FORMATS = [
         ['bold', 'Bold', 'bold', 'Mod-b'], ['italic', 'Italic', 'italic', 'Mod-i'], ['strike', 'Strike Through', 'strike'],
         ['code', 'Code', 'code', 'Mod-`'], ['link', 'Link…', 'link', 'Mod-k'],
-        ['bullets', 'Bulleted List', 'list'], ['numbers', 'Numbered List', 'list-numbered'], ['color', 'Text Colour…', 'colour']
+        ['bullets', 'Bulleted List', 'list'], ['numbers', 'Numbered List', 'list-numbered'], ['color', 'Text Colour…', 'colour'], ['class', 'Style…', 'tag']
     ];
+    /* The classes a stylesheet defines, for the Style dialog. */
+    function classesOf(css) {
+        var out = {}, re = /\.([A-Za-z][A-Za-z0-9-]*)/g, m;
+        while ((m = re.exec(css || ''))) { if (!/^(deck|sc|doc|pm|dinah|md|win|btn|menu|notice|form)(-|$)/.test(m[1])) { out[m[1]] = true; } }
+        return Object.keys(out).sort();
+    }
     var STYLES = [['paragraph', 'Paragraph', 'Mod-0']].concat([1, 2, 3, 4, 5, 6].map(function (n) { return ['h' + n, 'Heading ' + n, 'Mod-' + n]; }));
     var INSERTS = [
         { id: 'insert-checklist', label: 'Checklist', markdown: '- [ ] ' + PLACEHOLDER },
@@ -135,6 +141,17 @@
             });
             return;
         }
+        if (name === 'class') {
+            askClass(ctx.classes ? ctx.classes() : []).then(function (v) {
+                if (v == null) { view.focus(); return; }
+                var s3 = view.state, sl3 = s3.selection.main, inner3 = s3.sliceDoc(sl3.from, sl3.to) || 'these words';
+                if (!v) { view.focus(); return; }
+                var open3 = '{{class:' + v + '}}', close3 = '{{/class}}';
+                view.dispatch({ changes: { from: sl3.from, to: sl3.to, insert: open3 + inner3 + close3 }, selection: { anchor: sl3.from + open3.length, head: sl3.from + open3.length + inner3.length }, userEvent: 'input' });
+                view.focus();
+            });
+            return;
+        }
         if (name === 'color') {
             askColour().then(function (v) {
                 if (v == null) { view.focus(); return; }
@@ -184,6 +201,7 @@
         var page = ctx.page && ctx.page();
         if (page && ctx.onPage()) {
             if (name === 'color') { askColour().then(function (v) { if (v == null) { return; } page.run('color', v || null); page.focus(); }); return; }
+            if (name === 'class') { askClass(ctx.classes ? ctx.classes() : []).then(function (v) { if (v == null) { return; } page.run('class', v || null); page.focus(); }); return; }
             page.run(name);
             return;
         }
@@ -226,7 +244,7 @@
         return out;
     }
     /* The ids a toolbar or menu lists, in the kit's order. */
-    var MENU = { format: ['style', '-', 'bold', 'italic', 'strike', 'code', 'link', 'color', '-', 'bullets', 'numbers', '-', 'insert'], toolbar: ['style', 'bold', 'italic', 'strike', 'code', 'link', 'color', 'bullets', 'numbers', 'insert'] };
+    var MENU = { format: ['style', '-', 'bold', 'italic', 'strike', 'code', 'link', 'color', 'class', '-', 'bullets', 'numbers', '-', 'insert'], toolbar: ['style', 'bold', 'italic', 'strike', 'code', 'link', 'color', 'class', 'bullets', 'numbers', 'insert'] };
 
     /* The / menu's items, for the page host's inserts(): the shortcodes,
        and the host's own after them. */
@@ -305,6 +323,22 @@
             return (r.body.querySelector('[data-key="custom"]') || { value: '' }).value.trim().replace(/[{}\s]/g, '');
         });
     }
+    /* A class of the document's stylesheet: one of those it defines, or
+       any name; '' takes the class off; null is Cancel. */
+    function askClass(names) {
+        var id = 'md-dlg-field-' + (dlgCount + 1);
+        var html = (names && names.length ? '<div class="form-group"><span class="form-label">The stylesheet\'s classes</span><div class="md-swatches" role="group" aria-label="Classes">' +
+            names.map(function (c) { return '<button type="button" class="btn md-swatch" data-swatch="' + esc(c) + '">' + esc(c) + '</button>'; }).join('') + '</div></div>' : '<p class="form-help">The deck has no stylesheet classes yet. A {{style}} block defines them, as .callout { … }.</p>') +
+            '<div class="form-group"><label class="form-label" for="' + id + '">Any class</label><input class="form-input" id="' + id + '" autocomplete="off" spellcheck="false" placeholder="callout; empty takes the class off"></div>';
+        var p = dialog('Style the words', html, [{ id: 'cancel', label: 'Cancel' }, { id: 'ok', label: 'Use this style', primary: true }]);
+        var dlg = document.querySelector('.md-editor-dialog:last-of-type');
+        if (dlg) { dlg.querySelector('.dialog-body').addEventListener('click', function (e) { var b = e.target.closest('[data-swatch]'); if (b) { dlg.close('swatch:' + b.getAttribute('data-swatch')); } }); }
+        return p.then(function (r) {
+            if (r.value && r.value.indexOf('swatch:') === 0) { return r.value.slice(7); }
+            if (r.value !== 'ok') { return null; }
+            return (r.body.querySelector('input') || { value: '' }).value.trim().replace(/[^A-Za-z0-9-]/g, '');
+        });
+    }
     /* Several colours at once, by key: { key, label, value, fallback,
        placeholder }; resolves to the values by key, or null. */
     function askColours(title, fields) {
@@ -323,8 +357,8 @@
         here: HERE, stamp: STAMP, placeholder: PLACEHOLDER,
         libs: libs, pageView: pageView, mermaid: mermaid, loadScript: loadScript,
         FORMATS: FORMATS, STYLES: STYLES, INSERTS: INSERTS, SHORTCODES: SHORTCODES, MENU: MENU,
-        commands: commands, apply: apply, insertItem: insertItem, inserts: inserts, textFormat: textFormat, textInsert: textInsert,
-        askText: askText, askChoice: askChoice, askColour: askColour, askColours: askColours,
+        commands: commands, apply: apply, classesOf: classesOf, insertItem: insertItem, inserts: inserts, textFormat: textFormat, textInsert: textInsert,
+        askText: askText, askChoice: askChoice, askColour: askColour, askColours: askColours, askClass: askClass,
         _page: null
     };
 })();

@@ -352,17 +352,23 @@ func (p parser) walk(n ast.Node, marks []Mark, out *[]*Node) error {
 			if !ok {
 				return ErrNotEditable
 			}
-			if name != "color" && name != "colour" {
+			markType := ""
+			switch name {
+			case "color", "colour":
+				markType = "color"
+			case "class":
+				markType = "class"
+			default:
 				return ErrNotEditable
 			}
 			if node.Closing {
-				if len(marks) == 0 || marks[len(marks)-1].Type != "color" {
+				if len(marks) == 0 || marks[len(marks)-1].Type != markType {
 					return ErrNotEditable
 				}
 				marks = marks[:len(marks)-1]
 			} else {
 				// The spelling used is kept, so the text writes back as it was.
-				marks = withMark(marks, Mark{Type: "color", Attrs: map[string]any{"value": value, "name": name}})
+				marks = withMark(marks, Mark{Type: markType, Attrs: map[string]any{"value": value, "name": name}})
 			}
 		case *ast.AutoLink:
 			if err := flush(); err != nil {
@@ -576,7 +582,7 @@ func intAttr(n *Node, key string, def int) int {
 }
 
 // markOrder is the order marks are opened in, outermost first.
-var markOrder = []string{"color", "link", "strong", "em", "underline", "strike", "code"}
+var markOrder = []string{"class", "color", "link", "strong", "em", "underline", "strike", "code"}
 
 func delimiters(m Mark) (string, string) {
 	switch m.Type {
@@ -593,6 +599,9 @@ func delimiters(m Mark) (string, string) {
 			name = "color"
 		}
 		return "{{" + name + ":" + strings.ReplaceAll(strings.TrimSpace(v), "}", "") + "}}", "{{/" + name + "}}"
+	case "class":
+		v, _ := m.Attrs["value"].(string)
+		return "{{class:" + strings.ReplaceAll(strings.TrimSpace(v), "}", "") + "}}", "{{/class}}"
 	case "strike":
 		return "~~", "~~"
 	case "link":
@@ -693,7 +702,7 @@ func sameMark(a, b Mark) bool {
 	switch a.Type {
 	case "link":
 		return a.Attrs["href"] == b.Attrs["href"] && isAuto(a) == isAuto(b)
-	case "color":
+	case "color", "class":
 		return a.Attrs["value"] == b.Attrs["value"] && a.Attrs["name"] == b.Attrs["name"]
 	}
 	return true

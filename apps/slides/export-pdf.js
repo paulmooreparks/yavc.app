@@ -101,7 +101,7 @@
 
     /* Every slide as a PNG (an ArrayBuffer), at twice its size. */
     async function pictures(ctx, progress) {
-        var css = await styles(ctx);
+        var css = await styles(ctx) + '\n' + (ctx.deckCSS ? ctx.deckCSS() : '');
         var wh = ctx.sizeOf(), w = wh[0], h = wh[1];
         /* The show, drawn off the page so its diagrams and applets run. */
         var stage = document.createElement('div');

@@ -169,7 +169,7 @@ func IsShortcodeParagraph(n ast.Node) bool {
 // found, and gives its name and its value (the first argument).
 func Span(n *Inline) (name, value string, ok bool) {
 	d := table[n.Call.Name]
-	if d == nil || d.kind != span || !n.Matched {
+	if !isSpan(d) || !n.Matched {
 		return "", "", false
 	}
 	v, _ := n.Call.Get(n.Call.Name, 0)
@@ -249,12 +249,24 @@ type def struct {
 	// HTML before and after its body.
 	render func(c Call, doc ast.Node, src []byte) (string, error)
 	wrap   func(c Call) (string, string, error)
+	// spanWrap lets a container also be written around words in a line,
+	// {{name:args}}words{{/name}}, as a span shortcode is.
+	spanWrap func(c Call) (string, string, error)
 	// separator is the block shortcode that divides a container's body,
 	// and separatorHTML what it becomes ({{column}} in {{columns}}).
 	separator, separatorHTML string
 }
 
 var table = map[string]*def{}
+
+// isSpan says whether a definition is written around words in a line.
+func isSpan(d *def) bool { return d != nil && (d.kind == span || d.spanWrap != nil) }
+func spanOf(d *def) func(c Call) (string, string, error) {
+	if d.spanWrap != nil {
+		return d.spanWrap
+	}
+	return d.wrap
+}
 
 func add(d *def) { table[d.name] = d }
 
@@ -595,12 +607,31 @@ func init() {
 			}
 			return out + `></div>`, nil
 		}})
+	add(&def{name: "style", kind: container, title: "Stylesheet", what: "CSS for a deck or a page, kept with it: in Slides it styles every slide, or with {{style:slide}} the slide it is in. It is never shown.",
+		example: "{{style}}\n.deck-body h2 { letter-spacing: 0.02em; }\n{{/style}}",
+		wrap:    func(c Call) (string, string, error) { return `<div class="sc-style" hidden>`, `</div>`, nil }})
+	add(&def{name: "class", kind: container, title: "Style class", what: "A class of the deck's or the page's stylesheet, on words in a line ({{class:name}}words{{/class}}) or around blocks on lines of their own, given as the class itself in the HTML.",
+		example: "{{class:callout}}these words{{/class}}",
+		wrap: func(c Call) (string, string, error) {
+			name, ok := className(c)
+			if !ok {
+				return "", "", problem{"class needs a name: letters, digits and dashes, starting with a letter."}
+			}
+			return `<div class="` + name + `" data-class="` + name + `">`, `</div>`, nil
+		},
+		spanWrap: func(c Call) (string, string, error) {
+			name, ok := className(c)
+			if !ok {
+				return "", "", problem{"class needs a name: letters, digits and dashes, starting with a letter."}
+			}
+			return `<span class="` + name + `" data-class="` + name + `">`, `</span>`, nil
+		}})
 	add(&def{name: "notes", kind: container, title: "Speaker notes", what: "Notes for the presenter, shown in the presenter view and not on the slide.",
 		example: "{{notes}}\nWhat to say.\n{{/notes}}",
 		wrap: func(c Call) (string, string, error) {
 			return `<aside class="sc-notes"><p class="sc-notes-label">Speaker notes</p>`, `</aside>`, nil
 		}})
-	for _, name := range []string{"expand", "status", "toc", "anchor", "page", "figure", "applet", "video", "code", "color", "kbd", "glyph", "columns", "column", "draft-note", "slide", "notes"} {
+	for _, name := range []string{"expand", "status", "toc", "anchor", "page", "figure", "applet", "video", "code", "color", "class", "style", "kbd", "glyph", "columns", "column", "draft-note", "slide", "notes"} {
 		order = append(order, name)
 	}
 }
@@ -756,7 +787,7 @@ func matchSpans(p ast.Node) {
 						in.Matched = true
 						open = open[:len(open)-1]
 					}
-				} else if d != nil && d.kind == span {
+				} else if isSpan(d) {
 					open = append(open, in)
 				}
 				continue
@@ -773,7 +804,7 @@ func (r *htmlRenderer) inline(w util.BufWriter, src []byte, node ast.Node, enter
 	}
 	n := node.(*Inline)
 	d := table[n.Call.Name]
-	if (d != nil && d.kind == span) || n.Closing {
+	if isSpan(d) || n.Closing {
 		// Spans pair within the block they sit in, whatever it is: a
 		// paragraph, a heading, a table cell, a list item.
 		for b := node.Parent(); b != nil; b = b.Parent() {
@@ -784,7 +815,7 @@ func (r *htmlRenderer) inline(w util.BufWriter, src []byte, node ast.Node, enter
 		}
 	}
 	if n.Closing {
-		if n.Matched && d != nil && d.kind == span {
+		if n.Matched && isSpan(d) {
 			_, _ = w.WriteString("</span>")
 			return ast.WalkContinue, nil
 		}
@@ -794,12 +825,12 @@ func (r *htmlRenderer) inline(w util.BufWriter, src []byte, node ast.Node, enter
 	switch {
 	case d == nil:
 		_, _ = w.WriteString(problemHTML(n.Call, "There is no shortcode called "+n.Call.Name+"."))
-	case d.kind == span:
+	case isSpan(d):
 		if !n.Matched {
-			_, _ = w.WriteString(problemHTML(n.Call, n.Call.Name+" needs {{/"+n.Call.Name+"}} after the words it colours, in the same paragraph."))
+			_, _ = w.WriteString(problemHTML(n.Call, n.Call.Name+" needs {{/"+n.Call.Name+"}} after the words it wraps, in the same paragraph."))
 			return ast.WalkContinue, nil
 		}
-		open, _, err := d.wrap(n.Call)
+		open, _, err := spanOf(d)(n.Call)
 		if err != nil {
 			open = problemHTML(n.Call, err.Error()) + "<span>"
 		}
@@ -952,3 +983,16 @@ var (
 	colourName = regexp.MustCompile(`^[a-zA-Z]{3,24}$`)
 	colourFunc = regexp.MustCompile(`^(?:rgb|rgba|hsl|hsla|oklch|oklab)\([0-9a-zA-Z%.,/ -]{1,60}\)$`)
 )
+
+var classRe = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9-]{0,63}$`)
+
+// className reads a class shortcode's name, which must be safe in a class
+// attribute and in a selector.
+func className(c Call) (string, bool) {
+	v, _ := c.Get("name", 0)
+	v = strings.TrimSpace(v)
+	if !classRe.MatchString(v) {
+		return "", false
+	}
+	return v, true
+}
