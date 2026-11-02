@@ -1148,8 +1148,7 @@
                 cmd('presenter-auto', 'Always Show Presenter Window', null, function () { settings.presenterOnPresent = !settings.presenterOnPresent; keepSetting('presenterOnPresent', settings.presenterOnPresent); commandsChanged(); }, { checked: function () { return !!settings.presenterOnPresent; } }),
                 cmd('toggle-film', 'Show the Filmstrip', 'panel', function () { settings.filmstrip = !settings.filmstrip; el.film.hidden = !settings.filmstrip; keepSetting('filmstrip', settings.filmstrip); fit(); commandsChanged(); }, { checked: function () { return settings.filmstrip; } }),
                 { id: 'dock', label: 'Canvas', glyph: 'dock', current: function () { var d = DOCKS.find(function (x) { return x[0] === settings.dock; }); return d ? d[1] : null; },
-                    items: DOCKS.map(function (d) { return { id: 'dock-' + d[0], label: d[1], choice: 'deck-dock', value: d[0], checked: function () { return settings.dock === d[0]; }, run: function () { setDock(d[0]); } }; }) },
-                cmd('help', 'Slides Help', 'info', function () { say('A deck is a Markdown file: slides divided by ---, a {{slide}} line for each slide\'s settings, {{notes}} for what to say. Edit a slide on its canvas or as its Markdown; the canvas docks beside the Markdown or floats over it (View).', 'info'); })
+                    items: DOCKS.map(function (d) { return { id: 'dock-' + d[0], label: d[1], choice: 'deck-dock', value: d[0], checked: function () { return settings.dock === d[0]; }, run: function () { setDock(d[0]); } }; }) }
             ];
             if (window.yavcMdEditor) { table = table.concat(window.yavcMdEditor.commands(editCtx(), DECK_INSERTS)); }
             [['visual', 'Visual'], ['text', 'Text'], ['split', 'Split']].forEach(function (v) {
@@ -1166,6 +1165,9 @@
                 { label: 'View', glyph: 'panel', priority: 1, end: true, items: [{ choice: 'deck-view' }, 'dock', 'toggle-film'] }
             ] }];
         }
+        /* Slides' help is a page of the site, /help/slides, which the
+           site's Help menu links to (DESIGN.md, decision 19); Help here adds
+           only the styling reference. */
         function menus() {
             return { titles: [
                 { label: 'Slides', glyph: 'document', items: H.identity ? H.identity(root, []) : [] },
@@ -1174,7 +1176,7 @@
                 { id: 'format', label: 'Format', glyph: 'paragraph', items: window.yavcMdEditor ? window.yavcMdEditor.MENU.format : [] },
                 { id: 'deck', label: 'Deck', glyph: 'gear', items: ['deck-title', 'theme', 'deck-colours', '-', 'deck-stylesheet', 'deck-style-block', '-', 'size', 'deck-transition'] },
                 { id: 'show', label: 'Show', glyph: 'play', items: ['present', 'present-here', 'leave', '-', 'presenter', 'presenter-auto'] }
-            ], into: { view: ['view-visual', 'view-text', 'view-split', '-', 'dock', 'toggle-film'], help: ['help', 'styles-help'] } };
+            ], into: { view: ['view-visual', 'view-text', 'view-split', '-', 'dock', 'toggle-film'], help: ['styles-help'] } };
         }
         /* Right-clicks (PUDL's pudl:contextmenu): a slide in the filmstrip
            gets the Slide menu, the canvas and the Markdown pane get Format

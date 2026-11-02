@@ -23,13 +23,8 @@
 
     var esc = window.yavcUtil.esc;
 
-    var uid = 0;
-
     function init(root, opts) {
         opts = opts || {};
-        var n = ++uid;
-        /* On the edit origin, with the admin mount, uploads take any file. */
-        var mounted = !!document.querySelector('meta[name="pc-fs-mount"]');
         root.classList.add('pc-files');
         if (opts.fit === 'fill') { root.classList.add('pc-files-fill'); }
         /* The toolbar's place first: PUDL draws the toolbar from the command
@@ -59,22 +54,10 @@
                 FB.markup.body({ drop: true, hint: 'Drop files here to upload them' }) +
                 '<div class="fm-detail" data-role="detail" aria-live="polite"></div>' +
                 '<p class="fm-status" data-role="status" role="status" aria-live="polite"></p>' +
-                '<dialog class="dialog" data-role="help-dialog" aria-labelledby="fm-help-title-' + n + '">' +
-                  '<h3 class="dialog-title" id="fm-help-title-' + n + '">Files Quick Help</h3>' +
-                  '<div class="dialog-body">' +
-                    '<p>Browse the site in <code>/site</code>, or choose the home button to manage your own files in <code>~</code>. Select an entry to see its details; double-click or press Enter to open it.</p>' +
-                    '<p>The toolbar and the Folder menu offer commands for the current selection and folder. In your home directory you can create files and folders, upload files, rename, move, and delete. Download saves a copy to your computer.</p>' +
-                    '<p>Use View &gt; Files &gt; Show Hidden Files to reveal names starting with a dot. With the list focused, Backspace goes up a folder, F2 renames a selected personal file, and Delete asks before deleting it.</p>' +
-                    '<p>On yavc.app, your personal file contents are never sent to the servers. Files keeps your data in this browser&apos;s local storage. Upload imports a file into that storage: text into local storage, a picture or any other file into the browser&apos;s database. Other browsers and devices do not share it; clearing site data removes it. Download important files for safekeeping.</p>' +
-                    (mounted ? '<p>You are using the admin site. Its mounted home and server folders are server-backed; changes there are sent to the server.</p>' : '') +
-                    '<p><a href="/page/files-guide" data-action="help-guide">Read the complete Files guide</a> for commands, storage limits, and troubleshooting.</p>' +
-                  '</div>' +
-                  '<div class="dialog-actions"><button type="button" class="btn btn-primary" data-action="help-close">Close</button></div>' +
-                '</dialog>' +
                 '<input type="file" multiple hidden data-role="file-input" />';
             var q = function (sel) { return root.querySelector(sel); };
             el = {
-                helpDialog: q('[data-role="help-dialog"]'), detail: q('[data-role="detail"]'), status: q('[data-role="status"]'),
+                detail: q('[data-role="detail"]'), status: q('[data-role="status"]'),
                 fileInput: q('[data-role="file-input"]'), main: q('[data-fb="main"]')
             };
         }
@@ -184,9 +167,7 @@
                 cmd('move', 'Move To…', 'move', { hidden: function () { return !owned(); } }),
                 cmd('delete', 'Delete…', 'yavc-bin', { danger: true, hidden: function () { return !owned(); } }),
                 cmd('terminal', 'New Terminal Window Here', 'terminal', { hidden: function () { return !canOpen('shell'); } }),
-                cmd('hidden', 'Show Hidden Files', 'eye', { checked: function () { return showHidden; } }),
-                { id: 'help', label: 'Files Quick Help', glyph: 'info', disabled: function () { return !ready(); }, run: function () { if (el) { el.helpDialog.showModal(); } } },
-                { id: 'guide', label: 'Files Guide', run: function () { if (inWindows()) { window.pudlWindows.open('files-guide'); } else { location.assign('/page/files-guide'); } } }
+                cmd('hidden', 'Show Hidden Files', 'eye', { checked: function () { return showHidden; } })
             ];
         }
 
@@ -199,7 +180,7 @@
                 { label: 'Go', glyph: 'home', priority: 4, items: ['up', 'home'] },
                 { label: 'New', glyph: 'plus', priority: 2, items: ['new-file', 'new-folder', 'upload'] },
                 { label: 'Selected', glyph: 'file', priority: 1, items: ['open', 'edit', 'run', 'download', 'copy', 'rename', 'move', 'delete'] },
-                { label: 'View', glyph: 'eye', priority: 3, end: true, items: ['hidden', 'terminal', 'help'] }
+                { label: 'View', glyph: 'eye', priority: 3, end: true, items: ['hidden', 'terminal'] }
             ] }];
         }
 
@@ -261,8 +242,6 @@
         /* === Actions ====================================================== */
 
         async function act(action) {
-            if (action === 'help') { el.helpDialog.showModal(); return; }
-            if (action === 'help-close') { el.helpDialog.close(); return; }
             var c = b.selected(), dir = cwd();
             switch (action) {
                 case 'up': b.up(); return;
@@ -371,18 +350,6 @@
 
         /* === Wiring ====================================================== */
 
-        function onClick(e) {
-            var a = e.target.closest('[data-action]');
-            if (!a || !root.contains(a)) { return; }
-            if (a.getAttribute('data-action') === 'help-guide') {
-                el.helpDialog.close();
-                if (inWindows()) { e.preventDefault(); window.pudlWindows.open('files-guide'); }
-                return;
-            }
-            /* Only the help dialog's own buttons are left with data-action. */
-            act(a.getAttribute('data-action'));
-        }
-
         /* The file manager's own keys, beside the browser's. */
         function onKey(e, c) {
             if (!c || !inHome(c) || F.realOf(c).special) { return false; }
@@ -399,12 +366,14 @@
            looks up in the command table. The Folder title holds every
            command the toolbar has, because the toolbar hides while the menu
            bar shows as a ribbon (PUDL 0.80.1) and the Folder tab must then
-           offer all of them; Go, View and Help list theirs again where a
-           reader of the menus looks for them. */
+           offer all of them; Go and View list theirs again where a reader
+           of the menus looks for them. Files' help is a page of the site,
+           /help/files, which the site's Help menu links to (DESIGN.md,
+           decision 19). */
         function menus() {
             return { titles: [{ label: 'Files', items: window.pcAppletIdentity(root) },
                 { id: 'file', label: 'File', items: ['new-file', 'new-folder', 'upload', '-', 'open', 'edit', 'run', 'download', 'terminal', '-', 'rename', 'move', 'copy', '-', 'delete'] }],
-                into: { go: ['up', 'home'], view: ['hidden'], help: ['help', 'guide'] } };
+                into: { go: ['up', 'home'], view: ['hidden'] } };
         }
 
         function setHidden(on) { showHidden = !!on; if (b) { b.showHidden(showHidden); commandsChanged(); } }
@@ -424,7 +393,6 @@
             }
             if (destroyed) { return; }
             build();
-            root.addEventListener('click', onClick);
         /* A right-click (PUDL's pudl:contextmenu) on a row gives the row's
            commands, on a folder in the tree the way there, and on the list
            itself the folder's. The commands are the table's own, by id. */
@@ -493,8 +461,6 @@
                 if (snap) { snap.leave(); }
                 if (unConfig) { unConfig(); }
                 if (b) { b.destroy(); }
-                root.removeEventListener('click', onClick);
-                if (el && el.helpDialog.open) { el.helpDialog.close(); }
             },
             ready: boot
         };

@@ -106,7 +106,13 @@
             </ul></li>
           </ul></li>
           {{if .Desktop}}<li data-menubar-if="windows" data-menubar-id="window" data-menubar-windows>Window<ul></ul></li>{{end}}
+          {{/* Help: the contents and each application's help page first
+               (DESIGN.md, decision 19), as links, since PUDL's applet menus
+               cannot hold a link. */}}
           <li data-menubar-id="help">Help<ul>
+            <li><a href="{{.SiteURL}}?open=help&amp;top=help"{{if .Desktop}} data-win-open="help"{{end}}>Help Contents</a></li>
+            {{range .Help}}<li><a href="{{$.SiteURL}}?open=help-{{.Name}}&amp;top=help-{{.Name}}"{{if $.Desktop}} data-win-open="help-{{.Name}}"{{end}}>{{.Title}} Help</a></li>
+            {{end}}<li>-</li>
             <li><a href="{{.SiteURL}}?open=author&amp;top=author"{{if .Desktop}} data-win-open="author"{{end}}>About the Author</a></li>
             <li><a href="{{.SiteURL}}about/pudl" data-dialog="about-pudl">About PUDL</a></li>
             <li><a href="{{.SiteURL}}?open=agents&amp;top=agents"{{if .Desktop}} data-win-open="agents"{{end}}>For Agents</a></li>
@@ -229,6 +235,9 @@
             </ul></li>
           </ul></li>
           <li data-menubar-id="help">Help<ul>
+            {{if .AppletHelp}}<li><a href="{{.SiteURL}}help/{{.Applet.Name}}">{{.Applet.Title}} Help</a></li>
+            {{end}}<li><a href="{{.SiteURL}}help">Help Contents</a></li>
+            <li>-</li>
             <li><a href="{{.SiteURL}}about" data-dialog="about-site">About yavc.app</a></li>
             <li><a href="{{.SiteURL}}author">About the Author</a></li>
             <li><a href="{{.SiteURL}}about/pudl" data-dialog="about-pudl">About PUDL</a></li>
