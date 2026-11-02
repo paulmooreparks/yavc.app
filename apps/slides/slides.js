@@ -764,7 +764,12 @@
         document.addEventListener('fullscreenchange', function () { if (!document.fullscreenElement && presenting && !presenterRole) { leave(); } });
         function presenterWindow() {
             if (!path) { say('Save the deck first, so the presenter window can open it.'); return; }
-            var url = new URL(opts.pageUrl || location.href, location.href);
+            /* The presenter opens on this page's own origin, since the show
+               and the presenter follow each other over a BroadcastChannel,
+               which never crosses origins, and the deck's file is kept
+               per origin (DESIGN.md, decision 11): on the desktop that is
+               the applet's standalone page at /slides on the same host. */
+            var url = new URL(opts.host === 'window' ? '/slides' : location.pathname, location.origin);
             url.search = '?file=' + encodeURIComponent(path).replace(/%2F/g, '/').replace(/%7E/g, '~') + '&presenter=1';
             window.open(url.href, 'yavc-presenter-' + path, 'popup,width=960,height=600');
             channel = channel || channelFor();
@@ -1013,7 +1018,7 @@
                     /* An entry is Markdown, or a function that asks for it. */
                     if (typeof i[1] === 'function') { Promise.resolve(i[1]()).then(function (md) { if (md) { insertMarkdown(md); } }); } else { insertMarkdown(i[1]); }
                 } }; }) }),
-                { id: 'style', label: 'Paragraph Style', glyph: 'paragraph', items: [['paragraph', 'Paragraph'], ['h1', 'Heading 1'], ['h2', 'Heading 2'], ['h3', 'Heading 3']].map(function (x) { return { id: x[0], label: x[1], choice: 'deck-style', value: x[0], run: function () { applyFormat(x[0]); } }; }) },
+                { id: 'style', label: 'Paragraph Style', glyph: 'paragraph', items: [['paragraph', 'Paragraph', 'Mod+0'], ['h1', 'Heading 1', 'Mod+1'], ['h2', 'Heading 2', 'Mod+2'], ['h3', 'Heading 3', 'Mod+3'], ['h4', 'Heading 4', 'Mod+4']].map(function (x) { return { id: x[0], label: x[1], shortcut: x[2], choice: 'deck-style', value: x[0], run: function () { applyFormat(x[0]); } }; }) },
                 cmd('toggle-film', 'Show the Filmstrip', 'panel', function () { settings.filmstrip = !settings.filmstrip; el.film.hidden = !settings.filmstrip; keepSetting('filmstrip', settings.filmstrip); fit(); commandsChanged(); }, { checked: function () { return settings.filmstrip; } }),
                 { id: 'dock', label: 'Canvas', glyph: 'dock', current: function () { var d = DOCKS.find(function (x) { return x[0] === settings.dock; }); return d ? d[1] : null; },
                     items: DOCKS.map(function (d) { return { id: 'dock-' + d[0], label: d[1], choice: 'deck-dock', value: d[0], checked: function () { return settings.dock === d[0]; }, run: function () { setDock(d[0]); } }; }) },
