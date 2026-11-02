@@ -148,8 +148,9 @@
         root.tabIndex = -1;
         root.innerHTML =
             '<div class="deck-toolbar-slot" data-toolbar-slot></div>' +
+            '<div class="notice danger deck-notice" data-role="notice" role="alert" hidden><div class="notice-content"><p class="notice-body" data-role="notice-body"></p></div><button class="notice-close" type="button" aria-label="Dismiss" data-role="notice-close"></button></div>' +
             '<div class="deck-main" data-role="main">' +
-              '<nav class="deck-film" data-role="film" aria-label="Slides"></nav>' +
+              '<div class="deck-film" data-role="film" role="listbox" aria-label="Slides"></div>' +
               '<div class="deck-work split" data-role="work" data-split-pane="first">' +
                 '<div class="deck-stagebox split-pane" data-role="stagebox"><div class="deck-float-bar" data-role="float-bar" hidden><span>Slide</span></div><div class="deck-stage" data-role="stage"><div class="deck-canvas" data-role="canvas"><section class="deck-slide" data-role="slide"><div class="deck-body doc-page" data-role="body" data-ed-page></div></section></div></div>' +
                   '<div class="deck-notes-view" data-role="notes-view" hidden></div></div>' +
@@ -171,7 +172,7 @@
             '</dialog>';
         var q = function (sel) { return root.querySelector(sel); };
         var el = { film: q('[data-role="film"]'), work: q('[data-role="work"]'), stagebox: q('[data-role="stagebox"]'), stage: q('[data-role="stage"]'), canvas: q('[data-role="canvas"]'), slide: q('[data-role="slide"]'),
-            body: q('[data-role="body"]'), notesView: q('[data-role="notes-view"]'), split: q('[data-role="split"]'), text: q('[data-role="text"]'), floatBar: q('[data-role="float-bar"]'), main: q('[data-role="main"]'), where: q('[data-role="where"]'), message: q('[data-role="message"]'), presenter: q('[data-role="presenter"]'), main: q('[data-role="main"]') };
+            body: q('[data-role="body"]'), notesView: q('[data-role="notes-view"]'), split: q('[data-role="split"]'), text: q('[data-role="text"]'), notice: q('[data-role="notice"]'), noticeBody: q('[data-role="notice-body"]'), floatBar: q('[data-role="float-bar"]'), main: q('[data-role="main"]'), where: q('[data-role="where"]'), message: q('[data-role="message"]'), presenter: q('[data-role="presenter"]'), main: q('[data-role="main"]') };
 
         /* The applet's settings, kept by the host under its name. */
         function keepSetting(key, value) {
@@ -179,7 +180,22 @@
             var change = {}; change[key] = value;
             H.config.set('slides', change).catch(function () { });
         }
-        function say(msg, isError) { el.message.textContent = msg || ''; el.message.classList.toggle('deck-message-error', !!isError); }
+        /* A confirmation goes in the status strip; an error, which the
+           person must act on, is a notice that stays until dismissed, and
+           so is help, as an info notice. */
+        function say(msg, kind) {
+            if (kind) {
+                el.notice.classList.toggle('danger', kind === true);
+                el.notice.classList.toggle('info', kind === 'info');
+                el.notice.setAttribute('role', kind === true ? 'alert' : 'status');
+                el.noticeBody.textContent = msg;
+                el.notice.hidden = false;
+                fit();
+                return;
+            }
+            el.message.textContent = msg || '';
+        }
+        q('[data-role="notice-close"]').addEventListener('click', function () { el.notice.hidden = true; fit(); });
         function commandsChanged() { if (opts.commandsChanged) { opts.commandsChanged(); } }
         function stateString() {
             var p = new URLSearchParams();
@@ -411,10 +427,16 @@
 
         /* === The filmstrip ============================================= */
 
+        el.film.addEventListener('keydown', function (e) {
+            var by = e.key === 'ArrowDown' || e.key === 'ArrowRight' ? 1 : e.key === 'ArrowUp' || e.key === 'ArrowLeft' ? -1 : e.key === 'Home' ? -deck.slides.length : e.key === 'End' ? deck.slides.length : 0;
+            if (!by) { return; }
+            e.preventDefault();
+            goTo(at + by).then(function () { var b = el.film.querySelector('[data-slide="' + at + '"]'); if (b) { b.focus(); } });
+        });
         function drawFilm() {
             el.film.innerHTML = deck.slides.map(function (s, i) {
-                return '<button type="button" class="deck-thumb" data-slide="' + i + '" role="option" aria-selected="' + (i === at) + '" title="' + esc(titleOf(s, i)) + '">' +
-                    '<span class="deck-thumb-n">' + (i + 1) + '</span><span class="deck-thumb-stage"><span class="deck-thumb-canvas"><section class="deck-slide" data-role="thumb"><div class="deck-body doc-page"></div></section></span></span></button>';
+                return '<button type="button" class="deck-thumb" data-slide="' + i + '" role="option" aria-selected="' + (i === at) + '" aria-label="' + esc((i + 1) + '. ' + titleOf(s, i)) + '">' +
+                    '<span class="deck-thumb-n" aria-hidden="true">' + (i + 1) + '</span><span class="deck-thumb-stage" aria-hidden="true"><span class="deck-thumb-canvas"><section class="deck-slide" data-role="thumb"><div class="deck-body doc-page"></div></section></span></span></button>';
             }).join('');
             deck.slides.forEach(function (s, i) { drawThumb(i); });
             fitThumbs();
@@ -564,7 +586,7 @@
         }
         function newDeck() {
             load(NEW_DECK, null);
-            say('A new deck. Save it to keep it.');
+            say('This is a new deck. Save it to keep it.');
             announce();
         }
         function editWhole() {
@@ -723,13 +745,17 @@
             var js = await fetch(HERE + 'present.js' + STAMP).then(function (r) { return r.text(); });
             var pudl = document.querySelector('link[href*="/pudl/pudl.css"]');
             var pudlHref = pudl ? new URL(pudl.getAttribute('href'), location.href).href : 'https://yavc.app/pudl/pudl.css';
+            /* PUDL's stylesheet goes into the page, with its fonts' addresses
+               made absolute, so the file presents itself anywhere. */
+            var pudlCSS = await fetch(pudlHref).then(function (r) { return r.text(); }).catch(function () { return ''; });
+            pudlCSS = pudlCSS.replace(/url\((['"]?)(?!data:|https?:|\/\/)([^'")]+)\1\)/g, function (m, qu, u) { return 'url("' + new URL(u, pudlHref).href + '")'; });
             var stage = document.createElement('div');
             stage.className = 'deck-show deck-export-stage';
             buildShow(stage);
             var theme = document.documentElement.getAttribute('data-theme') || 'dark';
             var html = '<!doctype html>\n<html lang="en" data-theme="' + esc(theme) + '">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n<title>' + esc(deck.front.title || 'A deck') + '</title>\n' +
-                '<link rel="stylesheet" href="' + esc(pudlHref) + '">\n<style>\n' + css + '\nhtml, body { margin: 0; height: 100%; background: var(--bg); }\n.deck-export { position: fixed; inset: 0; }\n</style>\n</head>\n<body class="deck deck-showing">\n' +
-                '<div class="deck-show deck-export" tabindex="0">' + stage.innerHTML + '</div>\n<script>\n' + js + '\nyavcPresent.start(document.querySelector(".deck-show"));\n</script>\n</body>\n</html>\n';
+                '<style>\n' + pudlCSS + '\n' + css + '\nhtml, body { margin: 0; height: 100%; background: var(--bg); }\n.deck-export { position: fixed; inset: 0; }\n</style>\n</head>\n<body class="deck deck-showing">\n' +
+                '<div class="deck-show deck-export" tabindex="0" role="region" aria-label="' + esc(deck.front.title || 'The deck') + '">' + stage.innerHTML + '</div>\n<script>\n' + js + '\nyavcPresent.start(document.querySelector(".deck-show"));\n</script>\n</body>\n</html>\n';
             var name = (deck.front.title || 'deck').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'deck';
             return { name: name + '.html', html: html };
         }
@@ -794,14 +820,14 @@
             var table = [
                 cmd('new-deck', 'New Deck', 'plus', newDeck),
                 cmd('open', 'Open…', 'open', open, { shortcut: 'Mod+O' }),
-                cmd('save', 'Save', 'download', save, { shortcut: 'Mod+S', disabled: function () { return !ready; } }),
+                cmd('save', 'Save', null, save, { shortcut: 'Mod+S', disabled: function () { return !ready; } }),
                 cmd('save-as', 'Save As…', null, saveAs),
                 cmd('edit-whole', 'Edit the Whole Deck in the Editor', 'document', editWhole, { disabled: function () { return !path; } }),
-                cmd('export-html', 'Download as a Page…', 'new-window', exportHTML),
+                cmd('export-html', 'Download as a Page', 'download', exportHTML),
                 cmd('print', 'Print…', null, printDeck),
                 cmd('slide-new', 'New Slide', 'plus', null, { items: LAYOUTS.map(function (l) { return { id: 'slide-new-' + l[0], label: l[1], run: function () { addSlide(l[0]); } }; }) }),
                 cmd('slide-duplicate', 'Duplicate Slide', 'copy', duplicateSlide),
-                cmd('slide-delete', 'Delete Slide', 'close', deleteSlide, { danger: true, disabled: function () { return deck.slides.length <= 1; } }),
+                cmd('slide-delete', 'Delete Slide', null, deleteSlide, { danger: true, disabled: function () { return deck.slides.length <= 1; } }),
                 cmd('slide-up', 'Move Slide Up', 'arrow-up', function () { moveSlide(-1); }, { disabled: function () { return at === 0; } }),
                 cmd('slide-down', 'Move Slide Down', 'arrow-down', function () { moveSlide(1); }, { disabled: function () { return at >= deck.slides.length - 1; } }),
                 { id: 'layout', label: 'Layout', current: function () { var f = LAYOUTS.find(function (x) { return x[0] === (st.layout || 'content'); }); return f ? f[1] : null; },
@@ -820,7 +846,7 @@
                 cmd('present', 'Present from the Start', 'play', function () { present(0); }, { shortcut: 'F5', disabled: function () { return !ready || !!presenting; } }),
                 cmd('present-here', 'Present from This Slide', 'forward', function () { present(at); }, { shortcut: 'Shift+F5', disabled: function () { return !ready || !!presenting; } }),
                 cmd('leave', 'Leave the Show', 'stop', leave, { hidden: function () { return !presenting; } }),
-                cmd('presenter', 'Presenter Window…', 'new-window', presenterWindow, { disabled: function () { return !path; } }),
+                cmd('presenter', 'Presenter Window', 'new-window', presenterWindow, { disabled: function () { return !path; } }),
                 cmd('insert', 'Insert', 'plus', null, { items: INSERTS.map(function (i) { return { id: 'insert-' + i[0].toLowerCase().replace(/[^a-z]+/g, '-'), label: i[0], run: function () {
                     /* An entry is Markdown, or a function that asks for it. */
                     if (typeof i[1] === 'function') { Promise.resolve(i[1]()).then(function (md) { if (md) { insertMarkdown(md); } }); } else { insertMarkdown(i[1]); }
@@ -829,7 +855,7 @@
                 cmd('toggle-film', 'Show the Filmstrip', 'panel', function () { settings.filmstrip = !settings.filmstrip; el.film.hidden = !settings.filmstrip; keepSetting('filmstrip', settings.filmstrip); fit(); commandsChanged(); }, { checked: function () { return settings.filmstrip; } }),
                 { id: 'dock', label: 'Canvas', glyph: 'panel', current: function () { var d = DOCKS.find(function (x) { return x[0] === settings.dock; }); return d ? d[1] : null; },
                     items: DOCKS.map(function (d) { return { id: 'dock-' + d[0], label: d[1], choice: 'deck-dock', value: d[0], checked: function () { return settings.dock === d[0]; }, run: function () { setDock(d[0]); } }; }) },
-                cmd('help', 'Slides Help', 'info', function () { say('A deck is a Markdown file: slides divided by ---, a {{slide}} line for each slide\'s settings, {{notes}} for what to say. Edit a slide on its canvas or as its Markdown.'); })
+                cmd('help', 'Slides Help', 'info', function () { say('A deck is a Markdown file: slides divided by ---, a {{slide}} line for each slide\'s settings, {{notes}} for what to say. Edit a slide on its canvas or as its Markdown; the canvas docks beside the Markdown or floats over it (View).', 'info'); })
             ];
             FORMATS.forEach(function (f) { table.push(cmd(f[0], f[1], f[2], function () { applyFormat(f[0]); }, { shortcut: f[3] ? f[3].replace('Mod-', 'Mod+') : undefined, glyphOnly: true })); });
             [['visual', 'Visual'], ['text', 'Text'], ['split', 'Split']].forEach(function (v) {
@@ -848,13 +874,13 @@
         }
         function menus() {
             return { titles: [
-                { label: 'Slides', glyph: 'document', items: H.identity ? H.identity(root, ['help']) : ['help'] },
+                { label: 'Slides', glyph: 'document', items: H.identity ? H.identity(root, []) : [] },
                 { id: 'file', label: 'File', glyph: 'file', items: ['new-deck', 'open', 'save', 'save-as', '-', 'edit-whole', '-', 'export-html', 'print'] },
                 { id: 'slide', label: 'Slide', glyph: 'plus', items: ['slide-new', 'slide-duplicate', 'slide-delete', '-', 'slide-up', 'slide-down', '-', 'layout', 'reveal', 'background', 'background-image', 'slide-transition'] },
                 { id: 'format', label: 'Format', glyph: 'paragraph', items: ['style', '-', 'bold', 'italic', 'code', 'link', '-', 'bullets', 'numbers', '-', 'insert'] },
                 { id: 'deck', label: 'Deck', glyph: 'gear', items: ['deck-title', 'theme', 'size', 'deck-transition'] },
                 { id: 'show', label: 'Show', glyph: 'play', items: ['present', 'present-here', 'leave', '-', 'presenter'] }
-            ], into: { view: ['view-visual', 'view-text', 'view-split', '-', 'dock', 'toggle-film'] } };
+            ], into: { view: ['view-visual', 'view-text', 'view-split', '-', 'dock', 'toggle-film'], help: ['help'] } };
         }
         root.addEventListener('keydown', function (e) {
             if (e.key === 'F5') { e.preventDefault(); present(e.shiftKey ? at : 0); }
@@ -886,7 +912,7 @@
             await setMode(kept && kept.mode ? kept.mode : settings.view);
             if (start.get('present')) { present(parseInt(start.get('slide') || '1', 10) - 1); }
             announce();
-        })().catch(function (err) { if (!destroyed) { root.innerHTML = '<p class="deck-failed">Slides could not start: ' + esc(err.message) + '</p>'; } });
+        })().catch(function (err) { if (!destroyed) { root.innerHTML = '<div class="notice danger" role="alert"><div class="notice-content"><p class="notice-title">Slides could not start</p><p class="notice-body">' + esc(err.message) + '</p></div></div>'; } });
 
         /* === The live actions ============================================ */
 

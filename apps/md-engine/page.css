@@ -60,7 +60,7 @@
 .doc-page.page-view .pm-source > div > .doc-block { margin: 0; }
 .doc-page.page-view .pm-hint::before { content: attr(data-hint); float: left; height: 0; pointer-events: none; color: var(--dinah-muted-ink); }
 .doc-page.page-view .pm-slash-anchor { display: inline-block; width: 0; height: 1em; vertical-align: text-bottom; }
-.page-slash .menu-action[aria-selected="true"] { background: var(--menu-row-hover); }
+.page-slash .menu-action[aria-selected="true"] { background: var(--surface-alt); }
 .page-source { display: block; width: 100%; min-height: 3em; font: var(--text-sm)/1.5 var(--mono); resize: none; overflow: hidden; }
 
 /* === Shortcodes on the page (internal/shortcodes, from parkscomputing.com) ===
@@ -72,8 +72,9 @@
 .doc-page .sc-figure img { max-width: 100%; height: auto; }
 .doc-page .sc-figure figcaption { margin-top: var(--space-2); color: var(--dinah-muted-ink); font-size: var(--text-xs); }
 .doc-page .sc-expand { margin: 0 0 1.1em; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0 var(--space-4); }
-.doc-page .sc-expand > summary { cursor: pointer; padding: var(--space-2) 0; font-weight: 600; }
-.doc-page .sc-expand[open] > summary { border-bottom: 1px solid var(--border); margin-bottom: var(--space-3); }
+.doc-page .sc-expand > summary { margin: var(--space-2) 0; list-style: none; }
+.doc-page .sc-expand > summary::-webkit-details-marker { display: none; }
+.doc-page .sc-expand[open] > summary { margin-bottom: var(--space-3); }
 .doc-page .sc-toc { margin: 0 0 1.1em; padding: var(--space-3) var(--space-4); border-inline-start: 3px solid var(--border); }
 .doc-page .sc-toc ul { margin: 0; padding-inline-start: 1.2em; }
 .doc-page .sc-toc > ul { padding-inline-start: 0; list-style: none; }

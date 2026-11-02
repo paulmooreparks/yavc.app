@@ -33,6 +33,7 @@
 /* The tabs are PUDL's document tabs and the surface PUDL's code surface
    (0.26.0); only their place in the layout is set here. */
 .pc-editor .ed-tabs { min-height: 34px; }
+.pc-editor .ed-tabs[hidden] { display: none; }
 .pc-editor .ed-ro-mark { font-weight: 400; color: var(--text-muted); }
 /* The panes are PUDL's split: the Explorer, its handle, and the work,
    which is the text with the preview beside it. */

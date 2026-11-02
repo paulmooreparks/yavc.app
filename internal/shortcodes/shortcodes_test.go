@@ -27,7 +27,7 @@ func TestShortcodes(t *testing.T) {
 		{"{{glyph:nothing}} no", `sc-problem`},
 		{"{{tip:Try this}}\nSome *text*.\n{{/tip}}\n", `<div class="notice positive sc-notice" role="note"><div class="notice-content"><p class="notice-title">Try this</p><div class="notice-body">`},
 		{"{{tip:Try this}}\nSome *text*.\n{{/tip}}\n", `<em>text</em>`},
-		{"{{expand:More here}}\nHidden.\n{{/expand}}", `<details class="sc-expand"><summary>More here</summary>`},
+		{"{{expand:More here}}\nHidden.\n{{/expand}}", `<details class="sc-expand"><summary class="btn disclosure">More here</summary>`},
 		{"{{columns}}\nOne.\n\n{{column}}\n\nTwo.\n{{/columns}}", `<div class="sc-columns"><div class="sc-column">`},
 		{"{{columns}}\nOne.\n\n{{column}}\n\nTwo.\n{{/columns}}", `</div><div class="sc-column">`},
 		{"{{figure:/images/x.png alt=\"A thing\" width=80% caption=\"The *cap*\"}}", `<figure class="sc-figure"><img src="/images/x.png" alt="A thing" style="max-width:80%" loading="lazy"><figcaption>The <em>cap</em></figcaption></figure>`},

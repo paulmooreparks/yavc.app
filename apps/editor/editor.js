@@ -450,6 +450,9 @@
            them, and the close button or Delete asks, through
            pudl:tab-close, for the tab to close. */
         function renderTabs() {
+            /* The tab row shows only when there is more than one document
+               in progress (Paul, 2026-11-03). */
+            el.tabs.hidden = tabs.length <= 1;
             el.tabs.innerHTML = tabs.map(function (t, i) {
                 var on = i === active;
                 return '<button type="button" role="tab" data-tab="' + i + '" aria-selected="' + on + '" tabindex="' + (on ? '0' : '-1') + '" title="' + esc(t.path || t.name) + '">' +

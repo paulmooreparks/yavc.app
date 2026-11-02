@@ -100,6 +100,8 @@ The Editor gained Dinah Desktop's page view the same evening: Visual, Split and 
 
 Slides, the first application written for the site, arrived as a prototype on 2026-11-03, designed in `docs/slides-design.md`: a deck is a Markdown file of slides divided by `---`, with a `{{slide}}` line for each slide's layout and background and `{{notes}}` for the speaker; the current slide is edited on its canvas with the Editor's page view or as its Markdown in CodeMirror; the deck presents full screen from the window or `slides.yavc.app`, with a presenter window following over a BroadcastChannel; and it exports as a page that presents itself. The Markdown engine moved to `apps/md-engine`, a shared folder with its loader, the HTML cleaner and the page's stylesheet, which the Editor and Slides both use.
 
+The Editor shows its tab row only while more than one document is open (Paul, 2026-11-03); the same rule applies to Slides when it gains tabs.
+
 ## Order of work
 
 1. **Proof of concept.** The Go engine serving the desktop at `yavc.app` and standalone pages at `{slug}.yavc.app`, PUDL 0.96.2 with skins and themes, the session store, and three applications: dice (the smallest package, proving install and both addresses), sudoku (proving snapshot and continuity through the session store on both addresses) and settings (proving appearance kept in the engine and followed across subdomains). Conway is added if cheap, for `data-applet-param` and presets.

@@ -285,7 +285,8 @@ func init() {
 			if title == "" {
 				title = "More"
 			}
-			return `<details class="sc-expand"><summary>` + inlineHTML(title) + `</summary>`, `</details>`, nil
+			// The summary is PUDL's disclosure button, raised, since it is pressed.
+			return `<details class="sc-expand"><summary class="btn disclosure">` + inlineHTML(title) + `</summary>`, `</details>`, nil
 		}})
 	add(&def{name: "status", kind: inline, title: "Status", what: "A small coloured status label, with a glyph so colour isn't the only sign.",
 		example: "{{status:green Done}}",

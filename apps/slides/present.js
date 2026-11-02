@@ -28,6 +28,8 @@
         stage.appendChild(counter);
         stage.classList.add('deck-presenting');
         stage.setAttribute('tabindex', '0');
+        if (!stage.getAttribute('role')) { stage.setAttribute('role', 'region'); }
+        if (!stage.getAttribute('aria-label')) { stage.setAttribute('aria-label', document.title || 'The deck'); }
 
         function stepsOf(s) {
             if (!s || s.getAttribute('data-reveal') !== 'steps') { return []; }

@@ -73,7 +73,8 @@ body.desktop .md-layout { --md-sidebar-w: 300px; }
 .win-body:has(> .win-content > [data-applet-flush]) > .win-content { padding: 0; }
 .win-body:has(> .win-content > [data-applet="editor"][data-applet-fit="fill"]),
 .win-body:has(> .win-content > [data-applet="files"][data-applet-fit="fill"]),
-.win-body:has(> .win-content > [data-applet="terminal"][data-applet-fit="fill"]) { padding: 0; }
+.win-body:has(> .win-content > [data-applet="terminal"][data-applet-fit="fill"]),
+.win-body:has(> .win-content > [data-applet="slides"]) { padding: 0; }
 
 
 
