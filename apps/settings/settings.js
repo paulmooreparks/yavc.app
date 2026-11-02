@@ -158,7 +158,7 @@
                 .then(function (t) {
                     tokenShown.hidden = false;
                     tokenShown.textContent = t.token;
-                    tokenStatus.textContent = 'The token for ' + t.name + '. Copy it now; it is not shown again. Give it to the agent as a bearer token for ' + (window.pcPublicOrigin || location.origin) + '/mcp.';
+                    tokenStatus.textContent = 'The token for ' + t.name + '. Copy it now; it is not shown again. Give it to the agent as a bearer token for ' + ((document.querySelector('meta[name="pc-public-origin"]') || {}).content || location.origin).replace(/\/$/, '') + '/mcp.';
                     tokenShown.focus();
                     if (window.yavcBridge) { window.yavcBridge.connect(); }
                     return loadTokens();
