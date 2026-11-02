@@ -16,12 +16,6 @@
    into this slot and folding as the window narrows. The glyphs it uses
    that PUDL does not have are the Editor's own, set on the root because
    the menu bar's ribbon draws the same commands outside the Editor. */
-:root {
-  --glyph-undo: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5.5 3.5L2.5 6.5l3 3'/%3E%3Cpath d='M2.5 6.5h7a4 4 0 0 1 0 8H7'/%3E%3C/svg%3E");
-  --glyph-redo: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M10.5 3.5l3 3-3 3'/%3E%3Cpath d='M13.5 6.5h-7a4 4 0 0 0 0 8H9'/%3E%3C/svg%3E");
-  --glyph-save: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round'%3E%3Cpath d='M2.5 2.5h9l2 2v9h-11z'/%3E%3Cpath d='M5 2.5v3.5h5V2.5M4.5 13.5V9h7v4.5'/%3E%3C/svg%3E");
-  --glyph-wrap: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2 3.5h12M2 7.5h9.5a2.25 2.25 0 0 1 0 4.5H8'/%3E%3Cpath d='M9.5 10.5L8 12l1.5 1.5M2 12h3'/%3E%3C/svg%3E");
-}
 .pc-editor .ed-toolbar-slot { flex: none; min-width: 0; }
 .pc-editor .ed-readonly {
   display: inline-flex; align-items: center; gap: 5px;

@@ -915,11 +915,11 @@
         function commandTable() {
             var ready = !!md, s = current(), st = settingsOf(s);
             var table = [
-                cmd('new-deck', 'New Deck', 'plus', newDeck),
-                cmd('open', 'Open…', 'open', open, { shortcut: 'Mod+O' }),
-                cmd('save', 'Save', null, save, { shortcut: 'Mod+S', disabled: function () { return !ready; } }),
+                cmd('new-deck', 'New Deck', 'file', newDeck),
+                cmd('open', 'Open…', 'folder', open, { shortcut: 'Mod+O' }),
+                cmd('save', 'Save', 'save', save, { shortcut: 'Mod+S', disabled: function () { return !ready; } }),
                 cmd('save-as', 'Save As…', null, saveAs),
-                cmd('edit-whole', 'Edit the Whole Deck in the Editor', 'document', editWhole, { disabled: function () { return !path; } }),
+                cmd('edit-whole', 'Edit the Whole Deck in the Editor', 'pencil', editWhole, { disabled: function () { return !path; } }),
                 cmd('export-html', 'Download as a Page', 'download', exportHTML),
                 cmd('print', 'Print…', null, printDeck),
                 cmd('slide-new', 'New Slide', 'plus', null, { items: LAYOUTS.map(function (l) { return { id: 'slide-new-' + l[0], label: l[1], run: function () { addSlide(l[0]); } }; }) }),
@@ -927,16 +927,16 @@
                 cmd('slide-delete', 'Delete Slide', null, deleteSlide, { danger: true, disabled: function () { return deck.slides.length <= 1; } }),
                 cmd('slide-up', 'Move Slide Up', 'arrow-up', function () { moveSlide(-1); }, { disabled: function () { return at === 0; } }),
                 cmd('slide-down', 'Move Slide Down', 'arrow-down', function () { moveSlide(1); }, { disabled: function () { return at >= deck.slides.length - 1; } }),
-                { id: 'layout', label: 'Layout', current: function () { var f = LAYOUTS.find(function (x) { return x[0] === (st.layout || 'content'); }); return f ? f[1] : null; },
+                { id: 'layout', label: 'Layout', glyph: 'board', current: function () { var f = LAYOUTS.find(function (x) { return x[0] === (st.layout || 'content'); }); return f ? f[1] : null; },
                     items: LAYOUTS.map(function (l) { return { id: 'layout-' + l[0], label: l[1], choice: 'deck-layout', value: l[0], checked: function () { return (settingsOf(current()).layout || 'content') === l[0]; }, run: function () { setSlideSetting('layout', l[0]); } }; }) },
-                cmd('reveal', 'Reveal Points One by One', null, function () { setSlideSetting('reveal', settingsOf(current()).reveal === 'steps' ? null : 'steps'); }, { checked: function () { return settingsOf(current()).reveal === 'steps'; } }),
+                cmd('reveal', 'Reveal Points One by One', 'list', function () { setSlideSetting('reveal', settingsOf(current()).reveal === 'steps' ? null : 'steps'); }, { checked: function () { return settingsOf(current()).reveal === 'steps'; } }),
                 cmd('background', 'Background Colour…', 'colour', function () { askText('Background colour', 'A colour, such as #1b2a41 or teal; empty for the theme\'s own', settingsOf(current()).background || '').then(function (v) { if (v != null) { setSlideSetting('background', v.trim()); } }); }),
                 cmd('background-image', 'Background Picture…', 'image', function () { askText('Background picture', 'The picture\'s address, such as /images/x.png; empty for none', settingsOf(current()).image || '').then(function (v) { if (v != null) { setSlideSetting('image', v.trim()); } }); }),
                 { id: 'slide-transition', label: 'Transition', items: TRANSITIONS.map(function (t) { return { id: 'slide-transition-' + t[0], label: t[1], choice: 'deck-slide-transition', value: t[0], checked: function () { return (settingsOf(current()).transition || deck.front.transition || 'fade') === t[0]; }, run: function () { setSlideSetting('transition', t[0] === (deck.front.transition || 'fade') ? null : t[0]); } }; }) },
-                cmd('deck-title', 'Title and Author…', null, function () {
+                cmd('deck-title', 'Title and Author…', 'tag', function () {
                     askText('The deck\'s title', 'Title', deck.front.title).then(function (t) { if (t == null) { return; } setFront('title', t.trim()); return askText('The author', 'Author', deck.front.author).then(function (a) { if (a != null) { setFront('author', a.trim()); } }); });
                 }),
-                { id: 'theme', label: 'Theme', current: function () { var f = THEMES.find(function (x) { return x[0] === deck.front.theme; }); return f ? f[1] : null; },
+                { id: 'theme', label: 'Theme', glyph: 'theme', current: function () { var f = THEMES.find(function (x) { return x[0] === deck.front.theme; }); return f ? f[1] : null; },
                     items: THEMES.map(function (t) { return { id: 'theme-' + t[0], label: t[1], choice: 'deck-theme', value: t[0], checked: function () { return (deck.front.theme || 'plain') === t[0]; }, run: function () { setFront('theme', t[0]); } }; }) },
                 { id: 'size', label: 'Slide Size', items: SIZES.map(function (t) { return { id: 'size-' + t[0].replace(':', '-'), label: t[1], choice: 'deck-size', value: t[0], checked: function () { return (deck.front.size || '16:9') === t[0]; }, run: function () { setFront('size', t[0]); } }; }) },
                 { id: 'deck-transition', label: 'Transition for Every Slide', items: TRANSITIONS.map(function (t) { return { id: 'deck-transition-' + t[0], label: t[1], choice: 'deck-transition', value: t[0], checked: function () { return (deck.front.transition || 'fade') === t[0]; }, run: function () { setFront('transition', t[0]); } }; }) },
@@ -948,9 +948,9 @@
                     /* An entry is Markdown, or a function that asks for it. */
                     if (typeof i[1] === 'function') { Promise.resolve(i[1]()).then(function (md) { if (md) { insertMarkdown(md); } }); } else { insertMarkdown(i[1]); }
                 } }; }) }),
-                { id: 'style', label: 'Paragraph Style', items: [['paragraph', 'Paragraph'], ['h1', 'Heading 1'], ['h2', 'Heading 2'], ['h3', 'Heading 3']].map(function (x) { return { id: x[0], label: x[1], choice: 'deck-style', value: x[0], run: function () { applyFormat(x[0]); } }; }) },
+                { id: 'style', label: 'Paragraph Style', glyph: 'paragraph', items: [['paragraph', 'Paragraph'], ['h1', 'Heading 1'], ['h2', 'Heading 2'], ['h3', 'Heading 3']].map(function (x) { return { id: x[0], label: x[1], choice: 'deck-style', value: x[0], run: function () { applyFormat(x[0]); } }; }) },
                 cmd('toggle-film', 'Show the Filmstrip', 'panel', function () { settings.filmstrip = !settings.filmstrip; el.film.hidden = !settings.filmstrip; keepSetting('filmstrip', settings.filmstrip); fit(); commandsChanged(); }, { checked: function () { return settings.filmstrip; } }),
-                { id: 'dock', label: 'Canvas', glyph: 'panel', current: function () { var d = DOCKS.find(function (x) { return x[0] === settings.dock; }); return d ? d[1] : null; },
+                { id: 'dock', label: 'Canvas', glyph: 'dock', current: function () { var d = DOCKS.find(function (x) { return x[0] === settings.dock; }); return d ? d[1] : null; },
                     items: DOCKS.map(function (d) { return { id: 'dock-' + d[0], label: d[1], choice: 'deck-dock', value: d[0], checked: function () { return settings.dock === d[0]; }, run: function () { setDock(d[0]); } }; }) },
                 cmd('help', 'Slides Help', 'info', function () { say('A deck is a Markdown file: slides divided by ---, a {{slide}} line for each slide\'s settings, {{notes}} for what to say. Edit a slide on its canvas or as its Markdown; the canvas docks beside the Markdown or floats over it (View).', 'info'); })
             ];
