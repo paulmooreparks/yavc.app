@@ -19,16 +19,18 @@
             document.head.appendChild(s);
         });
     }
-    var cmReady = null;
-    function loadCodeMirror() {
-        if (window.CM && window.CM.EditorView) { return Promise.resolve(window.CM); }
-        if (!cmReady) {
-            cmReady = loadScript(beside('vendor/codemirror-6.43/codemirror.js?v=4'))
-                .then(function () { return window.CM; })
-                .catch(function (err) { cmReady = null; throw err; });
+    /* The editing kit (apps/md-editor): CodeMirror, the page view, Mermaid,
+       the formats, Insert and the dialogs, shared with Slides. */
+    var kitReady = null;
+    function loadKit() {
+        if (window.yavcMdEditor) { return Promise.resolve(window.yavcMdEditor); }
+        if (!kitReady) {
+            var v = window.yavcStaticVersion ? '?v=' + encodeURIComponent(window.yavcStaticVersion) : '';
+            kitReady = loadScript('/applets/md-editor/kit.js' + v).then(function () { return window.yavcMdEditor; }).catch(function (err) { kitReady = null; throw err; });
         }
-        return cmReady;
+        return kitReady;
     }
+    function loadCodeMirror() { return loadKit().then(function (k) { return k.libs(); }); }
     var siteFsReady = null;
     function loadSiteFs() {
         if (window.pcSiteFs) { return Promise.resolve(window.pcSiteFs); }
@@ -1004,20 +1006,20 @@
         }
         async function pageParts() {
             await mdEngine();
-            await into(document, 'script', HERE + 'page-view.js' + STAMP);
+            await loadKit().then(function (k) { return k.pageView(); });
         }
         function pageActive() { return !!(visual.api && visual.api.active()); }
         function pageHost() {
             return {
                 /* The / menu on the page offers the Insert menu's shortcodes. */
                 inserts: function () {
-                    var out = SHORTCODES.map(function (i) { return { id: 'insert-sc-' + i[0], label: i[1], words: i[0] + ' ' + i[1].toLowerCase(), markdown: i[2] }; });
+                    var extra = [];
                     if (F && F.mounted && shortcodes) {
-                        shortcodes.filter(function (s) { return s.name !== 'column' && !SHORTCODES.some(function (i) { return i[0] === s.name; }); }).forEach(function (s) {
-                            out.push({ id: 'insert-' + s.name, label: s.title, words: s.name + ' ' + s.title.toLowerCase(), markdown: s.example });
+                        shortcodes.filter(function (s) { return s.name !== 'column' && !SHORTCODES.some(function (i) { return i.name === s.name; }); }).forEach(function (s) {
+                            extra.push({ id: 'insert-' + s.name, label: s.title, words: s.name + ' ' + s.title.toLowerCase(), markdown: s.example });
                         });
                     }
-                    return out;
+                    return window.yavcMdEditor ? window.yavcMdEditor.inserts(extra) : [];
                 },
                 root: root, page: el.page, scroll: el.scroll,
                 text: function () { return view.state.doc.toString(); },
@@ -1084,6 +1086,7 @@
                         await pageParts();
                         if (gen !== visual.gen) { return; }
                         visual.api = window.yavcPageView.attach(pageHost());
+                        if (window.yavcMdEditor) { window.yavcMdEditor._page = visual.api; }
                     }
                     await visual.api.enable(true);
                     if (gen !== visual.gen) { return; }
@@ -1159,7 +1162,7 @@
         var mermaidReady = null, mermaidCount = 0;
         function drawMermaid(place, source) {
             if (!mermaidReady) {
-                mermaidReady = into(document, 'script', HERE + 'vendor/mermaid/mermaid.min.js');
+                mermaidReady = loadKit().then(function (k) { return k.mermaid(); });
             }
             var id = 'ed-mermaid-' + (++mermaidCount);
             mermaidReady.then(function () {
@@ -1187,42 +1190,18 @@
                 }).catch(function () { img.classList.add('ed-missing-image'); });
             });
         }
-        /* The blocks Insert offers, as the page view offers them. */
-        var INSERTS = [
-            { id: 'insert-checklist', label: 'Checklist', markdown: '- [ ] Type here.' },
-            { id: 'insert-table', label: 'Table', markdown: '| Heading 1 | Heading 2 | Heading 3 |\n| --- | --- | --- |\n| | | |\n| | | |' },
-            { id: 'insert-code', label: 'Code Block', markdown: '```\ncode\n```' }
-        ];
-        /* The shortcodes (internal/shortcodes), inserted as their examples:
-           on the page as blocks drawn from their Markdown, in the text as
-           the Markdown itself. */
-        var SHORTCODES = [
-            ['info', 'Information Notice', '{{info:An optional title}}\nText of the notice.\n{{/info}}'],
-            ['note', 'Note', '{{note:An optional title}}\nText of the note.\n{{/note}}'],
-            ['tip', 'Tip', '{{tip:An optional title}}\nText of the tip.\n{{/tip}}'],
-            ['warning', 'Warning', '{{warning:An optional title}}\nText of the warning.\n{{/warning}}'],
-            ['expand', 'Expand', '{{expand:The title}}\nWhat opens.\n{{/expand}}'],
-            ['columns', 'Columns', '{{columns}}\nThe first column.\n\n{{column}}\n\nThe second.\n{{/columns}}'],
-            ['figure', 'Figure', '{{figure:/images/picture.png alt="What it shows" width=80% caption="The caption, in Markdown."}}'],
-            ['video', 'Video', '{{video:https://youtu.be/dQw4w9WgXcQ title="What it is"}}'],
-            ['color', 'Colour', '{{color:accent}}these words{{/color}}'],
-            ['code-file', 'Code Listing from a File', '{{code:~/bin/hello}}'],
-            ['applet', 'Applet', '{{applet:conway fit=flow}}'],
-            ['toc', 'Contents', '{{toc}}'],
-            ['status', 'Status Label', '{{status:green Done}}'],
-            ['kbd', 'Keys', '{{kbd:Ctrl+Shift+P}}'],
-            ['glyph', 'Glyph', '{{glyph:check}}'],
-            ['page', 'Page Link', '{{page:author}}'],
-            ['anchor', 'Anchor', '{{anchor:name}}'],
-            ['draft-note', 'Note to Self', '{{draft-note}}\nCheck this date.\n{{/draft-note}}']
-        ].map(function (x) { return { id: 'insert-sc-' + x[0], label: x[1], markdown: x[2], shortcode: true }; });
-        function insertBlock(item) {
-            if (formatsThePage()) {
-                if (item.shortcode) { visual.api.insertMarkdown(item.markdown); } else { visual.api.run(item.id); }
-                return;
-            }
-            insertText('\n' + item.markdown + '\n');
+        var INSERTS = window.yavcMdEditor ? window.yavcMdEditor.INSERTS : [], SHORTCODES = window.yavcMdEditor ? window.yavcMdEditor.SHORTCODES : [];
+        /* Where a format or an insert goes: the page in Visual, the text
+           in Text and Preview, and in Split whichever has the keyboard. */
+        function editCtx() {
+            return {
+                page: function () { return visual.api; }, text: function () { return view; },
+                onPage: function () { return formatsThePage(); },
+                readOnly: function () { var t = current(); return !t || !!t.readOnly; },
+                blockStyle: blockStyle, say: say
+            };
         }
+        function insertBlock(item) { window.yavcMdEditor.insertItem(item, editCtx()); }
 
         /* === Find and replace ===========================================
            One find bar for the text and the page, in PUDL's parts: the two
@@ -1459,82 +1438,7 @@
            it does and the page otherwise. A toolbar button keeps the
            keyboard where it was, so Split can still tell. */
         function formatsThePage() { return pageActive() && (viewMode === 'visual' || (viewMode === 'split' && !(view && view.hasFocus))); }
-        function applyFormat(name) {
-            if (name === 'color') { textColour(); return; }
-            if (formatsThePage()) { visual.api.run(name); } else { textFormat(name); }
-        }
-        /* Words in a colour: one of the site's names or any CSS colour, as
-           the color shortcode takes it; on the page it is a mark, in the
-           Markdown the shortcode around the selection. */
-        function textColour() {
-            ask('Colour the words', 'One of ink, muted, accent, danger, warn or positive, or any colour such as #c0392b or tomato. Empty takes the colour off.', '', null, null, true).then(function (v) {
-                if (v == null) { return; }
-                v = String(v).trim().replace(/[{}\s]/g, '');
-                if (formatsThePage()) { visual.api.run('color', v || null); visual.api.focus(); return; }
-                var t = current();
-                if (!view || !t || t.readOnly) { return; }
-                var state = view.state, sel = state.selection.main, text = state.sliceDoc(sel.from, sel.to) || 'these words';
-                if (!v) { return; }
-                var open = '{{color:' + v + '}}', close = '{{/color}}';
-                view.dispatch({ changes: { from: sel.from, to: sel.to, insert: open + text + close }, selection: { anchor: sel.from + open.length, head: sel.from + open.length + text.length }, userEvent: 'input' });
-                view.focus();
-            });
-        }
-
-        /* The same formatting on the Markdown itself: a mark wraps the
-           selection, or is taken off it when it is there; a heading or a
-           list marks each selected line; Paragraph takes those marks off. */
-        var WRAPS = { bold: '**', italic: '*', strike: '~~', code: '`' };
-        function textFormat(name) {
-            var t = current();
-            if (!view || !t || t.readOnly) { return; }
-            var state = view.state, sel = state.selection.main;
-            if (WRAPS[name]) {
-                var w = WRAPS[name], text = state.sliceDoc(sel.from, sel.to);
-                var before = state.sliceDoc(Math.max(0, sel.from - w.length), sel.from), after = state.sliceDoc(sel.to, Math.min(state.doc.length, sel.to + w.length));
-                if (text.startsWith(w) && text.endsWith(w) && text.length >= 2 * w.length) {
-                    view.dispatch({ changes: { from: sel.from, to: sel.to, insert: text.slice(w.length, text.length - w.length) }, selection: { anchor: sel.from, head: sel.to - 2 * w.length }, userEvent: 'input' });
-                } else if (before === w && after === w) {
-                    view.dispatch({ changes: [{ from: sel.from - w.length, to: sel.from }, { from: sel.to, to: sel.to + w.length }], selection: { anchor: sel.from - w.length, head: sel.to - w.length }, userEvent: 'input' });
-                } else {
-                    view.dispatch({ changes: { from: sel.from, to: sel.to, insert: w + text + w }, selection: { anchor: sel.from + w.length, head: sel.to + w.length }, userEvent: 'input' });
-                }
-                view.focus();
-                return;
-            }
-            if (name === 'link') {
-                var chosen = state.sliceDoc(sel.from, sel.to);
-                ask('Link to', '', /^https?:\/\//.test(chosen) ? chosen : 'https://', [['cancel', 'Cancel'], ['ok', 'OK', true]], null, true).then(function (href) {
-                    if (href === 'cancel' || href == null || !href) { view.focus(); return; }
-                    var label = chosen && !/^https?:\/\//.test(chosen) ? chosen : href;
-                    var md = '[' + label + '](' + href + ')';
-                    view.dispatch({ changes: { from: sel.from, to: sel.to, insert: md }, selection: { anchor: sel.from + 1, head: sel.from + 1 + label.length }, userEvent: 'input' });
-                    view.focus();
-                });
-                return;
-            }
-            var first = state.doc.lineAt(sel.from), last = state.doc.lineAt(sel.to), changes = [];
-            var level = /^h([1-6])$/.exec(name), prefix = level ? '#'.repeat(+level[1]) + ' ' : name === 'bullets' ? '- ' : null;
-            var every = true;
-            for (var n = first.number; n <= last.number; n++) {
-                var line = state.doc.line(n), m = /^(\s*)(#{1,6}\s+|[-*+]\s+|\d+[.)]\s+)?/.exec(line.text), marked = m[2] || '';
-                if (name === 'numbers') { if (!/^\d+[.)]\s+$/.test(marked)) { every = false; } }
-                else if (prefix && marked !== prefix) { every = false; }
-            }
-            var k = 1;
-            for (var n2 = first.number; n2 <= last.number; n2++) {
-                var ln = state.doc.line(n2), mm = /^(\s*)(#{1,6}\s+|[-*+]\s+|\d+[.)]\s+)?/.exec(ln.text);
-                var indent = mm[1], old = mm[2] || '', put = '';
-                /* A list already on every line comes off; a heading level
-                   chosen again stays, as a paragraph style does. */
-                if (name === 'paragraph' || (every && !level)) { put = ''; }
-                else if (name === 'numbers') { put = (k++) + '. '; }
-                else { put = prefix; }
-                if (old !== put) { changes.push({ from: ln.from + indent.length, to: ln.from + indent.length + old.length, insert: put }); }
-            }
-            if (changes.length) { view.dispatch({ changes: changes, userEvent: 'input' }); }
-            view.focus();
-        }
+        function applyFormat(name) { window.yavcMdEditor.apply(name, editCtx()); }
 
         /* The insert menu lists the shortcodes, from the server's table, in
            alphabetical order of the titles it shows. */
@@ -2065,15 +1969,11 @@
            shortcut is the key bound to it, or failing one, CodeMirror's own;
            CodeMirror answers its keys in the text first, so PUDL answers a
            key only where CodeMirror did not. */
-        var FORMATS = [
-            ['bold', 'Bold', 'bold', 'Mod-b'], ['italic', 'Italic', 'italic', 'Mod-i'], ['strike', 'Strike Through', 'strike'],
-            ['code', 'Code', 'code', 'Mod-`'], ['link', 'Link…', 'link', 'Mod-k'],
-            ['bullets', 'Bulleted List', 'list'], ['numbers', 'Numbered List', 'list-numbered'], ['color', 'Text Colour…', 'colour']
-        ];
+        var FORMATS = window.yavcMdEditor ? window.yavcMdEditor.FORMATS : [];
         /* The paragraph style, as GK Companion's Editor has it: one menu that
            shows the style of the line the cursor is in, holding Paragraph
            (Ctrl+0) and the six heading levels (Ctrl+1 to Ctrl+6). */
-        var STYLES = [['paragraph', 'Paragraph', 'Mod-0']].concat([1, 2, 3, 4, 5, 6].map(function (n) { return ['h' + n, 'Heading ' + n, 'Mod-' + n]; }));
+        var STYLES = window.yavcMdEditor ? window.yavcMdEditor.STYLES : [];
         function blockStyle() {
             if (formatsThePage()) { return visual.api && visual.api.block ? visual.api.block() : null; }
             if (!view) { return null; }
@@ -2201,6 +2101,7 @@
             wrapOn = !!settings.wrap;
             /* The shortcodes for the Insert menu, which draws again once they are here. */
             loadShortcodes().then(commandsChanged);
+            loadKit().then(function () { FORMATS = window.yavcMdEditor.FORMATS; STYLES = window.yavcMdEditor.STYLES; INSERTS = window.yavcMdEditor.INSERTS; SHORTCODES = window.yavcMdEditor.SHORTCODES; commandsChanged(); });
             setupExplorer();
             setupExplorerSplit();
             wrapComp = new CM.Compartment(); langComp = new CM.Compartment(); lintComp = new CM.Compartment(); roComp = new CM.Compartment();

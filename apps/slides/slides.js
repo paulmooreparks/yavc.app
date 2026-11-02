@@ -18,7 +18,14 @@
     var SELF_SRC = document.currentScript && document.currentScript.src;
     var HERE = (SELF_SRC || '/applets/slides/slides.js').split('?')[0].replace(/slides\.js$/, '');
     var STAMP = SELF_SRC && SELF_SRC.indexOf('?') >= 0 ? SELF_SRC.slice(SELF_SRC.indexOf('?')) : '';
-    var EDITOR = '/applets/editor/';
+    /* The editing kit (apps/md-editor): the page view, CodeMirror, Mermaid,
+       the formats, Insert and the dialogs, shared with the Editor. */
+    var KIT = '/applets/md-editor/';
+    function kit() {
+        if (window.yavcMdEditor) { return Promise.resolve(window.yavcMdEditor); }
+        var v = window.yavcStaticVersion ? '?v=' + encodeURIComponent(window.yavcStaticVersion) : '';
+        return loadScript(KIT + 'kit.js' + v).then(function () { return window.yavcMdEditor; });
+    }
     var LAYOUTS = [['content', 'Content'], ['title', 'Title'], ['section', 'Section'], ['two-column', 'Two Columns'], ['image', 'Picture'], ['quote', 'Quote'], ['blank', 'Blank']];
     var THEMES = [['plain', 'Plain, the site\'s own'], ['paper', 'Paper'], ['midnight', 'Midnight']];
     var SIZES = [['16:9', 'Widescreen, 16:9'], ['4:3', 'Standard, 4:3']];
@@ -49,17 +56,8 @@
         var v = window.yavcStaticVersion ? '?v=' + encodeURIComponent(window.yavcStaticVersion) : '';
         return loadScript('/applets/md-engine/loader.js' + v).then(function () { return window.yavcMdEngine(); });
     }
-    function pageView() {
-        return engine().then(function () { return loadScript(EDITOR + 'page-view.js?v=' + encodeURIComponent(editorVersion())); });
-    }
-    function codeMirror() {
-        if (window.CM && window.CM.EditorView) { return Promise.resolve(window.CM); }
-        return loadScript(EDITOR + 'vendor/codemirror-6.43/codemirror.js?v=4').then(function () { return window.CM; });
-    }
-    function editorVersion() {
-        var d = window.pudlApplets && window.pudlApplets.definitions ? window.pudlApplets.definitions().editor : null;
-        return d && d.ver ? d.ver : '0';
-    }
+    function pageView() { return engine().then(kit).then(function (k) { return k.pageView(); }); }
+    function codeMirror() { return kit().then(function (k) { return k.libs(); }); }
 
     /* === The deck ==================================================== */
 
@@ -267,7 +265,7 @@
         }
         var mermaidReady = null, mermaidCount = 0;
         function drawMermaid(place, source) {
-            if (!mermaidReady) { mermaidReady = loadScript(EDITOR + 'vendor/mermaid/mermaid.min.js'); }
+            if (!mermaidReady) { mermaidReady = kit().then(function (k) { return k.mermaid(); }); }
             var id = 'deck-mermaid-' + n + '-' + (++mermaidCount);
             mermaidReady.then(function () {
                 window.mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', suppressErrorRendering: true, theme: document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'default' });
@@ -289,13 +287,7 @@
                 setText: function (text) { fromPage = true; try { takeText(text, 'page'); } finally { fromPage = false; } },
                 docOf: function (text) { return engine().then(function (m) { return m.doc(text); }); },
                 /* The / menu on the canvas offers the Insert menu's items. */
-                inserts: function () {
-                    return INSERTS.filter(function (i) { return !/^(Checklist|Table|Code Block)$/.test(i[0]); }).map(function (i) {
-                        var label = i[0].replace(/…$/, ''), id = 'insert-' + label.toLowerCase().replace(/[^a-z]+/g, '-');
-                        if (typeof i[1] === 'function') { return { id: id, label: i[0], words: label.toLowerCase(), run: function () { Promise.resolve(i[1]()).then(function (md) { if (md) { insertMarkdown(md); } }); } }; }
-                        return { id: id, label: label, words: label.toLowerCase(), markdown: i[1] };
-                    });
-                },
+                inserts: function () { return window.yavcMdEditor ? window.yavcMdEditor.inserts(DECK_INSERTS) : []; },
                 markdownOf: function (doc) { return engine().then(function (m) { return m.markdown(doc); }); },
                 sourceOf: function (src) { return engine().then(function (m) { return m.source(src); }); },
                 blocksOf: function (text) { return engine().then(function (m) { return m.blocks(text); }); },
@@ -440,7 +432,7 @@
                 try {
                     await pageView();
                     if (destroyed) { return; }
-                    if (!page) { page = window.yavcPageView.attach(pageHost()); }
+                    if (!page) { page = window.yavcPageView.attach(pageHost()); window.yavcMdEditor._page = page; }
                     applySlideSettings(el.slide, current());
                     await page.enable(true);
                 } catch (err) { say('The slide could not be edited on its canvas: ' + err.message, true); if (page) { page.enable(false); } drawSlide(); }
@@ -577,89 +569,16 @@
                 dialog.showModal();
             });
         }
-        /* A dialog of colours: each a picker beside a field that takes any
-           CSS colour or nothing, for the theme's own. Resolves to the values
-           by key, or null. */
-        function askColours(title, fields) {
-            var dialog = q('[data-role="choice"]'), actions = q('[data-role="choice-actions"]'), body = q('[data-role="choice-body"]');
-            q('[data-role="choice-title"]').textContent = title;
-            body.innerHTML = fields.map(function (f, k) {
-                var id = 'deck-col-' + n + '-' + k, v = f.value || '';
-                return '<div class="form-group deck-colour-row"><label class="form-label" for="' + id + '">' + esc(f.label) + '</label>' +
-                    '<div class="deck-colour-pair"><input type="color" class="deck-colour-pick" aria-label="' + esc(f.label) + ' picker" data-for="' + id + '" value="' + esc(/^#[0-9a-f]{6}$/i.test(v) ? v : (f.fallback || '#000000')) + '">' +
-                    '<input class="form-input" id="' + id + '" data-key="' + esc(f.key) + '" value="' + esc(v) + '" placeholder="' + esc(f.placeholder || 'The theme\'s own') + '" autocomplete="off" spellcheck="false"></div></div>';
-            }).join('');
-            body.addEventListener('input', function (e) {
-                if (e.target.classList.contains('deck-colour-pick')) { var t = body.querySelector('#' + e.target.getAttribute('data-for')); if (t) { t.value = e.target.value; } }
-                else if (e.target.matches('.form-input') && /^#[0-9a-f]{6}$/i.test(e.target.value)) { var pk = body.querySelector('[data-for="' + e.target.id + '"]'); if (pk) { pk.value = e.target.value; } }
-            });
-            actions.innerHTML = '<button class="btn" type="button" data-choice="cancel">Cancel</button><button class="btn btn-primary" type="submit" value="ok">OK</button>';
-            actions.querySelector('[data-choice]').addEventListener('click', function () { dialog.close('cancel'); });
-            return new Promise(function (resolve) {
-                dialog.addEventListener('close', function () {
-                    if (dialog.returnValue !== 'ok') { body.innerHTML = ''; resolve(null); return; }
-                    var out = {};
-                    body.querySelectorAll('[data-key]').forEach(function (i) { out[i.getAttribute('data-key')] = i.value.trim(); });
-                    body.innerHTML = '';
-                    resolve(out);
-                }, { once: true });
-                dialog.returnValue = '';
-                dialog.showModal();
-                var firstField = body.querySelector('.form-input');
-                if (firstField) { firstField.focus(); }
-            });
-        }
-        var SWATCHES = [['ink', 'Text'], ['muted', 'Muted'], ['accent', 'Accent'], ['danger', 'Danger'], ['warn', 'Warning'], ['positive', 'Positive']];
-        /* The colour for some words: one of the site's, or any other. */
-        function askTextColour() {
-            var dialog = q('[data-role="choice"]'), actions = q('[data-role="choice-actions"]'), body = q('[data-role="choice-body"]');
-            q('[data-role="choice-title"]').textContent = 'Colour the words';
-            body.innerHTML = '<div class="form-group"><span class="form-label">The site\'s colours</span><div class="deck-swatches" role="group" aria-label="The site\'s colours">' +
-                SWATCHES.map(function (s) { return '<button type="button" class="btn deck-swatch" data-swatch="' + s[0] + '"><span class="deck-swatch-dot" style="background:' + swatchCSS(s[0]) + '" aria-hidden="true"></span>' + s[1] + '</button>'; }).join('') + '</div></div>' +
-                '<div class="form-group"><label class="form-label" for="deck-col-custom-' + n + '">Any colour</label><div class="deck-colour-pair"><input type="color" class="deck-colour-pick" data-for="deck-col-custom-' + n + '" aria-label="Colour picker" value="#c0392b"><input class="form-input" id="deck-col-custom-' + n + '" data-key="custom" value="" placeholder="#c0392b, tomato, hsl(200 60% 40%)" autocomplete="off" spellcheck="false"></div></div>';
-            body.addEventListener('input', function (e) {
-                if (e.target.classList.contains('deck-colour-pick')) { var t = body.querySelector('#' + e.target.getAttribute('data-for')); if (t) { t.value = e.target.value; } }
-            });
-            actions.innerHTML = '<button class="btn" type="button" data-choice="cancel">Cancel</button><button class="btn btn-primary" type="submit" value="ok">Use this colour</button>';
-            actions.querySelector('[data-choice]').addEventListener('click', function () { dialog.close('cancel'); });
-            body.addEventListener('click', function (e) { var b = e.target.closest('[data-swatch]'); if (b) { dialog.close('swatch:' + b.getAttribute('data-swatch')); } });
-            return new Promise(function (resolve) {
-                dialog.addEventListener('close', function () {
-                    var v = dialog.returnValue, custom = (body.querySelector('[data-key="custom"]') || {}).value;
-                    body.innerHTML = '';
-                    if (v && v.indexOf('swatch:') === 0) { resolve(v.slice(7)); return; }
-                    resolve(v === 'ok' && custom && custom.trim() ? custom.trim() : null);
-                }, { once: true });
-                dialog.returnValue = '';
-                dialog.showModal();
-            });
-        }
-        function swatchCSS(name) {
-            return { ink: 'var(--text)', muted: 'var(--text-muted)', accent: 'var(--accent)', danger: 'var(--danger)', warn: 'var(--warn)', positive: 'var(--positive)' }[name] || name;
-        }
-        function colourWords(colour) {
-            var value = colour.replace(/[{}\s]/g, ''), open = '{{color:' + value + '}}', close = '{{/color}}';
-            if (pageActive() && (mode === 'visual' || !(cm && cm.hasFocus))) {
-                /* On the canvas a colour is a mark, as bold is. */
-                page.run('color', value);
-                page.focus();
-                return;
-            }
-            if (!cm) { return; }
-            var state = cm.state, s = state.selection.main, text = state.doc.sliceString(s.from, s.to) || 'these words';
-            cm.dispatch({ changes: { from: s.from, to: s.to, insert: open + text + close }, selection: { anchor: s.from + open.length, head: s.from + open.length + text.length } });
-            cm.focus();
-        }
         function deckColours() {
             var f = deck.front;
-            askColours('The deck\'s colours', [
+            window.yavcMdEditor.askColours('The deck\'s colours', [
                 { key: 'ink', label: 'Text', value: f.ink, fallback: '#1a1a1a' }, { key: 'muted', label: 'Muted text', value: f.muted, fallback: '#5c6470' },
                 { key: 'accent', label: 'Accent', value: f.accent, fallback: '#1f5fbf' }, { key: 'background', label: 'Background', value: f.background, fallback: '#ffffff' }
             ]).then(function (v) { if (!v) { return; } Object.keys(v).forEach(function (k) { setFront(k, v[k]); }); });
         }
         function slideColours() {
             var st = settingsOf(current());
-            askColours('This slide\'s colours', [
+            window.yavcMdEditor.askColours('This slide\'s colours', [
                 { key: 'color', label: 'Text', value: st.color, fallback: '#1a1a1a', placeholder: 'The deck\'s own' }, { key: 'accent', label: 'Accent', value: st.accent, fallback: '#1f5fbf', placeholder: 'The deck\'s own' },
                 { key: 'background', label: 'Background', value: st.background, fallback: '#ffffff', placeholder: 'The deck\'s own' }
             ]).then(function (v) { if (!v) { return; } Object.keys(v).forEach(function (k) { setSlideSetting(k, v[k]); }); });
@@ -1055,20 +974,6 @@
 
         /* === Commands ================================================== */
 
-        var FORMATS = [['bold', 'Bold', 'bold', 'Mod-b'], ['italic', 'Italic', 'italic', 'Mod-i'], ['code', 'Code', 'code', 'Mod-`'], ['link', 'Link…', 'link', 'Mod-k'], ['bullets', 'Bulleted List', 'list'], ['numbers', 'Numbered List', 'list-numbered']];
-        var WRAPS = { bold: '**', italic: '*', code: '`' };
-        function applyFormat(name) {
-            if (pageActive() && (mode === 'visual' || !(cm && cm.hasFocus))) { page.run(name); return; }
-            if (!cm) { return; }
-            var state = cm.state, sel = state.selection.main, text = state.doc.sliceString(sel.from, sel.to);
-            if (WRAPS[name]) { cm.dispatch({ changes: { from: sel.from, to: sel.to, insert: WRAPS[name] + text + WRAPS[name] }, selection: { anchor: sel.from + WRAPS[name].length, head: sel.to + WRAPS[name].length } }); cm.focus(); return; }
-            if (name === 'bullets' || name === 'numbers' || /^h[1-6]$/.test(name) || name === 'paragraph') {
-                var line = state.doc.lineAt(sel.from), bare = line.text.replace(/^\s*(#{1,6}\s+|[-*+]\s+|\d+[.)]\s+)/, '');
-                var prefix = name === 'bullets' ? '- ' : name === 'numbers' ? '1. ' : name === 'paragraph' ? '' : '#'.repeat(+name.charAt(1)) + ' ';
-                cm.dispatch({ changes: { from: line.from, to: line.to, insert: prefix + bare } });
-                cm.focus();
-            }
-        }
         function insertMarkdown(markdown) {
             if (pageActive() && (mode === 'visual' || !(cm && cm.hasFocus))) { page.insertMarkdown(markdown); return; }
             if (!cm) { takeText(current().text.replace(/\s*$/, '') + '\n\n' + markdown + '\n', 'command'); return; }
@@ -1076,11 +981,16 @@
             cm.dispatch({ changes: { from: sel.to, insert: '\n' + markdown + '\n' } });
             cm.focus();
         }
-        var INSERTS = [
-            ['Checklist', '- [ ] Type here.'], ['Table', '| Heading 1 | Heading 2 |\n| --- | --- |\n| | |'], ['Code Block', '```\ncode\n```'], ['Picture', '{{figure:/static/icon.svg alt="What it shows" width=60%}}'],
-            ['Columns', '{{columns}}\nLeft.\n\n{{column}}\n\nRight.\n{{/columns}}'], ['Tip', '{{tip:A title}}\nText.\n{{/tip}}'], ['Note', '{{note:A title}}\nText.\n{{/note}}'], ['Warning', '{{warning:A title}}\nText.\n{{/warning}}'],
-            ['Video…', function () { return askText('A hosted video', 'Its link, from YouTube or Vimeo', '').then(function (v) { v = (v || '').trim(); return v ? '{{video:' + v.replace(/[\s}]/g, '') + ' title="Video"}}' : null; }); }], ['Applet', '{{applet:dice fit=flow}}'], ['Diagram', '```mermaid\ngraph LR; A-->B;\n```'], ['Speaker Notes', '{{notes}}\nWhat to say.\n{{/notes}}'], ['Keys', '{{kbd:Ctrl+S}}'], ['Status Label', '{{status:green Done}}']
-        ];
+        /* What the deck adds to the kit's Insert menu and / menu. */
+        var DECK_INSERTS = [{ id: 'insert-notes', label: 'Speaker Notes', words: 'notes speaker', markdown: '{{notes}}\nWhat to say.\n{{/notes}}' }];
+        function editCtx() {
+            return {
+                page: function () { return page; }, text: function () { return cm; },
+                onPage: function () { return pageActive() && (mode === 'visual' || !(cm && cm.hasFocus)); },
+                blockStyle: function () { if (pageActive() && page.marks) { return page.marks().block || null; } if (!cm) { return null; } var m = /^\s{0,3}(#{1,6})(\s|$)/.exec(cm.state.doc.lineAt(cm.state.selection.main.head).text); return m ? 'h' + m[1].length : 'paragraph'; },
+                say: say, append: function (md) { takeText(current().text.replace(/\s*$/, '') + '\n\n' + md + '\n', 'command'); }
+            };
+        }
         function cmd(id, label, glyph, run, more) {
             return Object.assign({ id: id, label: label, glyph: glyph || undefined, run: run }, more || {});
         }
@@ -1109,7 +1019,6 @@
                 cmd('reveal', 'Reveal Points One by One', 'list', function () { setSlideSetting('reveal', settingsOf(current()).reveal === 'steps' ? null : 'steps'); }, { checked: function () { return settingsOf(current()).reveal === 'steps'; } }),
                 cmd('slide-colours', 'Slide Colours…', 'colour', slideColours),
                 cmd('deck-colours', 'Colours…', 'colour', deckColours),
-                cmd('text-colour', 'Text Colour…', 'colour', function () { askTextColour().then(function (v) { if (v) { colourWords(v); } }); }),
                 cmd('background-image', 'Background Picture…', 'image', function () { askText('Background picture', 'The picture\'s address, such as /images/x.png; empty for none', settingsOf(current()).image || '').then(function (v) { if (v != null) { setSlideSetting('image', v.trim()); } }); }),
                 { id: 'slide-transition', label: 'Transition', items: TRANSITIONS.map(function (t) { return { id: 'slide-transition-' + t[0], label: t[1], choice: 'deck-slide-transition', value: t[0], checked: function () { return (settingsOf(current()).transition || deck.front.transition || 'fade') === t[0]; }, run: function () { setSlideSetting('transition', t[0] === (deck.front.transition || 'fade') ? null : t[0]); } }; }) },
                 cmd('deck-title', 'Title and Author…', 'tag', function () {
@@ -1124,17 +1033,12 @@
                 cmd('leave', 'Leave the Show', 'stop', leave, { hidden: function () { return !presenting; } }),
                 cmd('presenter', 'Presenter Window', 'new-window', presenterWindow, { disabled: function () { return !path; } }),
                 cmd('presenter-auto', 'Presenter Window on Present', null, function () { settings.presenterOnPresent = !settings.presenterOnPresent; keepSetting('presenterOnPresent', settings.presenterOnPresent); commandsChanged(); }, { checked: function () { return !!settings.presenterOnPresent; } }),
-                cmd('insert', 'Insert', 'plus', null, { items: INSERTS.map(function (i) { return { id: 'insert-' + i[0].toLowerCase().replace(/[^a-z]+/g, '-'), label: i[0], run: function () {
-                    /* An entry is Markdown, or a function that asks for it. */
-                    if (typeof i[1] === 'function') { Promise.resolve(i[1]()).then(function (md) { if (md) { insertMarkdown(md); } }); } else { insertMarkdown(i[1]); }
-                } }; }) }),
-                { id: 'style', label: 'Paragraph Style', glyph: 'paragraph', items: [['paragraph', 'Paragraph', 'Mod+0'], ['h1', 'Heading 1', 'Mod+1'], ['h2', 'Heading 2', 'Mod+2'], ['h3', 'Heading 3', 'Mod+3'], ['h4', 'Heading 4', 'Mod+4']].map(function (x) { return { id: x[0], label: x[1], shortcut: x[2], choice: 'deck-style', value: x[0], run: function () { applyFormat(x[0]); } }; }) },
                 cmd('toggle-film', 'Show the Filmstrip', 'panel', function () { settings.filmstrip = !settings.filmstrip; el.film.hidden = !settings.filmstrip; keepSetting('filmstrip', settings.filmstrip); fit(); commandsChanged(); }, { checked: function () { return settings.filmstrip; } }),
                 { id: 'dock', label: 'Canvas', glyph: 'dock', current: function () { var d = DOCKS.find(function (x) { return x[0] === settings.dock; }); return d ? d[1] : null; },
                     items: DOCKS.map(function (d) { return { id: 'dock-' + d[0], label: d[1], choice: 'deck-dock', value: d[0], checked: function () { return settings.dock === d[0]; }, run: function () { setDock(d[0]); } }; }) },
                 cmd('help', 'Slides Help', 'info', function () { say('A deck is a Markdown file: slides divided by ---, a {{slide}} line for each slide\'s settings, {{notes}} for what to say. Edit a slide on its canvas or as its Markdown; the canvas docks beside the Markdown or floats over it (View).', 'info'); })
             ];
-            FORMATS.forEach(function (f) { table.push(cmd(f[0], f[1], f[2], function () { applyFormat(f[0]); }, { shortcut: f[3] ? f[3].replace('Mod-', 'Mod+') : undefined, glyphOnly: true })); });
+            if (window.yavcMdEditor) { table = table.concat(window.yavcMdEditor.commands(editCtx(), DECK_INSERTS)); }
             [['visual', 'Visual'], ['text', 'Text'], ['split', 'Split']].forEach(function (v) {
                 table.push({ id: 'view-' + v[0], label: v[1], choice: 'deck-view', choiceLabel: 'View', value: v[0], checked: function () { return mode === v[0]; }, run: function () { setMode(v[0]); } });
             });
@@ -1144,7 +1048,7 @@
             return [{ label: 'Slides', ribbon: 'hide', groups: [
                 { label: 'File', glyph: 'file', priority: 3, items: ['new-deck', 'open', 'save'] },
                 { label: 'Slide', glyph: 'plus', priority: 4, items: ['slide-new', 'slide-duplicate', 'slide-delete', 'slide-up', 'slide-down'] },
-                { label: 'Format', glyph: 'bold', priority: 2, items: ['layout', 'style', 'bold', 'italic', 'code', 'link', 'text-colour', 'bullets', 'numbers', 'insert'] },
+                { label: 'Format', glyph: 'bold', priority: 2, items: ['layout', 'style', 'bold', 'italic', 'strike', 'code', 'link', 'color', 'bullets', 'numbers', 'insert'] },
                 { label: 'Show', glyph: 'play', priority: 5, items: ['present', 'presenter'] },
                 { label: 'View', glyph: 'panel', priority: 1, end: true, items: [{ choice: 'deck-view' }, 'dock', 'toggle-film'] }
             ] }];
@@ -1154,7 +1058,7 @@
                 { label: 'Slides', glyph: 'document', items: H.identity ? H.identity(root, []) : [] },
                 { id: 'file', label: 'File', glyph: 'file', items: ['new-deck', 'open', 'import-pptx', 'save', 'save-as', '-', 'edit-whole', '-', 'export-pptx', 'export-pdf', 'export-html', 'print'] },
                 { id: 'slide', label: 'Slide', glyph: 'plus', items: ['slide-new', 'slide-duplicate', 'slide-delete', '-', 'slide-prev', 'slide-next', '-', 'slide-up', 'slide-down', '-', 'layout', 'reveal', 'slide-colours', 'background-image', 'slide-transition'] },
-                { id: 'format', label: 'Format', glyph: 'paragraph', items: ['style', '-', 'bold', 'italic', 'code', 'link', 'text-colour', '-', 'bullets', 'numbers', '-', 'insert'] },
+                { id: 'format', label: 'Format', glyph: 'paragraph', items: window.yavcMdEditor ? window.yavcMdEditor.MENU.format : [] },
                 { id: 'deck', label: 'Deck', glyph: 'gear', items: ['deck-title', 'theme', 'deck-colours', 'size', 'deck-transition'] },
                 { id: 'show', label: 'Show', glyph: 'play', items: ['present', 'present-here', 'leave', '-', 'presenter', 'presenter-auto'] }
             ], into: { view: ['view-visual', 'view-text', 'view-split', '-', 'dock', 'toggle-film'], help: ['help'] } };
@@ -1173,6 +1077,7 @@
 
         var booted = (async function () {
             md = await engine();
+            await kit();
             if (destroyed) { return; }
             if (H.config && H.config.load) { try { var c = await H.config.load('slides', SETTINGS); Object.assign(settings, c || {}); } catch (err) { } }
             if (settings.filmstrip === false) { el.film.hidden = true; }
