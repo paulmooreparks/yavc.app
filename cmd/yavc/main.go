@@ -5,10 +5,15 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"flag"
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"yavc.app/internal/session"
@@ -29,6 +34,11 @@ func main() {
 	title := flag.String("title", "yavc.app", "the site's name")
 	flag.Parse()
 
+	// The engine stops on an interrupt or a termination signal, letting the
+	// requests in progress finish first.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
 	store, err := session.New(*data, *retain)
 	if err != nil {
 		log.Fatalf("the data folder cannot be used: %v", err)
@@ -37,8 +47,17 @@ func main() {
 		log.Printf("%d expired sessions removed", n)
 	}
 	go func() {
-		for range time.Tick(time.Hour) {
-			store.Sweep()
+		t := time.NewTicker(time.Hour)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				if n := store.Sweep(); n > 0 {
+					log.Printf("%d expired sessions removed", n)
+				}
+			}
 		}
 	}()
 
@@ -49,7 +68,32 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	log.Printf("yavc.app engine at http://%s for %s", *addr, *domain)
-	srv := &http.Server{Addr: *addr, Handler: s, ReadHeaderTimeout: 10 * time.Second}
-	log.Fatal(srv.ListenAndServe())
+	go s.Run(ctx)
+
+	// Requests take their context from base, which is cancelled when the
+	// engine begins to stop, so the pages' event streams end and let the
+	// shutdown finish.
+	base, cancelBase := context.WithCancel(context.Background())
+	defer cancelBase()
+	srv := s.HTTPServer(base, *addr)
+	served := make(chan error, 1)
+	go func() {
+		log.Printf("yavc.app engine at http://%s for %s", *addr, *domain)
+		served <- srv.ListenAndServe()
+	}()
+	select {
+	case err := <-served:
+		if !errors.Is(err, http.ErrServerClosed) {
+			log.Fatal(err)
+		}
+		return
+	case <-ctx.Done():
+	}
+	log.Print("stopping")
+	cancelBase()
+	shutdown, done := context.WithTimeout(context.Background(), 15*time.Second)
+	defer done()
+	if err := srv.Shutdown(shutdown); err != nil {
+		log.Printf("stopping: %v", err)
+	}
 }

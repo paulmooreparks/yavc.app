@@ -17,8 +17,8 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 	"sync"
@@ -63,14 +63,37 @@ type Server struct {
 
 	mu       sync.Mutex
 	sessions map[string]*session
+	// waits is how many applet_invoke calls are waiting, by token.
+	waits map[string]int
+	now   func() time.Time
 }
 
 type session struct {
 	used time.Time
 }
 
+// The server's limits.
+const (
+	// MaxSessions is how many MCP sessions the server keeps; making one
+	// more forgets the one used longest ago.
+	MaxSessions = 1024
+	// SessionIdle is how long an MCP session lasts unused.
+	SessionIdle = time.Hour
+	// MaxWaits is how many applet_invoke calls one token may have waiting
+	// for their result at once.
+	MaxWaits = 4
+	// MaxBody is the largest request the endpoint reads.
+	MaxBody = 16 << 20
+	// MaxWait is the longest applet_invoke waits.
+	MaxWait = 600 * time.Second
+)
+
 func New(s *Server) *Server {
 	s.sessions = map[string]*session{}
+	s.waits = map[string]int{}
+	if s.now == nil {
+		s.now = time.Now
+	}
 	if s.Name == "" {
 		s.Name = "yavc.app"
 	}
@@ -113,7 +136,13 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req rpcRequest
-	if err := json.NewDecoder(io.LimitReader(r.Body, 8<<20)).Decode(&req); err != nil || req.JSONRPC != "2.0" || req.Method == "" {
+	err := json.NewDecoder(http.MaxBytesReader(w, r.Body, MaxBody)).Decode(&req)
+	var tooLarge *http.MaxBytesError
+	if errors.As(err, &tooLarge) {
+		replyStatus(w, http.StatusRequestEntityTooLarge, nil, nil, &rpcError{-32600, "The request is larger than this server reads."})
+		return
+	}
+	if err != nil || req.JSONRPC != "2.0" || req.Method == "" {
 		reply(w, nil, nil, &rpcError{-32700, "The body is not a JSON-RPC 2.0 request."})
 		return
 	}
@@ -128,8 +157,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	sess := s.session(r.Header.Get("Mcp-Session-Id"))
 	if sess == nil {
-		w.WriteHeader(http.StatusNotFound)
-		reply(w, req.ID, nil, &rpcError{-32001, "Unknown or expired session; initialize again."})
+		replyStatus(w, http.StatusNotFound, req.ID, nil, &rpcError{-32001, "Unknown or expired session; initialize again."})
 		return
 	}
 	switch req.Method {
@@ -159,12 +187,17 @@ func (s *Server) initialize(w http.ResponseWriter, req rpcRequest) {
 	rand.Read(b)
 	id := hex.EncodeToString(b)
 	s.mu.Lock()
-	for k, old := range s.sessions {
-		if time.Since(old.used) > 24*time.Hour {
-			delete(s.sessions, k)
+	s.sweepLocked()
+	if len(s.sessions) >= MaxSessions {
+		oldest, at := "", time.Time{}
+		for k, sess := range s.sessions {
+			if oldest == "" || sess.used.Before(at) {
+				oldest, at = k, sess.used
+			}
 		}
+		delete(s.sessions, oldest)
 	}
-	s.sessions[id] = &session{used: time.Now()}
+	s.sessions[id] = &session{used: s.now()}
 	s.mu.Unlock()
 	w.Header().Set("Mcp-Session-Id", id)
 	reply(w, req.ID, map[string]any{
@@ -179,10 +212,31 @@ func (s *Server) session(id string) *session {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	sess := s.sessions[id]
+	if sess != nil && s.now().Sub(sess.used) > SessionIdle {
+		delete(s.sessions, id)
+		sess = nil
+	}
 	if sess != nil {
-		sess.used = time.Now()
+		sess.used = s.now()
 	}
 	return sess
+}
+
+// Sweep forgets the sessions unused for longer than SessionIdle. The
+// server sweeps whenever a session is made; a host may also call it on a
+// ticker.
+func (s *Server) Sweep() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.sweepLocked()
+}
+
+func (s *Server) sweepLocked() {
+	for k, sess := range s.sessions {
+		if s.now().Sub(sess.used) > SessionIdle {
+			delete(s.sessions, k)
+		}
+	}
 }
 
 func schema(props map[string]any, required ...string) map[string]any {
@@ -354,27 +408,75 @@ func (s *Server) invoke(r *http.Request, args json.RawMessage) (map[string]any, 
 	if a.RequestID != "" && !recordID(a.RequestID) {
 		return nil, fmt.Errorf("a requestId is 1 to 128 letters, digits, - and _")
 	}
-	wait := 60
-	if a.WaitSeconds != nil {
-		wait = max(0, min(600, *a.WaitSeconds))
+	if !s.offers(r, a.Action) {
+		return nil, fmt.Errorf("there is no action %s; applet_discover lists the actions there are", a.Action)
+	}
+	wait := waitFor(a.WaitSeconds)
+	if wait > 0 {
+		if !s.startWait(peer.ID) {
+			return nil, fmt.Errorf("this token already has %d calls waiting for their results; wait for one to finish, or pass waitSeconds 0 and read the record with applet_status", MaxWaits)
+		}
+		defer s.endWait(peer.ID)
 	}
 	rec, err := s.Hub.Invoke(peer.Session, relay.Invocation{
 		ID: a.RequestID, Action: a.Action, Input: a.Input,
 		Owner: relay.Owner{Kind: "agent", Name: peer.Name, ID: peer.ID}, Grant: peer.Grant,
 	})
-	if err == relay.ErrNoPage {
+	if errors.Is(err, relay.ErrNoPage) {
 		return nil, fmt.Errorf("no page of the site is open for %s: ask the person to open %s in their browser and keep it open", peer.Name, s.Title)
 	}
 	if err != nil {
 		return nil, err
 	}
-	ctx, stop := context.WithTimeout(r.Context(), time.Duration(wait)*time.Second)
+	ctx, stop := context.WithTimeout(r.Context(), wait)
 	defer stop()
 	select {
 	case <-rec.Done():
 	case <-ctx.Done():
 	}
 	return s.view(rec), nil
+}
+
+// waitFor is how long applet_invoke waits for waitSeconds: 60 seconds when
+// it is not given, and otherwise between none and MaxWait.
+func waitFor(seconds *int) time.Duration {
+	if seconds == nil {
+		return 60 * time.Second
+	}
+	return time.Duration(max(0, min(int(MaxWait/time.Second), *seconds))) * time.Second
+}
+
+// offers says whether the catalogue has an action with this reference.
+func (s *Server) offers(r *http.Request, ref string) bool {
+	if s.Catalog == nil {
+		return false
+	}
+	for _, p := range s.Catalog(r) {
+		for _, act := range p.Actions {
+			if have, _ := act["ref"].(string); have == ref {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func (s *Server) startWait(token string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.waits[token] >= MaxWaits {
+		return false
+	}
+	s.waits[token]++
+	return true
+}
+
+func (s *Server) endWait(token string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.waits[token]--; s.waits[token] <= 0 {
+		delete(s.waits, token)
+	}
 }
 
 func (s *Server) view(rec *relay.Record) map[string]any {
@@ -456,6 +558,12 @@ func (s *Server) artifact(r *http.Request, args json.RawMessage) (map[string]any
 }
 
 func reply(w http.ResponseWriter, id json.RawMessage, result any, e *rpcError) {
+	replyStatus(w, http.StatusOK, id, result, e)
+}
+
+// replyStatus writes a JSON-RPC message with an HTTP status, its headers
+// set before the status is written.
+func replyStatus(w http.ResponseWriter, status int, id json.RawMessage, result any, e *rpcError) {
 	msg := map[string]any{"jsonrpc": "2.0"}
 	if id != nil {
 		msg["id"] = id
@@ -467,8 +575,8 @@ func reply(w http.ResponseWriter, id json.RawMessage, result any, e *rpcError) {
 	} else {
 		msg["result"] = result
 	}
-	if w.Header().Get("Content-Type") == "" {
-		w.Header().Set("Content-Type", "application/json")
-	}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(msg)
 }

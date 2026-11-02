@@ -200,7 +200,7 @@ func IsInlineAtom(n *Inline) bool {
 func InlineHTML(raw string) string {
 	m := tagRe.FindStringSubmatch(raw)
 	if m == nil || m[0] != raw || m[1] != "" {
-		return `<code class="sc-problem">` + esc(raw) + `</code>`
+		return `<code class="sc-problem">` + Esc(raw) + `</code>`
 	}
 	c := NewCall(m[2], m[3])
 	d := table[c.Name]
@@ -269,22 +269,22 @@ func takeLine(reader text.Reader, line []byte) {
 
 func (p *blockParser) Trigger() []byte { return []byte{'{'} }
 
+// closing is the key, in the parser's context, of the container whose
+// Continue has just said that this line closes it. Open takes the line in
+// the parent, where it finds the container here.
+var closing = parser.NewContextKey()
+
 func (p *blockParser) Open(parent ast.Node, reader text.Reader, pc parser.Context) (ast.Node, parser.State) {
 	line, _ := reader.PeekLine()
+	ending, _ := pc.Get(closing).(*Block)
+	pc.Set(closing, nil)
 	// The closing line of an open container: goldmark asks the open
 	// blocks' parent for a new block here, after Continue said the
 	// container ends (see Closer).
 	if m := closeLineRe.FindSubmatch(line); m != nil {
-		var open *Block
-		for _, b := range pc.OpenedBlocks() {
-			if blk, ok := b.Node.(*Block); ok && blk.Call.Name == string(m[1]) && !blk.Closed {
-				open = blk
-			}
-		}
-		if open == nil {
+		if ending == nil || ending.Call.Name != string(m[1]) {
 			return nil, parser.NoChildren
 		}
-		open.Closed = true
 		takeLine(reader, line)
 		return &Closer{}, parser.NoChildren
 	}
@@ -308,7 +308,23 @@ func (p *blockParser) Continue(node ast.Node, reader text.Reader, pc parser.Cont
 	line, _ := reader.PeekLine()
 	// The container's own closing line ends it; the line itself is left
 	// for Open to take, in the parent, which closes the blocks open inside.
-	if m := closeLineRe.FindSubmatch(line); m != nil && string(m[1]) == node.(*Block).Call.Name {
+	// A container of the same name open inside this one is closed first,
+	// so the closing lines pair with the opening lines by depth, as
+	// brackets do.
+	blk := node.(*Block)
+	if m := closeLineRe.FindSubmatch(line); m != nil && string(m[1]) == blk.Call.Name {
+		inside := false
+		for _, b := range pc.OpenedBlocks() {
+			if b.Node == node {
+				inside = true
+				continue
+			}
+			if other, ok := b.Node.(*Block); ok && inside && other.Call.Name == blk.Call.Name && !other.Closed {
+				return parser.Continue | parser.HasChildren
+			}
+		}
+		blk.Closed = true
+		pc.Set(closing, blk)
 		return parser.Close
 	}
 	return parser.Continue | parser.HasChildren
@@ -441,7 +457,7 @@ func init() {
 			wrap: func(c Call) (string, string, error) {
 				open := `<div class="notice` + sp(cls) + ` sc-notice" role="note"><div class="notice-content">`
 				if c.Args == "" {
-					open += `<span class="visually-hidden">` + esc(label) + `: </span>`
+					open += `<span class="visually-hidden">` + Esc(label) + `: </span>`
 				} else {
 					open += `<p class="notice-title">` + inlineHTML(c.Args) + `</p>`
 				}
@@ -475,14 +491,16 @@ func init() {
 			if !ok {
 				return "", problem{"status's colour is grey, blue, green, yellow or red."}
 			}
+			// The label is the words after the colour, as the call read
+			// them, so a colour written in quotes counts as one word.
 			text := ""
-			if len(c.Args) > len(colour) {
-				text = strings.TrimSpace(c.Args[len(colour):])
+			if len(c.Positional) > 1 {
+				text = strings.TrimSpace(strings.Join(c.Positional[1:], " "))
 			}
 			if text == "" {
 				return "", problem{"status needs a label after its colour."}
 			}
-			return `<span class="badge` + sp(cls) + `">` + esc(text) + `</span>`, nil
+			return `<span class="badge` + sp(cls) + `">` + Esc(text) + `</span>`, nil
 		}})
 	add(&def{name: "toc", kind: block, title: "Contents", what: "A list of the page's headings, linked, for a long page.",
 		example: "{{toc}}",
@@ -540,7 +558,7 @@ func init() {
 					}
 				}
 				first = false
-				b.WriteString(`<li><a href="#` + esc(h.id) + `">` + esc(h.text) + `</a>`)
+				b.WriteString(`<li><a href="#` + Esc(h.id) + `">` + Esc(h.text) + `</a>`)
 			}
 			b.WriteString("</li>")
 			for ; depth > heads[0].level; depth-- {
@@ -559,7 +577,7 @@ func init() {
 			if !anchorRe.MatchString(name) {
 				return "", problem{"An anchor's name is letters, digits, - and _, starting with a letter."}
 			}
-			return `<a id="` + esc(name) + `"></a>`, nil
+			return `<a id="` + Esc(name) + `"></a>`, nil
 		}})
 	add(&def{name: "page", kind: inline, title: "Page link", what: "A link to one of the site's pages, by its slug, with text of its own or the slug.",
 		example: "{{page:about}}",
@@ -571,13 +589,19 @@ func init() {
 			if !slugRe.MatchString(slug) {
 				return "", problem{"A page's slug is lower-case letters, digits and dashes."}
 			}
+			// The text is the words after the slug, as the call read them,
+			// so a slug written in quotes or as slug= still leaves the rest.
+			words := c.Positional
+			if _, named := c.Named["slug"]; !named && len(words) > 0 {
+				words = words[1:]
+			}
 			text := slug
 			if t, ok := c.Get("text", -1); ok {
 				text = t
-			} else if len(c.Positional) > 1 {
-				text = strings.TrimSpace(strings.TrimPrefix(c.Args, slug))
+			} else if w := strings.TrimSpace(strings.Join(words, " ")); w != "" {
+				text = w
 			}
-			return `<a href="/` + esc(slug) + `">` + esc(text) + `</a>`, nil
+			return `<a href="/` + Esc(slug) + `">` + Esc(text) + `</a>`, nil
 		}})
 	add(&def{name: "figure", kind: block, title: "Figure", what: "A picture with an optional caption, centred.",
 		example: `{{figure:/images/picture.png alt="What it shows" width=80% caption="The caption, in Markdown."}}`,
@@ -599,9 +623,9 @@ func init() {
 				if !sizeRe.MatchString(w) {
 					return "", problem{"width is a number with %, px, rem, em or ch, such as 80%."}
 				}
-				style = ` style="max-width:` + esc(w) + `"`
+				style = ` style="max-width:` + Esc(w) + `"`
 			}
-			out := `<figure class="sc-figure">` + imgTag(s, alt, style+` loading="lazy"`)
+			out := `<figure class="sc-figure">` + ImageTag(s, alt, style+` loading="lazy"`)
 			if cap, ok := c.Get("caption", -1); ok && strings.TrimSpace(cap) != "" {
 				out += `<figcaption>` + inlineHTML(cap) + `</figcaption>`
 			}
@@ -621,9 +645,9 @@ func init() {
 			if fit != "flow" && fit != "fill" {
 				return "", problem{"fit is flow or fill."}
 			}
-			out := `<div data-applet="` + esc(name) + `" data-applet-fit="` + esc(fit) + `"`
+			out := `<div data-applet="` + Esc(name) + `" data-applet-fit="` + Esc(fit) + `"`
 			if state, ok := c.Get("state", -1); ok && state != "" {
-				out += ` data-applet-initial="` + esc(state) + `"`
+				out += ` data-applet-initial="` + Esc(state) + `"`
 			}
 			return out + `></div>`, nil
 		}})
@@ -640,11 +664,11 @@ func init() {
 			if !ok {
 				title = "Video"
 			}
-			player := "https://www.youtube-nocookie.com/embed/" + esc(id)
+			player := "https://www.youtube-nocookie.com/embed/" + Esc(id)
 			if service == "vimeo" {
-				player = "https://player.vimeo.com/video/" + esc(id) + "?dnt=1"
+				player = "https://player.vimeo.com/video/" + Esc(id) + "?dnt=1"
 			}
-			return `<div class="sc-video" data-service="` + service + `"><iframe src="` + player + `" title="` + esc(title) +
+			return `<div class="sc-video" data-service="` + service + `"><iframe src="` + player + `" title="` + Esc(title) +
 				`" loading="lazy" allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe></div>`, nil
 		}})
 	add(&def{name: "code", kind: block, title: "Code listing", what: "A file, shown as a listing with Copy and Download, fetched as the page loads: a path on the site from /, or one of your own files under ~.",
@@ -670,9 +694,9 @@ func init() {
 			}
 			cls := ""
 			if lang != "" {
-				cls = ` class="language-` + esc(lang) + `"`
+				cls = ` class="language-` + Esc(lang) + `"`
 			}
-			return `<pre><code` + cls + ` data-code-src="` + esc(s) + `"></code></pre>`, nil
+			return `<pre><code` + cls + ` data-code-src="` + Esc(s) + `"></code></pre>`, nil
 		}})
 	add(&def{name: "color", kind: span, title: "Colour", what: "Words in a colour: one of the site's (ink, muted, accent, danger, warn, positive), or any CSS colour such as #c0392b or tomato. Markdown works inside it.",
 		example: "{{color:accent}}these words{{/color}}",
@@ -697,7 +721,7 @@ func init() {
 			}
 			var keys []string
 			for _, k := range splitKeys(c.Args) {
-				keys = append(keys, "<kbd>"+esc(strings.TrimSpace(k))+"</kbd>")
+				keys = append(keys, "<kbd>"+Esc(strings.TrimSpace(k))+"</kbd>")
 			}
 			return `<span class="sc-keys">` + strings.Join(keys, "+") + `</span>`, nil
 		}})
@@ -708,7 +732,7 @@ func init() {
 			if !ok || !glyphs[name] {
 				return "", problem{"PUDL has no glyph called " + name + "."}
 			}
-			return `<span class="glyph sc-glyph" style="--glyph: var(--glyph-` + esc(name) + `)" aria-hidden="true"></span>`, nil
+			return `<span class="glyph sc-glyph" style="--glyph: var(--glyph-` + Esc(name) + `)" aria-hidden="true"></span>`, nil
 		}})
 	add(&def{name: "columns", kind: container, title: "Columns", what: "Content side by side, divided by {{column}} lines; the columns stack on a narrow screen.",
 		example: "{{columns}}\nThe first column.\n\n{{column}}\n\nThe second.\n{{/columns}}",
@@ -741,7 +765,7 @@ func init() {
 						}
 						v = u
 					}
-					out += ` data-` + key + `="` + esc(v) + `"`
+					out += ` data-` + key + `="` + Esc(v) + `"`
 				}
 			}
 			return out + `></div>`, nil
@@ -825,28 +849,42 @@ func splitKeys(s string) []string {
 	return append(out, s[start:])
 }
 
-// safeURL is a path on the site, a file of the home folder (cat.png beside
-// the document, or ~/Pictures/cat.png) or an http or https address, never a
-// script.
-func safeURL(u, what string) (string, error) {
+// SafeImage says whether a picture's address may be drawn, and gives it
+// without the spaces around it. A picture may be a file of the home folder
+// (cat.png beside the document, or ~/Pictures/cat.png), a path on the site
+// (/images/x.png), an http or https address, or a data: address of an image,
+// never a script. A Markdown image and a figure both ask here, so the two
+// treat the same address the same way. A data: image is kept because the
+// page's HTML cleaner (apps/md-engine/safe-html.js) and the site's content
+// security policy already admit it, and a reader's documents, which live in
+// their browser, may hold one.
+func SafeImage(u string) (string, bool) {
 	u = strings.TrimSpace(u)
 	if strings.HasPrefix(u, "/") && !strings.HasPrefix(u, "//") {
-		return u, nil
+		return u, true
 	}
 	l := strings.ToLower(u)
-	if strings.HasPrefix(l, "http://") || strings.HasPrefix(l, "https://") {
-		return u, nil
+	if strings.HasPrefix(l, "http://") || strings.HasPrefix(l, "https://") || strings.HasPrefix(l, "data:image/") {
+		return u, true
 	}
-	if isLocal(u) {
+	if IsLocal(u) {
+		return u, true
+	}
+	return "", false
+}
+
+// safeURL is SafeImage with the problem a shortcode shows when it refuses.
+func safeURL(u, what string) (string, error) {
+	if u, ok := SafeImage(u); ok {
 		return u, nil
 	}
 	return "", problem{what + " must be a picture beside the document or in your home folder (cat.png, ~/Pictures/cat.png), a path on this site (/images/x.png), or an http or https address."}
 }
 
-// isLocal says whether an address is a file of the home folder: a path with
+// IsLocal says whether an address is a file of the home folder: a path with
 // no scheme that does not start with / (a page of the site) or // (another
 // host).
-func isLocal(u string) bool {
+func IsLocal(u string) bool {
 	if u == "" || strings.HasPrefix(u, "/") || strings.HasPrefix(u, "\\") {
 		return false
 	}
@@ -857,23 +895,25 @@ func isLocal(u string) bool {
 	return true
 }
 
-// imgTag is the <img> for a picture: one of the home folder is marked with
-// its path for the page to read (data-attachment), as internal/preview marks
-// a Markdown image; the rest load as they are. extra is further attributes.
-func imgTag(src, alt, extra string) string {
-	if isLocal(src) {
+// ImageTag is the <img> for a picture whose address SafeImage admitted:
+// one of the home folder is marked with its path for the page to read
+// (data-attachment), and the rest load as they are. extra is further
+// attributes, already escaped, each with a space before it.
+func ImageTag(src, alt, extra string) string {
+	if IsLocal(src) {
 		name := strings.ReplaceAll(src, `\`, "/")
 		for strings.HasPrefix(name, "./") {
 			name = name[2:]
 		}
-		return `<img class="dinah-attachment-image" data-attachment="` + esc(name) + `" alt="` + esc(alt) + `"` + extra + `>`
+		return `<img class="dinah-attachment-image" data-attachment="` + Esc(name) + `" alt="` + Esc(alt) + `"` + extra + `>`
 	}
-	return `<img src="` + esc(src) + `" alt="` + esc(alt) + `"` + extra + `>`
+	return `<img src="` + Esc(src) + `" alt="` + Esc(alt) + `"` + extra + `>`
 }
 
 var escaper = strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", `"`, "&quot;")
 
-func esc(s string) string { return escaper.Replace(s) }
+// Esc escapes text for HTML, in an element or in a double-quoted attribute.
+func Esc(s string) string { return escaper.Replace(s) }
 
 // inlineHTML draws a title or a caption written in Markdown, without the
 // paragraph around it.
@@ -882,7 +922,7 @@ var inlineMD = goldmark.New(goldmark.WithExtensions(extension.GFM))
 func inlineHTML(md string) string {
 	var b bytes.Buffer
 	if err := inlineMD.Convert([]byte(md), &b); err != nil {
-		return esc(md)
+		return Esc(md)
 	}
 	s := strings.TrimSpace(b.String())
 	s = strings.TrimPrefix(s, "<p>")
@@ -905,8 +945,12 @@ func plainText(n ast.Node, src []byte) string {
 	return b.String()
 }
 
-func problemHTML(c Call, why string) string {
-	return `<code class="sc-problem" title="` + esc(why) + `">` + esc(c.Source()) + `</code>`
+func problemHTML(c Call, why string) string { return problemSource(c.Source(), why) }
+
+// problemSource marks text as written that the page cannot draw, with the
+// reason as its title.
+func problemSource(source, why string) string {
+	return `<code class="sc-problem" title="` + Esc(why) + `">` + Esc(source) + `</code>`
 }
 
 // === Rendering ============================================================
@@ -994,7 +1038,7 @@ func (r *htmlRenderer) inline(w util.BufWriter, src []byte, node ast.Node, enter
 			_, _ = w.WriteString("</span>")
 			return ast.WalkContinue, nil
 		}
-		_, _ = w.WriteString(problemHTML(n.Call, "This closes "+n.Call.Name+", which is not open."))
+		_, _ = w.WriteString(problemSource(n.Raw, "This closes "+n.Call.Name+", which is not open."))
 		return ast.WalkContinue, nil
 	}
 	switch {

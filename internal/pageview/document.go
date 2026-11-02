@@ -8,6 +8,7 @@ import (
 	"html"
 	"strings"
 
+	"yavc.app/internal/frontmatter"
 	"yavc.app/internal/preview"
 	"yavc.app/internal/shortcodes"
 )
@@ -30,11 +31,15 @@ var richKinds = map[string]bool{"paragraph": true, "heading": true, "list": true
 // ParseDocument reads a whole document for the editor.
 func ParseDocument(text string, units []Unit) *Node {
 	doc := &Node{Type: "doc", Attrs: map[string]any{}}
-	if strings.Contains(text, "\r\n") {
+	// A document whose every line ends in \r\n is read with \n and written
+	// back with \r\n. One with mixed line ends is read as it is, since
+	// writing it back with one kind would change the lines the person did
+	// not touch.
+	if n := strings.Count(text, "\n"); n > 0 && strings.Count(text, "\r\n") == n {
 		text = strings.ReplaceAll(text, "\r\n", "\n")
 		doc.Attrs["crlf"] = true
 	}
-	front := frontMatter(text)
+	front := text[:frontmatter.End(text)]
 	doc.Attrs["front"] = front
 	b := builder{text: text, starts: lineStarts(text)}
 	content, tail := b.sequence(units, len(front), len(text))
@@ -45,33 +50,6 @@ func ParseDocument(text string, units []Unit) *Node {
 	}
 	doc.Content = content
 	return doc
-}
-
-// frontMatter is the document's YAML front matter with its closing line, or
-// "".
-func frontMatter(text string) string {
-	if !strings.HasPrefix(text, "---\n") {
-		return ""
-	}
-	at := 4
-	for at < len(text) {
-		end := strings.IndexByte(text[at:], '\n')
-		line := text[at:]
-		if end >= 0 {
-			line = text[at : at+end]
-		}
-		if strings.TrimRight(line, " \t") == "---" {
-			if end < 0 {
-				return text
-			}
-			return text[:at+end+1]
-		}
-		if end < 0 {
-			break
-		}
-		at += end + 1
-	}
-	return ""
 }
 
 func lineStarts(text string) []int {
@@ -189,14 +167,23 @@ func (b *builder) container(src string) *Node {
 		return nil
 	}
 	attrs := map[string]any{"uid": b.next(), "src": src, "name": info.Name, "args": info.Args, "open": open, "close": close, "before": info.Before, "after": info.After}
+	// A body of one empty line, between the opening and the closing line,
+	// is told apart from no body at all, so each comes back as it was.
+	if body == "" && strings.Count(src, "\n") > 1 {
+		attrs["blank"] = true
+	}
 	if info.Separator != "" {
-		parts, seps := splitBody(body, info.Separator)
+		parts, none, seps := splitBody(body, info.Separator)
 		cols := &Node{Type: "columns", Attrs: attrs}
 		attrs["sep"] = info.Separator
 		attrs["seps"] = seps
-		for _, part := range parts {
+		for i, part := range parts {
 			content, tail := b.body(part)
-			cols.Content = append(cols.Content, &Node{Type: "column", Attrs: map[string]any{"tail": tail}, Content: content})
+			col := &Node{Type: "column", Attrs: map[string]any{"tail": tail}, Content: content}
+			if none[i] {
+				col.Attrs["none"] = true
+			}
+			cols.Content = append(cols.Content, col)
 		}
 		return cols
 	}
@@ -206,13 +193,15 @@ func (b *builder) container(src string) *Node {
 }
 
 // splitBody divides a container's body at each line that is its separator
-// shortcode alone, keeping those lines as they were.
-func splitBody(body, sep string) ([]string, []string) {
-	var parts, seps []string
+// shortcode alone, keeping those lines as they were. none says, for each
+// part, that it had no lines at all, which an empty line also joins to "",
+// so a separator with nothing between it and the next comes back as it was.
+func splitBody(body, sep string) (parts []string, none []bool, seps []string) {
 	var part []string
 	for _, line := range strings.Split(body, "\n") {
 		if strings.TrimSpace(line) == "{{"+sep+"}}" {
 			parts = append(parts, strings.Join(part, "\n"))
+			none = append(none, part == nil)
 			seps = append(seps, line)
 			part = nil
 			continue
@@ -220,7 +209,8 @@ func splitBody(body, sep string) ([]string, []string) {
 		part = append(part, line)
 	}
 	parts = append(parts, strings.Join(part, "\n"))
-	return parts, seps
+	none = append(none, part == nil)
+	return parts, none, seps
 }
 
 // body reads a container's body as blocks, with the blank text after the
@@ -249,6 +239,9 @@ func (b *builder) source(kind, src, html string, diagrams any) *Node {
 // after a blank line. A source block keeps its Markdown, which is all it has.
 func Fresh(nodes []*Node) []*Node {
 	for _, n := range nodes {
+		if n == nil {
+			continue
+		}
 		delete(n.Attrs, "uid")
 		delete(n.Attrs, "gap")
 		if n.Type != "source_block" {
@@ -293,6 +286,9 @@ func sequenceText(nodes []*Node, first string) (string, error) {
 	var b strings.Builder
 	started := false
 	for _, n := range nodes {
+		if n == nil {
+			continue
+		}
 		text, err := blockText(n)
 		if err != nil {
 			return "", err
@@ -357,23 +353,34 @@ func containerText(n *Node) (string, error) {
 		if sep == "" {
 			sep = "column"
 		}
-		seps, _ := n.Attrs["seps"].([]any)
-		for i, col := range n.Content {
+		seps := stringList(n.Attrs["seps"])
+		// The body is its lines: each column's text, which may run over
+		// several, and the separator line before every column but the
+		// first. A column that had no lines adds none.
+		var pieces []string
+		i := 0
+		for _, col := range n.Content {
+			if col == nil {
+				continue
+			}
 			text, err := sequenceText(col.Content, "")
 			if err != nil {
 				return "", err
 			}
 			if i > 0 {
 				line := "{{" + sep + "}}"
-				if i-1 < len(seps) {
-					if s, ok := seps[i-1].(string); ok && s != "" {
-						line = s
-					}
+				if i-1 < len(seps) && seps[i-1] != "" {
+					line = seps[i-1]
 				}
-				body += "\n" + line + "\n"
+				pieces = append(pieces, line)
 			}
-			body += text + stringAttr(col, "tail")
+			text += stringAttr(col, "tail")
+			if none, _ := col.Attrs["none"].(bool); text != "" || !none {
+				pieces = append(pieces, text)
+			}
+			i++
 		}
+		body = strings.Join(pieces, "\n")
 	} else {
 		text, err := sequenceText(n.Content, "")
 		if err != nil {
@@ -381,10 +388,26 @@ func containerText(n *Node) (string, error) {
 		}
 		body = text + stringAttr(n, "tail")
 	}
-	if body == "" {
+	if blank, _ := n.Attrs["blank"].(bool); body == "" && !blank {
 		return open + "\n" + close, nil
 	}
 	return open + "\n" + body + "\n" + close, nil
+}
+
+// stringList reads a list of strings from an attribute, as the editor's
+// JSON gives it ([]any) or as this package builds it ([]string).
+func stringList(v any) []string {
+	switch l := v.(type) {
+	case []string:
+		return l
+	case []any:
+		out := make([]string, len(l))
+		for i, x := range l {
+			out[i], _ = x.(string)
+		}
+		return out
+	}
+	return nil
 }
 
 func stringAttr(n *Node, key string) string {

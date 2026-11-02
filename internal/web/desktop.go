@@ -21,12 +21,21 @@ type desktopState struct {
 	query     url.Values // everything else, kept as it is
 }
 
+// maxWindows is the most windows an address may open; the rest of the
+// list is ignored.
+const maxWindows = 20
+
 func parseDesktop(q url.Values) desktopState {
 	d := desktopState{query: url.Values{}, top: q.Get("top")}
+	// Each list keeps a window once, at its first place, and no more than
+	// maxWindows of them.
 	list := func(s string) []string {
 		var out []string
 		for _, k := range strings.Split(s, ",") {
-			if k != "" && winKey.MatchString(k) {
+			if len(out) == maxWindows {
+				break
+			}
+			if k != "" && winKey.MatchString(k) && !slices.Contains(out, k) {
 				out = append(out, k)
 			}
 		}

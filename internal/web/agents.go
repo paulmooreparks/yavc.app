@@ -18,8 +18,8 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -33,6 +33,9 @@ import (
 // token; the rest the person chooses.
 var grantable = []string{"files.read", "files.write", "window.open", "attention.request"}
 
+// maxTokens is how many pairing tokens one session keeps.
+const maxTokens = 20
+
 func (s *Server) agentRoutes(m *http.ServeMux) {
 	s.hub = relay.New()
 	s.mcp = mcp.New(&mcp.Server{Name: "yavc.app", Title: s.Title, Catalog: s.providers, Pair: s.pair, Hub: s.hub})
@@ -43,14 +46,33 @@ func (s *Server) agentRoutes(m *http.ServeMux) {
 	m.HandleFunc("GET /agent/stream", s.agentStream)
 	m.HandleFunc("POST /agent/front", s.agentFront)
 	m.HandleFunc("POST /agent/report", s.agentReport)
-	m.Handle("POST /mcp", s.mcp)
-	m.Handle("DELETE /mcp", s.mcp)
+	m.HandleFunc("POST /mcp", s.mcpEndpoint)
+	m.HandleFunc("DELETE /mcp", s.mcpEndpoint)
+}
+
+// mcpEndpoint is the MCP server, on the site's own hosts only.
+func (s *Server) mcpEndpoint(w http.ResponseWriter, r *http.Request) {
+	if !s.own(w, r) {
+		return
+	}
+	s.mcp.ServeHTTP(w, r)
 }
 
 // === The catalogue ==========================================================
 
-// providers reads every package's actions manifest, with its module and
-// page at their addresses for this request.
+// actionsDoc is a package's actions manifest, as the catalogue reads it.
+type actionsDoc struct {
+	ID          string           `json:"id"`
+	Title       string           `json:"title"`
+	Description string           `json:"description"`
+	Module      string           `json:"module"`
+	Actions     []map[string]any `json:"actions"`
+}
+
+// providers lists every package's actions manifest, with its module and
+// page at their addresses for this request. The manifests are read once
+// for each state of the catalogue and shared, so nothing here changes
+// them.
 func (s *Server) providers(r *http.Request) []mcp.Provider {
 	var out []mcp.Provider
 	origin := strings.TrimSuffix(s.siteURL(r), "/")
@@ -58,19 +80,8 @@ func (s *Server) providers(r *http.Request) []mcp.Provider {
 		if a.Actions == "" {
 			continue
 		}
-		raw, err := os.ReadFile(filepath.Join(a.Dir, a.Actions))
-		if err != nil {
-			continue
-		}
-		var m struct {
-			ID          string           `json:"id"`
-			Title       string           `json:"title"`
-			Description string           `json:"description"`
-			Module      string           `json:"module"`
-			Actions     []map[string]any `json:"actions"`
-		}
-		if json.Unmarshal(raw, &m) != nil || m.ID == "" {
-			log.Printf("applet %s: its actions manifest could not be read", a.Name)
+		m, ok := s.actionsManifest(a)
+		if !ok {
 			continue
 		}
 		p := mcp.Provider{ID: m.ID, Applet: a.Name, Title: m.Title, Description: m.Description, Page: s.appletPageURL(r, a.Name),
@@ -93,10 +104,9 @@ func (s *Server) actionsCatalogue(w http.ResponseWriter, r *http.Request) {
 	if !s.own(w, r) {
 		return
 	}
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
-	json.NewEncoder(w).Encode(map[string]any{"site": s.siteURL(r), "mcp": strings.TrimSuffix(s.siteURL(r), "/") + "/mcp", "providers": s.providers(r)})
+	writeJSON(w, http.StatusOK, map[string]any{"site": s.siteURL(r), "mcp": strings.TrimSuffix(s.siteURL(r), "/") + "/mcp", "providers": s.providers(r)})
 }
 
 // === Tokens =================================================================
@@ -112,6 +122,11 @@ func tokenView(a session.Agent) map[string]any {
 	v := map[string]any{"id": a.ID, "name": a.Name, "grant": a.Grant, "created": a.Created}
 	if !a.Used.IsZero() {
 		v["used"] = a.Used
+	}
+	if !a.Expires.IsZero() {
+		v["expires"] = a.Expires
+	} else {
+		v["expires"] = a.Created.Add(session.TokenLife)
 	}
 	if a.Grant == nil {
 		v["grant"] = []string{}
@@ -130,21 +145,21 @@ func (s *Server) listTokens(w http.ResponseWriter, r *http.Request) {
 			views = append(views, tokenView(a))
 		}
 	}
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-store")
-	json.NewEncoder(w).Encode(map[string]any{"tokens": views, "grantable": grantable})
+	writeJSON(w, http.StatusOK, map[string]any{"tokens": views, "grantable": grantable})
 }
 
+// errTokensFull is a session that keeps as many tokens as it may.
+var errTokensFull = errors.New("the session keeps as many tokens as it may")
+
 func (s *Server) makeToken(w http.ResponseWriter, r *http.Request) {
-	if !s.own(w, r) {
+	if !s.desktopOnly(w, r) {
 		return
 	}
 	var in struct {
 		Name  string   `json:"name"`
 		Grant []string `json:"grant"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
-		http.Error(w, "A token is made from a JSON object of name and grant.", http.StatusBadRequest)
+	if !decodeJSON(w, r, &in, "A token is made from a JSON object of name and grant.") {
 		return
 	}
 	in.Name = strings.TrimSpace(in.Name)
@@ -154,85 +169,97 @@ func (s *Server) makeToken(w http.ResponseWriter, r *http.Request) {
 	}
 	grant := []string{}
 	for _, g := range in.Grant {
-		ok := false
-		for _, allowed := range grantable {
-			ok = ok || g == allowed
-		}
-		if !ok {
+		if !slices.Contains(grantable, g) {
 			http.Error(w, "A token may be granted "+strings.Join(grantable, ", ")+".", http.StatusBadRequest)
 			return
 		}
-		grant = append(grant, g)
+		if !slices.Contains(grant, g) {
+			grant = append(grant, g)
+		}
 	}
 	var secret [32]byte
 	rand.Read(secret[:])
 	token := "yavc_" + base64.RawURLEncoding.EncodeToString(secret[:])
 	var id [12]byte
 	rand.Read(id[:])
-	agent := session.Agent{ID: base64.RawURLEncoding.EncodeToString(id[:]), Name: in.Name, Hash: hashToken(token), Grant: grant, Created: time.Now().UTC()}
-	err := s.update(w, r, func(sess *session.Session) {
-		if len(sess.Agents) >= 20 {
-			return
+	now := s.now().UTC()
+	agent := session.Agent{ID: base64.RawURLEncoding.EncodeToString(id[:]), Name: in.Name, Hash: hashToken(token), Grant: grant,
+		Created: now, Expires: now.Add(session.TokenLife)}
+	sess, err := s.update(w, r, func(sess *session.Session) error {
+		if len(sess.Agents) >= maxTokens {
+			return errTokensFull
 		}
 		sess.Agents = append(sess.Agents, agent)
+		return nil
 	})
-	if err != nil {
-		s.done(w, err)
+	if errors.Is(err, errTokensFull) {
+		http.Error(w, fmt.Sprintf("A session keeps up to %d tokens; revoke one first.", maxTokens), http.StatusConflict)
 		return
 	}
-	sess := s.sessionOf(r)
-	if sess == nil || !sess.HasAgent(agent.ID) {
-		http.Error(w, "A session keeps up to 20 tokens; revoke one first.", http.StatusConflict)
+	if err != nil {
+		s.done(w, err, "")
 		return
 	}
 	s.Sessions.IndexAgent(agent.Hash, sess.ID)
 	v := tokenView(agent)
 	v["token"] = token
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-store")
-	json.NewEncoder(w).Encode(v)
+	writeJSON(w, http.StatusOK, v)
 }
 
+// revokeToken takes a token out of the reader's session. A reader with no
+// session has no token, and none is made for the asking.
 func (s *Server) revokeToken(w http.ResponseWriter, r *http.Request) {
+	if !s.desktopOnly(w, r) {
+		return
+	}
 	id := r.PathValue("id")
-	if !s.own(w, r) || !tokenID.MatchString(id) {
+	sess := s.sessionOf(r)
+	if !tokenID.MatchString(id) || sess == nil || !sess.HasAgent(id) {
 		http.Error(w, "No such token.", http.StatusNotFound)
 		return
 	}
 	var hash string
-	err := s.update(w, r, func(sess *session.Session) {
-		kept := sess.Agents[:0]
-		for _, a := range sess.Agents {
+	_, err := s.Sessions.Update(sess.ID, func(sess *session.Session) error {
+		sess.Agents = slices.DeleteFunc(sess.Agents, func(a session.Agent) bool {
 			if a.ID == id {
 				hash = a.Hash
-				continue
+				return true
 			}
-			kept = append(kept, a)
-		}
-		sess.Agents = kept
+			return false
+		})
+		return nil
 	})
 	if hash != "" {
 		s.Sessions.IndexAgent(hash, "")
 	}
-	s.done(w, err)
+	s.done(w, err, "")
 }
 
-// pair finds the person a bearer token belongs to.
+// pair finds the person a bearer token belongs to. A token past its
+// expiry pairs no one.
 func (s *Server) pair(token string) (mcp.Peer, bool) {
 	if !strings.HasPrefix(token, "yavc_") {
 		return mcp.Peer{}, false
 	}
 	sess, agent, err := s.Sessions.FindAgent(hashToken(token))
 	if err != nil || sess == nil {
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
+			log.Printf("pair: %v", err)
+		}
 		return mcp.Peer{}, false
 	}
-	if time.Since(agent.Used) > time.Minute {
-		s.Sessions.Update(sess.ID, func(in *session.Session) {
+	now := s.now()
+	if agent.Expired(now) {
+		return mcp.Peer{}, false
+	}
+	if now.Sub(agent.Used) > time.Minute {
+		s.Sessions.Update(sess.ID, func(in *session.Session) error {
 			for i := range in.Agents {
 				if in.Agents[i].ID == agent.ID {
-					in.Agents[i].Used = time.Now().UTC()
+					in.Agents[i].Used = now.UTC()
 				}
 			}
+			return nil
 		})
 	}
 	grant := append([]string{"artifact.create", "notification.post"}, agent.Grant...)
@@ -244,8 +271,11 @@ func (s *Server) pair(token string) (mcp.Peer, bool) {
 var pageID = regexp.MustCompile(`^[0-9a-f]{24}$`)
 
 func (s *Server) agentStream(w http.ResponseWriter, r *http.Request) {
+	if !s.own(w, r) {
+		return
+	}
 	page := r.URL.Query().Get("page")
-	if !s.own(w, r) || !pageID.MatchString(page) {
+	if !pageID.MatchString(page) {
 		http.Error(w, "A stream needs a page id.", http.StatusBadRequest)
 		return
 	}
@@ -261,14 +291,19 @@ func (s *Server) agentStream(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Streaming is not possible here.", http.StatusInternalServerError)
 		return
 	}
+	events, leave, err := s.hub.Subscribe(sess.ID, page)
+	if err != nil {
+		w.Header().Set("Retry-After", "60")
+		http.Error(w, "The site has as many pages connected as it can keep; try again later.", http.StatusServiceUnavailable)
+		return
+	}
+	defer leave()
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("X-Accel-Buffering", "no")
 	w.WriteHeader(http.StatusOK)
 	fmt.Fprint(w, ": connected\n\n")
 	flusher.Flush()
-	events, leave := s.hub.Subscribe(sess.ID, page)
-	defer leave()
 	beat := time.NewTicker(25 * time.Second)
 	defer beat.Stop()
 	for {
@@ -278,7 +313,12 @@ func (s *Server) agentStream(w http.ResponseWriter, r *http.Request) {
 		case <-beat.C:
 			fmt.Fprint(w, ": beat\n\n")
 			flusher.Flush()
-		case e := <-events:
+		case e, open := <-events:
+			if !open {
+				// The hub dropped this stream: the page opened another,
+				// or the session was deleted.
+				return
+			}
 			data, err := json.Marshal(e.Data)
 			if err != nil {
 				continue
@@ -294,7 +334,10 @@ func (s *Server) agentFront(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var in struct{ Page string }
-	if json.NewDecoder(r.Body).Decode(&in) != nil || !pageID.MatchString(in.Page) {
+	if !decodeJSON(w, r, &in, "Which page?") {
+		return
+	}
+	if !pageID.MatchString(in.Page) {
 		http.Error(w, "Which page?", http.StatusBadRequest)
 		return
 	}
@@ -315,7 +358,10 @@ func (s *Server) agentReport(w http.ResponseWriter, r *http.Request) {
 			Key, Name, Mime, Data string
 		} `json:"artifacts"`
 	}
-	if json.NewDecoder(r.Body).Decode(&in) != nil || in.ID == "" || len(in.View) == 0 {
+	if !decodeJSON(w, r, &in, "A report is an invocation's id and its record.") {
+		return
+	}
+	if in.ID == "" || len(in.View) == 0 {
 		http.Error(w, "A report is an invocation's id and its record.", http.StatusBadRequest)
 		return
 	}
@@ -326,21 +372,32 @@ func (s *Server) agentReport(w http.ResponseWriter, r *http.Request) {
 	}
 	arts := map[string]relay.Artifact{}
 	for _, a := range in.Artifacts {
+		if a.Key == "" {
+			continue
+		}
+		if base64.StdEncoding.DecodedLen(len(a.Data)) > relay.MaxArtifact+3 {
+			http.Error(w, "An artifact is larger than the relay keeps.", http.StatusRequestEntityTooLarge)
+			return
+		}
 		data, err := base64.StdEncoding.DecodeString(a.Data)
-		if err != nil || a.Key == "" {
+		if err != nil {
+			// The record still finishes, without the artifact the page
+			// could not send, as it always has.
 			continue
 		}
 		arts[a.Key] = relay.Artifact{Name: a.Name, Mime: a.Mime, Data: data}
 	}
 	err := s.hub.Report(sess.ID, in.ID, in.View, arts)
-	if errors.Is(err, relay.ErrNoRecord) {
+	switch {
+	case err == nil:
+		w.WriteHeader(http.StatusNoContent)
+	case errors.Is(err, relay.ErrNoRecord):
 		http.Error(w, "No such invocation.", http.StatusNotFound)
-		return
-	}
-	if err != nil {
-		log.Printf("agent report: %v", err)
+	case errors.Is(err, relay.ErrFinished):
+		http.Error(w, "That invocation has already finished.", http.StatusConflict)
+	case errors.Is(err, relay.ErrArtifactSize):
+		http.Error(w, "The artifacts are larger than the relay keeps.", http.StatusRequestEntityTooLarge)
+	default:
 		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
 	}
-	w.WriteHeader(http.StatusNoContent)
 }

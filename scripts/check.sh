@@ -34,6 +34,11 @@ else
   go test -count=1 ./...
 fi
 
+step "Known vulnerabilities in the Go code and its modules"
+# A pinned release of govulncheck, run with go run so nothing need be
+# installed; it reads the Go vulnerability database over the network.
+go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
+
 step "Builds: the engine and the Markdown engine for the browser"
 go build -o /dev/null ./cmd/yavc
 GOOS=js GOARCH=wasm go build -o /dev/null ./cmd/yavc-md

@@ -59,12 +59,17 @@ var keyRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_-]{0,63}$`)
 // MaxValue is the longest value a dialog may write.
 const MaxValue = 2000
 
-// block finds the front matter: a first line "---" and the next line that
-// is "---", ignoring spaces at its end. It is the same rule internal/pageview
-// uses to keep front matter out of the page.
-func block(text string) (body string, end int, ok bool) {
+// End finds the end of a document's front matter and returns the byte
+// offset just after its closing line, or 0 when the document has none.
+// Front matter opens with a first line that is exactly "---" and closes at
+// the next line that is "---", ignoring spaces and tabs at its end; a
+// closing line at the very end of the text needs no line end of its own.
+// The text uses \n line ends. This is the one rule the preview, the page
+// view and the Properties dialog all keep to, so the three agree on where a
+// document's body starts.
+func End(text string) int {
 	if !strings.HasPrefix(text, "---\n") {
-		return "", 0, false
+		return 0
 	}
 	at := 4
 	for at <= len(text) {
@@ -75,16 +80,27 @@ func block(text string) (body string, end int, ok bool) {
 		}
 		if strings.TrimRight(line, " \t") == "---" {
 			if nl < 0 {
-				return text[4:at], len(text), true
+				return len(text)
 			}
-			return text[4:at], at + nl + 1, true
+			return at + nl + 1
 		}
 		if nl < 0 {
 			break
 		}
 		at += nl + 1
 	}
-	return "", 0, false
+	return 0
+}
+
+// block finds the front matter by End and gives its body, the lines
+// between the opening and the closing line.
+func block(text string) (body string, end int, ok bool) {
+	end = End(text)
+	if end == 0 {
+		return "", 0, false
+	}
+	closer := strings.LastIndexByte(strings.TrimSuffix(text[:end], "\n"), '\n') + 1
+	return text[4:closer], end, true
 }
 
 // Read reads a document's front matter. text uses \n line ends.
@@ -99,6 +115,14 @@ func Read(text string) Front {
 	}
 	f.lines = strings.Split(strings.TrimSuffix(body, "\n"), "\n")
 	if strings.TrimSpace(body) == "" {
+		return f
+	}
+	// YAML counts a carriage return, a next-line character and the Unicode
+	// line and paragraph separators as line breaks, where the lines here are
+	// divided only at \n, so front matter holding any of them would put
+	// the parser's line numbers and these lines out of step.
+	if i := strings.IndexAny(body, "\r\u0085  "); i >= 0 {
+		f.Problem = fmt.Sprintf("Line %d of the front matter holds a line break other than a plain one, which this dialog cannot keep safely.", strings.Count(body[:i], "\n")+2)
 		return f
 	}
 	if strings.Contains(body, "\t") && tabIndented(f.lines) {
@@ -139,22 +163,32 @@ func Read(text string) Front {
 			e.Editable = !strings.Contains(v.Value, "\n") && keyRe.MatchString(k.Value)
 		case v.Kind == yaml.SequenceNode && scalars(v):
 			var items []string
+			// A list is edited as its items joined by ", " and is divided
+			// there again when written, so it is editable only when that
+			// gives back the same items: none may be empty or hold ", ".
+			splittable := true
 			for _, it := range v.Content {
 				items = append(items, it.Value)
+				splittable = splittable && it.Value != "" && !strings.Contains(it.Value, ", ")
 			}
 			e.Value, e.Kind = strings.Join(items, ", "), "list"
-			e.Editable = keyRe.MatchString(k.Value)
+			e.Editable = keyRe.MatchString(k.Value) && splittable
 		default:
 			e.Value = "(several lines)"
 		}
 		f.Entries = append(f.Entries, e)
 	}
 	// Each property runs to the line before the next, less the blank and
-	// comment lines at its end, which belong to what follows.
+	// comment lines at its end, which belong to what follows. The parser's
+	// lines are held to the lines there are, so a line number it gives
+	// that is out of step can never index past them.
+	for i := range f.Entries {
+		f.Entries[i].line = max(1, min(f.Entries[i].line, len(f.lines)))
+	}
 	for i := range f.Entries {
 		end := len(f.lines)
 		if i+1 < len(f.Entries) {
-			end = f.Entries[i+1].line - 1
+			end = max(f.Entries[i].line, f.Entries[i+1].line-1)
 		}
 		for end > f.Entries[i].line {
 			t := strings.TrimSpace(f.lines[end-1])
@@ -256,6 +290,27 @@ func scalar(key, v string) (string, error) {
 	return s, nil
 }
 
+// list writes a list property as a block sequence of the items its value
+// holds, divided at each ", ", or as an empty flow sequence when the value
+// is empty, so a list stays a list when it is edited.
+func list(key, v string) ([]string, error) {
+	if v == "" {
+		return []string{key + ": []"}, nil
+	}
+	out := []string{key + ":"}
+	for _, item := range strings.Split(v, ", ") {
+		if item == "" {
+			return nil, fmt.Errorf("the list %s has an empty item", key)
+		}
+		line, err := scalar(key, item)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, "  - "+line)
+	}
+	return out, nil
+}
+
 // Set changes properties: each key in set takes its value, and a nil value
 // takes the property out. A property the dialog may not edit (Editable
 // false) cannot be changed. It returns the document with its new front
@@ -303,6 +358,14 @@ func Set(text string, set map[string]*string, order []string) (string, error) {
 		if has && e.Value == *v {
 			continue
 		}
+		if has && e.Kind == "list" {
+			written, err := list(k, *v)
+			if err != nil {
+				return "", err
+			}
+			edits = append(edits, edit{e.line, e.end, written})
+			continue
+		}
 		line, err := scalar(k, *v)
 		if err != nil {
 			return "", err
@@ -326,6 +389,9 @@ func Set(text string, set map[string]*string, order []string) (string, error) {
 		}
 	}
 	for _, e := range edits {
+		if e.from < 1 || e.to < e.from || e.to > len(lines) {
+			return "", errors.New("the front matter's lines could not be found, so the change was not made")
+		}
 		rest := append([]string(nil), lines[e.to:]...)
 		lines = append(append(lines[:e.from-1], e.lines...), rest...)
 	}
@@ -380,6 +446,10 @@ func verify(before, after Front, set map[string]*string) error {
 			return fmt.Errorf("the change would have altered %s, so it was not made", e.Key)
 		}
 	}
+	was := map[string]Entry{}
+	for _, e := range before.Entries {
+		was[e.Key] = e
+	}
 	for k, v := range set {
 		n, ok := now[k]
 		if v == nil {
@@ -388,7 +458,12 @@ func verify(before, after Front, set map[string]*string) error {
 			}
 			continue
 		}
-		if !ok || n.Value != *v || n.Kind != "scalar" {
+		// A property that was there keeps its kind, and a new one is text.
+		kind := "scalar"
+		if e, had := was[k]; had {
+			kind = e.Kind
+		}
+		if !ok || n.Value != *v || n.Kind != kind {
 			return fmt.Errorf("%s would not read back as written, so the change was not made", k)
 		}
 	}

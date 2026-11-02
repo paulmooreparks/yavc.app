@@ -8,6 +8,8 @@
 package web
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -21,6 +23,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 )
 
 // The applet packages installed on this site: each a folder under one of
@@ -67,11 +70,22 @@ func (a applet) IconURL() string {
 }
 
 type appletCatalog struct {
-	mu     sync.Mutex
-	stamp  string
-	list   []applet
-	warned map[string]string
+	mu      sync.Mutex
+	stamp   string
+	checked time.Time
+	list    []applet
+	byName  map[string]int
+	digest  string
+	warned  map[string]string
+	// The actions manifests read for the catalogue, by applet, with the
+	// stamp they were read under.
+	actions      map[string]*actionsDoc
+	actionsStamp string
 }
+
+// catalogCheck is how often the applet folders are looked at again for a
+// changed manifest or page body.
+const catalogCheck = time.Second
 
 type manifest struct {
 	Name        string `json:"name"`
@@ -103,15 +117,38 @@ type manifest struct {
 var offered = map[string]bool{"snapshot": true, "config": true, "fs": false}
 
 // applets is the installed packages, in name order, read again when a
-// folder has changed since. A name found in two folders takes the first
-// folder's.
+// folder has changed since. The folders are looked at no more than once a
+// second. A name found in two folders takes the first folder's. The list
+// is shared and must not be changed.
 func (s *Server) applets() []applet {
 	c := &s.catalog
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	s.refreshLocked()
+	return c.list
+}
+
+// catalogDigest is a digest of the installed packages' manifests and page
+// bodies, which the registry's address has, so a changed package is
+// fetched again and an unchanged registry can be kept.
+func (s *Server) catalogDigest() string {
+	c := &s.catalog
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	s.refreshLocked()
+	return c.digest
+}
+
+func (s *Server) refreshLocked() {
+	c := &s.catalog
+	now := time.Now()
+	if c.list != nil && now.Sub(c.checked) < catalogCheck {
+		return
+	}
+	c.checked = now
 	stamp := appletStamp(s.Applets)
-	if stamp == c.stamp {
-		return c.list
+	if stamp == c.stamp && c.list != nil {
+		return
 	}
 	if c.warned == nil {
 		c.warned = map[string]string{}
@@ -143,12 +180,20 @@ func (s *Server) applets() []applet {
 		}
 	}
 	sort.Slice(list, func(i, j int) bool { return list[i].Name < list[j].Name })
-	c.stamp, c.list = stamp, list
-	return list
+	if list == nil {
+		list = []applet{}
+	}
+	c.byName = make(map[string]int, len(list))
+	for i, a := range list {
+		c.byName[a.Name] = i
+	}
+	sum := sha256.Sum256([]byte(stamp))
+	c.stamp, c.list, c.digest = stamp, list, hex.EncodeToString(sum[:])[:12]
 }
 
 // appletStamp is what the folders hold that the catalogue depends on:
-// each package's manifest and page body, with when they changed.
+// each package's manifest, page body and actions manifest, with when they
+// changed.
 func appletStamp(dirs []string) string {
 	var b strings.Builder
 	for _, dir := range dirs {
@@ -157,7 +202,7 @@ func appletStamp(dirs []string) string {
 			if !e.IsDir() {
 				continue
 			}
-			for _, f := range []string{"applet.json", "page.html"} {
+			for _, f := range []string{"applet.json", "page.html", "actions.json"} {
 				if fi, err := os.Stat(filepath.Join(dir, e.Name(), f)); err == nil {
 					fmt.Fprintf(&b, "%s/%s/%s:%d:%d;", dir, e.Name(), f, fi.ModTime().UnixNano(), fi.Size())
 				}
@@ -259,12 +304,44 @@ func (s *Server) appletByName(name string) (applet, bool) {
 	if !appletName.MatchString(name) {
 		return applet{}, false
 	}
-	for _, a := range s.applets() {
-		if a.Name == name {
-			return a, true
+	c := &s.catalog
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	s.refreshLocked()
+	i, ok := c.byName[name]
+	if !ok {
+		return applet{}, false
+	}
+	return c.list[i], true
+}
+
+// actionsManifest is an applet's actions manifest, read once for each
+// state of the catalogue and shared by every caller, which must not change
+// it. A manifest that cannot be read is said once in the log.
+func (s *Server) actionsManifest(a applet) (*actionsDoc, bool) {
+	c := &s.catalog
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	s.refreshLocked()
+	if c.actionsStamp != c.stamp {
+		c.actions, c.actionsStamp = map[string]*actionsDoc{}, c.stamp
+	}
+	if m, ok := c.actions[a.Name]; ok {
+		return m, m != nil
+	}
+	var m *actionsDoc
+	raw, err := os.ReadFile(filepath.Join(a.Dir, filepath.FromSlash(a.Actions)))
+	if err == nil {
+		var doc actionsDoc
+		if json.Unmarshal(raw, &doc) == nil && doc.ID != "" {
+			m = &doc
 		}
 	}
-	return applet{}, false
+	if m == nil {
+		log.Printf("applet %s: its actions manifest could not be read", a.Name)
+	}
+	c.actions[a.Name] = m
+	return m, m != nil
 }
 
 // registryScript writes /applets/registry.js: a define() for each

@@ -15,6 +15,7 @@ package preview
 import (
 	"bytes"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -28,6 +29,7 @@ import (
 	"github.com/yuin/goldmark/text"
 	"github.com/yuin/goldmark/util"
 
+	"yavc.app/internal/frontmatter"
 	"yavc.app/internal/shortcodes"
 )
 
@@ -71,34 +73,36 @@ type Problem struct {
 // diagramLanguages are the fenced-code languages the page draws as diagrams.
 var diagramLanguages = map[string]bool{"mermaid": true, "d2": true}
 
-// FrontMatterEnd returns the number of leading lines taken by a YAML front
-// matter block (its opening fence, its body and its closing fence), or 0
-// when there is none. The opener is a first line that is exactly "---", and
-// the closer is the next line that starts with "---".
-func FrontMatterEnd(lines []string) int {
-	if len(lines) == 0 || lines[0] != "---" {
+// frontMatterLines is the number of leading lines a document's front
+// matter takes, its opening line, its body and its closing line, or 0 when
+// it has none. Where the front matter ends is frontmatter.End's rule, the
+// one the page view and the Properties dialog keep to as well.
+func frontMatterLines(text string) int {
+	end := frontmatter.End(text)
+	if end == 0 {
 		return 0
 	}
-	for i := 1; i < len(lines); i++ {
-		if strings.HasPrefix(lines[i], "---") {
-			return i + 1
-		}
+	n := strings.Count(text[:end], "\n")
+	if !strings.HasSuffix(text[:end], "\n") {
+		n++
 	}
-	return 0
+	return n
 }
 
 // Render draws a Markdown document as its top-level blocks. Front matter is
 // not drawn, but its lines are counted, so every block's lines are lines of
 // the document as the person sees it.
 func Render(markdown string) ([]Block, []Problem) {
-	lines := strings.Split(strings.ReplaceAll(markdown, "\r\n", "\n"), "\n")
+	markdown = strings.ReplaceAll(markdown, "\r\n", "\n")
+	lines := strings.Split(markdown, "\n")
 	// Front matter becomes blank lines, which Markdown ignores, so the
 	// lines of everything after it keep their numbers.
-	front := FrontMatterEnd(lines)
+	front := frontMatterLines(markdown)
 	for i := 0; i < front; i++ {
 		lines[i] = ""
 	}
 	src := []byte(strings.Join(lines, "\n"))
+	starts := lineStarts(src)
 
 	d := &drawer{}
 	md := goldmark.New(
@@ -115,16 +119,16 @@ func Render(markdown string) ([]Block, []Problem) {
 
 	var problems []Problem
 	var blocks []Block
-	for _, u := range units(doc, src) {
+	for _, u := range units(doc, src, starts) {
 		d.line = u.start
 		first := len(d.diagrams)
 		var b bytes.Buffer
 		for _, n := range u.nodes {
 			if t, ok := n.(*extast.Table); ok {
-				problems = append(problems, droppedCells(t, src)...)
+				problems = append(problems, droppedCells(t, src, starts)...)
 			}
 			if err := md.Renderer().Render(&b, src, n); err != nil {
-				b.WriteString(`<p>` + escape(err.Error()) + `</p>`)
+				b.WriteString(`<p>` + shortcodes.Esc(err.Error()) + `</p>`)
 			}
 		}
 		inner := `<div class="dinah-src" data-start="` + strconv.Itoa(u.start) + `" data-end="` + strconv.Itoa(u.end) +
@@ -150,7 +154,7 @@ type unit struct {
 // units finds the document's top-level blocks and their lines: from the
 // line a block's first character is on to the line before the next block's,
 // less blank lines.
-func units(doc ast.Node, src []byte) []unit {
+func units(doc ast.Node, src []byte, starts []int) []unit {
 	var out []unit
 	for n := doc.FirstChild(); n != nil; n = n.NextSibling() {
 		// A container's closing line is part of the container's block.
@@ -162,7 +166,7 @@ func units(doc ast.Node, src []byte) []unit {
 			out[len(out)-1].nodes = append(out[len(out)-1].nodes, n)
 			continue
 		}
-		out = append(out, unit{nodes: []ast.Node{n}, start: lineOf(src, off), kind: kindOf(n)})
+		out = append(out, unit{nodes: []ast.Node{n}, start: lineOf(starts, off), kind: kindOf(n)})
 	}
 	lines := bytes.Split(src, []byte("\n"))
 	for i := range out {
@@ -178,12 +182,23 @@ func units(doc ast.Node, src []byte) []unit {
 	return out
 }
 
-// lineOf is the 1-based line of a byte offset in src.
-func lineOf(src []byte, off int) int {
-	if off > len(src) {
-		off = len(src)
+// lineStarts is the byte offset each line of src starts at, in order, so
+// that a block's line is found by a binary search rather than by counting
+// the lines before it, which made a long document quadratic to draw.
+func lineStarts(src []byte) []int {
+	starts := []int{0}
+	for i, c := range src {
+		if c == '\n' {
+			starts = append(starts, i+1)
+		}
 	}
-	return bytes.Count(src[:off], []byte("\n")) + 1
+	return starts
+}
+
+// lineOf is the 1-based line of a byte offset, from the line starts.
+func lineOf(starts []int, off int) int {
+	// The line is the last one starting at or before the offset.
+	return sort.Search(len(starts), func(i int) bool { return starts[i] > off })
 }
 
 // firstOffset is the offset of a block's first source character: where the
@@ -270,7 +285,7 @@ func isTaskList(list *ast.List) bool {
 // goldmark drops a longer row's extra cells without a word, so the source
 // line is read to find them: whatever follows the last parsed cell, after
 // its pipe, was dropped.
-func droppedCells(t *extast.Table, src []byte) []Problem {
+func droppedCells(t *extast.Table, src []byte, starts []int) []Problem {
 	var out []Problem
 	for row := t.FirstChild(); row != nil; row = row.NextSibling() {
 		if _, header := row.(*extast.TableHeader); header {
@@ -294,7 +309,7 @@ func droppedCells(t *extast.Table, src []byte) []Problem {
 		rest = strings.TrimSpace(strings.TrimPrefix(rest, "|"))
 		rest = strings.TrimSpace(strings.TrimSuffix(rest, "|"))
 		if rest != "" {
-			out = append(out, Problem{Line: lineOf(src, stop), Message: "This table row has more cells than its header row, and the extra cells are not shown: " + strconv.Quote(abbreviate(rest, 60)) + ". Make the header and delimiter rows as wide as the widest row."})
+			out = append(out, Problem{Line: lineOf(starts, stop), Message: "This table row has more cells than its header row, and the extra cells are not shown: " + strconv.Quote(abbreviate(rest, 60)) + ". Make the header and delimiter rows as wide as the widest row."})
 		}
 	}
 	return out
@@ -340,25 +355,34 @@ func (d *drawer) fencedCode(w util.BufWriter, src []byte, node ast.Node, enterin
 	if diagramLanguages[language] {
 		id := "preview-diagram-" + strconv.Itoa(len(d.diagrams)+1)
 		d.diagrams = append(d.diagrams, Diagram{ID: id, Language: language, Source: code.String(), Line: d.line})
-		_, _ = w.WriteString(`<div class="dinah-diagram-placeholder" data-preview-diagram="` + id + `"><pre><code class="language-` + language + `">` + escape(code.String()) + "</code></pre></div>\n")
+		_, _ = w.WriteString(`<div class="dinah-diagram-placeholder" data-preview-diagram="` + id + `"><pre><code class="language-` + language + `">` + shortcodes.Esc(code.String()) + "</code></pre></div>\n")
 		return ast.WalkSkipChildren, nil
 	}
 	_, _ = w.WriteString("<pre><code")
 	if language != "" {
-		_, _ = w.WriteString(` class="language-` + escape(language) + `"`)
+		_, _ = w.WriteString(` class="language-` + shortcodes.Esc(language) + `"`)
 	}
-	_, _ = w.WriteString(">" + escape(code.String()) + "</code></pre>\n")
+	_, _ = w.WriteString(">" + shortcodes.Esc(code.String()) + "</code></pre>\n")
 	return ast.WalkSkipChildren, nil
 }
 
-// image draws an image on the web as it is, and a local one as the file's
-// name for the page to load (data-attachment).
+// image draws an image on the web or the site as it is, and one of the home
+// folder by its path for the page to load (data-attachment), by the rule a
+// figure keeps to (shortcodes.SafeImage). An address that rule refuses is
+// shown as written, marked, as a shortcode written wrongly is.
 func (d *drawer) image(w util.BufWriter, src []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
 	if !entering {
 		return ast.WalkContinue, nil
 	}
 	n := node.(*ast.Image)
-	_, _ = w.WriteString(imageTag(string(n.Destination), plainText(n, src), "", ""))
+	alt := plainText(n, src)
+	dest, ok := shortcodes.SafeImage(string(n.Destination))
+	if !ok {
+		_, _ = w.WriteString(`<code class="sc-problem" title="A picture is a file beside the document or in your home folder, a path on this site, or an http or https address.">` +
+			shortcodes.Esc("!["+alt+"]("+string(n.Destination)+")") + `</code>`)
+		return ast.WalkSkipChildren, nil
+	}
+	_, _ = w.WriteString(imageTag(dest, alt, "", ""))
 	return ast.WalkSkipChildren, nil
 }
 
@@ -393,38 +417,23 @@ func (d *drawer) htmlBlock(w util.BufWriter, src []byte, node ast.Node, entering
 	return ast.WalkContinue, nil
 }
 
-// imageTag is the <img> for an image at dest.
+// imageTag is the <img> for an image at an address shortcodes.SafeImage
+// admitted, drawn as a figure draws its picture (shortcodes.ImageTag). A
+// file of the home folder with no description of its own is described by
+// its file's name.
 func imageTag(dest, alt, width, height string) string {
 	size := ""
 	if width != "" {
-		size += ` width="` + escape(width) + `"`
+		size += ` width="` + shortcodes.Esc(width) + `"`
 	}
 	if height != "" {
-		size += ` height="` + escape(height) + `"`
+		size += ` height="` + shortcodes.Esc(height) + `"`
 	}
-	// An address on the web, or one from this site's root such as
-	// /static/shots/desktop.jpg, is loaded as it is; only a path from the
-	// document's folder is an attachment of the document.
-	if isWeb(dest) || (strings.HasPrefix(dest, "/") && !strings.HasPrefix(dest, "//")) {
-		return `<img src="` + escape(dest) + `" alt="` + escape(alt) + `"` + size + `>`
-	}
-	// A path from the document's folder is kept, so the file is read from
-	// there (localfs.FilePlaces); an absolute one is looked for by its name.
-	name := strings.ReplaceAll(dest, `\`, "/")
-	for strings.HasPrefix(name, "./") {
-		name = name[2:]
-	}
-	if strings.HasPrefix(name, "/") || strings.Contains(name, ":") {
-		name = name[strings.LastIndex(name, "/")+1:]
-	}
-	if alt == "" {
+	if alt == "" && shortcodes.IsLocal(dest) {
+		name := strings.ReplaceAll(dest, `\`, "/")
 		alt = name[strings.LastIndex(name, "/")+1:]
 	}
-	return `<img class="dinah-attachment-image" data-attachment="` + escape(name) + `" alt="` + escape(alt) + `"` + size + `>`
-}
-
-func isWeb(dest string) bool {
-	return strings.HasPrefix(dest, "http://") || strings.HasPrefix(dest, "https://") || strings.HasPrefix(dest, "data:image/")
+	return shortcodes.ImageTag(dest, alt, size)
 }
 
 var (
@@ -432,8 +441,9 @@ var (
 	imgAttrRe = regexp.MustCompile(`(?is)([a-zA-Z_:][-a-zA-Z0-9_:.]*)\s*=\s*(?:"([^"]*)"|'([^']*)')`)
 )
 
-// localImages draws each <img> in inline HTML whose source is a local file
-// as a local image, keeping its size; other HTML is left as it is.
+// localImages draws each <img> in inline HTML whose source is a file of
+// the home folder as such an image, keeping its size; other HTML, and an
+// <img> from the site or the web, is left as it is.
 func localImages(s string) string {
 	return imgTagRe.ReplaceAllStringFunc(s, func(tag string) string {
 		var src, alt, width, height string
@@ -450,7 +460,7 @@ func localImages(s string) string {
 				height = val
 			}
 		}
-		if src == "" || isWeb(src) {
+		if !shortcodes.IsLocal(src) {
 			return tag
 		}
 		return imageTag(src, alt, width, height)
@@ -472,7 +482,3 @@ func plainText(n ast.Node, src []byte) string {
 	}
 	return b.String()
 }
-
-var escaper = strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", `"`, "&quot;")
-
-func escape(s string) string { return escaper.Replace(s) }
