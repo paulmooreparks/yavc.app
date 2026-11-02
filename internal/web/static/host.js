@@ -71,6 +71,52 @@
         };
     })();
 
+    /* Keys go where the focus is, and PUDL binds an applet's shortcuts to
+       its mount and what is inside it. Nothing may be focused, though: a
+       window was clicked by its title, a show just ended, or the page has
+       only just drawn. Then a key such as F5 or Ctrl+S reaches the browser
+       instead of the applet the person is looking at. So the applet in the
+       active window, or the one page of its own, takes the focus when it
+       starts and when its window is pressed, and a key pressed with nothing
+       focused is offered to that applet first. */
+    function mountInFront() {
+        var win = document.querySelector('.win.active');
+        var mount = win ? win.querySelector('[data-applet]') : null;
+        if (!mount && !document.querySelector('.win-layer')) {
+            var all = document.querySelectorAll('[data-applet]');
+            if (all.length === 1) { mount = all[0]; }
+        }
+        return mount;
+    }
+    function unfocused() {
+        var a = document.activeElement;
+        return !a || a === document.body || a === document.documentElement || a.classList.contains('win');
+    }
+    function focusMount(mount) {
+        if (!mount || !unfocused()) { return; }
+        if (!mount.hasAttribute('tabindex')) { mount.tabIndex = -1; }
+        try { mount.focus({ preventScroll: true }); } catch (err) { }
+    }
+    document.addEventListener('pudl:applet-start', function (e) {
+        var mount = e.target;
+        setTimeout(function () { if (mount === mountInFront()) { focusMount(mount); } }, 0);
+    });
+    document.addEventListener('mousedown', function (e) {
+        var win = e.target.closest && e.target.closest('.win');
+        if (!win) { return; }
+        setTimeout(function () { if (win.classList.contains('active')) { focusMount(win.querySelector('[data-applet]')); } }, 0);
+    });
+    document.addEventListener('keydown', function (e) {
+        if (e.defaultPrevented || e.yavcAgain || !unfocused()) { return; }
+        if (document.querySelector('dialog:modal')) { return; }
+        var mount = mountInFront();
+        if (!mount) { return; }
+        var again = new KeyboardEvent('keydown', e);
+        again.yavcAgain = true;
+        mount.dispatchEvent(again);
+        if (again.defaultPrevented) { e.preventDefault(); }
+    });
+
     window.pudlHost = kit.host({
         pages: '/', pudl: '/pudl/',
         snapshot: window.pcSnapshot,

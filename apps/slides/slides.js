@@ -749,6 +749,8 @@
             if (!presenting) { return; }
             at = presenting.position().slide;
             presenting.destroy();
+            /* The focus comes back to the deck, so its keys keep working. */
+            setTimeout(function () { try { root.focus({ preventScroll: true }); } catch (err) { } }, 0);
             presenting = null;
             window.removeEventListener('resize', showResize);
             showStage.remove();
