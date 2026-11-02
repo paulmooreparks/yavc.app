@@ -53,6 +53,9 @@ type Server struct {
 	// /{slug}; Bin is the folder of the site's scripts, listed under
 	// /site/bin by the file system.
 	Pages, Bin string
+	// Home is the folder of the stock files a reader's home folder starts
+	// with (home.go).
+	Home string
 	// Sessions keeps the readers' sessions.
 	Sessions *session.Store
 	// Title is the site's name, shown in the topbar and the page titles.
@@ -182,6 +185,7 @@ func New(s *Server) (*Server, error) {
 	m.HandleFunc("GET /api/site/tree", s.siteTree)
 	m.HandleFunc("GET /api/site/text/{slug}", s.siteText)
 	m.HandleFunc("GET /api/site/texts", s.siteTexts)
+	m.HandleFunc("GET /api/site/home", s.homeSeedHandler)
 	// parkscomputing.com's applets link to pages under /page/; here a
 	// page is at the root.
 	m.HandleFunc("GET /page/{slug}", func(w http.ResponseWriter, r *http.Request) {

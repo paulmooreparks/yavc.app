@@ -108,6 +108,9 @@
         setTimeout(function () { if (win.classList.contains('active')) { focusMount(win.querySelector('[data-applet]')); } }, 0);
     });
 
+    /* A dialog starts in the folder asked for when it exists, else in ~. */
+    function startIn(F, want) { try { return want && F.resolve(F.home(), want) ? want : '~'; } catch (err) { return '~'; } }
+
     window.pudlHost = kit.host({
         pages: '/', pudl: '/pudl/',
         snapshot: window.pcSnapshot,
@@ -127,7 +130,7 @@
                 return withDialog().then(function (x) {
                     var F = x[0], FB = x[1];
                     return FB.pick(F, {
-                        mode: 'open', title: o.title, host: o.host, start: o.start || '~', accept: o.accept || [], computer: true,
+                        mode: 'open', title: o.title, host: o.host, start: startIn(F, o.start), accept: o.accept || [], computer: true,
                         check: function (node) {
                             if (!F.isText(node)) { return node.name + ' isn\'t a text file.'; }
                             return o.check ? o.check(F.displayPath(node)) : null;
@@ -145,7 +148,7 @@
                 return withDialog().then(function (x) {
                     var F = x[0], FB = x[1];
                     return FB.pick(F, {
-                        mode: 'save', title: o.title, name: o.name, host: o.host, start: o.start || '~', computer: true,
+                        mode: 'save', title: o.title, name: o.name, host: o.host, start: startIn(F, o.start), computer: true,
                         canSaveIn: text ? null : function (dir) { return dir.server ? null : 'Pictures can\'t be kept in ~ in this browser, which keeps only text. Download it instead.'; }
                     }).then(function (res) {
                         if (!res) { return null; }

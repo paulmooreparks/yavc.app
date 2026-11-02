@@ -24,6 +24,7 @@ docker compose up -d --build
 | `-applets` | folders of installed applet packages, comma-separated | `applets,apps` |
 | `-pudl` | the folder holding PUDL's `dist` files | `web/pudl` |
 | `-pages` | the folder of the site's pages, Markdown files served at `/{slug}` and in windows | `pages` |
+| `-home` | `site/home` | the stock files a reader's home folder starts with: the README, the Howto guides, Documents, bin |
 | `-bin` | the folder of the site's scripts, which the file system lists under `/site/bin` | `site/bin` |
 | `-data` | the folder the engine keeps sessions in | `data` |
 | `-retain` | how long a session lives unseen | `2160h` (90 days) |

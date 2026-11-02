@@ -53,7 +53,7 @@
         if (!treeReady) {
             treeReady = fetch('/api/site/tree', { headers: { Accept: 'application/json' } })
                 .then(function (r) { if (!r.ok) { throw new Error('HTTP ' + r.status); } return r.json(); })
-                .then(function (data) { root = buildFs(data); return MOUNT ? mountServer(root) : null; })
+                .then(function (data) { root = buildFs(data); return MOUNT ? mountServer(root) : seedHome(); })
                 .then(function () { return root; })
                 .catch(function (err) { treeReady = null; throw err; });
         }
@@ -199,66 +199,65 @@
 
     var home = { dir: null, raw: undefined };
 
-    var SEED = {
-        '/README': [
-            'Welcome to your home directory.',
-            '',
-            'Everything under ~ is yours. It lives in this',
-            'browser\'s storage, under this address, and',
-            'nowhere else; the site never sees it, and',
-            'clearing the browser\'s site data erases it, so',
-            'download anything you want to keep. The rest',
-            'of the site is read-only.',
-            '',
-            'Some things to try:',
-            '',
-            '  edit glider.cells',
-            '  conway glider.cells',
-            '  sudoku puzzle.sudoku',
-            '  ls /site/apps',
-            '  cat /site/pages/author',
-            '  ls /site/apps > apps.txt',
-            '  download glider.cells',
-            '  upload',
-            '  hello                  (a script in ~/bin)',
-            '',
-            '"man edit" lists the editor\'s keys, and "help"',
-            'lists every command.',
-            ''
-        ].join('\n'),
-        '/bin/hello': [
-            '# hello: greet someone, a first script to copy',
-            '#',
-            '# Usage: hello [name]',
-            '#',
-            '# A script is a file of terminal commands, one a line. Scripts in',
-            '# ~/bin run by name, like the site\'s own in /site/bin. $1 is the',
-            '# first argument, and ${1:-world} gives it a default. Change this',
-            '# one with "edit ~/bin/hello", or copy it to start another:',
-            '# cp ~/bin/hello ~/bin/mine',
-            'echo Hello, ${1:-world}!',
-            'echo Your home directory contains:',
-            'ls ~',
-            ''
-        ].join('\n'),
-        '/glider.cells': '!Name: Glider\n!A small pattern that travels across the board. O is a live cell, . is a dead one.\n.O.\n..O\nOOO\n',
-        '/puzzle.sudoku': '# A Sudoku puzzle: digits are clues, dots are empty cells.\n53..7....\n6..195...\n.98....6.\n8...6...3\n4..8.3..1\n7...2...6\n.6....28.\n...419..5\n....8..79\n'
-    };
-
-    /* The seed version that introduced each file; files not named here
-       came with version 1. */
-    var SEED_VERSION = 2;
-    var SEED_SINCE = { '/bin/hello': 2 };
-
-    /* Seed files whose text named the old paths (/articles, /bin) before
-       the site moved under /site. A copy still exactly as it was seeded
-       takes the new text; one the reader changed is left alone. */
-    var SEED_BEFORE = {
-        '/README': SEED['/README'].replace('cp /site/articles/', 'cp /articles/').replace('ls /site/articles', 'ls /articles'),
-        '/bin/hello': SEED['/bin/hello'].replace(
-            '# ~/bin run by name, like the site\'s own in /site/bin. $1 is the\n# first argument, and ${1:-world} gives it a default. Change this\n# one with "edit ~/bin/hello", or copy it to start another:',
-            '# ~/bin run by name, like the site\'s own in /bin. $1 is the first\n# argument, and ${1:-world} gives it a default. Change this one\n# with "edit ~/bin/hello", or copy it to start another:')
-    };
+    /* The stock files come from the server (/api/site/home, from
+       site/home). Each is seeded once: a reader who deletes one keeps it
+       deleted, and a stock file that changes on the server replaces the
+       reader's copy only while that copy is still as it was seeded. What
+       was seeded is remembered by path and a hash of its text. Before
+       this, four files were seeded from this script; the old README,
+       still as it was, gives way to README.md. */
+    var OLD_README_START = 'Welcome to your home directory.\n\nEverything under ~ is yours. It lives in this\nbrowser\'s storage';
+    function hashOf(text) {
+        var h = 5381, str = String(text);
+        for (var i = 0; i < str.length; i++) { h = ((h << 5) + h + str.charCodeAt(i)) | 0; }
+        return (h >>> 0).toString(36);
+    }
+    var seeding = null;
+    function seedHome() {
+        if (MOUNT || !home.dir) { return Promise.resolve(); }
+        if (!seeding) {
+            seeding = fetch('/api/site/home', { headers: { Accept: 'application/json' } })
+                .then(function (r) { return r.ok ? r.json() : null; })
+                .then(function (seed) { if (seed && seed.files) { applySeed(seed.files); } })
+                .catch(function () { })
+                .then(function () { seeding = null; });
+        }
+        return seeding;
+    }
+    function applySeed(files) {
+        var raw = null, data = null;
+        try { raw = localStorage.getItem(HOME_KEY); data = raw ? JSON.parse(raw) : null; } catch (err) { data = null; }
+        if (!data || !data.files || typeof data.files !== 'object') { data = { files: {} }; }
+        var done = data.seeds && typeof data.seeds === 'object' ? data.seeds : {}, changed = false;
+        var old = data.files['/README'];
+        if (old && old.t === 'f' && String(old.c || '').indexOf(OLD_README_START) === 0 && !data.files['/README.md']) { delete data.files['/README']; changed = true; }
+        Object.keys(files).sort().forEach(function (p) {
+            var e = files[p], have = data.files[p];
+            if (e.t === 'd') {
+                if (!have) { data.files[p] = { t: 'd', m: Date.now() }; changed = true; }
+                return;
+            }
+            var h = hashOf(e.c || '');
+            if (done[p] === undefined) {
+                if (!have) { ensureDirs(data, p); data.files[p] = { t: 'f', c: e.c || '', m: Date.now() }; changed = true; }
+                done[p] = have && have.t === 'f' ? hashOf(have.c || '') : h;
+                changed = true;
+            } else if (done[p] !== h) {
+                if (have && have.t === 'f' && hashOf(have.c || '') === done[p]) { have.c = e.c || ''; have.m = Date.now(); changed = true; }
+                done[p] = h;
+                changed = true;
+            }
+        });
+        data.seeds = done;
+        if (!changed) { return; }
+        try { var out = JSON.stringify(data); localStorage.setItem(HOME_KEY, out); home.raw = out; } catch (err) { return; }
+        homeLoad();
+        emit('home');
+    }
+    function ensureDirs(data, p) {
+        var parts = p.split('/').filter(Boolean), at = '';
+        for (var i = 0; i < parts.length - 1; i++) { at += '/' + parts[i]; if (!data.files[at]) { data.files[at] = { t: 'd', m: Date.now() }; } }
+    }
 
     function mountHome(top) {
         var homes = { name: 'home', kind: 'dir', title: 'Home directories', description: '', parent: top, children: [] };
@@ -295,28 +294,10 @@
         var data = null;
         try { data = raw ? JSON.parse(raw) : null; } catch (err) { data = null; }
         if (!data || !data.files || typeof data.files !== 'object') { data = { files: {} }; }
-        /* Seeding is versioned: a home directory gets each seed file once,
-           in the version that introduced it, so a reader who deletes one
-           keeps it deleted, and a later seed still reaches an older home. */
-        var had = data.seeded === true ? 1 : (+data.seeded || 0);
-        var seedNow = had < SEED_VERSION;
-        Object.keys(SEED_BEFORE).forEach(function (p) {
-            var f = data.files[p];
-            if (f && f.t === 'f' && f.c === SEED_BEFORE[p]) { f.c = SEED[p]; seedNow = true; }
-        });
-        if (seedNow) {
-            Object.keys(SEED).forEach(function (p) {
-                if ((SEED_SINCE[p] || 1) <= had || data.files[p]) { return; }
-                var dir = p.slice(0, p.lastIndexOf('/'));
-                if (dir && !data.files[dir]) { data.files[dir] = { t: 'd', m: Date.now() }; }
-                data.files[p] = { t: 'f', c: SEED[p], m: Date.now() };
-            });
-        }
         home.dir.children = [];
         Object.keys(data.files).sort().forEach(function (p) { homeInsert(p, data.files[p]); });
         sortKids(home.dir);
         home.generation = (home.generation || 0) + 1;
-        if (seedNow) { homeSave(); }
     }
 
     function homeSerialize() {
@@ -328,7 +309,9 @@
                 else { files[p] = { t: 'f', c: c.content, m: +c.mtime }; }
             });
         })(home.dir, '');
-        return JSON.stringify({ seeded: SEED_VERSION, files: files });
+        var seeds = {};
+        try { var kept = home.raw ? JSON.parse(home.raw) : null; if (kept && kept.seeds) { seeds = kept.seeds; } } catch (err) { }
+        return JSON.stringify({ seeds: seeds, files: files });
     }
 
     /* Saves the home directory; on failure the stored copy is reloaded so

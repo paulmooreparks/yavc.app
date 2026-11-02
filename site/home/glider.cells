@@ -1,0 +1,5 @@
+!Name: Glider
+!A small pattern that travels across the board. O is a live cell, . is a dead one.
+.O.
+..O
+OOO

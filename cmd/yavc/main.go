@@ -23,6 +23,7 @@ func main() {
 	pudl := flag.String("pudl", "web/pudl", "the folder holding PUDL's dist files")
 	pages := flag.String("pages", "pages", "the folder of the site's pages, Markdown files served at /{slug}")
 	bin := flag.String("bin", "site/bin", "the folder of the site's scripts, listed by the file system under /site/bin")
+	home := flag.String("home", "site/home", "the folder of the stock files a reader's home folder starts with")
 	data := flag.String("data", "data", "the folder the engine keeps sessions in")
 	retain := flag.Duration("retain", 90*24*time.Hour, "how long a session lives unseen")
 	title := flag.String("title", "yavc.app", "the site's name")
@@ -42,7 +43,7 @@ func main() {
 	}()
 
 	s, err := web.New(&web.Server{
-		Domain: *domain, Secure: *secure, Applets: strings.Split(*applets, ","), PUDL: *pudl, Pages: *pages, Bin: *bin,
+		Domain: *domain, Secure: *secure, Applets: strings.Split(*applets, ","), PUDL: *pudl, Pages: *pages, Bin: *bin, Home: *home,
 		Sessions: store, Title: *title,
 	})
 	if err != nil {

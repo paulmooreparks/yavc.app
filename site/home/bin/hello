@@ -1,0 +1,12 @@
+# hello: greet someone, a first script to copy
+#
+# Usage: hello [name]
+#
+# A script is a file of terminal commands, one a line. Scripts in
+# ~/bin run by name, like the site's own in /site/bin. $1 is the
+# first argument, and ${1:-world} gives it a default. Change this
+# one with "edit ~/bin/hello", or copy it to start another:
+# cp ~/bin/hello ~/bin/mine
+echo Hello, ${1:-world}!
+echo Your home directory contains:
+ls ~

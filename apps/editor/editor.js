@@ -655,7 +655,7 @@
             /* The dialog stays open while the file is written, and says
                there why it couldn't be. */
             var res = await FB.pick(F, {
-                mode: 'save', title: t.readOnly ? 'Save a copy' : 'Save as', host: root,
+                mode: 'save', title: t.readOnly ? 'Save a copy' : 'Save as', host: root, start: (F && F.resolve(F.home(), '~/Documents')) ? '~/Documents' : '~',
                 start: startDir, name: name, current: t.readOnly ? null : t.path, computer: true,
                 commit: function (c) { return c.download ? true : writeTo(t, c.path, true); }
             });

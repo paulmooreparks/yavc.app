@@ -22,5 +22,5 @@ COPY site /app/site
 RUN mkdir -p /data && chown yavc /data
 USER yavc
 EXPOSE 8400
-ENTRYPOINT ["/app/yavc", "-addr", "0.0.0.0:8400", "-applets", "/app/applets,/app/apps", "-pudl", "/app/web/pudl", "-pages", "/app/pages", "-bin", "/app/site/bin", "-data", "/data"]
+ENTRYPOINT ["/app/yavc", "-addr", "0.0.0.0:8400", "-applets", "/app/applets,/app/apps", "-pudl", "/app/web/pudl", "-pages", "/app/pages", "-bin", "/app/site/bin", "-home", "/app/site/home", "-data", "/data"]
 CMD ["-domain", "yavc.app", "-secure"]

@@ -746,7 +746,7 @@
         async function saveAs() {
             if (!H.fs || !H.fs.save) { return; }
             var name = (deck.front.title || 'deck').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'deck';
-            var res = await H.fs.save({ title: 'Save the deck as', name: name + '.slides.md', host: root, start: '~', blob: new Blob([fullText()], { type: 'text/markdown' }) }).catch(function (e) { say(e.message, true); return null; });
+            var res = await H.fs.save({ title: 'Save the deck as', name: name + '.slides.md', host: root, start: '~/Documents', blob: new Blob([fullText()], { type: 'text/markdown' }) }).catch(function (e) { say(e.message, true); return null; });
             if (!res) { return; }
             if (res.path) { path = res.path; modified = false; say('Saved ' + path + '.'); announce(); }
             else { say('Downloaded ' + res.download + '.'); }
