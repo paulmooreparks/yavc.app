@@ -398,7 +398,10 @@ func imageTag(dest, alt, width, height string) string {
 	if height != "" {
 		size += ` height="` + escape(height) + `"`
 	}
-	if isWeb(dest) {
+	// An address on the web, or one from this site's root such as
+	// /static/shots/desktop.jpg, is loaded as it is; only a path from the
+	// document's folder is an attachment of the document.
+	if isWeb(dest) || (strings.HasPrefix(dest, "/") && !strings.HasPrefix(dest, "//")) {
 		return `<img src="` + escape(dest) + `" alt="` + escape(alt) + `"` + size + `>`
 	}
 	// A path from the document's folder is kept, so the file is read from

@@ -230,7 +230,7 @@
         if (!data || !data.files || typeof data.files !== 'object') { data = { files: {} }; }
         var done = data.seeds && typeof data.seeds === 'object' ? data.seeds : {}, changed = false;
         var old = data.files['/README'];
-        if (old && old.t === 'f' && String(old.c || '').indexOf(OLD_README_START) === 0 && !data.files['/README.md']) { delete data.files['/README']; changed = true; }
+        if (old && old.t === 'f' && String(old.c || '').indexOf('Welcome to your home directory.') === 0) { delete data.files['/README']; changed = true; }
         Object.keys(files).sort().forEach(function (p) {
             var e = files[p], have = data.files[p];
             if (e.t === 'd') {
