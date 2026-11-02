@@ -7,6 +7,7 @@
 package web
 
 import (
+	"context"
 	"crypto/sha256"
 	"embed"
 	"encoding/hex"
@@ -16,6 +17,7 @@ import (
 	"io"
 	"io/fs"
 	"log"
+	"maps"
 	"net"
 	"net/http"
 	"net/url"
@@ -24,6 +26,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"yavc.app/internal/mcp"
@@ -72,6 +75,54 @@ type Server struct {
 	// contents, and PUDL's take the release's version from pudl.css.
 	staticVersion, pudlVersion string
 	retain                     time.Duration
+	// The embedded files, and each one's entity tag.
+	staticFS  fs.FS
+	staticTag map[string]string
+	// The release's skins and colour themes, read once at start-up.
+	skinList, paletteList []skinEntry
+	// The site's pages as last rendered, and the home folder's stock files
+	// as last read (site.go, home.go).
+	pageMu    sync.Mutex
+	pageCache map[string]cachedPage
+	home      homeCache
+	now       func() time.Time
+}
+
+// The server's timeouts. A handler's answer must be written within
+// writeTimeout, except the page's event stream and the MCP endpoint,
+// whose answers wait on the person's page.
+const (
+	readHeaderTimeout = 10 * time.Second
+	readTimeout       = 30 * time.Second
+	idleTimeout       = 120 * time.Second
+	writeTimeout      = 2 * time.Minute
+)
+
+// HTTPServer is the HTTP server for the engine at addr, with its timeouts.
+// Requests' contexts derive from base, so cancelling it ends the streams
+// that would otherwise hold a shutdown open.
+func (s *Server) HTTPServer(base context.Context, addr string) *http.Server {
+	return &http.Server{
+		Addr: addr, Handler: s,
+		ReadHeaderTimeout: readHeaderTimeout, ReadTimeout: readTimeout, IdleTimeout: idleTimeout,
+		BaseContext: func(net.Listener) context.Context { return base },
+	}
+}
+
+// Run sweeps what the engine keeps in memory, the relay's records and the
+// MCP sessions, once a minute until ctx ends.
+func (s *Server) Run(ctx context.Context) {
+	t := time.NewTicker(time.Minute)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			s.hub.Sweep()
+			s.mcp.Sweep()
+		}
+	}
 }
 
 // retention says how long a session lives unseen, for the reader.
@@ -152,7 +203,14 @@ func New(s *Server) (*Server, error) {
 	if s.Title == "" {
 		s.Title = "yavc.app"
 	}
+	if s.now == nil {
+		s.now = time.Now
+	}
 	s.versions()
+	s.skinList, s.paletteList = s.readSkins(), s.readPalettes()
+	s.staticFS, _ = fs.Sub(static, "static")
+	s.staticTag = staticTags(s.staticFS)
+	s.pageCache = map[string]cachedPage{}
 	var err error
 	s.pages, err = template.New("").Funcs(template.FuncMap{
 		"asset": s.asset,
@@ -176,9 +234,8 @@ func New(s *Server) (*Server, error) {
 	}
 	m := http.NewServeMux()
 	s.mux = m
-	sub, _ := fs.Sub(static, "static")
-	m.Handle("GET /static/", http.StripPrefix("/static/", http.FileServerFS(sub)))
-	m.Handle("GET /pudl/", http.StripPrefix("/pudl/", http.FileServerFS(os.DirFS(s.PUDL))))
+	m.HandleFunc("GET /static/{file...}", s.staticFile)
+	m.HandleFunc("GET /pudl/{file...}", s.pudlFile)
 	m.HandleFunc("GET /applets/registry.js", s.registry)
 	m.HandleFunc("GET /applets/{name}/{file...}", s.appletFile)
 	m.HandleFunc("GET /win/{key}", s.window)
@@ -186,11 +243,7 @@ func New(s *Server) (*Server, error) {
 	m.HandleFunc("GET /api/site/text/{slug}", s.siteText)
 	m.HandleFunc("GET /api/site/texts", s.siteTexts)
 	m.HandleFunc("GET /api/site/home", s.homeSeedHandler)
-	// parkscomputing.com's applets link to pages under /page/; here a
-	// page is at the root.
-	m.HandleFunc("GET /page/{slug}", func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, "/"+r.PathValue("slug"), http.StatusPermanentRedirect)
-	})
+	m.HandleFunc("GET /page/{slug}", s.pageRedirect)
 	m.HandleFunc("GET /state/{key}", s.getState)
 	m.HandleFunc("PUT /state/{key}", s.putState)
 	m.HandleFunc("GET /config/{name}", s.getConfig)
@@ -208,27 +261,56 @@ func New(s *Server) (*Server, error) {
 	return s, nil
 }
 
+// bodyLimit is the most bytes a request's body may have. An agent's report
+// may hold an action's artifacts, up to 4 MB each by PUDL's rule, and an
+// MCP call may hold a deck.
+func bodyLimit(path string) int64 {
+	if path == "/agent/report" || path == "/mcp" {
+		return 16 << 20
+	}
+	return 1 << 20
+}
+
+// streaming says whether a path's answer waits on the person's page, and
+// so has no write deadline and is not compressed.
+func streaming(path string) bool { return path == "/agent/stream" || path == "/mcp" }
+
 // ServeHTTP checks where a request came from, then routes it.
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// A change must come from a page of this site: the session cookie is
-	// SameSite=Lax, so another site's form cannot send it, and a change
-	// whose Origin is another host is refused as well.
+	securityHeaders(w.Header(), s.Secure)
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		// A change must come from a page of this site. The session cookie
+		// is SameSite=Lax, so another site's form cannot send it; a
+		// browser that says where the request came from (Sec-Fetch-Site)
+		// must say this origin, or that no page sent it; and a change
+		// whose Origin is another host is refused as well. An agent's
+		// client sends neither header.
+		if site := r.Header.Get("Sec-Fetch-Site"); site != "" && site != "same-origin" && site != "none" {
+			http.Error(w, "A change must come from this site's own pages.", http.StatusForbidden)
+			return
+		}
 		if o := r.Header.Get("Origin"); o != "" {
 			if u, err := url.Parse(o); err != nil || !strings.EqualFold(u.Host, r.Host) {
 				http.Error(w, "A change must come from this site's own pages.", http.StatusForbidden)
 				return
 			}
 		}
-		limit := int64(1 << 20)
-		// An agent's report may hold an action's artifacts, up to 4 MB
-		// each by PUDL's rule, and an MCP call may hold a deck.
-		if r.URL.Path == "/agent/report" || r.URL.Path == "/mcp" {
-			limit = 16 << 20
-		}
-		r.Body = http.MaxBytesReader(w, r.Body, limit)
+		r.Body = http.MaxBytesReader(w, r.Body, bodyLimit(r.URL.Path))
 	}
-	securityHeaders(w.Header(), s.Secure)
+	rc := http.NewResponseController(w)
+	if streaming(r.URL.Path) {
+		// An error says only that the writer underneath has no deadlines,
+		// as a test's recorder has none, which leaves nothing to clear.
+		_ = rc.SetWriteDeadline(time.Time{})
+		s.mux.ServeHTTP(w, r)
+		return
+	}
+	_ = rc.SetWriteDeadline(time.Now().Add(writeTimeout))
+	if r.Method != http.MethodHead && r.Header.Get("Range") == "" && acceptsGzip(r) {
+		gz := &gzipWriter{ResponseWriter: w}
+		defer gz.close()
+		w = gz
+	}
 	s.mux.ServeHTTP(w, r)
 }
 
@@ -261,9 +343,13 @@ func (s *Server) scheme() string {
 	return "http"
 }
 
-// port is the port the request came in on, with its colon, when the
-// request's host has one, so a local run's addresses keep it.
-func port(r *http.Request) string {
+// port is the port the request came in on, with its colon, for a local
+// run at localhost, whose addresses keep it. A site at a real domain is
+// reached on the scheme's own port, whatever the Host header says.
+func (s *Server) port(r *http.Request) string {
+	if s.Domain != "localhost" {
+		return ""
+	}
 	if _, p, err := net.SplitHostPort(r.Host); err == nil && p != "" {
 		return ":" + p
 	}
@@ -275,7 +361,7 @@ func (s *Server) siteURL(r *http.Request) string {
 	if s.Domain == "" {
 		return "/"
 	}
-	return s.scheme() + "://" + s.Domain + port(r) + "/"
+	return s.scheme() + "://" + s.Domain + s.port(r) + "/"
 }
 
 // appletPageURL is an applet's own page, at its subdomain.
@@ -283,7 +369,7 @@ func (s *Server) appletPageURL(r *http.Request, name string) string {
 	if s.Domain == "" {
 		return "/" + name
 	}
-	return s.scheme() + "://" + name + "." + s.Domain + port(r) + "/"
+	return s.scheme() + "://" + name + "." + s.Domain + s.port(r) + "/"
 }
 
 // === Sessions ===============================================================
@@ -343,15 +429,15 @@ func (s *Server) ensureSession(w http.ResponseWriter, r *http.Request) (*session
 	return sess, nil
 }
 
-// update changes the request's session under the store's lock, making
-// the session first if there is none.
-func (s *Server) update(w http.ResponseWriter, r *http.Request, change func(*session.Session)) error {
+// update changes the request's session under its lock, making the session
+// first if there is none, and returns the session as changed. A change
+// that returns an error is not kept.
+func (s *Server) update(w http.ResponseWriter, r *http.Request, change func(*session.Session) error) (*session.Session, error) {
 	sess, err := s.ensureSession(w, r)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	_, err = s.Sessions.Update(sess.ID, change)
-	return err
+	return s.Sessions.Update(sess.ID, change)
 }
 
 // === Pages ==================================================================
@@ -391,9 +477,9 @@ type skinEntry struct {
 	Admitted   bool   `json:"admitted"`
 }
 
-// skins is the release's catalogue of admitted skins, from
+// readSkins is the release's catalogue of admitted skins, from
 // pudl-skins.json, never a list written into the engine.
-func (s *Server) skins() []skinEntry {
+func (s *Server) readSkins() []skinEntry {
 	raw, err := os.ReadFile(filepath.Join(s.PUDL, "pudl-skins.json"))
 	if err != nil {
 		return []skinEntry{{ID: "standard", Label: "Standard", Admitted: true}}
@@ -413,19 +499,22 @@ func (s *Server) skins() []skinEntry {
 	return out
 }
 
-// palettes is the colour themes the release ships, pudl-theme-<id>.css,
-// with Standard first.
-func (s *Server) palettes() []skinEntry {
+// readPalettes is the colour themes the release ships,
+// pudl-theme-<id>.css, with Standard first.
+func (s *Server) readPalettes() []skinEntry {
 	out := []skinEntry{{ID: "standard", Label: "Standard"}}
 	matches, _ := filepath.Glob(filepath.Join(s.PUDL, "pudl-theme-*.css"))
 	for _, m := range matches {
 		id := strings.TrimSuffix(strings.TrimPrefix(filepath.Base(m), "pudl-theme-"), ".css")
+		if id == "" {
+			continue
+		}
 		out = append(out, skinEntry{ID: id, Label: strings.ToUpper(id[:1]) + id[1:], Stylesheet: filepath.Base(m)})
 	}
 	return out
 }
 
-// pageData is what every page's template gets.
+// pageData is what every page's template gets. A request builds it once.
 func (s *Server) pageData(r *http.Request, title string) map[string]any {
 	sess := s.sessionOf(r)
 	state := map[string]string{}
@@ -435,10 +524,10 @@ func (s *Server) pageData(r *http.Request, title string) map[string]any {
 	}
 	return map[string]any{
 		"Site": s.Title, "Title": title, "SiteURL": s.siteURL(r),
-		"Appearance": s.appearanceOf(sess), "Skins": s.skins(), "Palettes": s.palettes(),
+		"Appearance": s.appearanceOf(sess), "Skins": s.skinList, "Palettes": s.paletteList,
 		"State": state, "Config": config,
 		"Applets": s.appletEntries(r), "Dialog": "", "PUDLVersion": s.pudlVersion, "Retention": s.retention(), "StaticVersion": s.staticVersion, "SiteOrigin": strings.TrimSuffix(s.siteURL(r), "/"),
-		"Agents": agentCount(sess),
+		"Agents": agentCount(sess), "Registry": "/applets/registry.js?v=" + s.catalogDigest(),
 	}
 }
 
@@ -470,19 +559,17 @@ func (s *Server) rootWith(w http.ResponseWriter, r *http.Request, dialog string)
 		data := s.pageData(r, s.Title)
 		data["Desktop"] = true
 		data["Dialog"] = dialog
-		// The windows the address names are drawn into the page, as PUDL's
-		// window contract asks of a server, so the desktop holds its content
-		// without script and a reader arriving by a shared link sees it.
+		// The windows the address has open are drawn into the page, as
+		// PUDL's window contract asks of a server, so the desktop holds its
+		// content without script and a reader arriving by a shared link
+		// sees it.
+		d := parseDesktop(r.URL.Query())
 		var wins strings.Builder
-		if q := r.URL.Query(); q.Has("open") {
-			for _, k := range strings.Split(q.Get("open"), ",") {
-				if m := winKey.FindStringSubmatch(k); m != nil {
-					wins.WriteString(s.windowMarkup(r, k))
-				}
-			}
+		for _, k := range d.open {
+			wins.WriteString(s.windowMarkup(r, data, d, k))
 		}
 		data["Windows"] = template.HTML(wins.String())
-		data["Bar"] = parseDesktop(r.URL.Query()).bar()
+		data["Bar"] = d.bar()
 		s.render(w, http.StatusOK, "desktop", data)
 	default:
 		http.Redirect(w, r, s.siteURL(r), http.StatusTemporaryRedirect)
@@ -512,12 +599,29 @@ func (s *Server) listPage(w http.ResponseWriter, r *http.Request) {
 	s.render(w, http.StatusOK, "list", s.pageData(r, "Applications"))
 }
 
+// pageRedirect is /page/{slug}, where parkscomputing.com's applets link to
+// a page; here a page is at the root. Only a page's slug is redirected,
+// so the address cannot lead off the site.
+func (s *Server) pageRedirect(w http.ResponseWriter, r *http.Request) {
+	slug := r.PathValue("slug")
+	if !slugRe.MatchString(slug) {
+		s.notFound(w, r)
+		return
+	}
+	http.Redirect(w, r, "/"+slug, http.StatusPermanentRedirect)
+}
+
 // classicPage is /{slug} at the site's domain: the applet as a page of
 // the site, with the site's topbar, which is also what a window shows.
 func (s *Server) classicPage(w http.ResponseWriter, r *http.Request) {
 	kind, _ := s.hostKind(r)
 	if kind != "desktop" {
-		http.Redirect(w, r, s.siteURL(r)+r.PathValue("slug"), http.StatusTemporaryRedirect)
+		slug := r.PathValue("slug")
+		if !slugRe.MatchString(slug) {
+			s.notFound(w, r)
+			return
+		}
+		http.Redirect(w, r, s.siteURL(r)+slug, http.StatusTemporaryRedirect)
 		return
 	}
 	if p, ok := s.page(r.PathValue("slug")); ok {
@@ -554,23 +658,28 @@ func (s *Server) window(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	data := s.pageData(r, "")
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
-	io.WriteString(w, s.windowMarkup(r, key))
+	io.WriteString(w, s.windowMarkup(r, data, parseDesktop(r.URL.Query()), key))
 }
 
 // windowMarkup draws one window, for the window endpoint and for the
-// desktop page. The key has been checked.
-func (s *Server) windowMarkup(r *http.Request, key string) string {
+// desktop page, from the request's page data, which it does not change.
+// The key has been checked.
+func (s *Server) windowMarkup(r *http.Request, base map[string]any, d desktopState, key string) string {
 	m := winKey.FindStringSubmatch(key)
+	if m == nil {
+		return ""
+	}
+	data := maps.Clone(base)
 	a, isApplet := s.appletByName(m[1])
 	if !isApplet {
 		p, ok := s.page(key)
 		if !ok {
 			return ""
 		}
-		d := parseDesktop(r.URL.Query())
-		data := s.pageData(r, p.Title)
+		data["Title"] = p.Title
 		data["Article"], data["Slug"], data["Key"] = p.Body, p.Slug, key
 		data["Page"] = s.siteURL(r) + p.Slug
 		data["Minimize"], data["Maximize"], data["Close"] = d.minimize(key), d.maximize(key, "0.6", "0.8"), d.close(key)
@@ -581,7 +690,7 @@ func (s *Server) windowMarkup(r *http.Request, key string) string {
 		}
 		return b.String()
 	}
-	data := s.pageData(r, a.Title)
+	data["Title"] = a.Title
 	data["Applet"] = a
 	data["Mount"] = appletBody(a, false)
 	data["Key"] = key
@@ -597,7 +706,6 @@ func (s *Server) windowMarkup(r *http.Request, key string) string {
 		// starts; PUDL then cascades later ones itself.
 		data["Style"] = template.CSS("--win-x:0.05; --win-y:0.06; --win-w:" + w + "; --win-h:" + h)
 	}
-	d := parseDesktop(r.URL.Query())
 	data["Minimize"], data["Maximize"], data["Close"] = d.minimize(key), d.maximize(key, w, h), d.close(key)
 	var b strings.Builder
 	if err := s.pages.ExecuteTemplate(&b, "window", data); err != nil {
@@ -606,36 +714,54 @@ func (s *Server) windowMarkup(r *http.Request, key string) string {
 	return b.String()
 }
 
+// registry is /applets/registry.js. The page asks for it with the
+// catalogue's digest in its address, and an address with the current
+// digest is kept for good; any other is written for the request and never
+// kept, since a proxy that caches scripts by their extension, as
+// Cloudflare does, rewrites no-cache to a browser lifetime of hours, and a
+// package's new version would then wait.
 func (s *Server) registry(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
-	// Written for each request, and never to be kept: a proxy that caches
-	// scripts by their extension, as Cloudflare does, rewrites no-cache to
-	// a browser lifetime of hours, and a package's new version then waits.
-	w.Header().Set("Cache-Control", "no-store")
+	if c := cacheFor(r, s.catalogDigest()); c == immutable {
+		w.Header().Set("Cache-Control", c)
+	} else {
+		w.Header().Set("Cache-Control", "no-store")
+	}
 	io.WriteString(w, s.registryScript(r))
+}
+
+// staticFile serves the site's own embedded files.
+func (s *Server) staticFile(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("file")
+	if !serveFile(w, r, s.staticFS, name, cacheFor(r, s.staticVersion), s.staticTag[name]) {
+		s.notFound(w, r)
+	}
+}
+
+// pudlFile serves the PUDL release's files.
+func (s *Server) pudlFile(w http.ResponseWriter, r *http.Request) {
+	if !serveDir(w, r, s.PUDL, r.PathValue("file"), cacheFor(r, s.pudlVersion)) {
+		s.notFound(w, r)
+	}
 }
 
 // appletFile serves a package's files from wherever that package lives,
 // and the files of a collection's shared folder, which sits beside its
 // packages under its own name with no manifest, as the package format
-// has it (PUDLSplash's games load ../shared/ at run time).
+// has it (PUDLSplash's games load ../shared/ at run time). A package's
+// files may be named freely (a score is "Chopin - Życzenie.mxl"); what is
+// refused is a path that is not a path inside the package, and a link
+// that leads out of it.
 func (s *Server) appletFile(w http.ResponseWriter, r *http.Request) {
 	name, file := r.PathValue("name"), r.PathValue("file")
-	// A package's files may be named freely (a score is "Chopin -
-	// Życzenie.mxl"); what is refused is a path that is not a path inside
-	// the package, which fs.ValidPath settles: no "..", no leading slash,
-	// no empty element.
-	if file == "" || !fs.ValidPath(file) || strings.ContainsAny(file, "\\\x00") {
-		s.notFound(w, r)
-		return
-	}
 	if a, ok := s.appletByName(name); ok {
-		http.ServeFileFS(w, r, os.DirFS(a.Dir), file)
-		return
-	}
-	if dir, ok := s.sharedFolder(name); ok {
-		http.ServeFileFS(w, r, os.DirFS(dir), file)
-		return
+		if serveDir(w, r, a.Dir, file, cacheFor(r, a.Version)) {
+			return
+		}
+	} else if dir, ok := s.sharedFolder(name); ok {
+		if serveDir(w, r, dir, file, cacheFor(r, s.staticVersion)) {
+			return
+		}
 	}
 	s.notFound(w, r)
 }
@@ -665,7 +791,9 @@ func (s *Server) notFound(w http.ResponseWriter, r *http.Request) {
 
 // === State, settings and appearance =========================================
 
-// A reader's state resources answer only on the site's own hosts.
+// own says whether the request came to one of the site's own hosts, the
+// desktop's or an applet's; a reader's resources answer only there. When
+// it did not, own has answered 404 and the handler must stop.
 func (s *Server) own(w http.ResponseWriter, r *http.Request) bool {
 	if kind, _ := s.hostKind(r); kind == "other" {
 		http.Error(w, "Not here.", http.StatusNotFound)
@@ -674,18 +802,49 @@ func (s *Server) own(w http.ResponseWriter, r *http.Request) bool {
 	return true
 }
 
-func readText(r *http.Request) (string, error) {
-	b, err := io.ReadAll(r.Body)
-	if err != nil {
-		return "", err
+// desktopOnly says whether the request came to the desktop's host. A
+// pairing token is made and revoked only there, the one place Settings
+// shows them; elsewhere the answer is 404 and the handler must stop.
+func (s *Server) desktopOnly(w http.ResponseWriter, r *http.Request) bool {
+	if kind, _ := s.hostKind(r); kind != "desktop" {
+		http.Error(w, "Not here.", http.StatusNotFound)
+		return false
 	}
-	return string(b), nil
+	return true
+}
+
+// The most a session keeps of applet state and of settings: each key's
+// value, and all of them together.
+const (
+	maxValue = 64 << 10
+	maxTotal = 1 << 20
+)
+
+// withinBudget says whether a map of state or settings, with key set to
+// value, is within a session's budget.
+func withinBudget(m map[string]string, key, value string) error {
+	if len(value) > maxValue {
+		return errTooLarge
+	}
+	total := len(key) + len(value)
+	for k, v := range m {
+		if k != key {
+			total += len(k) + len(v)
+		}
+	}
+	if total > maxTotal {
+		return errTooLarge
+	}
+	return nil
 }
 
 // getState is an applet instance's continuity, as text, or 204 for none.
 func (s *Server) getState(w http.ResponseWriter, r *http.Request) {
+	if !s.own(w, r) {
+		return
+	}
 	key := r.PathValue("key")
-	if !s.own(w, r) || !session.ValidKey(key) {
+	if !session.ValidKey(key) {
 		http.Error(w, "No such state.", http.StatusNotFound)
 		return
 	}
@@ -702,66 +861,87 @@ func (s *Server) getState(w http.ResponseWriter, r *http.Request) {
 
 // putState keeps an applet instance's continuity; an empty body forgets it.
 func (s *Server) putState(w http.ResponseWriter, r *http.Request) {
+	if !s.own(w, r) {
+		return
+	}
 	key := r.PathValue("key")
-	if !s.own(w, r) || !session.ValidKey(key) {
+	if !session.ValidKey(key) {
 		http.Error(w, "No such state.", http.StatusNotFound)
 		return
 	}
 	text, err := readText(r)
 	if err != nil {
-		http.Error(w, "The state could not be read.", http.StatusBadRequest)
+		s.done(w, err, "The state could not be read.")
 		return
 	}
-	err = s.update(w, r, func(sess *session.Session) {
+	_, err = s.update(w, r, func(sess *session.Session) error {
 		if text == "" {
 			delete(sess.State, key)
-		} else {
-			sess.State[key] = text
+			return nil
 		}
+		if err := withinBudget(sess.State, key, text); err != nil {
+			return err
+		}
+		sess.State[key] = text
+		return nil
 	})
-	s.done(w, err)
+	s.done(w, err, "")
 }
 
 func (s *Server) getConfig(w http.ResponseWriter, r *http.Request) {
+	if !s.own(w, r) {
+		return
+	}
 	name := r.PathValue("name")
-	if !s.own(w, r) || !appletName.MatchString(name) {
+	if !appletName.MatchString(name) {
 		http.Error(w, "No such settings.", http.StatusNotFound)
 		return
 	}
-	w.Header().Set("Cache-Control", "no-store")
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	value := "{}"
 	if sess := s.sessionOf(r); sess != nil {
 		if v, ok := sess.Config[name]; ok {
-			io.WriteString(w, v)
-			return
+			value = v
 		}
 	}
-	io.WriteString(w, "{}")
+	writeJSON(w, http.StatusOK, json.RawMessage(value))
 }
 
+// putConfig keeps an applet's settings, which are a JSON object.
 func (s *Server) putConfig(w http.ResponseWriter, r *http.Request) {
+	if !s.own(w, r) {
+		return
+	}
 	name := r.PathValue("name")
-	if !s.own(w, r) || !appletName.MatchString(name) {
+	if !appletName.MatchString(name) {
 		http.Error(w, "No such settings.", http.StatusNotFound)
 		return
 	}
 	text, err := readText(r)
-	if err != nil || !json.Valid([]byte(text)) {
+	if err != nil {
+		s.done(w, err, "The settings could not be read.")
+		return
+	}
+	var object map[string]json.RawMessage
+	if json.Unmarshal([]byte(text), &object) != nil || object == nil {
 		http.Error(w, "Settings must be a JSON object.", http.StatusBadRequest)
 		return
 	}
-	err = s.update(w, r, func(sess *session.Session) { sess.Config[name] = text })
-	s.done(w, err)
+	_, err = s.update(w, r, func(sess *session.Session) error {
+		if err := withinBudget(sess.Config, name, text); err != nil {
+			return err
+		}
+		sess.Config[name] = text
+		return nil
+	})
+	s.done(w, err, "")
 }
 
 func (s *Server) getAppearance(w http.ResponseWriter, r *http.Request) {
 	if !s.own(w, r) {
 		return
 	}
-	w.Header().Set("Cache-Control", "no-store")
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	a := s.appearanceOf(s.sessionOf(r))
-	json.NewEncoder(w).Encode(map[string]string{"skin": a.Skin, "palette": a.Palette, "mode": a.Mode})
+	writeJSON(w, http.StatusOK, map[string]string{"skin": a.Skin, "palette": a.Palette, "mode": a.Mode})
 }
 
 var appearanceID = regexp.MustCompile(`^[a-z][a-z0-9-]{0,39}$`)
@@ -773,8 +953,7 @@ func (s *Server) putAppearance(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var in struct{ Skin, Palette, Mode *string }
-	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
-		http.Error(w, "Appearance must be a JSON object of skin, palette and mode.", http.StatusBadRequest)
+	if !decodeJSON(w, r, &in, "Appearance must be a JSON object of skin, palette and mode.") {
 		return
 	}
 	ok := func(p *string) bool { return p == nil || appearanceID.MatchString(*p) }
@@ -782,7 +961,7 @@ func (s *Server) putAppearance(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "That is not an appearance choice.", http.StatusUnprocessableEntity)
 		return
 	}
-	err := s.update(w, r, func(sess *session.Session) {
+	_, err := s.update(w, r, func(sess *session.Session) error {
 		if in.Skin != nil {
 			sess.Appearance.Skin = *in.Skin
 		}
@@ -792,32 +971,43 @@ func (s *Server) putAppearance(w http.ResponseWriter, r *http.Request) {
 		if in.Mode != nil {
 			sess.Appearance.Mode = *in.Mode
 		}
+		return nil
 	})
-	s.done(w, err)
+	s.done(w, err, "")
 }
 
-// deleteSession forgets everything the engine keeps for the reader and
+// deleteSession forgets everything the engine keeps for the reader: the
+// session, the tokens it made, and the streams its pages hold open; and it
 // drops the cookie.
 func (s *Server) deleteSession(w http.ResponseWriter, r *http.Request) {
 	if !s.own(w, r) {
 		return
 	}
-	if c, err := r.Cookie(cookieName); err == nil {
+	if c, err := r.Cookie(cookieName); err == nil && session.ValidID(c.Value) {
 		if err := s.Sessions.Delete(c.Value); err != nil && !errors.Is(err, os.ErrNotExist) {
 			log.Printf("delete session: %v", err)
 		}
+		s.hub.CloseSession(c.Value)
 	}
 	http.SetCookie(w, s.cookie("", -1))
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Server) done(w http.ResponseWriter, err error) {
-	if err != nil {
+// done answers a change: 204 when it was kept, 413 when it was larger than
+// the site takes, 400 with unreadable when the request could not be read,
+// and 500 when the store failed.
+func (s *Server) done(w http.ResponseWriter, err error, unreadable string) {
+	switch {
+	case err == nil:
+		w.WriteHeader(http.StatusNoContent)
+	case tooLarge(err):
+		http.Error(w, "That is larger than this site keeps.", http.StatusRequestEntityTooLarge)
+	case unreadable != "":
+		http.Error(w, unreadable, http.StatusBadRequest)
+	default:
 		log.Printf("session: %v", err)
 		http.Error(w, "The change could not be kept.", http.StatusInternalServerError)
-		return
 	}
-	w.WriteHeader(http.StatusNoContent)
 }
 
 // agentCount is how many agents the reader has paired, for the page's

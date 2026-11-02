@@ -4,7 +4,6 @@ package web
 
 import (
 	"bytes"
-	"encoding/json"
 	"html/template"
 	"io"
 	"net/http"
@@ -42,36 +41,74 @@ type sitePage struct {
 	Modified    time.Time
 }
 
-// page reads a page from the pages folder, or reports that there is none.
-func (s *Server) page(slug string) (sitePage, bool) {
+// cachedPage is a page as last rendered, with its file's modification time
+// and size then.
+type cachedPage struct {
+	page sitePage
+	size int64
+}
+
+// pageFile is a page's file, when the slug is a page's and the file is
+// there.
+func (s *Server) pageFile(slug string) (string, os.FileInfo, bool) {
 	if s.Pages == "" || !slugRe.MatchString(slug) {
-		return sitePage{}, false
+		return "", nil, false
 	}
 	path := filepath.Join(s.Pages, slug+".md")
+	fi, err := os.Stat(path)
+	if err != nil || fi.IsDir() {
+		return "", nil, false
+	}
+	return path, fi, true
+}
+
+// pageSource is a page's text as written, with {{retention}} made the
+// engine's setting, so the privacy policy and the terms never contradict
+// the flag.
+func (s *Server) pageSource(path string) (string, bool) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
+		return "", false
+	}
+	return strings.ReplaceAll(string(raw), "{{retention}}", s.retention()), true
+}
+
+// page reads a page from the pages folder, or reports that there is none.
+// A page is rendered once and again only when its file changes.
+func (s *Server) page(slug string) (sitePage, bool) {
+	path, fi, ok := s.pageFile(slug)
+	if !ok {
 		return sitePage{}, false
 	}
-	fi, _ := os.Stat(path)
-	// A page may say {{retention}}, which becomes the engine's setting, so
-	// the privacy policy and the terms never contradict the flag.
-	raw = bytes.ReplaceAll(raw, []byte("{{retention}}"), []byte(s.retention()))
+	s.pageMu.Lock()
+	c, hit := s.pageCache[slug]
+	s.pageMu.Unlock()
+	if hit && c.page.Modified.Equal(fi.ModTime()) && c.size == fi.Size() {
+		return c.page, true
+	}
+	text, ok := s.pageSource(path)
+	if !ok {
+		return sitePage{}, false
+	}
 	var out bytes.Buffer
-	if err := markdown.Convert(raw, &out); err != nil {
+	if err := markdown.Convert([]byte(text), &out); err != nil {
 		return sitePage{}, false
 	}
-	title := slug
-	for _, line := range strings.Split(string(raw), "\n") {
+	p := sitePage{Slug: slug, Title: pageTitle(slug, text), Body: template.HTML(out.String()), Text: text, Modified: fi.ModTime()}
+	s.pageMu.Lock()
+	s.pageCache[slug] = cachedPage{page: p, size: fi.Size()}
+	s.pageMu.Unlock()
+	return p, true
+}
+
+// pageTitle is a page's first heading, or its slug.
+func pageTitle(slug, text string) string {
+	for _, line := range strings.Split(text, "\n") {
 		if strings.HasPrefix(line, "# ") {
-			title = strings.TrimSpace(line[2:])
-			break
+			return strings.TrimSpace(line[2:])
 		}
 	}
-	p := sitePage{Slug: slug, Title: title, Body: template.HTML(out.String()), Text: string(raw)}
-	if fi != nil {
-		p.Modified = fi.ModTime()
-	}
-	return p, true
+	return slug
 }
 
 // pages lists the site's pages, by slug.
@@ -210,16 +247,16 @@ func scriptSummary(name, source string) string {
 }
 
 func (s *Server) siteTree(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Header().Set("Cache-Control", "public, max-age=60")
-	json.NewEncoder(w).Encode(s.tree(r))
+	writeJSON(w, http.StatusOK, s.tree(r))
 }
 
 // pageText is a page's text as the terminal shows it: the Markdown source
-// for a page, and a line about an application for an app.
+// for a page, which is read without rendering it, and a line about an
+// application for an app.
 func (s *Server) pageText(slug string) (string, bool) {
-	if p, ok := s.page(slug); ok {
-		return p.Text, true
+	if path, _, ok := s.pageFile(slug); ok {
+		return s.pageSource(path)
 	}
 	if a, ok := s.appletByName(slug); ok {
 		return a.Title + "\n\n" + a.Description + "\n\n[The " + a.Title + " applet runs here. Type \"open " + a.Name + "\" to use it.]\n", true
@@ -238,17 +275,20 @@ func (s *Server) siteText(w http.ResponseWriter, r *http.Request) {
 	io.WriteString(w, text)
 }
 
+// maxTexts is the most pages one request for texts may ask for; the rest
+// are left out.
+const maxTexts = 50
+
 func (s *Server) siteTexts(w http.ResponseWriter, r *http.Request) {
 	out := map[string]string{}
 	for i, slug := range strings.Split(r.URL.Query().Get("slugs"), ",") {
-		if i >= 500 {
+		if i >= maxTexts {
 			break
 		}
 		if text, ok := s.pageText(slug); ok {
 			out[slug] = text
 		}
 	}
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Header().Set("Cache-Control", "public, max-age=60")
-	json.NewEncoder(w).Encode(out)
+	writeJSON(w, http.StatusOK, out)
 }
