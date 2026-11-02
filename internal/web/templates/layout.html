@@ -76,16 +76,19 @@
         <ul data-menubar-source hidden>
           <li data-menubar-id="site"><img src="{{asset "/static/icon.svg"}}" alt=""> {{.Site}}<ul>
             <li><a href="{{.SiteURL}}">Desktop</a></li>
+            <li><a href="{{.SiteURL}}about" data-dialog="about-site">About yavc.app</a></li>
+            <li>-</li>
             <li><a href="{{.SiteURL}}?open=settings&amp;top=settings"{{if .Desktop}} data-win-open="settings"{{end}}>Settings</a></li>
           </ul></li>
-          <li data-menubar-id="go">Go<ul>
-            <li><a href="{{.SiteURL}}pages">Applications as pages</a></li>
-          </ul></li>
+          <li data-menubar-id="go">Go<ul></ul></li>
           <li data-menubar-id="applets">Applets<ul>
-            {{range .Applets}}<li><a href="{{$.SiteURL}}?open={{.Name}}&amp;top={{.Name}}"{{if $.Desktop}} data-win-open="{{.Name}}"{{end}} title="{{.Description}}">{{if .Icon}}<img src="{{.Icon}}" alt=""> {{end}}{{.Title}}</a></li>
-            {{end}}
+            {{range .Applets}}{{if ne .Name "settings"}}<li><a href="{{$.SiteURL}}?open={{.Name}}&amp;top={{.Name}}"{{if $.Desktop}} data-win-open="{{.Name}}"{{end}} title="{{.Description}}">{{if .Icon}}<img src="{{.Icon}}" alt=""> {{end}}{{.Title}}</a></li>
+            {{end}}{{end}}
           </ul></li>
           <li data-menubar-id="view">View<ul>
+            {{/* The other layout, as a link; the segment in the top bar shows which one this is. */}}
+            {{if .Desktop}}<li><a href="{{.SiteURL}}pages">Pages</a></li>{{else}}<li><a href="{{.SiteURL}}">Windowed</a></li>{{end}}
+            <li>-</li>
             {{if .Desktop}}<li><button type="button" data-site-command="sidebar" aria-checked="false">Hide the list</button></li>
             <li>-</li>{{end}}
             <li>Mode<ul data-menu-radio>
@@ -104,7 +107,6 @@
           </ul></li>
           {{if .Desktop}}<li data-menubar-if="windows" data-menubar-id="window" data-menubar-windows>Window<ul></ul></li>{{end}}
           <li data-menubar-id="help">Help<ul>
-            <li><a href="{{.SiteURL}}about" data-dialog="about-site">About yavc.app</a></li>
             <li><a href="{{.SiteURL}}?open=author&amp;top=author"{{if .Desktop}} data-win-open="author"{{end}}>About the author</a></li>
             <li><a href="{{.SiteURL}}about/pudl" data-dialog="about-pudl">About PUDL</a></li>
             <li><a href="{{.SiteURL}}?open=agents&amp;top=agents"{{if .Desktop}} data-win-open="agents"{{end}}>For agents</a></li>
@@ -126,7 +128,8 @@
     <div class="topbar">
       {{template "menubar" .}}
       <nav class="seg view-seg" aria-label="View" data-seg-menu>
-        <a href="{{.SiteURL}}" aria-current="true"><span class="glyph" style="--glyph: var(--yavc-glyph-windowed)" aria-hidden="true"></span>Windowed</a>
+        {{/* The current view is not a link: following it would open the default windows and close the reader's. */}}
+        <a aria-current="true"><span class="glyph" style="--glyph: var(--yavc-glyph-windowed)" aria-hidden="true"></span>Windowed</a>
         <a href="{{.SiteURL}}pages"><span class="glyph" style="--glyph: var(--yavc-glyph-classic)" aria-hidden="true"></span>Pages</a>
       </nav>
     </div>
@@ -152,7 +155,7 @@
             <div class="reader-empty"><div class="card welcome-card">
               <h1>Welcome to {{.Site}}</h1>
               <p>Pick an application from the list and it opens as a floating window. Drag it by its title bar, resize it from any edge, snap it against the sides, or maximize it; open several and switch between them from the taskbar below.</p>
-              <p>Every application also runs on its own, at its own address, with the same game or document you left on the desktop. The ↗ button in a window's title bar takes you there.</p>
+              <p>Every application also runs on its own, at its own address, with the same game or document you left on the desktop. The Open as a Page button <span class="glyph" style="--glyph: var(--glyph-new-window)" aria-hidden="true"></span> in a window's title bar takes you there.</p>
               <p>The arrangement of windows lives in the page address, so it can be bookmarked and shared, and Back undoes the last thing you did.</p>
               <p>This desktop is built with <a href="https://github.com/paulmooreparks/pudl" target="_blank" rel="noopener">PUDL</a>, the Pleasantly Usable Design Language. Skins and colours are in the View menu.</p>
             </div></div>
@@ -292,7 +295,7 @@
       {{range .Applets}}<section class="card">
         <h2 class="card-title">{{if .Icon}}<img class="site-list-icon" src="{{.Icon}}" alt="">{{end}}<a href="{{$.SiteURL}}{{.Name}}">{{.Title}}</a></h2>
         <p class="card-desc">{{.Description}}</p>
-        <p class="card-desc app-links"><a href="{{.Page}}">Standalone</a> · <a href="{{$.SiteURL}}?open={{.Name}}&amp;top={{.Name}}">Window</a></p>
+        <p class="card-desc app-links"><a href="{{.Page}}">Open as a page</a> · <a href="{{$.SiteURL}}?open={{.Name}}&amp;top={{.Name}}">Open in a window</a></p>
       </section>
       {{end}}
     </div>

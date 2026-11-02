@@ -165,7 +165,7 @@
               '</div>' +
             '</div>' +
             '<div class="ed-status" data-role="status-bar">' +
-              '<span class="ed-readonly" data-role="readonly" hidden><svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="7" width="10" height="7.5" rx="1.5"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"/></svg>Read-only</span>' +
+              '<span class="ed-readonly" data-role="readonly" hidden><span class="glyph" style="--glyph: var(--glyph-pencil-off)" aria-hidden="true"></span>Read-only</span>' +
               '<span data-role="where"></span><span data-role="lang"></span><span data-role="pos"></span>' +
               '<span class="ed-message" data-role="message" role="status" aria-live="polite"></span>' +
             '</div>' +
@@ -211,9 +211,11 @@
             if (opts.changed) { opts.changed(stateString()); }
         }
 
+        /* A passing message goes in the status line; an error is a notice
+           above the document, which stays until dismissed or the next one. */
         function say(msg, isError) {
+            if (isError && msg) { window.yavcUtil.notice(el.tabs, msg, true); el.message.textContent = ''; return; }
             el.message.textContent = msg || '';
-            el.message.classList.toggle('ed-message-error', !!isError);
         }
 
         /* === Languages ==================================================== */
@@ -1717,16 +1719,16 @@
                 cmd('toggle-files', 'Files', 'panel', toggleExplorer, { checked: function () { return !el.explorer.hidden; } }),
                 cmd('new', 'New', 'file', function () { newTab(); }),
                 cmd('open', 'Open…', 'folder', function () { openDialog(); }),
-                cmd('save', 'Save', 'save', function () { save(); }, { disabled: function () { var t = current(); return !ready || !t || t.readOnly; }, reason: 'This file is read-only.' }),
+                cmd('save', 'Save', 'yavc-save', function () { save(); }, { disabled: function () { var t = current(); return !ready || !t || t.readOnly; }, reason: 'This file is read-only.' }),
                 cmd('save-as', 'Save As…', null, function () { saveAs(); }, { label: function () { var t = current(); return t && t.readOnly ? 'Save a Copy to ~…' : 'Save As…'; }, disabled: function () { return !ready || !current(); } }),
                 cmd('close-document', 'Close Document', null, function () { COMMANDS['close-document'](); }, { disabled: function () { return !ready || !current(); } }),
                 /* glyphOnly: a glyph every reader knows shows alone on the
                    menu bar's ribbon (PUDL 0.79.0), its words its tooltip. */
-                cmd('undo', 'Undo', 'undo', function () { CM.undo(view); }, { builtIn: 'Mod-z', glyphOnly: true }),
-                cmd('redo', 'Redo', 'redo', function () { CM.redo(view); }, { builtIn: 'Mod-y', glyphOnly: true }),
+                cmd('undo', 'Undo', 'yavc-undo', function () { CM.undo(view); }, { builtIn: 'Mod-z', glyphOnly: true }),
+                cmd('redo', 'Redo', 'yavc-redo', function () { CM.redo(view); }, { builtIn: 'Mod-y', glyphOnly: true }),
                 cmd('find', 'Find and Replace…', 'search', openFind, { builtIn: 'Mod-f' }),
                 cmd('go-to-line', 'Go to Line…', null, goToLine, { builtIn: 'Mod-Alt-g' }),
-                cmd('toggle-wrap', 'Wrap Lines', 'wrap', function () { setWrap(!wrapOn, true); }, { checked: function () { return wrapOn; } }),
+                cmd('toggle-wrap', 'Wrap Lines', 'yavc-wrap', function () { setWrap(!wrapOn, true); }, { checked: function () { return wrapOn; } }),
                 cmd('insert-timestamp', 'Insert Date and Time', null, COMMANDS['insert-timestamp'], { disabled: function () { return !ready || !editable; } }),
                 cmd('insert-date', 'Insert Date', null, COMMANDS['insert-date'], { disabled: function () { return !ready || !editable; } }),
                 cmd('stamp-modified', 'Update Last-Modified', null, stampModified, { disabled: function () { return !ready || !editable; } }),
@@ -1787,7 +1789,7 @@
                menu (menus() below), so the ribbon has them while it shows. */
             return [{ label: 'Editor', ribbon: 'hide', groups: [
                 { label: 'File', glyph: 'file', priority: 3, items: ['toggle-files', 'new', 'open', 'save', 'save-as'] },
-                { label: 'Edit', glyph: 'undo', priority: 2, items: ['undo', 'redo', 'find', 'toggle-wrap'] },
+                { label: 'Edit', glyph: 'yavc-undo', priority: 2, items: ['undo', 'redo', 'find', 'toggle-wrap'] },
                 { label: 'Format', glyph: 'bold', priority: 1, items: ['style', 'bold', 'italic', 'strike', 'code', 'link', 'color', 'bullets', 'numbers', 'insert', 'box'] },
                 { label: 'View', glyph: 'new-window', priority: 4, end: true, items: ['source', { choice: 'ed-view' }, 'preview'] }
             ] }];
@@ -1802,18 +1804,17 @@
            views, which the site's View menu lists again where a reader of
            the menus looks for them. Headings and separators start the
            ribbon's groups. */
-        var LAYOUT = ['toggle-files', 'toggle-wrap', '-', 'view-text', 'view-visual', 'view-split', 'view-preview', 'md-default', '-', 'source', 'preview', 'present'];
+        var LAYOUT = ['toggle-files', 'toggle-wrap', '-', 'view-text', 'view-visual', 'view-split', 'view-preview', 'md-default', '-', 'source', 'preview'];
         function menus() {
             var titles = [
-                { label: 'Editor', glyph: 'document', items: window.pcAppletIdentity(root) },
-                { id: 'file', label: 'File', glyph: 'file', items: ['new', 'open', 'save', 'save-as', '-', 'properties', '-', 'close-document'] },
-                { id: 'edit', label: 'Edit', glyph: 'pencil', items: ['undo', 'redo', '-', 'find', 'go-to-line', '-', 'key-bindings'] },
+                { label: 'Editor', glyph: 'document', items: window.pcAppletIdentity(root, ['key-bindings']) },
+                { id: 'file', label: 'File', glyph: 'file', items: ['new', 'open', 'save', 'save-as', '-', 'properties', 'present', '-', 'close-document'] },
+                { id: 'edit', label: 'Edit', glyph: 'pencil', items: ['undo', 'redo', '-', 'find'] },
                 { id: 'insert', label: 'Insert', glyph: 'plus', items: ['link', 'insert', 'box', '-', 'insert-timestamp', 'insert-date', 'stamp-modified'] }
             ];
             /* Format, where there is formatting to do. */
             if (formatOffered) { titles.push({ id: 'format', label: 'Format', glyph: 'paragraph', items: ['style', '-', 'bold', 'italic', 'strike', 'code', 'color', '-', 'bullets', 'numbers'] }); }
-            titles.push({ id: 'layout', label: 'Layout', glyph: 'panel', items: LAYOUT });
-            return { titles: titles, into: { view: LAYOUT } };
+            return { titles: titles, into: { view: LAYOUT, go: ['go-to-line'] } };
         }
 
         /* === Start ======================================================== */

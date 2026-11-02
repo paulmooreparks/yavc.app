@@ -26,7 +26,6 @@
 .pc-files .fm-d-desc { flex-basis: 100%; }
 .pc-files .fm-d-tags { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 4px; }
 .pc-files .fm-status { margin: 0; min-height: 1.4em; color: var(--text-muted); }
-.pc-files .fm-status-error { color: var(--danger); }
 .pc-files .fm-failed, .pc-files .fm-loading { color: var(--text-muted); padding: var(--space-4); }
 
 /* === Filling a window ==================================================== */

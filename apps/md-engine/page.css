@@ -61,7 +61,7 @@
 /* The empty line's hint is a placeholder, not text: the muted ink at
    just over half strength, small and italic, so it is read as a prompt and
    never as the page's words (placeholder text is held to 3:1 at most). */
-.doc-page.page-view .pm-hint::before { content: attr(data-hint); float: left; height: 0; pointer-events: none; color: var(--dinah-muted-ink); opacity: .55; font-style: italic; font-size: .8em; font-weight: 400; letter-spacing: 0; }
+.doc-page.page-view .pm-hint::before { content: attr(data-hint); float: left; height: 0; pointer-events: none; color: var(--text-muted); font-style: italic; font-size: .8em; font-weight: 400; letter-spacing: 0; }
 .doc-page.page-view .pm-slash-anchor { display: inline-block; width: 0; height: 1em; vertical-align: text-bottom; }
 .page-slash { max-height: 50vh; overflow-y: auto; }
 .page-slash .menu-action[aria-selected="true"] { background: var(--surface-alt); }

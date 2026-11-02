@@ -186,7 +186,6 @@
         root.tabIndex = -1;
         root.innerHTML =
             '<div class="deck-toolbar-slot" data-toolbar-slot></div>' +
-            '<div class="notice danger deck-notice" data-role="notice" role="alert" hidden><div class="notice-content"><p class="notice-body" data-role="notice-body"></p></div><button class="notice-close" type="button" aria-label="Dismiss" data-role="notice-close"></button></div>' +
             '<div class="tablist doc-tabs deck-tabs" role="tablist" aria-label="Open decks" data-role="tabs" hidden></div>' +
             '<div class="deck-main" data-role="main">' +
               '<div class="deck-film" data-role="film" role="listbox" aria-label="Slides"></div>' +
@@ -201,7 +200,7 @@
             '<div class="deck-presenter" data-role="presenter" hidden></div>';
         var q = function (sel) { return root.querySelector(sel); };
         var el = { film: q('[data-role="film"]'), work: q('[data-role="work"]'), stagebox: q('[data-role="stagebox"]'), stage: q('[data-role="stage"]'), canvas: q('[data-role="canvas"]'), slide: q('[data-role="slide"]'),
-            body: q('[data-role="body"]'), notesView: q('[data-role="notes-view"]'), split: q('[data-role="split"]'), text: q('[data-role="text"]'), tabsEl: q('[data-role="tabs"]'), notice: q('[data-role="notice"]'), noticeBody: q('[data-role="notice-body"]'), floatBar: q('[data-role="float-bar"]'), main: q('[data-role="main"]'), where: q('[data-role="where"]'), message: q('[data-role="message"]'), presenter: q('[data-role="presenter"]'), main: q('[data-role="main"]') };
+            body: q('[data-role="body"]'), notesView: q('[data-role="notes-view"]'), split: q('[data-role="split"]'), text: q('[data-role="text"]'), tabsEl: q('[data-role="tabs"]'), floatBar: q('[data-role="float-bar"]'), main: q('[data-role="main"]'), where: q('[data-role="where"]'), message: q('[data-role="message"]'), presenter: q('[data-role="presenter"]'), main: q('[data-role="main"]') };
 
         /* The applet's settings, kept by the host under its name. */
         function keepSetting(key, value) {
@@ -213,18 +212,10 @@
            person must act on, is a notice that stays until dismissed, and
            so is help, as an info notice. */
         function say(msg, kind) {
-            if (kind) {
-                el.notice.classList.toggle('danger', kind === true);
-                el.notice.classList.toggle('info', kind === 'info');
-                el.notice.setAttribute('role', kind === true ? 'alert' : 'status');
-                el.noticeBody.textContent = msg;
-                el.notice.hidden = false;
-                fit();
-                return;
-            }
+            if (kind) { window.yavcUtil.notice(el.tabsEl, msg, kind); fit(); return; }
             el.message.textContent = msg || '';
         }
-        q('[data-role="notice-close"]').addEventListener('click', function () { el.notice.hidden = true; fit(); });
+        root.addEventListener('yavc:notice-closed', function () { fit(); });
         function commandsChanged() { if (opts.commandsChanged) { opts.commandsChanged(); } tabRow(); }
         function stateString() {
             var p = new URLSearchParams();
@@ -542,8 +533,12 @@
             goTo(at + 1);
         }
         function duplicateSlide() { deck.slides.splice(at + 1, 0, { text: current().text }); modified = true; drawFilm(); goTo(at + 1); }
-        function deleteSlide() {
+        /* asked: false for an agent's delete@1, which changes only the deck
+           in the window, unsaved, and must not wait on a dialog. */
+        async function deleteSlide(asked) {
             if (deck.slides.length <= 1) { say('A deck keeps at least one slide.'); return; }
+            /* There is no undo for a slide, so the person's delete asks (Principles, section 3). */
+            if (asked !== false && !(await window.yavcDialog.confirm('Delete slide ' + (at + 1) + '?', '"' + titleOf(current(), at) + '" and its notes go from the deck.', { okLabel: 'Delete', danger: true }))) { return; }
             deck.slides.splice(at, 1);
             modified = true;
             drawFilm();
@@ -1097,7 +1092,7 @@
             var table = [
                 cmd('new-deck', 'New Deck', 'file', newDeck),
                 cmd('open', 'Open…', 'folder', open, { shortcut: 'Mod+O' }),
-                cmd('save', 'Save', 'save', save, { shortcut: 'Mod+S', disabled: function () { return !ready; } }),
+                cmd('save', 'Save', 'yavc-save', save, { shortcut: 'Mod+S', disabled: function () { return !ready; } }),
                 cmd('save-as', 'Save As…', null, saveAs),
                 cmd('edit-whole', 'Edit the Whole Deck in the Editor', 'pencil', editWhole, { disabled: function () { return !path; } }),
                 cmd('export-html', 'Download as a Page', 'download', exportHTML),
@@ -1354,7 +1349,7 @@
                 await booted;
                 if (deck.slides.length <= 1) { throw new Error('a deck keeps at least one slide'); }
                 await atSlide(input.index);
-                deleteSlide();
+                await deleteSlide(false);
                 return { output: placed() };
             },
             'move@1': async function (input) {

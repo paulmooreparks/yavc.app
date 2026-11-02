@@ -5,15 +5,17 @@
    desktop of applets needs; the accent and topbar tints are that site's
    too, so the two feel alike. PUDL's tokens do the rest. */
 
-/* The site's own tints apply only while no PUDL colour theme is chosen;
-   a theme sets these tokens itself (THEMES.md). */
-:root:not([data-palette]) {
+/* The site's own tints apply only to the Standard skin while no PUDL
+   colour theme is chosen: a colour theme sets these tokens itself
+   (THEMES.md), and every other skin pairs its own accent with its depth
+   (SKINS.md, palette precedence), which the site must not replace. */
+:root:not([data-palette]):is(:not([data-skin]), [data-skin="standard"]) {
   --accent: #0d47a1;
   --accent-hover: #08306e;
   --tb-bg: #d7dce2;
   --tb-fg: #1b1f24;
 }
-:root:not([data-palette])[data-theme="dark"] {
+:root:not([data-palette]):is(:not([data-skin]), [data-skin="standard"])[data-theme="dark"] {
   --accent: #4da3ff;
   --accent-hover: #7bd3ff;
   --on-accent: #0d1117;
@@ -52,7 +54,6 @@ body.desktop .md-layout { --md-sidebar-w: 300px; }
 .welcome-card p { margin: 0 0 var(--space-3); font-size: var(--text-sm); color: var(--text-muted); }
 .welcome-card p:last-child { margin-bottom: 0; }
 .site-list-icon { width: 20px; height: 20px; vertical-align: -5px; margin-inline-end: var(--space-2); object-fit: contain; }
-.icon-btn[aria-disabled="true"] { opacity: .45; cursor: not-allowed; }
 
 /* A window's content: the applet, filling the window when it says so.
    An applet that fills (data-applet-fit="fill", which PUDL sets on a
@@ -88,8 +89,9 @@ body.desktop .md-layout { --md-sidebar-w: 300px; }
 .about-dialog .dialog-title img { width: 22px; height: 22px; }
 .about-dialog .dialog-body p:last-child { margin-bottom: 0; }
 
-/* Glyphs PUDL does not have, shared by the applications: Save, Undo, Redo
-   and Wrap from the Editor, and Rename and Bin from
+/* Glyphs PUDL does not have, shared by the applications, named yavc-*
+   so none can shadow a glyph PUDL adds later: Save, Undo, Redo and Wrap
+   from the Editor, and Rename and Bin from
    Files (PUDL has Upload, Eye and Move). They sit on the root because the menu bar's ribbon and the
    context menus draw the same commands outside the applet. */
 :root {
@@ -97,12 +99,12 @@ body.desktop .md-layout { --md-sidebar-w: 300px; }
   --yavc-glyph-windowed: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.3' stroke-linejoin='round'%3E%3Cpath d='M5 4V1.5h9.5V11H12'/%3E%3Crect x='1.5' y='4.5' width='10' height='10' rx='1'/%3E%3Cpath d='M2 7.5h9'/%3E%3C/svg%3E");
   --yavc-glyph-classic: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.3'%3E%3Crect x='1.5' y='2.5' width='13' height='11' rx='1'/%3E%3Cpath d='M2 5.5h12'/%3E%3C/svg%3E");
   /* Rename: a text cursor beside a box of text; Move To: an arrow into a folder. */
-  --glyph-rename: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 4.5H2.5v7H9M12.5 2v12M11 2h3M11 14h3'/%3E%3C/svg%3E");
-  --glyph-bin: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M2.5 4.5h11M6 4.5V3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1.5M4 4.5l.7 8.6a1 1 0 0 0 1 .9h4.6a1 1 0 0 0 1-.9l.7-8.6M6.7 7v4.5M9.3 7v4.5'/%3E%3C/svg%3E");
-  --glyph-undo: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5.5 3.5L2.5 6.5l3 3'/%3E%3Cpath d='M2.5 6.5h7a4 4 0 0 1 0 8H7'/%3E%3C/svg%3E");
-  --glyph-redo: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M10.5 3.5l3 3-3 3'/%3E%3Cpath d='M13.5 6.5h-7a4 4 0 0 0 0 8H9'/%3E%3C/svg%3E");
-  --glyph-save: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round'%3E%3Cpath d='M2.5 2.5h9l2 2v9h-11z'/%3E%3Cpath d='M5 2.5v3.5h5V2.5M4.5 13.5V9h7v4.5'/%3E%3C/svg%3E");
-  --glyph-wrap: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2 3.5h12M2 7.5h9.5a2.25 2.25 0 0 1 0 4.5H8'/%3E%3Cpath d='M9.5 10.5L8 12l1.5 1.5M2 12h3'/%3E%3C/svg%3E");
+  --glyph-yavc-rename: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 4.5H2.5v7H9M12.5 2v12M11 2h3M11 14h3'/%3E%3C/svg%3E");
+  --glyph-yavc-bin: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M2.5 4.5h11M6 4.5V3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1.5M4 4.5l.7 8.6a1 1 0 0 0 1 .9h4.6a1 1 0 0 0 1-.9l.7-8.6M6.7 7v4.5M9.3 7v4.5'/%3E%3C/svg%3E");
+  --glyph-yavc-undo: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5.5 3.5L2.5 6.5l3 3'/%3E%3Cpath d='M2.5 6.5h7a4 4 0 0 1 0 8H7'/%3E%3C/svg%3E");
+  --glyph-yavc-redo: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M10.5 3.5l3 3-3 3'/%3E%3Cpath d='M13.5 6.5h-7a4 4 0 0 0 0 8H9'/%3E%3C/svg%3E");
+  --glyph-yavc-save: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round'%3E%3Cpath d='M2.5 2.5h9l2 2v9h-11z'/%3E%3Cpath d='M5 2.5v3.5h5V2.5M4.5 13.5V9h7v4.5'/%3E%3C/svg%3E");
+  --glyph-yavc-wrap: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2 3.5h12M2 7.5h9.5a2.25 2.25 0 0 1 0 4.5H8'/%3E%3Cpath d='M9.5 10.5L8 12l1.5 1.5M2 12h3'/%3E%3C/svg%3E");
 }
 
 /* What an agent's action is about to touch, in the site's permission dialog (site-actions.js). */
@@ -116,3 +118,8 @@ body.desktop .md-layout { --md-sidebar-w: 300px; }
 .yavc-dialog .dialog-title { display: flex; align-items: center; gap: var(--space-2); }
 .yavc-dlg-warn { --glyph-size: 20px; color: var(--danger); flex: none; }
 .yavc-dialog .form-input { width: 100%; }
+
+/* A notice an application places (yavcUtil.notice): set apart from what
+   follows it, and gone when dismissed. */
+.yavc-notice { margin: var(--space-2) var(--space-3) 0; flex: none; }
+.yavc-notice[hidden] { display: none; }

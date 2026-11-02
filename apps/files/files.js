@@ -92,10 +92,12 @@
             if (opts.changed) { opts.changed(stateString()); }
         }
 
+        /* A passing message goes in the status line; an error is a notice
+           above the list, which stays until dismissed or the next one. */
         function say(msg, isError) {
             if (!el) { return; }
+            if (isError && msg) { window.yavcUtil.notice(el.main, msg, true); el.status.textContent = ''; return; }
             el.status.textContent = msg || '';
-            el.status.classList.toggle('fm-status-error', !!isError);
         }
 
         function inHome(node) { var r = F.realOf(node); return !!r.home; }
@@ -178,9 +180,9 @@
                 cmd('run', 'Run in the Terminal', 'terminal', { hidden: function () { var s = sel(); return !(s.c && (s.kind === 'script' || s.kind === 'app') && canOpen('shell')); } }),
                 cmd('download', 'Download', 'download', { hidden: function () { var s = sel(); return !(s.c && s.kind !== 'dir'); } }),
                 cmd('copy', 'Copy to ~', 'copy', { hidden: function () { var s = sel(); return !(s.c && !s.r.home && s.kind === 'page'); } }),
-                cmd('rename', 'Rename…', 'rename', { hidden: function () { return !owned(); } }),
+                cmd('rename', 'Rename…', 'yavc-rename', { hidden: function () { return !owned(); } }),
                 cmd('move', 'Move To…', 'move', { hidden: function () { return !owned(); } }),
-                cmd('delete', 'Delete…', 'bin', { danger: true, hidden: function () { return !owned(); } }),
+                cmd('delete', 'Delete…', 'yavc-bin', { danger: true, hidden: function () { return !owned(); } }),
                 cmd('terminal', 'New Terminal Window Here', 'terminal', { hidden: function () { return !canOpen('shell'); } }),
                 cmd('hidden', 'Show Hidden Files', 'eye', { checked: function () { return showHidden; } }),
                 { id: 'help', label: 'Files Quick Help', glyph: 'info', disabled: function () { return !ready(); }, run: function () { if (el) { el.helpDialog.showModal(); } } },
@@ -401,7 +403,7 @@
            reader of the menus looks for them. */
         function menus() {
             return { titles: [{ label: 'Files', items: window.pcAppletIdentity(root) },
-                { id: 'folder', label: 'Folder', items: ['up', 'home', '-', 'open', 'edit', 'run', 'download', '-', 'rename', 'move', 'delete', 'copy', '-', 'new-file', 'new-folder', 'upload', '-', 'hidden', 'terminal', 'help'] }],
+                { id: 'file', label: 'File', items: ['new-file', 'new-folder', 'upload', '-', 'open', 'edit', 'run', 'download', 'terminal', '-', 'rename', 'move', 'copy', '-', 'delete'] }],
                 into: { go: ['up', 'home'], view: ['hidden'], help: ['help', 'guide'] } };
         }
 

@@ -588,7 +588,7 @@
               '<h3 class="dialog-title" id="' + id + '-title">' + esc(o.title || (save ? 'Save as' : 'Open')) + '</h3>' +
               '<div class="dialog-body fb-pick-body">' +
                 '<div class="fb-pick-bar">' +
-                  '<button type="button" class="icon-btn" data-pick="up" aria-label="Up one folder" title="Up one folder"><svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 13V3.5"/><path d="M4 7.5l4-4 4 4"/></svg></button>' +
+                  '<button type="button" class="icon-btn" data-pick="up" aria-label="Up one folder" title="Up one folder"><span class="glyph" style="--glyph: var(--glyph-arrow-up)" aria-hidden="true"></span></button>' +
                   '<button type="button" class="icon-btn" data-pick="home" aria-label="Your home directory" title="Your home directory">' + glyph('home') + '</button>' +
                   markup.pathBar() +
                   '<button type="button" class="btn btn-sm" data-pick="newfolder" title="Make a folder here">New folder</button>' +

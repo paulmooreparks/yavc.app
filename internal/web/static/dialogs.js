@@ -38,7 +38,7 @@
         dlg.setAttribute('aria-labelledby', 'yavc-dlg-' + n + '-title');
         var buttons = (o.buttons || []).map(function (b) {
             var cls = 'btn' + (b.danger ? ' btn-danger' : b.primary ? ' btn-primary' : '');
-            var glyph = b.danger ? '<span class="glyph" style="--glyph: var(--glyph-bin)" aria-hidden="true"></span>' : '';
+            var glyph = b.danger ? '<span class="glyph" style="--glyph: var(--glyph-yavc-bin)" aria-hidden="true"></span>' : '';
             return b.primary || b.submit === true || (b.danger && b.submit !== false)
                 ? '<button class="' + cls + '" type="submit" value="' + esc(b.id) + '">' + glyph + esc(b.label) + '</button>'
                 : '<button class="' + cls + '" type="button" data-choice="' + esc(b.id) + '">' + glyph + esc(b.label) + '</button>';

@@ -22,7 +22,6 @@
   color: var(--text-muted); font-weight: 600; font-size: var(--text-xs);
 }
 .pc-editor .ed-readonly[hidden] { display: none; }
-.pc-editor .ed-readonly svg { width: 13px; height: 13px; }
 
 /* The tabs are PUDL's document tabs and the surface PUDL's code surface
    (0.26.0); only their place in the layout is set here. */
@@ -87,7 +86,6 @@
    language and the cursor, trimmed rather than wrapped onto a second line
    the window's bottom would cut off. */
 .pc-editor .ed-message { margin-left: auto; min-width: 0; flex: 0 1 auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.pc-editor .ed-message-error { color: var(--danger); }
 /* A shortcode in the text: its name and braces, and its arguments. */
 .pc-editor .cm-shortcode-name { color: var(--syntax-tag); font-weight: 600; }
 .pc-editor .cm-shortcode-args { color: var(--syntax-attr); }

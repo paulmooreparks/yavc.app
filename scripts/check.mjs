@@ -96,13 +96,29 @@ rules.push({ id: 'glyph-defined', run() {
   const defined = rootGlyphs();
   const sources = js.filter((f) => /^(apps|applets|internal\/web\/static)\//.test(f));
   for (const f of sources) {
-    each(/\bglyph:\s*'([a-z0-9-]+)'/g, text.get(f), (m) => {
-      if (!defined.has(m[1])) report('glyph-defined', f, m.index, `the command glyph "${m[1]}" is neither PUDL's nor defined on :root in site.css`);
+    // A command's glyph, by name or as cmd(id, label, glyph, ...).
+    each(/\bglyph:\s*'([a-z0-9-]+)'|\bcmd\(\s*'[^']*'\s*,\s*'(?:[^'\\]|\\.)*'\s*,\s*'([a-z0-9-]+)'/g, text.get(f), (m) => {
+      const name = m[1] || m[2];
+      if (!defined.has(name)) report('glyph-defined', f, m.index, `the command glyph "${name}" is neither PUDL's nor defined on :root in a stylesheet`);
     });
   }
   for (const f of files.filter((f) => /\.(html|js)$/.test(f) && !f.startsWith('scripts/'))) {
     each(/var\(--yavc-glyph-([a-z0-9-]+)\)/g, text.get(f), (m) => {
       if (!defined.has('yavc-' + m[1])) report('glyph-defined', f, m.index, `--yavc-glyph-${m[1]} is used but not defined on :root in site.css`);
+    });
+  }
+} });
+
+// The site's own glyphs are named yavc-*, so none shadows a glyph PUDL
+// has or adds later (PUDL review, 2026-11-03). The installed packages
+// under applets/ keep their own names.
+rules.push({ id: 'glyph-namespace', run() {
+  const pudl = new Set();
+  each(/--glyph-([a-z0-9-]+)\s*:/g, readFileSync(join(ROOT, 'web/pudl/pudl.css'), 'utf8'), (m) => pudl.add(m[1]));
+  for (const f of css.filter((f) => !f.startsWith('applets/'))) {
+    each(/--glyph-([a-z0-9-]+)\s*:\s*url\(/g, text.get(f), (m) => {
+      if (pudl.has(m[1])) report('glyph-namespace', f, m.index, `--glyph-${m[1]} redefines one of PUDL's glyphs`);
+      else if (!m[1].startsWith('yavc-')) report('glyph-namespace', f, m.index, `--glyph-${m[1]} is the site's own glyph; name it --glyph-yavc-${m[1]}`);
     });
   }
 } });
@@ -217,7 +233,8 @@ const SHARED_HOMES = [
   [/window\.yavcMd\s*[.[]/g, 'apps/md-engine/loader.js', 'the Markdown engine called directly; go through its loader, whose calls throw on errors'],
   [/['"]\/(js|css)\//g, null, "a parkscomputing.com address (/js/, /css/) that this site does not serve"],
   [/\.replace\(\s*'Mod-'\s*,/g, 'internal/web/static/yavc-util.js', 'a shortcut spelled by hand; use yavcUtil.shortcut'],
-  [/mermaid\.render\(|data-preview-diagram/g, 'apps/md-editor/kit.js', "a renderer of its own; draw the engine's blocks with yavcMdEditor.drawBlocks"]
+  [/mermaid\.render\(|data-preview-diagram/g, 'apps/md-editor/kit.js', "a renderer of its own; draw the engine's blocks with yavcMdEditor.drawBlocks"],
+  [/classList\.toggle\(\s*'[a-z-]*(status|message)-error'/g, null, 'an error drawn in a status line; an error is a notice (yavcUtil.notice)']
 ];
 rules.push({ id: 'one-shared-implementation', run() {
   for (const f of SITE) {

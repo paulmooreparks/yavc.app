@@ -9,7 +9,8 @@
      yavcUtil.loadGlobal(src, name)   a promise of window[name], loading src if need be
      yavcUtil.siteFs()                a promise of the site file system, loaded and ready
      yavcUtil.download(name, blob)    hands the person a file through the browser
-     yavcUtil.shortcut(key)           a CodeMirror key (Mod-b) as PUDL spells a shortcut (Mod+B) */
+     yavcUtil.shortcut(key)           a CodeMirror key (Mod-b) as PUDL spells a shortcut (Mod+B)
+     yavcUtil.notice(ref, text, kind) PUDL's dismissible notice before ref; kind true for an error */
 (function () {
     'use strict';
     if (window.yavcUtil) { return; }
@@ -72,5 +73,32 @@
         }).join('+');
     }
 
-    window.yavcUtil = Object.freeze({ esc: esc, versioned: versioned, loadScript: loadScript, loadGlobal: loadGlobal, siteFs: siteFs, download: download, shortcut: shortcut, version: V });
+    /* A message the person should see in full: PUDL's notice, dismissible,
+       placed before ref (one per place, reused). An error is a danger
+       notice and is announced; 'info' is a plain notice. A status line is
+       for passing messages only (PUDL README, notices and toasts; review of
+       2026-11-03: errors were shown three ways). Resolves to the notice;
+       an empty text hides it. */
+    function notice(ref, text, kind) {
+        var host = ref && ref.parentNode;
+        if (!host) { return null; }
+        var n = ref.previousElementSibling && ref.previousElementSibling.classList.contains('yavc-notice') ? ref.previousElementSibling : null;
+        if (!n) {
+            n = document.createElement('div');
+            n.className = 'notice yavc-notice';
+            n.hidden = true;
+            n.innerHTML = '<div class="notice-content"><p class="notice-body"></p></div><button class="notice-close" type="button" aria-label="Dismiss"></button>';
+            n.querySelector('.notice-close').addEventListener('click', function () { n.hidden = true; n.dispatchEvent(new CustomEvent('yavc:notice-closed', { bubbles: true })); });
+            host.insertBefore(n, ref);
+        }
+        if (!text) { n.hidden = true; return n; }
+        var danger = kind === true || kind === 'danger';
+        n.classList.toggle('danger', danger);
+        n.setAttribute('role', danger ? 'alert' : 'status');
+        n.querySelector('.notice-body').textContent = text;
+        n.hidden = false;
+        return n;
+    }
+
+    window.yavcUtil = Object.freeze({ esc: esc, versioned: versioned, loadScript: loadScript, loadGlobal: loadGlobal, siteFs: siteFs, download: download, shortcut: shortcut, notice: notice, version: V });
 })();

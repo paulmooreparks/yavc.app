@@ -56,11 +56,11 @@
               '<h2 class="card-title">What this site keeps</h2>' +
               '<p class="card-desc">Your appearance choices and each application\'s state, such as a game in progress, are kept on this site under an anonymous session, so the same game is on the desktop and on the application\'s own address. Nothing in it identifies you.' + kept + '</p>' +
               '<p class="card-desc">Files you make, in the editor, the terminal or a game\'s saves, are kept in this browser alone, under the address you made them at, and this site never sees them. The desktop and each application\'s own address keep separate files. Clearing this browser\'s site data removes them, so download anything you want to keep.</p>' +
-              '<div class="settings-actions"><button type="button" class="btn btn-danger" commandfor="yavc-forget-' + n + '" command="show-modal">Forget everything this site keeps for me…</button></div>' +
+              '<div class="settings-actions"><button type="button" class="btn btn-danger" commandfor="yavc-forget-' + n + '" command="show-modal">Forget everything this site keeps for you…</button></div>' +
               '<p class="settings-status" data-status role="status"></p>' +
               '<dialog class="dialog" id="yavc-forget-' + n + '" aria-labelledby="yavc-forget-title-' + n + '">' +
                 '<h3 class="dialog-title" id="yavc-forget-title-' + n + '">Forget everything this site keeps for you?</h3>' +
-                '<p class="dialog-body">Your appearance choices and every application\'s state go, and the page starts afresh. Nothing can bring them back.</p>' +
+                '<p class="dialog-body">Your appearance choices and every application\'s state go, and the page starts afresh. Nothing can bring them back. Your files in this browser are kept.</p>' +
                 '<form class="dialog-actions" method="dialog">' +
                   '<button class="btn" value="keep" autofocus>Keep them</button>' +
                   '<button class="btn btn-danger" value="forget">Forget them</button>' +
@@ -73,7 +73,7 @@
               '<ul class="row-list" data-token-list aria-label="Tokens"></ul>' +
               '<p class="card-desc" data-token-none>No agent is paired.</p>' +
               '<div class="settings-actions"><button type="button" class="btn btn-primary" commandfor="yavc-token-' + n + '" command="show-modal">Make a token…</button></div>' +
-              '<pre class="settings-token" data-token-shown hidden tabindex="0"></pre>' +
+              '<pre class="settings-token" data-token-shown data-code-actions="copy" hidden tabindex="0"></pre>' +
               '<p class="settings-status" data-token-status role="status"></p>' +
               '<dialog class="dialog" id="yavc-token-' + n + '" aria-labelledby="yavc-token-title-' + n + '">' +
                 '<form method="dialog" data-token-form>' +
@@ -120,7 +120,7 @@
                 status.textContent = 'Forgotten. The page will reload.';
                 setTimeout(function () { location.reload(); }, 800);
             }).catch(function () {
-                status.textContent = 'That could not be done just now.';
+                window.yavcUtil.notice(status, 'Your data could not be forgotten just now. Try again in a moment.', true);
             });
         });
         /* === Agents ====================================================== */
@@ -138,7 +138,7 @@
                 var may = (t.grant || []).map(function (g) { return WORDS[g] || g; }).join(', ');
                 li.innerHTML = '<span class="settings-token-name">' + esc(t.name) + '</span>' +
                     '<span class="settings-token-meta">' + (may ? 'May ' + esc(may) + ' unasked. ' : 'Asks before everything. ') + 'Made ' + esc(when.toLocaleDateString()) + (t.used ? ', last used ' + esc(new Date(t.used).toLocaleString()) : ', not used yet') + '.</span>' +
-                    '<button type="button" class="btn btn-danger btn-sm" data-revoke="' + esc(t.id) + '">Revoke</button>';
+                    '<button type="button" class="btn btn-danger btn-sm" data-revoke="' + esc(t.id) + '" data-name="' + esc(t.name) + '">Revoke</button>';
                 tokenList.appendChild(li);
             });
         }
@@ -163,15 +163,21 @@
                     if (window.yavcBridge) { window.yavcBridge.connect(); }
                     return loadTokens();
                 })
-                .catch(function (err) { tokenStatus.textContent = err.message; });
+                .catch(function (err) { window.yavcUtil.notice(tokenStatus, err.message, true); });
         });
         root.addEventListener('click', function (e) {
             var b = e.target.closest('[data-revoke]');
             if (!b) { return; }
-            window.fetch('/agent/tokens/' + encodeURIComponent(b.getAttribute('data-revoke')), { method: 'DELETE', credentials: 'same-origin' })
-                .then(function (r) { if (!r.ok) { throw new Error('HTTP ' + r.status); } tokenStatus.textContent = 'Revoked.'; tokenShown.hidden = true; return loadTokens(); })
-                .catch(function () { tokenStatus.textContent = 'That could not be done just now.'; });
+            var name = b.getAttribute('data-name');
+            window.yavcDialog.confirm('Revoke ' + (name ? 'the token for ' + name : 'this token') + '?', 'An agent using it can no longer reach this site. A new token can be made at any time.', { okLabel: 'Revoke', danger: true }).then(function (yes) {
+                if (yes) { revoke(b.getAttribute('data-revoke')); }
+            });
         });
+        function revoke(id) {
+            window.fetch('/agent/tokens/' + encodeURIComponent(id), { method: 'DELETE', credentials: 'same-origin' })
+                .then(function (r) { if (!r.ok) { throw new Error('HTTP ' + r.status); } tokenStatus.textContent = 'Revoked.'; tokenShown.hidden = true; return loadTokens(); })
+                .catch(function () { window.yavcUtil.notice(tokenStatus, 'The token could not be revoked just now. Try again in a moment.', true); });
+        }
 
         function onTheme() { mark(); }
         document.addEventListener('pudl:theme-change', onTheme);
