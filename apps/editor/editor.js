@@ -923,6 +923,7 @@
                 docOf: function (text) { return mdEngine().then(function (m) { return m.doc(text); }); },
                 markdownOf: function (doc) { return mdEngine().then(function (m) { return m.markdown(doc); }); },
                 sourceOf: function (src) { return mdEngine().then(function (m) { return m.source(src); }); },
+                wrapOf: function (line) { return mdEngine().then(function (m) { return m.container(line); }); },
                 blocksOf: function (text) { return mdEngine().then(function (m) { return m.blocks(text); }); },
                 draw: function (target, html, diagrams) { drawBlocks(target, [{ line: 0, html: html, diagrams: diagrams }]); },
                 keys: pageKeys,

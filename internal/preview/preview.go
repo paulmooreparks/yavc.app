@@ -153,6 +153,10 @@ type unit struct {
 func units(doc ast.Node, src []byte) []unit {
 	var out []unit
 	for n := doc.FirstChild(); n != nil; n = n.NextSibling() {
+		// A container's closing line is part of the container's block.
+		if n.Kind() == shortcodes.KindCloser {
+			continue
+		}
 		off, ok := firstOffset(n, src)
 		if !ok && len(out) > 0 {
 			out[len(out)-1].nodes = append(out[len(out)-1].nodes, n)

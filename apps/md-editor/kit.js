@@ -85,12 +85,12 @@
     ];
     var SHORTCODES = [
         ['figure', 'Picture', '{{figure:/static/icon.svg alt="What it shows" width=60%}}'],
-        ['columns', 'Columns', '{{columns}}\nThe first column.\n\n{{column}}\n\nThe second.\n{{/columns}}'],
-        ['tip', 'Tip', '{{tip:A title}}\nText.\n{{/tip}}'],
-        ['note', 'Note', '{{note:A title}}\nText.\n{{/note}}'],
-        ['info', 'Information Notice', '{{info:A title}}\nText.\n{{/info}}'],
-        ['warning', 'Warning', '{{warning:A title}}\nText.\n{{/warning}}'],
-        ['expand', 'Expand', '{{expand:The title}}\nWhat opens.\n{{/expand}}'],
+        ['columns', 'Columns', '{{columns}}\n' + PLACEHOLDER + '\n\n{{column}}\n\nThe second column.\n{{/columns}}'],
+        ['tip', 'Tip', '{{tip:A title}}\n' + PLACEHOLDER + '\n{{/tip}}'],
+        ['note', 'Note', '{{note:A title}}\n' + PLACEHOLDER + '\n{{/note}}'],
+        ['info', 'Information Notice', '{{info:A title}}\n' + PLACEHOLDER + '\n{{/info}}'],
+        ['warning', 'Warning', '{{warning:A title}}\n' + PLACEHOLDER + '\n{{/warning}}'],
+        ['expand', 'Expand', '{{expand:The title}}\n' + PLACEHOLDER + '\n{{/expand}}'],
         ['video', 'Video…', null],
         ['applet', 'Applet', '{{applet:dice fit=flow}}'],
         ['diagram', 'Diagram', '```mermaid\ngraph LR; A-->B;\n```'],
@@ -102,7 +102,7 @@
         ['glyph', 'Glyph', '{{glyph:check}}'],
         ['page', 'Page Link', '{{page:author}}'],
         ['anchor', 'Anchor', '{{anchor:name}}'],
-        ['draft-note', 'Note to Self', '{{draft-note}}\nCheck this date.\n{{/draft-note}}']
+        ['draft-note', 'Note to Self', '{{draft-note}}\n' + PLACEHOLDER + '\n{{/draft-note}}']
     ].map(function (x) { return { id: 'insert-sc-' + x[0], name: x[0], label: x[1], markdown: x[2], shortcode: true }; });
 
     /* A hosted video's shortcode, from its link, asked for. */

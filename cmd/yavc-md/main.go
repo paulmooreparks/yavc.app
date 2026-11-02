@@ -24,6 +24,7 @@ import (
 
 	"yavc.app/internal/pageview"
 	"yavc.app/internal/preview"
+	"yavc.app/internal/shortcodes"
 )
 
 type problem struct {
@@ -91,6 +92,13 @@ func main() {
 		blocks, _ := render(text)
 		doc := pageview.ParseDocument(text, pageview.Units(blocks))
 		return out(pageview.Fresh(doc.Content), nil)
+	}))
+	api.Set("container", fn(func(line string) string {
+		c, ok := shortcodes.ContainerOf(line)
+		if !ok {
+			return out(nil, errText("not a container's opening line"))
+		}
+		return out(map[string]any{"name": c.Name, "args": c.Args, "before": c.Before, "after": c.After, "sep": c.Separator, "open": shortcodes.OpenLine(c.Name, c.Args)}, nil)
 	}))
 	api.Set("source", fn(func(src string) string {
 		blocks, _ := render(src)

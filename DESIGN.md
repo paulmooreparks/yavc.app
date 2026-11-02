@@ -28,6 +28,8 @@ Each decision is dated and numbered so that later documents and cards can refer 
 
 15. **A page wraps to its pane** (2026-11-03, Paul asked whether text should wrap to the widest element or to the window). The Editor's Visual view and Preview are Markdown drawn for reading, not a printed page, so text wraps to the width of the pane, with the page's own margin, and nothing in the document makes the page wider: a picture scales down to the column, and a code block or a wide table scrolls within itself. A view sized to a printed page, for documents that will be printed or exported as pages, is open question 4.
 
+16. **Shortcodes are edited as rich text in the page view** (2026-11-03, Paul: editing them only as raw Markdown would stop people using the thing). A container shortcode is a box on the page whose body is edited as blocks, a block shortcode is a form, and a span shortcode is a mark. The design is `docs/page-view-design.md`.
+
 ## Addresses
 
 `yavc.app` serves the desktop. `yavc.app/{slug}` is an application's page on the main origin, which is what a window fetches and what a link from an article opens. `{slug}.yavc.app` serves the same application standalone. The engine answers both from one deployment: a wildcard DNS record points every subdomain at it, and the engine reads the host header to choose the standalone layout for the application whose slug matches. A subdomain whose slug matches no application redirects to the desktop.

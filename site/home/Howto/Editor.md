@@ -15,7 +15,7 @@ A file of the site opens read-only; Save As keeps an editable copy under `~`. A 
 Under View, for a Markdown file:
 
 - **Text** is the Markdown, in a code editor with syntax colouring, line wrapping and the usual keys.
-- **Visual** is the page as it will look, edited in place: type, select, format, and the Markdown follows. A block the page cannot draw as rich text, such as a column set or a figure, is drawn as it will show and edited as its Markdown in place.
+- **Visual** is the page as it will look, edited in place: type, select, format, and the Markdown follows. A tip, a note, an expand section or a column set is a box on the page, edited inside as any text is; a bar at its top changes its title, removes the box or edits it as Markdown, and Enter on an empty last line leaves it. A picture opens its dialog. A block the page cannot draw as rich text, such as a code block or a diagram, is drawn as it will show and edited as its Markdown in place.
 - **Split** is both side by side, kept in step.
 - **Preview** is the page as it will look, read-only.
 

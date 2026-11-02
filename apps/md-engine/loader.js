@@ -52,7 +52,7 @@
                     return out;
                 };
             }
-            return { preview: call('preview'), doc: call('doc'), markdown: call('markdown'), blocks: call('blocks'), source: call('source') };
+            return { preview: call('preview'), doc: call('doc'), markdown: call('markdown'), blocks: call('blocks'), source: call('source'), container: call('container') };
         })();
         ready.catch(function () { ready = null; });
         return ready;

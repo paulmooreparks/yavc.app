@@ -130,6 +130,24 @@ var schemaCache = null;
             return { src: d.getAttribute('data-src'), kind: d.getAttribute('data-kind') || 'text', html: window.yavcHTML.clean(d.getAttribute('data-html') || '') };
           } }],
           toDOM: function (n) { return ['div', { class: 'pm-source', 'data-src': n.attrs.src || '', 'data-kind': n.attrs.kind, 'data-html': n.attrs.html }]; } },
+        /* A container shortcode, a notice say, whose body is blocks edited
+           here, drawn inside the HTML the preview draws for it (before and
+           after); and a column set, a row of columns each a run of blocks
+           (docs/page-view-design.md). Both keep their opening and closing
+           lines, to be written back as they were. */
+        container: { group: 'block', content: 'block+', defining: true, isolating: true,
+          attrs: withPlace({ name: { default: 'note' }, args: { default: '' }, open: { default: '' }, close: { default: '' }, before: { default: '' }, after: { default: '' }, tail: { default: '' } }),
+          parseDOM: [{ tag: 'div.pm-box[data-name]:not([data-columns])', getAttrs: function (d) {
+            return { name: d.getAttribute('data-name'), args: d.getAttribute('data-args') || '', open: d.getAttribute('data-open') || '', close: d.getAttribute('data-close') || '',
+              before: window.yavcHTML.clean(d.getAttribute('data-before') || ''), after: window.yavcHTML.clean(d.getAttribute('data-after') || '') };
+          } }],
+          toDOM: function (n) { return ['div', { class: 'pm-box', 'data-name': n.attrs.name, 'data-args': n.attrs.args, 'data-open': n.attrs.open, 'data-close': n.attrs.close, 'data-before': n.attrs.before, 'data-after': n.attrs.after }, 0]; } },
+        columns: { group: 'block', content: 'column+', defining: true, isolating: true,
+          attrs: withPlace({ name: { default: 'columns' }, args: { default: '' }, open: { default: '' }, close: { default: '' }, before: { default: '' }, after: { default: '' }, sep: { default: 'column' }, seps: { default: null } }),
+          parseDOM: [{ tag: 'div.pm-box[data-columns]', getAttrs: function (d) { return { name: d.getAttribute('data-name') || 'columns', open: d.getAttribute('data-open') || '', close: d.getAttribute('data-close') || '' }; } }],
+          toDOM: function (n) { return ['div', { class: 'pm-box sc-columns', 'data-name': n.attrs.name, 'data-columns': '', 'data-open': n.attrs.open, 'data-close': n.attrs.close }, 0]; } },
+        column: { content: 'block+', isolating: true, attrs: { tail: { default: '' } },
+          parseDOM: [{ tag: 'div.pm-column' }], toDOM: function () { return ['div', { class: 'pm-column sc-column' }, 0]; } },
         text: { group: 'inline' },
         // A line break, as HTML pasted from another program can hold one.
         hard_break: { group: 'inline', inline: true, selectable: false, parseDOM: [{ tag: 'br' }], toDOM: function () { return ['br']; } },
@@ -175,6 +193,8 @@ var schemaCache = null;
        draw(el, html, diagrams) draws preview HTML into el, diagrams and images included
        keys()                   [{ key, run }], the Editor's key table in ProseMirror's spelling
        say(text, warn)          the Editor's status line
+       wrapOf(line)             a promise of a container's parts for its opening line
+                                ({ name, args, open, before, after }), for its Title dialog
        editBlock(src)           optional: a drawn block pressed; a promise of its new
                                 source, '' to take it out, or null; undefined to edit it here
        editBlock(src)           optional: a drawn block pressed; a promise of its new
@@ -216,7 +236,7 @@ var schemaCache = null;
           o.page.replaceChildren();
           view = new PM.EditorView(o.page, {
             state: state,
-            nodeViews: { source_block: sourceView },
+            nodeViews: { source_block: sourceView, container: boxView, columns: boxView },
             handlePaste: handlePaste,
             // HTML pasted from another program is made safe before the
             // editor reads it (safe-html.js).
@@ -590,6 +610,27 @@ var schemaCache = null;
         }
         return PM.splitListItem(n.list_item, task ? { checked: false } : undefined)(state, d);
       }
+      /* Enter on an empty last line of a box leaves the box, as it leaves a
+         list: the empty line goes, and a new one follows the box. */
+      function exitBox(state, d) {
+        var $c = state.selection.$from;
+        if (!state.selection.empty || $c.parent.type !== n.paragraph || $c.parent.content.size || $c.depth < 2) return false;
+        var depth = $c.depth - 1, box = $c.node(depth);
+        if (box.type !== n.container && box.type !== n.column) return false;
+        if ($c.index(depth) !== box.childCount - 1 || box.childCount < 2) return false;
+        var outer = depth;
+        if (box.type === n.column) {
+          var cols = $c.node(depth - 1);
+          if ($c.index(depth - 1) !== cols.childCount - 1) return false;
+          outer = depth - 1;
+        }
+        var after = $c.after(outer) - $c.parent.nodeSize;
+        var tr = state.tr.delete($c.before(depth + 1), $c.after(depth + 1));
+        tr.insert(after, n.paragraph.create());
+        tr.setSelection(PM.TextSelection.create(tr.doc, after + 1));
+        if (d) d(tr.scrollIntoView());
+        return true;
+      }
       return [
         taskBoxes(schema),
         suggestionPlugin(),
@@ -600,7 +641,7 @@ var schemaCache = null;
         PM.keymap({
           'Tab': PM.chainCommands(PM.goToNextCell(1), addRowAtEnd, sink),
           'Shift-Tab': PM.chainCommands(PM.goToNextCell(-1), lift),
-          'Enter': splitItem,
+          'Enter': PM.chainCommands(exitBox, splitItem),
           'Mod-z': PM.undo, 'Mod-y': PM.redo, 'Mod-Shift-z': PM.redo
         }),
         PM.keymap(PM.baseKeymap),
@@ -669,8 +710,15 @@ var schemaCache = null;
       var sel = state.selection;
       if (!sel.empty) return null;
       var $c = sel.$from, n = schema.nodes;
-      if ($c.parent.type !== n.paragraph || $c.depth !== 1) return null;
+      if ($c.parent.type !== n.paragraph || !inBody($c, n)) return null;
       return $c;
+    }
+    /* Whether a position's block sits directly in the page or in a box's
+       body (a container, or a column), where a block of its own can go. */
+    function inBody($c, n) {
+      if ($c.depth === 1) return true;
+      var parent = $c.depth > 1 ? $c.node($c.depth - 1).type : null;
+      return parent === n.container || parent === n.column;
     }
 
     /* The / menu: typed at the start of an empty line, it lists the blocks
@@ -795,8 +843,10 @@ var schemaCache = null;
     function insertPlace(state) {
       var sel = state.selection;
       if (sel instanceof PM.NodeSelection) return { from: sel.to, to: sel.to };
-      var $f = sel.$from, d = 1;
+      var $f = sel.$from, d = $f.depth, n = state.schema.nodes;
       if ($f.depth === 0) return { from: sel.from, to: sel.from };
+      // The block directly inside the nearest body: the page, or a box's.
+      while (d > 1) { var parent = $f.node(d - 1).type; if (parent === n.container || parent === n.column) break; d--; }
       var block = $f.node(d);
       if (block.isTextblock && block.content.size === 0) return { from: $f.before(d), to: $f.after(d) };
       return { from: $f.after(d), to: $f.after(d) };
@@ -951,6 +1001,116 @@ var schemaCache = null;
         selectNode: function () { dom.classList.add('selected'); },
         deselectNode: function () { dom.classList.remove('selected'); }
       };
+    }
+
+    /* A box: a container shortcode or a column set, its body edited as
+       blocks inside the HTML the preview draws for it. A bar at its top,
+       shown while the pointer or the keyboard is in it, changes its title,
+       adds a column, lifts its content onto the page, or turns it back into
+       Markdown (docs/page-view-design.md, decision 5). */
+    var BOX_TITLED = { info: 'Title', note: 'Title', tip: 'Title', warning: 'Title', expand: 'Title', 'class': 'Class' };
+    var BOX_NAMES = { info: 'Information', note: 'Note', tip: 'Tip', warning: 'Warning', expand: 'Expand', 'class': 'Style class', 'draft-note': 'Note to self', notes: 'Speaker notes', columns: 'Columns' };
+    function escText(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+    function boxView(node, v, getPos) {
+      var isColumns = node.type.name === 'columns', current = node, contentDOM;
+      var dom = document.createElement('div');
+      dom.className = 'pm-box';
+      dom.dataset.name = node.attrs.name;
+      var bar = document.createElement('div');
+      bar.className = 'pm-box-bar';
+      bar.contentEditable = 'false';
+      bar.innerHTML = '<span class="pm-box-kind">' + escText(BOX_NAMES[node.attrs.name] || node.attrs.name) + '</span>' +
+        (BOX_TITLED[node.attrs.name] ? '<button type="button" class="btn btn-sm" data-box="args">' + escText(BOX_TITLED[node.attrs.name]) + '…</button>' : '') +
+        (isColumns ? '<button type="button" class="btn btn-sm" data-box="column">Add a Column</button>' : '') +
+        '<button type="button" class="btn btn-sm" data-box="lift">Remove the Box</button>' +
+        '<button type="button" class="btn btn-sm" data-box="source">Edit as Markdown</button>';
+      bar.addEventListener('mousedown', function (e) { e.preventDefault(); });
+      bar.addEventListener('click', function (e) {
+        var b = e.target.closest('[data-box]');
+        if (b) boxAction(b.getAttribute('data-box'), current, getPos, v);
+      });
+      var frame;
+      if (isColumns) {
+        frame = document.createElement('div');
+        frame.className = 'pm-box-frame sc-columns';
+        contentDOM = frame;
+      } else {
+        frame = document.createElement('div');
+        frame.className = 'pm-box-frame';
+        frame.appendChild(window.yavcHTML.fragment((node.attrs.before || '<div>') + '<div class="pm-slot"></div>' + (node.attrs.after || '</div>')));
+        contentDOM = document.createElement('div');
+        contentDOM.className = 'pm-box-body';
+        var slot = frame.querySelector('.pm-slot');
+        if (slot) slot.replaceWith(contentDOM); else frame.appendChild(contentDOM);
+        // An expand section stays open while it is edited.
+        frame.querySelectorAll('details').forEach(function (det) { det.open = true; });
+        frame.querySelectorAll('summary').forEach(function (s) { s.addEventListener('click', function (e) { e.preventDefault(); }); });
+      }
+      dom.append(bar, frame);
+      return {
+        dom: dom, contentDOM: contentDOM,
+        update: function (nd) {
+          if (nd.type !== node.type || nd.attrs.before !== current.attrs.before || nd.attrs.after !== current.attrs.after) return false;
+          current = nd;
+          return true;
+        },
+        stopEvent: function (e) { return bar.contains(e.target); },
+        ignoreMutation: function (m) { return m.type !== 'selection' && !contentDOM.contains(m.target); }
+      };
+    }
+    function boxAction(action, node, getPos, v) {
+      var pos = getPos(), n = v.state.schema.nodes;
+      if (typeof pos !== 'number') return;
+      if (action === 'args') {
+        var ask = window.yavcMdEditor && window.yavcMdEditor.askText;
+        if (!ask) return;
+        ask(BOX_NAMES[node.attrs.name] || node.attrs.name, BOX_TITLED[node.attrs.name] || 'Arguments', node.attrs.args).then(function (args) {
+          if (args == null || !o.wrapOf) return;
+          var line = args.trim() ? '{{' + node.attrs.name + ':' + args.trim() + '}}' : '{{' + node.attrs.name + '}}';
+          return Promise.resolve(o.wrapOf(line)).then(function (info) {
+            var at = getPos(), now = typeof at === 'number' ? v.state.doc.nodeAt(at) : null;
+            if (!now || now.type !== node.type) return;
+            v.dispatch(v.state.tr.setNodeMarkup(at, null, Object.assign({}, now.attrs, { args: info.args, open: info.open, before: info.before, after: info.after })));
+            v.focus();
+          });
+        }).catch(function (err) { o.say(String(err && err.message || err), true); });
+        return;
+      }
+      if (action === 'column') {
+        var col = n.column.create(null, n.paragraph.create());
+        var tr = v.state.tr.insert(pos + node.nodeSize - 1, col);
+        tr.setSelection(PM.TextSelection.create(tr.doc, pos + node.nodeSize - 1 + 2));
+        v.dispatch(tr.scrollIntoView());
+        v.focus();
+        return;
+      }
+      if (action === 'lift') {
+        /* The blocks lose their place in the box, so they are written where
+           they land, after a blank line, as a new block is. */
+        var blocks = [];
+        function loose(b) { blocks.push(b.type.create(Object.assign({}, b.attrs, { uid: null, gap: null, src: b.type === n.source_block ? b.attrs.src : null }), b.content, b.marks)); }
+        if (node.type === n.columns) node.forEach(function (c) { c.forEach(loose); });
+        else node.forEach(loose);
+        var lifted = v.state.tr.replaceWith(pos, pos + node.nodeSize, PM.Fragment.fromArray(blocks));
+        lifted.setSelection(PM.TextSelection.near(lifted.doc.resolve(pos + 1)));
+        v.dispatch(lifted.scrollIntoView());
+        v.focus();
+        return;
+      }
+      if (action === 'source') {
+        Promise.resolve(o.markdownOf({ type: 'doc', attrs: { front: '', tail: '', crlf: false }, content: [node.toJSON()] })).then(function (text) {
+          var src = String(text || '').replace(/^\n+|\n+$/g, '');
+          var at = getPos(), now = typeof at === 'number' ? v.state.doc.nodeAt(at) : null;
+          if (!now || now.type !== node.type) return;
+          var block = n.source_block.create({ src: src, kind: 'shortcode', html: '', diagrams: null });
+          v.dispatch(v.state.tr.replaceWith(at, at + now.nodeSize, block));
+          return Promise.resolve(o.sourceOf(src)).then(function (r) {
+            var here = v.state.doc.nodeAt(at);
+            if (!here || here.type !== n.source_block || here.attrs.src !== src) return;
+            v.dispatch(v.state.tr.setNodeMarkup(at, null, Object.assign({}, here.attrs, { html: r.html, diagrams: r.diagrams })).setMeta('addToHistory', false));
+          });
+        }).catch(function (err) { o.say(String(err && err.message || err), true); });
+      }
     }
 
     /* A table's shape: rows and columns are added and deleted. Merged

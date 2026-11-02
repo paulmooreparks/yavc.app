@@ -43,7 +43,7 @@ Everything else is Markdown as the Editor draws it, shortcodes included: picture
 
 Slides opens with the deck's slides down the left (the filmstrip) and the current slide on its canvas. Three views, under View:
 
-- **Visual** edits the slide on its canvas. Type, select, format; headings, lists, pictures and the rest are drawn as they will show. A block the canvas cannot draw as rich text, such as a column set, is edited as its Markdown in place.
+- **Visual** edits the slide on its canvas. Type, select, format; headings, lists, pictures and the rest are drawn as they will show. A tip, a note, a column set or the speaker notes is a box on the canvas, edited inside as any text is, with a bar at its top for its title, for removing the box, or for editing it as Markdown. A block the canvas cannot draw as rich text, such as a code block, is edited as its Markdown in place.
 - **Text** edits the slide's Markdown.
 - **Split** shows both. View, Canvas puts the canvas left, right, above or below the Markdown, or lets it float over the Markdown as a panel you drag by its bar and resize by its corner.
 
@@ -65,7 +65,7 @@ Show, Present from the Start (Ctrl+Enter) presents full screen from the first sl
 
 Presenter Window opens a second browser window with the current slide, the next, the notes, a clock and a timer.
 
-![The presenter window](/static/shots/slides-presenter.jpg) Both windows follow each other, and either drives. Show, Presenter Window on Present opens it whenever a show starts. The window opens on the same address as the show, which matters because your files live per address.
+![The presenter window](/static/shots/slides-presenter.jpg) Both windows follow each other, and either drives. Show, Always Show Presenter Window opens it whenever a show starts. The window opens on the same address as the show, which matters because your files live per address.
 
 ## Colours
 

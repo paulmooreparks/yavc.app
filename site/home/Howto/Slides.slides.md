@@ -97,7 +97,7 @@ This is a tip, drawn on a slide exactly as it is on a page.
 - **Present from the Start** is Ctrl+Enter; **Present from This Slide** is Ctrl+Shift+Enter
 - Arrows, Space, Page Up and Down, Home and End move through the show; a number then Enter jumps; Escape leaves
 - A slide with `reveal=steps` shows its points one by one
-- **Presenter Window** opens a second window with the current slide, the next, your notes, a clock and a timer; Show, Presenter Window on Present opens it every time
+- **Presenter Window** opens a second window with the current slide, the next, your notes, a clock and a timer; Show, Always Show Presenter Window opens it every time
 
 ---
 

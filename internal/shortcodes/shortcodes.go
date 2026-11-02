@@ -144,6 +144,22 @@ type Block struct {
 
 var KindBlock = ast.NewNodeKind("ShortcodeBlock")
 
+// Closer is the {{/name}} line that ends a container. It stands in the
+// tree as a leaf of its own so that goldmark closes the container's open
+// blocks at that line (blockParser.Open), rather than reading the line
+// after it as a lazy continuation of a paragraph inside the container, as
+// it does when Continue consumes the line itself. It draws nothing.
+type Closer struct {
+	ast.BaseBlock
+}
+
+var KindCloser = ast.NewNodeKind("ShortcodeCloser")
+
+func (n *Closer) Kind() ast.NodeKind { return KindCloser }
+func (n *Closer) Dump(src []byte, level int) {
+	ast.DumpHelper(n, src, level, nil, nil)
+}
+
 func (n *Block) Kind() ast.NodeKind { return KindBlock }
 func (n *Block) Dump(src []byte, level int) {
 	ast.DumpHelper(n, src, level, map[string]string{"call": n.Call.Source()}, nil)
@@ -197,10 +213,38 @@ func (p *inlineParser) Parse(parent ast.Node, block text.Reader, pc parser.Conte
 
 type blockParser struct{}
 
+// takeLine consumes a line a block parser has read, up to its newline:
+// goldmark moves past the newline itself, and a parser that takes it too
+// makes goldmark skip the line after.
+func takeLine(reader text.Reader, line []byte) {
+	n := len(line)
+	if n > 0 && line[n-1] == '\n' {
+		n--
+	}
+	reader.Advance(n)
+}
+
 func (p *blockParser) Trigger() []byte { return []byte{'{'} }
 
 func (p *blockParser) Open(parent ast.Node, reader text.Reader, pc parser.Context) (ast.Node, parser.State) {
 	line, _ := reader.PeekLine()
+	// The closing line of an open container: goldmark asks the open
+	// blocks' parent for a new block here, after Continue said the
+	// container ends (see Closer).
+	if m := closeLineRe.FindSubmatch(line); m != nil {
+		var open *Block
+		for _, b := range pc.OpenedBlocks() {
+			if blk, ok := b.Node.(*Block); ok && blk.Call.Name == string(m[1]) && !blk.Closed {
+				open = blk
+			}
+		}
+		if open == nil {
+			return nil, parser.NoChildren
+		}
+		open.Closed = true
+		takeLine(reader, line)
+		return &Closer{}, parser.NoChildren
+	}
 	m := lineRe.FindSubmatch(line)
 	if m == nil {
 		return nil, parser.NoChildren
@@ -209,15 +253,19 @@ func (p *blockParser) Open(parent ast.Node, reader text.Reader, pc parser.Contex
 	if def == nil || def.kind != container {
 		return nil, parser.NoChildren
 	}
-	reader.Advance(len(line))
+	takeLine(reader, line)
 	return &Block{Call: NewCall(string(m[1]), string(m[2]))}, parser.HasChildren
 }
 
 func (p *blockParser) Continue(node ast.Node, reader text.Reader, pc parser.Context) parser.State {
+	// A closer ends at once, so the line after it is the parent's.
+	if _, ok := node.(*Closer); ok {
+		return parser.Close
+	}
 	line, _ := reader.PeekLine()
+	// The container's own closing line ends it; the line itself is left
+	// for Open to take, in the parent, which closes the blocks open inside.
 	if m := closeLineRe.FindSubmatch(line); m != nil && string(m[1]) == node.(*Block).Call.Name {
-		reader.Advance(len(line))
-		node.(*Block).Closed = true
 		return parser.Close
 	}
 	return parser.Continue | parser.HasChildren
@@ -269,6 +317,54 @@ func spanOf(d *def) func(c Call) (string, string, error) {
 }
 
 func add(d *def) { table[d.name] = d }
+
+// Container is what an editor needs to edit a container shortcode's body
+// as rich text (internal/pageview, docs/page-view-design.md): its HTML
+// before and after the body, and the block shortcode that divides the body
+// into parts, if it has one.
+type Container struct {
+	Name, Args    string
+	Before, After string
+	Separator     string
+}
+
+// sourceOnly are the containers whose body is not rich text.
+var sourceOnly = map[string]bool{"style": true}
+
+// ContainerOf reads a container's opening line, {{name}} or {{name:args}}
+// on a line of its own, and gives its parts; ok is false for any other
+// line, and for a container whose body is edited as source.
+func ContainerOf(line string) (Container, bool) {
+	m := lineRe.FindStringSubmatch(line)
+	if m == nil {
+		return Container{}, false
+	}
+	d := table[m[1]]
+	if d == nil || d.kind != container || d.wrap == nil || sourceOnly[d.name] {
+		return Container{}, false
+	}
+	c := NewCall(m[1], m[2])
+	before, after, err := d.wrap(c)
+	if err != nil {
+		return Container{}, false
+	}
+	return Container{Name: d.name, Args: c.Args, Before: before, After: after, Separator: d.separator}, true
+}
+
+// ClosesContainer says whether a line is {{/name}} on its own.
+func ClosesContainer(line, name string) bool {
+	m := closeLineRe.FindStringSubmatch(line)
+	return m != nil && m[1] == name
+}
+
+// OpenLine writes a container's opening line for its arguments.
+func OpenLine(name, args string) string {
+	args = strings.TrimSpace(args)
+	if args == "" {
+		return "{{" + name + "}}"
+	}
+	return "{{" + name + ":" + args + "}}"
+}
 
 // Definitions lists the shortcodes, for an editor's Insert menu.
 type Definition struct {
@@ -777,6 +873,9 @@ type htmlRenderer struct{}
 func (r *htmlRenderer) RegisterFuncs(reg renderer.NodeRendererFuncRegisterer) {
 	reg.Register(KindInline, r.inline)
 	reg.Register(KindBlock, r.block)
+	reg.Register(KindCloser, func(w util.BufWriter, src []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
+		return ast.WalkContinue, nil
+	})
 	reg.Register(ast.KindParagraph, r.paragraph)
 }
 

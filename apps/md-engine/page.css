@@ -101,6 +101,21 @@
 .md-swatches { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .md-swatch-dot { display: inline-block; width: 0.9em; height: 0.9em; border-radius: 50%; border: 1px solid var(--border); margin-inline-end: 0.4em; vertical-align: -0.1em; }
 
+/* A box on the page (page-view.js boxView): a container shortcode or a
+   column set edited in place. Its bar sits over its top edge and shows
+   while the pointer or the keyboard is in the box. */
+.doc-page.page-view .pm-box { position: relative; margin-top: var(--space-4); }
+.doc-page.page-view .pm-box-bar { position: absolute; top: -14px; right: var(--space-3); z-index: 2; display: flex; align-items: center; gap: var(--space-1); opacity: 0; transition: opacity .12s; }
+.doc-page.page-view .pm-box:hover > .pm-box-bar, .doc-page.page-view .pm-box:focus-within > .pm-box-bar { opacity: 1; }
+/* The box's extent shows while it is worked in, since an expand section has no edge of its own. */
+.doc-page.page-view .pm-box:hover > .pm-box-frame, .doc-page.page-view .pm-box:focus-within > .pm-box-frame { outline: 1px dashed var(--input-border); outline-offset: 4px; border-radius: var(--radius-sm); }
+.doc-page.page-view .pm-box-kind { font-size: var(--text-2xs); font-weight: 700; text-transform: uppercase; color: var(--text-muted); padding: 0 var(--space-2); background: var(--surface); border-radius: var(--radius-sm); }
+.doc-page.page-view .pm-box-frame > :first-child { margin-top: 0; }
+.doc-page.page-view .pm-box-body > :last-child, .doc-page.page-view .pm-column > :last-child { margin-bottom: 0; }
+.doc-page.page-view .pm-box .sc-expand > summary { pointer-events: none; }
+.doc-page.page-view .pm-column { min-width: 0; padding: var(--space-2); border: 1px dashed transparent; border-radius: var(--radius-sm); }
+.doc-page.page-view .pm-box:hover .pm-column, .doc-page.page-view .pm-box:focus-within .pm-column { border-color: var(--input-border); }
+
 /* A picture never widens the page: it scales to the column, as a figure's
    does; code and tables scroll within themselves (DESIGN.md, decision 15). */
 .doc-page img { max-width: 100%; height: auto; }

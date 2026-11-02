@@ -7,6 +7,9 @@ import (
 	"errors"
 	"html"
 	"strings"
+
+	"yavc.app/internal/preview"
+	"yavc.app/internal/shortcodes"
 )
 
 // A whole document in the editor. ParseDocument turns a document's text and
@@ -146,7 +149,91 @@ func (b *builder) node(u Unit, src string) *Node {
 			return n
 		}
 	}
+	if u.Kind == "shortcode" {
+		if n := b.container(src); n != nil {
+			return n
+		}
+	}
 	return b.source(u.Kind, src, u.HTML, u.Diagrams)
+}
+
+// A container shortcode's text is its opening line, its body and its
+// closing line (docs/page-view-design.md). The body is read as a document
+// of its own, so its blocks are edited as the page's are, and written back
+// between the two lines as they were.
+func containerParts(src string) (open, body, close string, info shortcodes.Container, ok bool) {
+	nl := strings.IndexByte(src, '\n')
+	if nl < 0 {
+		return
+	}
+	open = src[:nl]
+	info, ok = shortcodes.ContainerOf(open)
+	if !ok {
+		return
+	}
+	last := strings.LastIndexByte(src, '\n')
+	close = src[last+1:]
+	if !shortcodes.ClosesContainer(close, info.Name) {
+		ok = false
+		return
+	}
+	if last > nl {
+		body = src[nl+1 : last]
+	}
+	return
+}
+
+func (b *builder) container(src string) *Node {
+	open, body, close, info, ok := containerParts(src)
+	if !ok {
+		return nil
+	}
+	attrs := map[string]any{"uid": b.next(), "src": src, "name": info.Name, "args": info.Args, "open": open, "close": close, "before": info.Before, "after": info.After}
+	if info.Separator != "" {
+		parts, seps := splitBody(body, info.Separator)
+		cols := &Node{Type: "columns", Attrs: attrs}
+		attrs["sep"] = info.Separator
+		attrs["seps"] = seps
+		for _, part := range parts {
+			content, tail := b.body(part)
+			cols.Content = append(cols.Content, &Node{Type: "column", Attrs: map[string]any{"tail": tail}, Content: content})
+		}
+		return cols
+	}
+	content, tail := b.body(body)
+	attrs["tail"] = tail
+	return &Node{Type: "container", Attrs: attrs, Content: content}
+}
+
+// splitBody divides a container's body at each line that is its separator
+// shortcode alone, keeping those lines as they were.
+func splitBody(body, sep string) ([]string, []string) {
+	var parts, seps []string
+	var part []string
+	for _, line := range strings.Split(body, "\n") {
+		if strings.TrimSpace(line) == "{{"+sep+"}}" {
+			parts = append(parts, strings.Join(part, "\n"))
+			seps = append(seps, line)
+			part = nil
+			continue
+		}
+		part = append(part, line)
+	}
+	parts = append(parts, strings.Join(part, "\n"))
+	return parts, seps
+}
+
+// body reads a container's body as blocks, with the blank text after the
+// last one. An empty body gives one empty paragraph to type into.
+func (b *builder) body(text string) ([]*Node, string) {
+	blocks, _ := preview.Render(text)
+	inner := builder{text: text, starts: lineStarts(text), uid: b.uid}
+	content, tail := inner.sequence(Units(blocks), 0, len(text))
+	b.uid = inner.uid
+	if len(content) == 0 {
+		content = []*Node{{Type: "paragraph"}}
+	}
+	return content, tail
 }
 
 func (b *builder) source(kind, src, html string, diagrams any) *Node {
@@ -166,6 +253,9 @@ func Fresh(nodes []*Node) []*Node {
 		delete(n.Attrs, "gap")
 		if n.Type != "source_block" {
 			delete(n.Attrs, "src")
+		}
+		if n.Type == "container" || n.Type == "columns" || n.Type == "column" {
+			Fresh(n.Content)
 		}
 	}
 	return nodes
@@ -228,7 +318,14 @@ func blockText(n *Node) (string, error) {
 	if n.Type == "source_block" {
 		return stringAttr(n, "src"), nil
 	}
-	s, err := serializeBlock(n, "")
+	var s string
+	var err error
+	switch n.Type {
+	case "container", "columns":
+		s, err = containerText(n)
+	default:
+		s, err = serializeBlock(n, "")
+	}
 	if err != nil {
 		return "", err
 	}
@@ -238,6 +335,56 @@ func blockText(n *Node) (string, error) {
 		return src, nil
 	}
 	return s, nil
+}
+
+// containerText writes a container: its opening line, the body's blocks
+// (each column's, divided by the separator lines), the blank text after
+// them, and the closing line. The lines are as they were read, or made for
+// a container new to the document.
+func containerText(n *Node) (string, error) {
+	name := stringAttr(n, "name")
+	open := stringAttr(n, "open")
+	if open == "" {
+		open = shortcodes.OpenLine(name, stringAttr(n, "args"))
+	}
+	close := stringAttr(n, "close")
+	if close == "" {
+		close = "{{/" + name + "}}"
+	}
+	var body string
+	if n.Type == "columns" {
+		sep := stringAttr(n, "sep")
+		if sep == "" {
+			sep = "column"
+		}
+		seps, _ := n.Attrs["seps"].([]any)
+		for i, col := range n.Content {
+			text, err := sequenceText(col.Content, "")
+			if err != nil {
+				return "", err
+			}
+			if i > 0 {
+				line := "{{" + sep + "}}"
+				if i-1 < len(seps) {
+					if s, ok := seps[i-1].(string); ok && s != "" {
+						line = s
+					}
+				}
+				body += "\n" + line + "\n"
+			}
+			body += text + stringAttr(col, "tail")
+		}
+	} else {
+		text, err := sequenceText(n.Content, "")
+		if err != nil {
+			return "", err
+		}
+		body = text + stringAttr(n, "tail")
+	}
+	if body == "" {
+		return open + "\n" + close, nil
+	}
+	return open + "\n" + body + "\n" + close, nil
 }
 
 func stringAttr(n *Node, key string) string {
