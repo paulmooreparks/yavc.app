@@ -109,7 +109,7 @@ var schemaCache = null;
             } }],
           toDOM: function (n) {
             if (n.attrs.checked === null) return ['li', 0];
-            var box = { type: 'checkbox', tabindex: '0', 'aria-label': n.attrs.checked ? 'Done' : 'Not done' };
+            var box = { type: 'checkbox', tabindex: '0', 'aria-label': n.attrs.checked ? 'Done' : 'Not Done' };
             if (n.attrs.checked) box.checked = '';
             return ['li', { class: 'pm-task' }, ['span', { class: 'pm-check', contenteditable: 'false' }, ['input', box]], ['div', { class: 'pm-task-body' }, 0]];
           } },
@@ -253,7 +253,7 @@ var schemaCache = null;
             // editor reads it (safe-html.js).
             transformPastedHTML: function (html) { return window.yavcHTML.clean(html); },
             dispatchTransaction: dispatch,
-            attributes: { 'aria-label': 'The document, as its page' }
+            attributes: { 'aria-label': 'The Document, as Its Page' }
           });
         }
         shown = text;
@@ -1014,7 +1014,7 @@ var schemaCache = null;
         box.className = 'form-textarea page-source';
         box.spellcheck = false;
         box.value = shownNode.attrs.src || '';
-        box.setAttribute('aria-label', 'The Markdown of this block');
+        box.setAttribute('aria-label', 'The Markdown of This Block');
         dom.replaceChildren(box);
         function fit() { box.style.height = 'auto'; box.style.height = box.scrollHeight + 2 + 'px'; }
         box.addEventListener('input', fit);
@@ -1093,7 +1093,7 @@ var schemaCache = null;
        adds a column, lifts its content onto the page, or turns it back into
        Markdown (docs/page-view-design.md, decision 5). */
     var BOX_TITLED = { info: 'Title', note: 'Title', tip: 'Title', warning: 'Title', expand: 'Title', 'class': 'Class' };
-    var BOX_NAMES = { info: 'Information', note: 'Note', tip: 'Tip', warning: 'Warning', expand: 'Expand', 'class': 'Style class', 'draft-note': 'Note to self', notes: 'Speaker notes', columns: 'Columns' };
+    var BOX_NAMES = { info: 'Information', note: 'Note', tip: 'Tip', warning: 'Warning', expand: 'Expand', 'class': 'Style Class', 'draft-note': 'Note to Self', notes: 'Speaker Notes', columns: 'Columns' };
     function escText(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
     function boxView(node, v, getPos) {
       var isColumns = node.type.name === 'columns', current = node, contentDOM;
@@ -1156,7 +1156,7 @@ var schemaCache = null;
       var dom = document.createElement('span'), current = node;
       dom.className = 'pm-sc';
       dom.contentEditable = 'false';
-      dom.title = 'Change it';
+      dom.title = 'Change It';
       function draw(nd) { dom.replaceChildren(window.yavcHTML.fragment(nd.attrs.html || nd.attrs.src)); }
       draw(node);
       dom.addEventListener('mousedown', function (e) {

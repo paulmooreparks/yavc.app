@@ -146,13 +146,13 @@
                table and toolbars() (PUDL 0.68.0), folding its groups as the
                window narrows. */
             '<div class="ed-toolbar-slot" data-toolbar-slot></div>' +
-            '<div class="tablist doc-tabs ed-tabs" role="tablist" aria-label="Open files" data-role="tabs"></div>' +
+            '<div class="tablist doc-tabs ed-tabs" role="tablist" aria-label="Open Files" data-role="tabs"></div>' +
             /* PUDL's splitter divides the Explorer from the work. */
             '<div class="ed-panes split" data-role="panes">' +
               /* The Explorer: the shared file browser's tree, files and all
                  (js/filebrowser.js), filled once the filesystem loads. */
               '<nav class="ed-explorer split-pane" data-role="explorer" aria-label="Files" hidden></nav>' +
-              '<div class="split-handle ed-split" data-role="explorer-split" aria-label="Resize the files" data-split-min="160" data-split-max="50%" hidden></div>' +
+              '<div class="split-handle ed-split" data-role="explorer-split" aria-label="Resize the Files" data-split-min="160" data-split-max="50%" hidden></div>' +
               '<div class="ed-work split-pane">' +
                 '<div class="code-surface ed-surface" data-role="surface"></div>' +
                 /* The page: the document as its page (page-view.js), edited
@@ -227,7 +227,7 @@
             if (/^~\/bin\/|^\/bin\/|\.sh$/i.test(p)) { return 'script'; }
             return 'text';
         }
-        var LANG_NAMES = { markdown: 'Markdown', json: 'JSON', script: 'Script', text: 'Plain text' };
+        var LANG_NAMES = { markdown: 'Markdown', json: 'JSON', script: 'Script', text: 'Plain Text' };
         /* === Shortcodes in the text =========================================
            A {{shortcode}} is marked as one, its name and its arguments in
            their own colours; {{ offers the shortcodes' names and, inside a
@@ -589,7 +589,7 @@
             /* The dialog stays open while the file is written, and says
                there why it couldn't be. */
             var res = await FB.pick(F, {
-                mode: 'save', title: t.readOnly ? 'Save a copy' : 'Save as', host: root, start: (F && F.resolve(F.home(), '~/Documents')) ? '~/Documents' : '~',
+                mode: 'save', title: t.readOnly ? 'Save a Copy' : 'Save As', host: root, start: (F && F.resolve(F.home(), '~/Documents')) ? '~/Documents' : '~',
                 start: startDir, name: name, current: t.readOnly ? null : t.path, computer: true,
                 commit: function (c) { return c.download ? true : writeTo(t, c.path, true); }
             });
@@ -931,7 +931,7 @@
                 if (pageActive() && visual.api.sync) { await visual.api.sync(); }
                 var m = await mdEngine(), text = view.state.doc.toString();
                 var front = m.front(text);
-                var r = await window.yavcMdEditor.askProperties(front, { title: 'Properties of ' + (t.name || 'the document') });
+                var r = await window.yavcMdEditor.askProperties(front, { title: 'Properties of ' + (t.name || 'the Document') });
                 if (!r || !r.order.length) { return; }
                 if (view.state.doc.toString() !== text) { say('The document changed while the dialog was open, so the properties were not written. Try again.', true); return; }
                 var next = m.frontset({ text: text, set: r.set, order: r.order }).text;
@@ -969,7 +969,7 @@
             var dom = document.createElement('div');
             dom.className = 'ed-find';
             dom.setAttribute('role', 'search');
-            dom.setAttribute('aria-label', 'Find and replace');
+            dom.setAttribute('aria-label', 'Find and Replace');
             var g = function (name) { return '<span class="glyph" style="--glyph: var(--glyph-' + name + ')" aria-hidden="true"></span>'; };
             /* The grid inside the bar, so the bar's own width can set it out
                (a container query in css/editor.css). */
@@ -978,8 +978,8 @@
                   '<input class="form-input ed-find-field" type="text" data-find="search" placeholder="Find" aria-label="Find" autocomplete="off" spellcheck="false" main-field="true" />' +
                   '<span class="ed-find-tools">' +
                     '<span class="ed-find-count" data-find="count" aria-live="polite"></span>' +
-                    '<button type="button" class="btn btn-sm" data-find="prev" aria-label="Previous Match" title="Previous match (Shift+Enter)">' + g('arrow-up') + '</button>' +
-                    '<button type="button" class="btn btn-sm" data-find="next" aria-label="Next Match" title="Next match (Enter)">' + g('arrow-down') + '</button>' +
+                    '<button type="button" class="btn btn-sm" data-find="prev" aria-label="Previous Match" title="Previous Match (Shift+Enter)">' + g('arrow-up') + '</button>' +
+                    '<button type="button" class="btn btn-sm" data-find="next" aria-label="Next Match" title="Next Match (Enter)">' + g('arrow-down') + '</button>' +
                     '<span class="ed-find-opts" role="group" aria-label="Options">' + FIND_OPTS.map(function (o) {
                         return '<button type="button" class="btn btn-sm ed-find-opt" data-opt="' + o[0] + '" aria-pressed="false" aria-label="' + o[2] + '" title="' + o[2] + '">' + o[1] + '</button>';
                     }).join('') + '</span>' +
@@ -987,10 +987,10 @@
                   '</span>' +
                 '</div>' +
                 '<div class="ed-find-row" data-find="replace-row">' +
-                  '<input class="form-input ed-find-field" type="text" data-find="replace" placeholder="Replace with" aria-label="Replace with" autocomplete="off" spellcheck="false" />' +
+                  '<input class="form-input ed-find-field" type="text" data-find="replace" placeholder="Replace With" aria-label="Replace With" autocomplete="off" spellcheck="false" />' +
                   '<span class="ed-find-tools">' +
-                    '<button type="button" class="btn btn-sm" data-find="replace-one" title="Replace this match (Enter)">Replace</button>' +
-                    '<button type="button" class="btn btn-sm" data-find="replace-all" title="Replace every match (Ctrl+Enter)">Replace All</button>' +
+                    '<button type="button" class="btn btn-sm" data-find="replace-one" title="Replace This Match (Enter)">Replace</button>' +
+                    '<button type="button" class="btn btn-sm" data-find="replace-all" title="Replace Every Match (Ctrl+Enter)">Replace All</button>' +
                   '</span>' +
                 '</div>' +
             '</div>';

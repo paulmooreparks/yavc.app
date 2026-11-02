@@ -60,11 +60,11 @@
                 '<div class="fm-detail" data-role="detail" aria-live="polite"></div>' +
                 '<p class="fm-status" data-role="status" role="status" aria-live="polite"></p>' +
                 '<dialog class="dialog" data-role="help-dialog" aria-labelledby="fm-help-title-' + n + '">' +
-                  '<h3 class="dialog-title" id="fm-help-title-' + n + '">Files quick help</h3>' +
+                  '<h3 class="dialog-title" id="fm-help-title-' + n + '">Files Quick Help</h3>' +
                   '<div class="dialog-body">' +
                     '<p>Browse the site in <code>/site</code>, or choose the home button to manage your own files in <code>~</code>. Select an entry to see its details; double-click or press Enter to open it.</p>' +
                     '<p>The toolbar and the Folder menu offer commands for the current selection and folder. In your home directory you can create files and folders, upload files, rename, move, and delete. Download saves a copy to your computer.</p>' +
-                    '<p>Use View &gt; Files &gt; Show hidden files to reveal names starting with a dot. With the list focused, Backspace goes up a folder, F2 renames a selected personal file, and Delete asks before deleting it.</p>' +
+                    '<p>Use View &gt; Files &gt; Show Hidden Files to reveal names starting with a dot. With the list focused, Backspace goes up a folder, F2 renames a selected personal file, and Delete asks before deleting it.</p>' +
                     '<p>On yavc.app, your personal file contents are never sent to the servers. Files keeps your data in this browser&apos;s local storage. Upload imports a file into that storage: text into local storage, a picture or any other file into the browser&apos;s database. Other browsers and devices do not share it; clearing site data removes it. Download important files for safekeeping.</p>' +
                     (mounted ? '<p>You are using the admin site. Its mounted home and server folders are server-backed; changes there are sent to the server.</p>' : '') +
                     '<p><a href="/page/files-guide" data-action="help-guide">Read the complete Files guide</a> for commands, storage limits, and troubleshooting.</p>' +
@@ -278,7 +278,7 @@
                 case 'download': if (c) { download(c); } return;
                 case 'copy': if (c) { await copyHome(c); } return;
                 case 'new-file': {
-                    var name = await window.yavcDialog.askText('New file', 'Name', '', { text: 'In ' + F.displayPath(dir), okLabel: 'Create', validate: nameCheck });
+                    var name = await window.yavcDialog.askText('New File', 'Name', '', { text: 'In ' + F.displayPath(dir), okLabel: 'Create', validate: nameCheck });
                     if (name == null) { return; }
                     var res = await F.write(dir, name, '', false);
                     if (res.error) { say(res.error, true); return; }
@@ -286,7 +286,7 @@
                     return;
                 }
                 case 'new-folder': {
-                    var dname = await window.yavcDialog.askText('New folder', 'Name', '', { text: 'In ' + F.displayPath(dir), okLabel: 'Create', validate: nameCheck });
+                    var dname = await window.yavcDialog.askText('New Folder', 'Name', '', { text: 'In ' + F.displayPath(dir), okLabel: 'Create', validate: nameCheck });
                     if (dname == null) { return; }
                     var e1 = await F.mkdir(dir, dname, false);
                     if (e1) { say(e1, true); return; }
@@ -296,7 +296,7 @@
                 case 'upload': el.fileInput.value = ''; el.fileInput.click(); return;
                 case 'rename': {
                     if (!c) { return; }
-                    var nn = await window.yavcDialog.askText('Rename', 'New name for ' + c.name, c.name, { okLabel: 'Rename', validate: function (v) { return v === c.name ? null : nameCheck(v); } });
+                    var nn = await window.yavcDialog.askText('Rename', 'New Name for ' + c.name, c.name, { okLabel: 'Rename', validate: function (v) { return v === c.name ? null : nameCheck(v); } });
                     if (nn == null || nn === c.name) { return; }
                     var e2 = await F.move(dir, c, nn);
                     if (e2) { say(e2, true); return; }
@@ -305,7 +305,7 @@
                 }
                 case 'move': {
                     if (!c) { return; }
-                    var dest = await window.yavcDialog.askText('Move ' + c.name, 'To the folder', F.displayPath(dir), { help: 'For example ~/notes', okLabel: 'Move', validate: function (v) {
+                    var dest = await window.yavcDialog.askText('Move ' + c.name, 'To the Folder', F.displayPath(dir), { help: 'For example ~/notes', okLabel: 'Move', validate: function (v) {
                         var d = F.resolve(dir, v);
                         if (!d || !d.children) { return 'There\'s no folder at ' + v + '.'; }
                         if (!d.home) { return 'Only folders in your home directory (~)' + (F.mounted ? ' or under /wwwroot' : '') + ' can take it.'; }

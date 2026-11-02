@@ -131,7 +131,7 @@
         }
         if (name === 'link') {
             var chosen = state.sliceDoc(sel.from, sel.to);
-            askText('Link to', 'The address', /^https?:\/\//.test(chosen) ? chosen : 'https://').then(function (href) {
+            askText('Link', 'Address', /^https?:\/\//.test(chosen) ? chosen : 'https://').then(function (href) {
                 if (!href) { view.focus(); return; }
                 var label = chosen && !/^https?:\/\//.test(chosen) ? chosen : href;
                 var md = '[' + label + '](' + href + ')';
@@ -337,7 +337,7 @@
         return fields.map(function (f, k) {
             var id = 'md-col-' + dlgCount + '-' + k, v = f.value || '';
             return '<div class="form-group md-colour-row"><label class="form-label" for="' + id + '">' + esc(f.label) + '</label>' +
-                '<div class="md-colour-pair"><input type="color" class="md-colour-pick" aria-label="' + esc(f.label) + ' picker" data-for="' + id + '" value="' + esc(/^#[0-9a-f]{6}$/i.test(v) ? v : (f.fallback || '#000000')) + '">' +
+                '<div class="md-colour-pair"><input type="color" class="md-colour-pick" aria-label="' + esc(f.label) + ' Picker" data-for="' + id + '" value="' + esc(/^#[0-9a-f]{6}$/i.test(v) ? v : (f.fallback || '#000000')) + '">' +
                 '<input class="form-input" id="' + id + '" data-key="' + esc(f.key) + '" value="' + esc(v) + '" placeholder="' + esc(f.placeholder || '') + '" autocomplete="off" spellcheck="false"' + (f.help ? ' aria-describedby="' + id + '-help"' : '') + '></div>' +
                 (f.help ? '<p class="form-help" id="' + id + '-help">' + esc(f.help) + '</p>' : '') + '</div>';
         }).join('');
@@ -355,10 +355,10 @@
     /* The colour for some words: a swatch, or anything typed; '' takes the
        colour off; null is Cancel. */
     function askColour() {
-        var html = '<div class="form-group"><span class="form-label">The site\'s colours</span><div class="md-swatches" role="group" aria-label="The site\'s colours">' +
+        var html = '<div class="form-group"><span class="form-label">The Site\'s Colours</span><div class="md-swatches" role="group" aria-label="The Site\'s Colours">' +
             SWATCHES.map(function (s) { return '<button type="button" class="btn md-swatch" data-swatch="' + s[0] + '"><span class="md-swatch-dot" style="background:' + swatchCSS(s[0]) + '" aria-hidden="true"></span>' + s[1] + '</button>'; }).join('') + '</div></div>' +
-            pickerRows([{ key: 'custom', label: 'Any colour', value: '', fallback: '#c0392b', placeholder: '#c0392b, tomato, hsl(200 60% 40%); empty takes the colour off' }]);
-        return dialog('Colour the words', html, [{ id: 'cancel', label: 'Cancel' }, { id: 'ok', label: 'Use this colour', primary: true }],
+            pickerRows([{ key: 'custom', label: 'Any Colour', value: '', fallback: '#c0392b', placeholder: '#c0392b, tomato, hsl(200 60% 40%); empty takes the colour off' }]);
+        return dialog('Colour the Words', html, [{ id: 'cancel', label: 'Cancel' }, { id: 'ok', label: 'Use This Colour', primary: true }],
             function (api) { wirePickers(api.body); wireSwatches(api); }).then(function (r) {
             if (r.value && r.value.indexOf('swatch:') === 0) { return r.value.slice(7); }
             if (r.value !== 'ok') { return null; }
@@ -369,10 +369,10 @@
        any name; '' takes the class off; null is Cancel. */
     function askClass(names) {
         var id = 'md-dlg-field-' + (dlgCount + 1);
-        var html = (names && names.length ? '<div class="form-group"><span class="form-label">The stylesheet\'s classes</span><div class="md-swatches" role="group" aria-label="Classes">' +
+        var html = (names && names.length ? '<div class="form-group"><span class="form-label">The Stylesheet\'s Classes</span><div class="md-swatches" role="group" aria-label="Classes">' +
             names.map(function (c) { return '<button type="button" class="btn md-swatch" data-swatch="' + esc(c) + '">' + esc(c) + '</button>'; }).join('') + '</div></div>' : '<p class="form-help">The deck has no stylesheet classes yet. A {{style}} block defines them, as .callout { … }.</p>') +
-            '<div class="form-group"><label class="form-label" for="' + id + '">Any class</label><input class="form-input" id="' + id + '" autocomplete="off" spellcheck="false" placeholder="callout; empty takes the class off"></div>';
-        return dialog('Style the words', html, [{ id: 'cancel', label: 'Cancel' }, { id: 'ok', label: 'Use this style', primary: true }], wireSwatches).then(function (r) {
+            '<div class="form-group"><label class="form-label" for="' + id + '">Any Class</label><input class="form-input" id="' + id + '" autocomplete="off" spellcheck="false" placeholder="callout; empty takes the class off"></div>';
+        return dialog('Style the Words', html, [{ id: 'cancel', label: 'Cancel' }, { id: 'ok', label: 'Use This Style', primary: true }], wireSwatches).then(function (r) {
             if (r.value && r.value.indexOf('swatch:') === 0) { return r.value.slice(7); }
             if (r.value !== 'ok') { return null; }
             return (r.body.querySelector('input') || { value: '' }).value.trim().replace(/[^A-Za-z0-9-]/g, '');
@@ -497,12 +497,12 @@
             '<div class="md-figure-src"><input class="form-input" id="' + id + 'src" data-key="src" value="' + esc(f ? f.src : '') + '" autocomplete="off" spellcheck="false" placeholder="cat.png, ~/Pictures/cat.png or https://…" required>' +
             (pictures ? '<button type="button" class="btn" data-act="browse">Browse…</button><button type="button" class="btn" data-act="upload">Upload…</button>' : '') + '</div>' +
             '<p class="form-help">A picture beside the document, one in your home folder, one of the site\'s, or an address on the web.</p>' +
-            '<label class="form-label" for="' + id + 'alt">What it shows</label>' +
+            '<label class="form-label" for="' + id + 'alt">What It Shows</label>' +
             '<input class="form-input" id="' + id + 'alt" data-key="alt" value="' + esc(f ? f.alt : '') + '" autocomplete="off">' +
             '<p class="form-help">For someone who can\'t see it. Leave it empty for a picture that only decorates.</p>' +
-            '<label class="form-label" for="' + id + 'width">Largest width</label>' +
+            '<label class="form-label" for="' + id + 'width">Largest Width</label>' +
             '<div class="md-figure-width"><span class="number-field"><input class="form-input" type="number" id="' + id + 'width" data-key="width" value="' + esc(width.n) + '" min="1" step="1" placeholder="Column"></span>' +
-            '<span class="form-select-wrap"><select class="form-select" data-key="unit" aria-label="Unit of the width">' + WIDTH_UNITS.map(function (u) { return '<option value="' + u + '"' + (u === width.u ? ' selected' : '') + '>' + u + '</option>'; }).join('') + '</select></span></div>' +
+            '<span class="form-select-wrap"><select class="form-select" data-key="unit" aria-label="Unit of the Width">' + WIDTH_UNITS.map(function (u) { return '<option value="' + u + '"' + (u === width.u ? ' selected' : '') + '>' + u + '</option>'; }).join('') + '</select></span></div>' +
             '<p class="form-help">Of the column (%), or in px, rem, em or ch; empty takes the column\'s width.</p>' +
             '<label class="form-label" for="' + id + 'caption">Caption</label>' +
             '<input class="form-input" id="' + id + 'caption" data-key="caption" value="' + esc(f ? f.caption : '') + '" autocomplete="off">' +
@@ -517,7 +517,7 @@
             pictures.site().then(function (site) {
                 var F = site.F, FB = site.FB, dir = pictures.dir ? pictures.dir() : null;
                 return FB.pick(F, {
-                    mode: 'open', title: 'Choose a picture', host: pictures.root, start: dir && F.resolve(null, dir) ? dir : '~',
+                    mode: 'open', title: 'Choose a Picture', host: pictures.root, start: dir && F.resolve(null, dir) ? dir : '~',
                     check: function (r) { return PICTURE_EXT.test(r.name) ? null : r.name + ' isn\'t a picture.'; },
                     commit: function (c) {
                         var node = c.path ? F.resolve(null, c.path) : null;
@@ -548,7 +548,7 @@
             }).catch(function (err) { problem(err && err.message || String(err)); });
         }
         return ownForm({
-            title: f ? 'Change the picture' : 'Insert a picture', className: 'md-figure', body: body, remove: !!f, okLabel: f ? 'Change' : 'Insert',
+            title: f ? 'Change the Picture' : 'Insert a Picture', className: 'md-figure', body: body, remove: !!f, okLabel: f ? 'Change' : 'Insert',
             setup: function (api) {
                 dlg = api.dialog; errorLine = dlg.querySelector('[data-role="error"]');
                 var file = dlg.querySelector('[data-role="file"]');
@@ -587,7 +587,7 @@
        label], or a function of the host giving a promise of one), min, max,
        browse (a picker for a file) }. */
     function plain(v) { return String(v == null ? '' : v).trim().replace(/[{}\n]/g, ''); }
-    var STATUS = [['green', 'Green, done or good'], ['blue', 'Blue, information'], ['yellow', 'Yellow, a warning'], ['red', 'Red, failed or blocked'], ['grey', 'Grey, neutral']];
+    var STATUS = [['green', 'Green, Done or Good'], ['blue', 'Blue, Information'], ['yellow', 'Yellow, a Warning'], ['red', 'Red, Failed or Blocked'], ['grey', 'Grey, Neutral']];
     function appletOptions() {
         var defs = window.pudlApplets && window.pudlApplets.definitions ? window.pudlApplets.definitions() : {};
         return Promise.resolve(Object.keys(defs).sort().map(function (k) { return [k, (defs[k] && defs[k].title) || k]; }));
@@ -606,7 +606,7 @@
         }).catch(function () { return null; });
     }
     var FORMS = {
-        video: { title: 'A hosted video', fields: [
+        video: { title: 'A Hosted Video', fields: [
             { key: 'src', label: 'Link', placeholder: 'https://youtu.be/… or https://vimeo.com/…', help: 'The video\'s link from YouTube or Vimeo. YouTube plays without tracking until it is played.' },
             { key: 'title', label: 'Title', help: 'What the video is, for someone who can\'t see it.' }],
             read: function (sc) {
@@ -618,17 +618,17 @@
                 if (!src) { return { problem: 'The video needs its link.', field: 'src' }; }
                 return '{{video:' + src + (plain(v.title) ? ' title=' + quoteArg(plain(v.title)) : '') + '}}';
             } },
-        applet: { title: 'An applet on the page', fields: [
+        applet: { title: 'An Applet on the Page', fields: [
             { key: 'name', label: 'Applet', kind: 'select', options: appletOptions },
-            { key: 'fit', label: 'Size', kind: 'select', options: [['flow', 'As tall as it needs'], ['fill', 'Fills the space it is given']] },
-            { key: 'state', label: 'Starting state', help: 'Optional, as the applet understands it, such as a board for Conway\'s Game of Life.' }],
+            { key: 'fit', label: 'Size', kind: 'select', options: [['flow', 'As Tall as It Needs'], ['fill', 'Fills the Space It Is Given']] },
+            { key: 'state', label: 'Starting State', help: 'Optional, as the applet understands it, such as a board for Conway\'s Game of Life.' }],
             read: function (sc) { return { name: sc.named.name || sc.positional[0] || '', fit: sc.named.fit || 'flow', state: sc.named.state || '' }; },
             write: function (v) {
                 var name = plain(v.name);
                 if (!/^[a-z][a-z0-9-]*$/.test(name)) { return { problem: 'Choose an applet.', field: 'name' }; }
                 return '{{applet:' + name + ' fit=' + (v.fit === 'fill' ? 'fill' : 'flow') + (plain(v.state) ? ' state=' + quoteArg(plain(v.state)) : '') + '}}';
             } },
-        code: { title: 'A code listing from a file', fields: [
+        code: { title: 'A Code Listing from a File', fields: [
             { key: 'src', label: 'File', placeholder: '~/bin/hello or /applets/dice/dice.js', browse: true, help: 'A file of yours under ~, or one of the site\'s; the page shows it as it is when the page is read.' },
             { key: 'lang', label: 'Language', placeholder: 'From the file name', help: 'Optional, such as javascript or go, for the colouring.' }],
             read: function (sc) { return { src: sc.named.src || sc.positional[0] || '', lang: sc.named.lang || '' }; },
@@ -638,15 +638,15 @@
                 return '{{code:' + quoteArg(src) + (plain(v.lang) ? ' lang=' + quoteArg(plain(v.lang)) : '') + '}}';
             } },
         toc: { title: 'Contents', fields: [
-            { key: 'min', label: 'From heading level', kind: 'number', min: 1, max: 6 },
-            { key: 'max', label: 'To heading level', kind: 'number', min: 1, max: 6, help: 'The contents list the headings from the one level to the other, linked.' }],
+            { key: 'min', label: 'From Heading Level', kind: 'number', min: 1, max: 6 },
+            { key: 'max', label: 'To Heading Level', kind: 'number', min: 1, max: 6, help: 'The contents list the headings from the one level to the other, linked.' }],
             read: function (sc) { return { min: sc.named.min || '2', max: sc.named.max || '3' }; },
             write: function (v) {
                 var a = parseInt(v.min, 10) || 2, b = parseInt(v.max, 10) || 3;
                 if (b < a) { return { problem: 'The last level is at or below the first.', field: 'max' }; }
                 return a === 2 && b === 3 ? '{{toc}}' : '{{toc:min=' + a + ' max=' + b + '}}';
             } },
-        status: { title: 'A status label', inline: true, fields: [
+        status: { title: 'A Status Label', inline: true, fields: [
             { key: 'colour', label: 'Colour', kind: 'select', options: STATUS },
             { key: 'label', label: 'Label', placeholder: 'Done' }],
             read: function (sc) { var c = (sc.positional[0] || 'green').toLowerCase(); return { colour: c === 'gray' ? 'grey' : c === 'amber' ? 'yellow' : c, label: sc.args.slice((sc.positional[0] || '').length).trim() }; },
@@ -663,11 +663,11 @@
                 if (!keys) { return { problem: 'Name the keys, such as Ctrl+C.', field: 'keys' }; }
                 return '{{kbd:' + keys + '}}';
             } },
-        glyph: { title: 'A glyph', inline: true, fields: [
+        glyph: { title: 'A Glyph', inline: true, fields: [
             { key: 'name', label: 'Glyph', kind: 'select', options: glyphOptions, help: 'One of the small symbols the site\'s controls use.' }],
             read: function (sc) { return { name: sc.named.name || sc.positional[0] || '' }; },
             write: function (v) { return plain(v.name) ? '{{glyph:' + plain(v.name) + '}}' : { problem: 'Choose a glyph.', field: 'name' }; } },
-        page: { title: 'A link to a page', inline: true, fields: [
+        page: { title: 'A Link to a Page', inline: true, fields: [
             { key: 'slug', label: 'Page', kind: 'select', options: pageOptions, placeholder: 'about' },
             { key: 'text', label: 'Text', help: 'The words of the link; the page\'s name if empty.' }],
             read: function (sc) {
@@ -679,7 +679,7 @@
                 if (!/^[a-z0-9][a-z0-9-]*(\/[a-z0-9][a-z0-9-]*)*$/.test(slug)) { return { problem: 'Choose a page.', field: 'slug' }; }
                 return '{{page:' + slug + (plain(v.text) ? ' text=' + quoteArg(plain(v.text)) : '') + '}}';
             } },
-        anchor: { title: 'An anchor', inline: true, fields: [
+        anchor: { title: 'An Anchor', inline: true, fields: [
             { key: 'name', label: 'Name', placeholder: 'section-two', help: 'A link to #name goes here. Letters, digits, - and _, starting with a letter.' }],
             read: function (sc) { return { name: sc.named.name || sc.positional[0] || '' }; },
             write: function (v) {
@@ -736,7 +736,7 @@
                     if (!b) { return; }
                     var key = b.getAttribute('data-for');
                     host.site().then(function (site) {
-                        return site.FB.pick(site.F, { mode: 'open', title: 'Choose a file', host: host.root, start: '~',
+                        return site.FB.pick(site.F, { mode: 'open', title: 'Choose a File', host: host.root, start: '~',
                             commit: function (c) { var node = c.path ? site.F.resolve(null, c.path) : null; if (!node || node.children) { return 'Choose a file.'; } field(key).value = site.F.displayPath(site.F.realOf(node)); return true; } });
                     }).catch(function (err) { errorLine.textContent = err && err.message || String(err); errorLine.hidden = false; });
                 });
@@ -915,7 +915,7 @@
             return '<div class="md-prop-row" data-row data-was="' + esc(e ? e.key : '') + '"' + (locked ? ' data-locked' : '') + '>' +
                 '<input class="form-input" data-name aria-label="Name" placeholder="name" value="' + esc(e ? e.key : '') + '" autocomplete="off" spellcheck="false"' + (locked ? ' readonly' : '') + '>' +
                 '<input class="form-input" data-value aria-label="Value" placeholder="value" value="' + esc(e ? e.value : '') + '" autocomplete="off"' + (locked ? ' readonly title="Written in a form this dialog does not change; edit it in the text."' : '') + '>' +
-                (locked ? '<span class="md-prop-note">In the text</span>' : '<button type="button" class="btn" data-act="remove-row" aria-label="Take out this property">Remove</button>') + '</div>';
+                (locked ? '<span class="md-prop-note">In the text</span>' : '<button type="button" class="btn" data-act="remove-row" aria-label="Take Out This Property">Remove</button>') + '</div>';
         }
         var html = '<div class="md-props-stock">' + STOCK.map(function (f) {
             var e = byKey[f.key], v = e ? e.value : '', locked = e && !e.editable, fid = id + f.key;
@@ -925,7 +925,7 @@
             var help = locked ? 'Written in a form this dialog does not change; edit it in the text.' : (f.kind === 'date' && v && !/^\d{4}-\d{2}-\d{2}$/.test(v) ? 'It is now "' + v + '", which is not a date this field reads; choosing one replaces it.' : f.help);
             return '<div class="form-group"><label class="form-label" for="' + fid + '">' + esc(f.label) + '</label>' + input + (help ? '<p class="form-help">' + esc(help) + '</p>' : '') + '</div>';
         }).join('') + '</div>' +
-            '<div class="form-group"><span class="form-label">Other properties</span><div class="md-props-custom" data-role="custom">' + custom.map(customRow).join('') + '</div>' +
+            '<div class="form-group"><span class="form-label">Other Properties</span><div class="md-props-custom" data-role="custom">' + custom.map(customRow).join('') + '</div>' +
             '<button type="button" class="btn" data-act="add-row">Add a Property</button>' +
             '<p class="form-help">Any name and value of your own, kept in the front matter.' + (opts.hidden && opts.hidden.length ? ' ' + esc(opts.hiddenNote || '') : '') + '</p></div>' +
             '<p class="form-error" data-role="error" hidden></p>';

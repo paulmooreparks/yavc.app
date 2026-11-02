@@ -579,7 +579,7 @@ func init() {
 			}
 			return `<a id="` + Esc(name) + `"></a>`, nil
 		}})
-	add(&def{name: "page", kind: inline, title: "Page link", what: "A link to one of the site's pages, by its slug, with text of its own or the slug.",
+	add(&def{name: "page", kind: inline, title: "Page Link", what: "A link to one of the site's pages, by its slug, with text of its own or the slug.",
 		example: "{{page:about}}",
 		render: func(c Call, doc ast.Node, src []byte) (string, error) {
 			slug, ok := c.Get("slug", 0)
@@ -671,7 +671,7 @@ func init() {
 			return `<div class="sc-video" data-service="` + service + `"><iframe src="` + player + `" title="` + Esc(title) +
 				`" loading="lazy" allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe></div>`, nil
 		}})
-	add(&def{name: "code", kind: block, title: "Code listing", what: "A file, shown as a listing with Copy and Download, fetched as the page loads: a path on the site from /, or one of your own files under ~.",
+	add(&def{name: "code", kind: block, title: "Code Listing", what: "A file, shown as a listing with Copy and Download, fetched as the page loads: a path on the site from /, or one of your own files under ~.",
 		example: "{{code:~/bin/hello}}",
 		render: func(c Call, doc ast.Node, src []byte) (string, error) {
 			s, ok := c.Get("src", 0)
@@ -739,12 +739,12 @@ func init() {
 		wrap: func(c Call) (string, string, error) {
 			return `<div class="sc-columns"><div class="sc-column">`, `</div></div>`, nil
 		}, separator: "column", separatorHTML: `</div><div class="sc-column">`})
-	add(&def{name: "column", kind: block, title: "Next column", what: "Inside {{columns}}, starts the next column.",
+	add(&def{name: "column", kind: block, title: "Next Column", what: "Inside {{columns}}, starts the next column.",
 		example: "{{column}}",
 		render: func(c Call, doc ast.Node, src []byte) (string, error) {
 			return "", problem{"column divides {{columns}} … {{/columns}}; it means nothing outside one."}
 		}})
-	add(&def{name: "draft-note", kind: container, title: "Note to self", what: "A note while writing, shown in the editor and never on a published page.",
+	add(&def{name: "draft-note", kind: container, title: "Note to Self", what: "A note while writing, shown in the editor and never on a published page.",
 		example: "{{draft-note}}\nCheck this date.\n{{/draft-note}}",
 		wrap: func(c Call) (string, string, error) {
 			return `<aside class="sc-draft-note"><p class="sc-draft-note-label">Note to self, not published</p>`, `</aside>`, nil
@@ -752,7 +752,7 @@ func init() {
 	// A slide deck's own (docs/slides-design.md): a slide's settings, which
 	// render as a marker the Slides application reads and nothing on a
 	// page, and speaker notes, drawn as an aside a page may hide.
-	add(&def{name: "slide", kind: block, title: "Slide settings", what: "A slide's layout, background and reveal, on the first line of the slide in a deck.",
+	add(&def{name: "slide", kind: block, title: "Slide Settings", what: "A slide's layout, background and reveal, on the first line of the slide in a deck.",
 		example: "{{slide:layout=title}}",
 		render: func(c Call, doc ast.Node, src []byte) (string, error) {
 			out := `<div class="sc-slide" hidden`
@@ -773,7 +773,7 @@ func init() {
 	add(&def{name: "style", kind: container, title: "Stylesheet", what: "CSS for a deck or a page, kept with it: in Slides it styles every slide, or with {{style:slide}} the slide it is in. It is never shown.",
 		example: "{{style}}\n.deck-body h2 { letter-spacing: 0.02em; }\n{{/style}}",
 		wrap:    func(c Call) (string, string, error) { return `<div class="sc-style" hidden>`, `</div>`, nil }})
-	add(&def{name: "class", kind: container, title: "Style class", what: "A class of the deck's or the page's stylesheet, on words in a line ({{class:name}}words{{/class}}) or around blocks on lines of their own, given as the class itself in the HTML.",
+	add(&def{name: "class", kind: container, title: "Style Class", what: "A class of the deck's or the page's stylesheet, on words in a line ({{class:name}}words{{/class}}) or around blocks on lines of their own, given as the class itself in the HTML.",
 		example: "{{class:callout}}these words{{/class}}",
 		wrap: func(c Call) (string, string, error) {
 			name, ok := className(c)
@@ -789,10 +789,10 @@ func init() {
 			}
 			return `<span class="` + name + `" data-class="` + name + `">`, `</span>`, nil
 		}})
-	add(&def{name: "notes", kind: container, title: "Speaker notes", what: "Notes for the presenter, shown in the presenter view and not on the slide.",
+	add(&def{name: "notes", kind: container, title: "Speaker Notes", what: "Notes for the presenter, shown in the presenter view and not on the slide.",
 		example: "{{notes}}\nWhat to say.\n{{/notes}}",
 		wrap: func(c Call) (string, string, error) {
-			return `<aside class="sc-notes"><p class="sc-notes-label">Speaker notes</p>`, `</aside>`, nil
+			return `<aside class="sc-notes"><p class="sc-notes-label">Speaker Notes</p>`, `</aside>`, nil
 		}})
 	for _, name := range []string{"expand", "status", "toc", "anchor", "page", "figure", "applet", "video", "code", "color", "class", "style", "kbd", "glyph", "columns", "column", "draft-note", "slide", "notes"} {
 		order = append(order, name)

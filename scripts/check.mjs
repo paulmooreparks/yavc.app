@@ -245,6 +245,60 @@ rules.push({ id: 'one-shared-implementation', run() {
   }
 } });
 
+// Every label is title case: a menu title or item, a command, a button, a
+// dialog's title, a tab, a field's label (Paul, DESIGN.md decision 18). A
+// label had drifted between sentence case and title case from one
+// application to the next. Chicago style: the first and the last word and
+// every major word are capitalised, and the minor words below are not,
+// unless first or last. A word that is not plain letters (a file name, a
+// path, a key, a product such as yavc.app) is left as it is, and so is a
+// string that is a sentence. The rule reads the label of cmd(id, label, ...)
+// and every label: '...' in the site's own scripts, aria-label attributes
+// there and in the layout, and the short text of the layout's links,
+// buttons and menu items. A string that runs on with + is checked only for
+// the words it has, so its last word may be a minor one.
+const MINOR_WORDS = new Set(['a', 'an', 'the', 'and', 'but', 'or', 'for', 'nor', 'as', 'at', 'by', 'in', 'of', 'on', 'to', 'up', 'via', 'with', 'from', 'into', 'per']);
+function titleCaseProblem(label, { continues = false, continued = false } = {}) {
+  const s = label.replace(/\\'/g, "'").replace(/(…|\.\.\.)$/, '').trim();
+  if (!s || /[.?!;:](\s|$)/.test(s)) return null; // a sentence, or nothing
+  const words = s.split(/\s+/);
+  for (let i = 0; i < words.length; i++) {
+    const w = words[i].replace(/^[("'“]+|[)"',”]+$/g, '');
+    if (!/^[a-z][a-z'’-]*$/.test(w)) continue; // capitalised already, or not a plain word
+    const first = i === 0 && !continued, last = i === words.length - 1 && !continues && words.length > 1;
+    if (first || last || !MINOR_WORDS.has(w)) return w;
+  }
+  return null;
+}
+const LABEL_SOURCES = js.filter((f) => /^(apps|internal\/web\/static)\//.test(f));
+rules.push({ id: 'title-case-labels', run() {
+  const flag = (f, src, m, label, where) => {
+    const before = src.slice(0, m.index + m[0].length - label.length - 1), after = src.slice(m.index + m[0].length);
+    const word = titleCaseProblem(label, { continued: /\+\s*$/.test(before), continues: /^\s*\+/.test(after) });
+    if (word) report('title-case-labels', f, m.index, `${where} "${label}" is not title case ("${word}")`);
+  };
+  for (const f of LABEL_SOURCES) {
+    const src = text.get(f);
+    each(/\bcmd\(\s*'[^']*'\s*,\s*'((?:[^'\\\n]|\\.)*)'/g, src, (m) => flag(f, src, m, m[1], 'the command label'));
+    each(/\blabel:\s*'((?:[^'\\\n]|\\.)*)'/g, src, (m) => flag(f, src, m, m[1], 'the label'));
+    // An attribute in markup a script builds, unless the script splices a
+    // value into it.
+    each(/\baria-label="([^"{}<>]+)"/g, src, (m) => { if (!/'\s*\+|\+\s*'/.test(m[1])) flag(f, src, m, m[1], 'the aria-label'); });
+  }
+  for (const f of files.filter((f) => /^internal\/web\/templates\/.*\.html$/.test(f))) {
+    const src = text.get(f);
+    each(/\b(?:aria-label|data-tooltip|title)="([^"{}<>]+)"/g, src, (m) => flag(f, src, m, m[1], 'the attribute'));
+    // The text right after a link, button or menu item opens, or right before
+    // a link or button closes; a template action reads as a capitalised word.
+    each(/<(?:a|button|li)\b[^>]*>([^<]+)<|>([^<>]+)<\/(?:a|button)>/g, src, (m) => {
+      const raw = m[1] ?? m[2], label = raw.replace(/\{\{[^}]*\}\}/g, 'X').replace(/&amp;/g, '&').trim();
+      if (!label || label.split(/\s+/).length > 6) return;
+      const word = titleCaseProblem(label);
+      if (word) report('title-case-labels', f, m.index, `the menu or link text "${raw.trim()}" is not title case ("${word}")`);
+    });
+  }
+} });
+
 let ran = 0;
 for (const r of rules) {
   if (r.needsSince && !since) continue;

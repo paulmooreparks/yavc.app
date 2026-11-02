@@ -62,7 +62,7 @@ func TestShortcodes(t *testing.T) {
 		{"{{/tip}}", `which is not open`},
 		{"{{column}}", `means nothing outside one`},
 		{"{{slide:layout=title background=#123 reveal=steps}}", `<div class="sc-slide" hidden data-layout="title" data-background="#123" data-reveal="steps"></div>`},
-		{"{{notes}}\nSay this.\n{{/notes}}", `<aside class="sc-notes"><p class="sc-notes-label">Speaker notes</p>`},
+		{"{{notes}}\nSay this.\n{{/notes}}", `<aside class="sc-notes"><p class="sc-notes-label">Speaker Notes</p>`},
 	}
 	for _, c := range cases {
 		got := render(t, c.md)
