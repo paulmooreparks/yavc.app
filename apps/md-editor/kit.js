@@ -14,7 +14,9 @@
      yavcMdEditor.inserts(extra, pictures)   the / menu's items, for the page host
      yavcMdEditor.askText / askChoice / askColour / askColours   PUDL dialogs
      yavcMdEditor.askFigure(existing, pictures)   the picture dialog
-     yavcMdEditor.editBlock(src, pictures)   a drawn block pressed on the page
+     yavcMdEditor.editBlock(src, pictures)   a drawn block or inline shortcode pressed on the page
+     yavcMdEditor.askShortcode(name, existing, host)   a standalone shortcode's form
+     yavcMdEditor.boxCommand(ctx, opts, extra)   Box, which wraps the selection in a box
      yavcMdEditor.loadImages(el, pictures)   pictures of the home folder, read
 
    ctx says where a format goes: { page(): the page view's handle or null,
@@ -92,31 +94,29 @@
         ['warning', 'Warning', '{{warning:A title}}\n' + PLACEHOLDER + '\n{{/warning}}'],
         ['expand', 'Expand', '{{expand:The title}}\n' + PLACEHOLDER + '\n{{/expand}}'],
         ['video', 'Video…', null],
-        ['applet', 'Applet', '{{applet:dice fit=flow}}'],
+        ['applet', 'Applet…', null],
         ['diagram', 'Diagram', '```mermaid\ngraph LR; A-->B;\n```'],
-        ['code-file', 'Code Listing from a File', '{{code:~/bin/hello}}'],
+        ['code', 'Code Listing from a File…', null],
         ['color', 'Coloured Words', '{{color:accent}}these words{{/color}}'],
-        ['toc', 'Contents', '{{toc}}'],
-        ['status', 'Status Label', '{{status:green Done}}'],
-        ['kbd', 'Keys', '{{kbd:Ctrl+Shift+P}}'],
-        ['glyph', 'Glyph', '{{glyph:check}}'],
-        ['page', 'Page Link', '{{page:author}}'],
-        ['anchor', 'Anchor', '{{anchor:name}}'],
+        ['toc', 'Contents…', null],
+        ['status', 'Status Label…', null],
+        ['kbd', 'Keys…', null],
+        ['glyph', 'Glyph…', null],
+        ['page', 'Page Link…', null],
+        ['anchor', 'Anchor…', null],
         ['draft-note', 'Note to Self', '{{draft-note}}\n' + PLACEHOLDER + '\n{{/draft-note}}']
     ].map(function (x) { return { id: 'insert-sc-' + x[0], name: x[0], label: x[1], markdown: x[2], shortcode: true }; });
 
-    /* A hosted video's shortcode, from its link, asked for. */
-    function askVideo() {
-        return askText('A hosted video', 'Its link, from YouTube or Vimeo', '').then(function (v) {
-            v = (v || '').trim();
-            return v ? '{{video:' + v.replace(/[\s}]/g, '') + ' title="Video"}}' : null;
-        });
-    }
+    /* The Markdown an insert item puts in: its example, or for a shortcode
+       with a form, what its form is filled in with (null for Cancel). */
     function markdownFor(item, ctx) {
-        if (item.name === 'video') { return askVideo(); }
-        if (item.name === 'figure') { return askFigure(null, ctx && ctx.pictures ? ctx.pictures() : null); }
+        var host = ctx && ctx.pictures ? ctx.pictures() : null;
+        if (item.name === 'figure') { return askFigure(null, host); }
+        if (FORMS[item.name]) { return askShortcode(item.name, null, host); }
         return Promise.resolve(item.markdown);
     }
+    /* Whether a shortcode goes in a line of text, rather than on a line of its own. */
+    function isInlineForm(name) { return !!(FORMS[name] && FORMS[name].inline); }
 
     /* === Formats on the Markdown ========================================= */
 
@@ -193,6 +193,12 @@
         if (changes.length) { view.dispatch({ changes: changes, userEvent: 'input' }); }
         view.focus();
     }
+    /* An inline shortcode into a CodeMirror view, at the cursor. */
+    function textInsertInline(view, markdown) {
+        var sel = view.state.selection.main;
+        view.dispatch({ changes: { from: sel.from, to: sel.to, insert: markdown }, selection: { anchor: sel.from + markdown.length }, userEvent: 'input' });
+        view.focus();
+    }
     function textInsert(view, markdown) {
         if (!view) { return; }
         var sel = view.state.selection.main, at = sel.to;
@@ -220,11 +226,14 @@
             if (!md) { return; }
             var page = ctx.page && ctx.page();
             if (page && ctx.onPage()) {
-                if (!item.shortcode && !item.name) { page.run(item.id); } else { page.insertMarkdown(md); }
+                if (!item.shortcode && !item.name) { page.run(item.id); }
+                else if (isInlineForm(item.name) && page.insertInline) { page.insertInline(md); }
+                else { page.insertMarkdown(md); }
                 return;
             }
             var view = ctx.text && ctx.text();
-            if (view) { textInsert(view, md); } else if (ctx.append) { ctx.append(md); }
+            if (view && isInlineForm(item.name)) { textInsertInline(view, md); }
+            else if (view) { textInsert(view, md); } else if (ctx.append) { ctx.append(md); }
         });
     }
 
@@ -248,10 +257,34 @@
             items.push({ id: i.id, label: i.label, run: function () { if (i.run) { i.run(); } else { insertItem(i, ctx); } } });
         });
         out.push({ id: 'insert', label: 'Insert', glyph: 'plus', items: items });
+        out.push(boxCommand(ctx));
         return out;
     }
+    /* Box: the selection, or the line the cursor is on, wrapped in a box,
+       a container shortcode (docs/page-view-design.md). On the page the
+       selected blocks go into the box; in the text the selected lines go
+       between its opening and closing lines. */
+    var BOXES = [['tip', 'Tip'], ['note', 'Note'], ['info', 'Information Notice'], ['warning', 'Warning'], ['expand', 'Expand'], ['draft-note', 'Note to Self'], ['columns', 'Columns']];
+    function boxCommand(ctx, opts, extra) {
+        var list = BOXES.concat(extra || []);
+        return Object.assign({ id: 'box', label: 'Box', glyph: 'square',
+            items: list.map(function (b) { return Object.assign({ id: 'box-' + b[0], label: b[1], run: function () { wrapBox(b[0], ctx); } }, opts || {}); }) }, opts || {});
+    }
+    function wrapBox(name, ctx) {
+        if (ctx.readOnly && ctx.readOnly()) { if (ctx.say) { ctx.say('This is read-only, so it cannot be changed.', true); } return; }
+        var page = ctx.page && ctx.page();
+        if (page && ctx.onPage() && page.wrap) { page.wrap(name); return; }
+        var view = ctx.text && ctx.text();
+        if (!view) { return; }
+        var st = view.state, sel = st.selection.main, first = st.doc.lineAt(sel.from), last = st.doc.lineAt(sel.to);
+        var text = st.sliceDoc(first.from, last.to);
+        if (!text.trim()) { text = PLACEHOLDER; }
+        var open = '{{' + name + '}}\n', close = name === 'columns' ? '\n\n{{column}}\n\n' + PLACEHOLDER + '\n{{/columns}}' : '\n{{/' + name + '}}';
+        view.dispatch({ changes: { from: first.from, to: last.to, insert: open + text + close }, selection: { anchor: first.from + open.length, head: first.from + open.length + text.length }, userEvent: 'input' });
+        view.focus();
+    }
     /* The ids a toolbar or menu lists, in the kit's order. */
-    var MENU = { format: ['style', '-', 'bold', 'italic', 'strike', 'code', 'link', 'color', 'class', '-', 'bullets', 'numbers', '-', 'insert'], toolbar: ['style', 'bold', 'italic', 'strike', 'code', 'link', 'color', 'class', 'bullets', 'numbers', 'insert'] };
+    var MENU = { format: ['style', '-', 'bold', 'italic', 'strike', 'code', 'link', 'color', 'class', '-', 'bullets', 'numbers', '-', 'insert', 'box'], toolbar: ['style', 'bold', 'italic', 'strike', 'code', 'link', 'color', 'class', 'bullets', 'numbers', 'insert', 'box'] };
 
     /* The / menu's items, for the page host's inserts(): the shortcodes,
        and the host's own after them. */
@@ -259,8 +292,16 @@
         function onPage(md) { if (md && window.yavcMdEditor._page) { window.yavcMdEditor._page.insertMarkdown(md); } }
         var out = SHORTCODES.map(function (i) {
             var it = { id: i.id, label: i.label.replace(/…$/, ''), words: i.name + ' ' + i.label.toLowerCase() };
-            if (i.name === 'video') { it.run = function () { askVideo().then(onPage); }; }
-            else if (i.name === 'figure') { it.run = function () { askFigure(null, pictures ? pictures() : null).then(onPage); }; }
+            if (i.name === 'figure') { it.run = function () { askFigure(null, pictures ? pictures() : null).then(onPage); }; }
+            else if (FORMS[i.name]) {
+                it.run = function () {
+                    askShortcode(i.name, null, pictures ? pictures() : null).then(function (md) {
+                        var page = window.yavcMdEditor._page;
+                        if (!md || !page) { return; }
+                        if (isInlineForm(i.name) && page.insertInline) { page.insertInline(md); } else { page.insertMarkdown(md); }
+                    });
+                };
+            }
             else { it.markdown = i.markdown; }
             return it;
         });
@@ -377,7 +418,7 @@
     function parseShortcode(src) {
         var m = /^\{\{(\/?)([a-z][a-z0-9-]*)(?::([\s\S]*?))?\}\}$/.exec((src || '').trim());
         if (!m) { return null; }
-        var out = { name: m[2], positional: [], named: {} }, t = m[3] || '', i = 0;
+        var out = { name: m[2], args: (m[3] || '').trim(), positional: [], named: {} }, t = m[3] || '', i = 0;
         while (i < t.length) {
             while (i < t.length && /\s/.test(t[i])) { i++; }
             if (i >= t.length) { break; }
@@ -535,8 +576,195 @@
        leave it; any other block is undefined, for the page to edit as its
        Markdown. */
     function editBlock(src, pictures) {
-        if (!parseFigure(src)) { return undefined; }
-        return askFigure(src, pictures);
+        if (parseFigure(src)) { return askFigure(src, pictures); }
+        var sc = parseShortcode((src || '').trim());
+        if (sc && FORMS[sc.name] && (src || '').trim().indexOf('\n') < 0) { return askShortcode(sc.name, src.trim(), pictures); }
+        return undefined;
+    }
+
+    /* === Forms for the standalone shortcodes ==============================
+       Each is { title, inline, fields, read(sc) -> values, write(values) ->
+       the shortcode or { problem, field } }. A field is { key, label, kind
+       (text, select, number), help, placeholder, options (a list of [value,
+       label], or a function of the host giving a promise of one), min, max,
+       browse (a picker for a file) }. */
+    function plain(v) { return String(v == null ? '' : v).trim().replace(/[{}\n]/g, ''); }
+    var STATUS = [['green', 'Green, done or good'], ['blue', 'Blue, information'], ['yellow', 'Yellow, a warning'], ['red', 'Red, failed or blocked'], ['grey', 'Grey, neutral']];
+    function appletOptions() {
+        var defs = window.pudlApplets && window.pudlApplets.definitions ? window.pudlApplets.definitions() : {};
+        return Promise.resolve(Object.keys(defs).sort().map(function (k) { return [k, (defs[k] && defs[k].title) || k]; }));
+    }
+    function glyphOptions() {
+        return (window.yavcMdEngine ? window.yavcMdEngine().then(function (m) { return m.glyphs(''); }) : Promise.resolve([])).then(function (list) {
+            return (list || []).map(function (g) { return [g, g]; });
+        });
+    }
+    function pageOptions(host) {
+        if (!host || !host.site) { return Promise.resolve(null); }
+        return host.site().then(function (site) {
+            var dir = site.F.resolve(null, '/site/pages');
+            if (!dir || !dir.children) { return null; }
+            return dir.children.filter(function (c) { return !c.children; }).map(function (c) { return [c.name, c.title ? c.title + ' (' + c.name + ')' : c.name]; });
+        }).catch(function () { return null; });
+    }
+    var FORMS = {
+        video: { title: 'A hosted video', fields: [
+            { key: 'src', label: 'Link', placeholder: 'https://youtu.be/… or https://vimeo.com/…', help: 'The video\'s link from YouTube or Vimeo. YouTube plays without tracking until it is played.' },
+            { key: 'title', label: 'Title', help: 'What the video is, for someone who can\'t see it.' }],
+            read: function (sc) {
+                var p = sc.positional, src = sc.named.src || (p.length > 1 && /^(youtube|vimeo)$/i.test(p[0]) ? p[0] + ' ' + p[1] : p[0] || '');
+                return { src: src, title: sc.named.title || '' };
+            },
+            write: function (v) {
+                var src = plain(v.src);
+                if (!src) { return { problem: 'The video needs its link.', field: 'src' }; }
+                return '{{video:' + src + (plain(v.title) ? ' title=' + quoteArg(plain(v.title)) : '') + '}}';
+            } },
+        applet: { title: 'An applet on the page', fields: [
+            { key: 'name', label: 'Applet', kind: 'select', options: appletOptions },
+            { key: 'fit', label: 'Size', kind: 'select', options: [['flow', 'As tall as it needs'], ['fill', 'Fills the space it is given']] },
+            { key: 'state', label: 'Starting state', help: 'Optional, as the applet understands it, such as a board for Conway\'s Game of Life.' }],
+            read: function (sc) { return { name: sc.named.name || sc.positional[0] || '', fit: sc.named.fit || 'flow', state: sc.named.state || '' }; },
+            write: function (v) {
+                var name = plain(v.name);
+                if (!/^[a-z][a-z0-9-]*$/.test(name)) { return { problem: 'Choose an applet.', field: 'name' }; }
+                return '{{applet:' + name + ' fit=' + (v.fit === 'fill' ? 'fill' : 'flow') + (plain(v.state) ? ' state=' + quoteArg(plain(v.state)) : '') + '}}';
+            } },
+        code: { title: 'A code listing from a file', fields: [
+            { key: 'src', label: 'File', placeholder: '~/bin/hello or /applets/dice/dice.js', browse: true, help: 'A file of yours under ~, or one of the site\'s; the page shows it as it is when the page is read.' },
+            { key: 'lang', label: 'Language', placeholder: 'From the file name', help: 'Optional, such as javascript or go, for the colouring.' }],
+            read: function (sc) { return { src: sc.named.src || sc.positional[0] || '', lang: sc.named.lang || '' }; },
+            write: function (v) {
+                var src = plain(v.src);
+                if (!/^(~\/|\/(?!\/))/.test(src) || src.indexOf('..') >= 0) { return { problem: 'The file is a path from / or under ~, such as ~/bin/hello.', field: 'src' }; }
+                return '{{code:' + quoteArg(src) + (plain(v.lang) ? ' lang=' + quoteArg(plain(v.lang)) : '') + '}}';
+            } },
+        toc: { title: 'Contents', fields: [
+            { key: 'min', label: 'From heading level', kind: 'number', min: 1, max: 6 },
+            { key: 'max', label: 'To heading level', kind: 'number', min: 1, max: 6, help: 'The contents list the headings from the one level to the other, linked.' }],
+            read: function (sc) { return { min: sc.named.min || '2', max: sc.named.max || '3' }; },
+            write: function (v) {
+                var a = parseInt(v.min, 10) || 2, b = parseInt(v.max, 10) || 3;
+                if (b < a) { return { problem: 'The last level is at or below the first.', field: 'max' }; }
+                return a === 2 && b === 3 ? '{{toc}}' : '{{toc:min=' + a + ' max=' + b + '}}';
+            } },
+        status: { title: 'A status label', inline: true, fields: [
+            { key: 'colour', label: 'Colour', kind: 'select', options: STATUS },
+            { key: 'label', label: 'Label', placeholder: 'Done' }],
+            read: function (sc) { var c = (sc.positional[0] || 'green').toLowerCase(); return { colour: c === 'gray' ? 'grey' : c === 'amber' ? 'yellow' : c, label: sc.args.slice((sc.positional[0] || '').length).trim() }; },
+            write: function (v) {
+                var label = plain(v.label);
+                if (!label) { return { problem: 'The label needs some words.', field: 'label' }; }
+                return '{{status:' + (v.colour || 'green') + ' ' + label + '}}';
+            } },
+        kbd: { title: 'Keys', inline: true, fields: [
+            { key: 'keys', label: 'Keys', placeholder: 'Ctrl+Shift+P', help: 'The keys to press together, joined by +.' }],
+            read: function (sc) { return { keys: sc.args }; },
+            write: function (v) {
+                var keys = plain(v.keys);
+                if (!keys) { return { problem: 'Name the keys, such as Ctrl+C.', field: 'keys' }; }
+                return '{{kbd:' + keys + '}}';
+            } },
+        glyph: { title: 'A glyph', inline: true, fields: [
+            { key: 'name', label: 'Glyph', kind: 'select', options: glyphOptions, help: 'One of the small symbols the site\'s controls use.' }],
+            read: function (sc) { return { name: sc.named.name || sc.positional[0] || '' }; },
+            write: function (v) { return plain(v.name) ? '{{glyph:' + plain(v.name) + '}}' : { problem: 'Choose a glyph.', field: 'name' }; } },
+        page: { title: 'A link to a page', inline: true, fields: [
+            { key: 'slug', label: 'Page', kind: 'select', options: pageOptions, placeholder: 'about' },
+            { key: 'text', label: 'Text', help: 'The words of the link; the page\'s name if empty.' }],
+            read: function (sc) {
+                var slug = sc.named.slug || sc.positional[0] || '';
+                return { slug: slug, text: sc.named.text || (sc.positional.length > 1 ? sc.args.slice(slug.length).trim() : '') };
+            },
+            write: function (v) {
+                var slug = plain(v.slug);
+                if (!/^[a-z0-9][a-z0-9-]*(\/[a-z0-9][a-z0-9-]*)*$/.test(slug)) { return { problem: 'Choose a page.', field: 'slug' }; }
+                return '{{page:' + slug + (plain(v.text) ? ' text=' + quoteArg(plain(v.text)) : '') + '}}';
+            } },
+        anchor: { title: 'An anchor', inline: true, fields: [
+            { key: 'name', label: 'Name', placeholder: 'section-two', help: 'A link to #name goes here. Letters, digits, - and _, starting with a letter.' }],
+            read: function (sc) { return { name: sc.named.name || sc.positional[0] || '' }; },
+            write: function (v) {
+                var name = plain(v.name);
+                return /^[A-Za-z][A-Za-z0-9_-]*$/.test(name) ? '{{anchor:' + name + '}}' : { problem: 'An anchor\'s name is letters, digits, - and _, starting with a letter.', field: 'name' };
+            } }
+    };
+    /* A shortcode's form: a promise of the shortcode to write, '' to take
+       it out, or null for no change. existing is the shortcode being
+       changed, or null for a new one. host is where files are, for Browse
+       and for the site's pages (as for the picture dialog). */
+    function askShortcode(name, existing, host) {
+        var form = FORMS[name];
+        if (!form) { return Promise.resolve(null); }
+        var sc = existing ? parseShortcode(existing) : null;
+        var values = form.read(sc || { name: name, args: '', positional: [], named: {} });
+        var n = ++dlgCount, id = 'md-sc-' + n + '-';
+        var dlg = document.createElement('dialog');
+        dlg.className = 'dialog md-editor-dialog md-form';
+        dlg.setAttribute('aria-labelledby', id + 'title');
+        dlg.innerHTML = '<form method="dialog"><h3 class="dialog-title" id="' + id + 'title">' + esc(existing ? 'Change ' + form.title.replace(/^(A|An) /, 'the ') : 'Insert ' + form.title.replace(/^(A|An) /, 'a ').replace(/^a a/, 'an a')) + '</h3>' +
+            '<div class="dialog-body md-form-fields">' + form.fields.map(function (f) {
+                var fid = id + f.key, v = values[f.key] == null ? '' : values[f.key], help = f.help ? '<p class="form-help">' + esc(f.help) + '</p>' : '';
+                var control;
+                if (f.kind === 'select') { control = '<select class="form-select" id="' + fid + '" data-key="' + f.key + '" data-value="' + esc(v) + '"><option value="' + esc(v) + '">' + esc(v || 'Loading…') + '</option></select>'; }
+                else if (f.kind === 'number') { control = '<span class="number-field"><input class="form-input" type="number" id="' + fid + '" data-key="' + f.key + '" value="' + esc(v) + '" min="' + f.min + '" max="' + f.max + '" step="1"></span>'; }
+                else { control = '<input class="form-input" id="' + fid + '" data-key="' + f.key + '" value="' + esc(v) + '" autocomplete="off" spellcheck="false"' + (f.placeholder ? ' placeholder="' + esc(f.placeholder) + '"' : '') + '>'; }
+                if (f.browse && host && host.site) { control = '<div class="md-figure-src">' + control + '<button type="button" class="btn" data-act="browse" data-for="' + f.key + '">Browse…</button></div>'; }
+                return '<label class="form-label" for="' + fid + '">' + esc(f.label) + '</label>' + control + help;
+            }).join('') + '<p class="form-error" data-role="error" hidden></p></div>' +
+            '<div class="dialog-actions">' + (existing ? '<button type="button" class="btn" data-act="remove">Remove</button>' : '') +
+            '<button type="button" class="btn" data-act="cancel">Cancel</button><button type="submit" class="btn btn-primary">' + (existing ? 'Change' : 'Insert') + '</button></div></form>';
+        document.body.appendChild(dlg);
+        if (window.pudlFields && window.pudlFields.enhance) { window.pudlFields.enhance(dlg); }
+        var field = function (k) { return dlg.querySelector('[data-key="' + k + '"]'); }, errorLine = dlg.querySelector('[data-role="error"]');
+        /* A choice fills from its list; a value it does not list is kept as a choice of its own. */
+        form.fields.forEach(function (f) {
+            if (f.kind !== 'select') { return; }
+            var sel = field(f.key), want = sel.getAttribute('data-value') || '';
+            Promise.resolve(typeof f.options === 'function' ? f.options(host) : f.options).then(function (list) {
+                if (!list) {
+                    /* No list to choose from: a text field takes the choice's place. */
+                    var input = document.createElement('input');
+                    input.className = 'form-input'; input.id = sel.id; input.setAttribute('data-key', f.key); input.value = want; input.autocomplete = 'off'; input.spellcheck = false;
+                    if (f.placeholder) { input.placeholder = f.placeholder; }
+                    sel.replaceWith(input);
+                    return;
+                }
+                var opts = list.slice();
+                if (want && !opts.some(function (o) { return o[0] === want; })) { opts.unshift([want, want]); }
+                sel.innerHTML = (want ? '' : '<option value="">Choose…</option>') + opts.map(function (o) { return '<option value="' + esc(o[0]) + '"' + (o[0] === want ? ' selected' : '') + '>' + esc(o[1]) + '</option>'; }).join('');
+            }).catch(function () { });
+        });
+        return new Promise(function (resolve) {
+            var done = false;
+            function finish(v) { if (done) { return; } done = true; if (dlg.open) { dlg.close(); } resolve(v); setTimeout(function () { dlg.remove(); }, 0); }
+            dlg.querySelector('form').addEventListener('submit', function (e) {
+                e.preventDefault();
+                var v = {};
+                form.fields.forEach(function (f) { var el = field(f.key); v[f.key] = el ? el.value : ''; });
+                var out = form.write(v);
+                if (typeof out !== 'string') { errorLine.textContent = out.problem; errorLine.hidden = false; var bad = field(out.field); if (bad) { bad.focus(); } return; }
+                finish(out);
+            });
+            dlg.addEventListener('click', function (e) {
+                var b = e.target.closest('[data-act]');
+                if (!b) { return; }
+                var act = b.getAttribute('data-act');
+                if (act === 'cancel') { finish(null); }
+                else if (act === 'remove') { finish(''); }
+                else if (act === 'browse') {
+                    var key = b.getAttribute('data-for');
+                    host.site().then(function (site) {
+                        return site.FB.pick(site.F, { mode: 'open', title: 'Choose a file', host: host.root, start: '~',
+                            commit: function (c) { var node = c.path ? site.F.resolve(null, c.path) : null; if (!node || node.children) { return 'Choose a file.'; } field(key).value = site.F.displayPath(site.F.realOf(node)); return true; } });
+                    }).catch(function (err) { errorLine.textContent = err && err.message || String(err); errorLine.hidden = false; });
+                }
+            });
+            dlg.addEventListener('close', function () { finish(null); });
+            dlg.showModal();
+            var first = dlg.querySelector('.md-form-fields input, .md-form-fields select');
+            if (first) { first.focus(); }
+        });
     }
     /* The pictures of the home folder in drawn HTML (the engine marks each
        with data-attachment, its path from the document's folder), read
@@ -564,7 +792,7 @@
         FORMATS: FORMATS, STYLES: STYLES, INSERTS: INSERTS, SHORTCODES: SHORTCODES, MENU: MENU,
         commands: commands, apply: apply, classesOf: classesOf, insertItem: insertItem, inserts: inserts, textFormat: textFormat, textInsert: textInsert,
         askText: askText, askChoice: askChoice, askColour: askColour, askColours: askColours, askClass: askClass,
-        askFigure: askFigure, editBlock: editBlock, loadImages: loadImages, parseFigure: parseFigure, buildFigure: buildFigure, parseShortcode: parseShortcode,
+        askFigure: askFigure, editBlock: editBlock, askShortcode: askShortcode, FORMS: FORMS, boxCommand: boxCommand, BOXES: BOXES, loadImages: loadImages, parseFigure: parseFigure, buildFigure: buildFigure, parseShortcode: parseShortcode,
         _page: null
     };
 })();

@@ -924,6 +924,7 @@
                 markdownOf: function (doc) { return mdEngine().then(function (m) { return m.markdown(doc); }); },
                 sourceOf: function (src) { return mdEngine().then(function (m) { return m.source(src); }); },
                 wrapOf: function (line) { return mdEngine().then(function (m) { return m.container(line); }); },
+                inlineOf: function (src) { return mdEngine().then(function (m) { return m.inline(src); }); },
                 blocksOf: function (text) { return mdEngine().then(function (m) { return m.blocks(text); }); },
                 draw: function (target, html, diagrams) { drawBlocks(target, [{ line: 0, html: html, diagrams: diagrams }]); },
                 keys: pageKeys,
@@ -1926,6 +1927,7 @@
                         checked: function () { return blockStyle() === s[0]; }, hidden: unformatted, disabled: noEdit,
                         run: function () { applyFormat(s[0]); } };
                 }) });
+            if (window.yavcMdEditor) { table.push(window.yavcMdEditor.boxCommand(editCtx(), { hidden: unformatted, disabled: noEdit })); }
             table.push({ id: 'md-default', label: 'Open Markdown As', hidden: function () { return !viewsOffered; },
                 current: function () { var f = MARKDOWN_VIEWS.find(function (x) { return x[0] === markdownDefault(); }); return f ? f[1] : null; },
                 items: MARKDOWN_VIEWS.map(function (v) {
@@ -1951,7 +1953,7 @@
             return [{ label: 'Editor', ribbon: 'hide', groups: [
                 { label: 'File', glyph: 'file', priority: 3, items: ['toggle-files', 'new', 'open', 'save', 'save-as'] },
                 { label: 'Edit', glyph: 'undo', priority: 2, items: ['undo', 'redo', 'find', 'toggle-wrap'] },
-                { label: 'Format', glyph: 'bold', priority: 1, items: ['style', 'bold', 'italic', 'strike', 'code', 'link', 'color', 'bullets', 'numbers', 'insert'] },
+                { label: 'Format', glyph: 'bold', priority: 1, items: ['style', 'bold', 'italic', 'strike', 'code', 'link', 'color', 'bullets', 'numbers', 'insert', 'box'] },
                 { label: 'View', glyph: 'new-window', priority: 4, end: true, items: ['source', { choice: 'ed-view' }, 'preview'] }
             ] }];
         }
@@ -1971,7 +1973,7 @@
                 { label: 'Editor', glyph: 'document', items: window.pcAppletIdentity(root) },
                 { id: 'file', label: 'File', glyph: 'file', items: ['new', 'open', 'save', 'save-as', '-', 'close-document'] },
                 { id: 'edit', label: 'Edit', glyph: 'pencil', items: ['undo', 'redo', '-', 'find', 'go-to-line', '-', 'key-bindings'] },
-                { id: 'insert', label: 'Insert', glyph: 'plus', items: ['link', 'insert', '-', 'insert-timestamp', 'insert-date', 'stamp-modified'] }
+                { id: 'insert', label: 'Insert', glyph: 'plus', items: ['link', 'insert', 'box', '-', 'insert-timestamp', 'insert-date', 'stamp-modified'] }
             ];
             /* Format, where there is formatting to do. */
             if (formatOffered) { titles.push({ id: 'format', label: 'Format', glyph: 'paragraph', items: ['style', '-', 'bold', 'italic', 'strike', 'code', 'color', '-', 'bullets', 'numbers'] }); }

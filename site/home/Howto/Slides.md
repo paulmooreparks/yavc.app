@@ -43,7 +43,7 @@ Everything else is Markdown as the Editor draws it, shortcodes included: picture
 
 Slides opens with the deck's slides down the left (the filmstrip) and the current slide on its canvas. Three views, under View:
 
-- **Visual** edits the slide on its canvas. Type, select, format; headings, lists, pictures and the rest are drawn as they will show. A tip, a note, a column set or the speaker notes is a box on the canvas, edited inside as any text is, with a bar at its top for its title, for removing the box, or for editing it as Markdown. A block the canvas cannot draw as rich text, such as a code block, is edited as its Markdown in place.
+- **Visual** edits the slide on its canvas. Type, select, format; headings, lists, pictures and the rest are drawn as they will show. A tip, a note, a column set or the speaker notes is a box on the canvas, edited inside as any text is, with a bar at its top for its title, for removing the box, or for editing it as Markdown; Format, Box wraps the selected paragraphs in one. A video, an applet, keys or a status label opens a form when clicked. A block the canvas cannot draw as rich text, such as a code block, is edited as its Markdown in place.
 - **Text** edits the slide's Markdown.
 - **Split** shows both. View, Canvas puts the canvas left, right, above or below the Markdown, or lets it float over the Markdown as a panel you drag by its bar and resize by its corner.
 

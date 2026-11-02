@@ -116,6 +116,20 @@
 .doc-page.page-view .pm-column { min-width: 0; padding: var(--space-2); border: 1px dashed transparent; border-radius: var(--radius-sm); }
 .doc-page.page-view .pm-box:hover .pm-column, .doc-page.page-view .pm-box:focus-within .pm-column { border-color: var(--input-border); }
 
+/* An inline shortcode on the page (page-view.js inlineView): keys or a
+   status label, pressed to change it. */
+.doc-page.page-view .pm-sc { cursor: pointer; border-radius: var(--radius-sm); }
+.doc-page.page-view .pm-sc:hover { outline: 1px dashed var(--input-border); outline-offset: 2px; }
+.doc-page.page-view .pm-sc.selected { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.doc-page.page-view .pm-sc .sc-glyph { vertical-align: -0.15em; }
+
+/* The editing kit's shortcode forms (apps/md-editor/kit.js). */
+.md-form { max-width: 34rem; }
+.md-form-fields { display: grid; gap: var(--space-1); }
+.md-form-fields .form-label { margin-top: var(--space-3); }
+.md-form-fields .form-help { margin: 0; }
+.md-form-fields .form-input, .md-form-fields .form-select { width: 100%; }
+
 /* A picture never widens the page: it scales to the column, as a figure's
    does; code and tables scroll within themselves (DESIGN.md, decision 15). */
 .doc-page img { max-width: 100%; height: auto; }

@@ -323,6 +323,7 @@
                 markdownOf: function (doc) { return engine().then(function (m) { return m.markdown(doc); }); },
                 sourceOf: function (src) { return engine().then(function (m) { return m.source(src); }); },
                 wrapOf: function (line) { return engine().then(function (m) { return m.container(line); }); },
+                inlineOf: function (src) { return engine().then(function (m) { return m.inline(src); }); },
                 blocksOf: function (text) { return engine().then(function (m) { return m.blocks(text); }); },
                 draw: function (target, html, diagrams) {
                     target.replaceChildren(window.yavcHTML.fragment(html));
@@ -1144,7 +1145,7 @@
             return [{ label: 'Slides', ribbon: 'hide', groups: [
                 { label: 'File', glyph: 'file', priority: 3, items: ['new-deck', 'open', 'save'] },
                 { label: 'Slide', glyph: 'plus', priority: 4, items: ['slide-new', 'slide-duplicate', 'slide-delete', 'slide-up', 'slide-down'] },
-                { label: 'Format', glyph: 'bold', priority: 2, items: ['layout', 'style', 'bold', 'italic', 'strike', 'code', 'link', 'color', 'bullets', 'numbers', 'insert'] },
+                { label: 'Format', glyph: 'bold', priority: 2, items: ['layout', 'style', 'bold', 'italic', 'strike', 'code', 'link', 'color', 'bullets', 'numbers', 'insert', 'box'] },
                 { label: 'Show', glyph: 'play', priority: 5, items: ['present', 'presenter'] },
                 { label: 'View', glyph: 'panel', priority: 1, end: true, items: [{ choice: 'deck-view' }, 'dock', 'toggle-film'] }
             ] }];

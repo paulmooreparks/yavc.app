@@ -80,7 +80,9 @@ func TestShortcodeKind(t *testing.T) {
 		rest := b.HTML[i+len(`data-kind="`):]
 		kinds = append(kinds, rest[:strings.Index(rest, `"`)])
 	}
-	want := "shortcode shortcode paragraph"
+	// Keys in a line of text leave the paragraph a paragraph, edited as rich
+	// text with the keys as one piece of it; a container is a shortcode.
+	want := "paragraph shortcode paragraph"
 	if strings.Join(kinds, " ") != want {
 		t.Errorf("kinds %v, want %s", kinds, want)
 	}

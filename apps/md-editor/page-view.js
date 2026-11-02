@@ -148,6 +148,13 @@ var schemaCache = null;
           toDOM: function (n) { return ['div', { class: 'pm-box sc-columns', 'data-name': n.attrs.name, 'data-columns': '', 'data-open': n.attrs.open, 'data-close': n.attrs.close }, 0]; } },
         column: { content: 'block+', isolating: true, attrs: { tail: { default: '' } },
           parseDOM: [{ tag: 'div.pm-column' }], toDOM: function () { return ['div', { class: 'pm-column sc-column' }, 0]; } },
+        /* A shortcode in a line of text, keys or a status label: one piece
+           of the line, drawn as the preview draws it, changed through its
+           form, and written back as it was written (src). */
+        shortcode: { group: 'inline', inline: true, atom: true, selectable: true, draggable: true,
+          attrs: { src: { default: '' }, html: { default: '' } },
+          parseDOM: [{ tag: 'span.pm-sc[data-src]', getAttrs: function (d) { return { src: d.getAttribute('data-src'), html: window.yavcHTML.clean(d.getAttribute('data-html') || '') }; } }],
+          toDOM: function (n) { return ['span', { class: 'pm-sc', 'data-src': n.attrs.src, 'data-html': n.attrs.html }]; } },
         text: { group: 'inline' },
         // A line break, as HTML pasted from another program can hold one.
         hard_break: { group: 'inline', inline: true, selectable: false, parseDOM: [{ tag: 'br' }], toDOM: function () { return ['br']; } },
@@ -193,6 +200,7 @@ var schemaCache = null;
        draw(el, html, diagrams) draws preview HTML into el, diagrams and images included
        keys()                   [{ key, run }], the Editor's key table in ProseMirror's spelling
        say(text, warn)          the Editor's status line
+       inlineOf(src)            a promise of { html } for an inline shortcode
        wrapOf(line)             a promise of a container's parts for its opening line
                                 ({ name, args, open, before, after }), for its Title dialog
        editBlock(src)           optional: a drawn block pressed; a promise of its new
@@ -236,7 +244,7 @@ var schemaCache = null;
           o.page.replaceChildren();
           view = new PM.EditorView(o.page, {
             state: state,
-            nodeViews: { source_block: sourceView, container: boxView, columns: boxView },
+            nodeViews: { source_block: sourceView, container: boxView, columns: boxView, shortcode: inlineView },
             handlePaste: handlePaste,
             // HTML pasted from another program is made safe before the
             // editor reads it (safe-html.js).
@@ -1058,6 +1066,80 @@ var schemaCache = null;
         ignoreMutation: function (m) { return m.type !== 'selection' && !contentDOM.contains(m.target); }
       };
     }
+    /* A block moved to a new place: it loses where it was read from, so it
+       is written where it lands, after a blank line, as a new block is; a
+       block kept as its Markdown keeps that Markdown. */
+    function looseCopy(b, n) {
+      if (!('uid' in b.attrs)) return b;
+      return b.type.create(Object.assign({}, b.attrs, { uid: null, gap: null, src: b.type === n.source_block ? b.attrs.src : null }), b.content, b.marks);
+    }
+
+    /* An inline shortcode on the page: drawn as the preview draws it; a
+       press opens its form, whose answer replaces it or takes it out. */
+    function inlineView(node, v, getPos) {
+      var dom = document.createElement('span'), current = node;
+      dom.className = 'pm-sc';
+      dom.contentEditable = 'false';
+      dom.title = 'Change it';
+      function draw(nd) { dom.replaceChildren(window.yavcHTML.fragment(nd.attrs.html || nd.attrs.src)); }
+      draw(node);
+      dom.addEventListener('mousedown', function (e) {
+        if (e.button !== 0) return;
+        e.preventDefault();
+        var asked = o.editBlock ? o.editBlock(current.attrs.src) : undefined;
+        if (asked === undefined) return;
+        Promise.resolve(asked).then(function (value) {
+          var pos = getPos();
+          if (value == null || typeof pos !== 'number') { v.focus(); return; }
+          if (value === '') { v.dispatch(v.state.tr.delete(pos, pos + 1)); v.focus(); return; }
+          return Promise.resolve(o.inlineOf ? o.inlineOf(value) : { html: '' }).then(function (r) {
+            var at = getPos();
+            if (typeof at !== 'number') return;
+            v.dispatch(v.state.tr.setNodeMarkup(at, null, { src: value, html: r && r.html || '' }));
+            v.focus();
+          });
+        }).catch(function (err) { o.say(String(err && err.message || err), true); });
+      });
+      return {
+        dom: dom,
+        update: function (nd) { if (nd.type !== node.type) return false; if (nd.attrs.html !== current.attrs.html || nd.attrs.src !== current.attrs.src) draw(nd); current = nd; return true; },
+        ignoreMutation: function () { return true; },
+        selectNode: function () { dom.classList.add('selected'); },
+        deselectNode: function () { dom.classList.remove('selected'); }
+      };
+    }
+    /* An inline shortcode put in at the cursor, in place of the selection. */
+    function insertInline(src) {
+      return Promise.resolve(o.inlineOf ? o.inlineOf(src) : { html: '' }).then(function (r) {
+        if (!view) return;
+        var node = view.state.schema.nodes.shortcode.create({ src: src, html: r && r.html || '' });
+        view.dispatch(view.state.tr.replaceSelectionWith(node, true).scrollIntoView());
+        view.focus();
+      }).catch(function (err) { o.say(String(err && err.message || err), true); });
+    }
+    /* The selected blocks, or the block the cursor is in, wrapped in a box
+       (a container shortcode, or a column set whose first column they
+       become), within whatever body they are in. */
+    function wrap(name) {
+      if (!view || !o.wrapOf) return Promise.resolve();
+      return Promise.resolve(o.wrapOf('{{' + name + '}}')).then(function (info) {
+        if (!view) return;
+        var st = view.state, n = st.schema.nodes, sel = st.selection;
+        var range = sel.$from.blockRange(sel.$to, function (node) { return node.type === n.doc || node.type === n.container || node.type === n.column; });
+        if (!range) { o.say('These blocks cannot go into a box together.', true); return; }
+        var blocks = [];
+        for (var i = range.startIndex; i < range.endIndex; i++) blocks.push(looseCopy(range.parent.child(i), n));
+        var attrs = { name: info.name, args: info.args || '', open: '', close: '', before: info.before, after: info.after };
+        var box = name === 'columns'
+          ? n.columns.create(Object.assign(attrs, { sep: info.sep || 'column' }), [n.column.create(null, blocks), n.column.create(null, n.paragraph.create(null, st.schema.text(PLACEHOLDER)))])
+          : n.container.create(attrs, blocks);
+        var tr = st.tr.replaceWith(range.start, range.end, box);
+        tr.setSelection(PM.TextSelection.near(tr.doc.resolve(range.start + (name === 'columns' ? 3 : 2))));
+        view.dispatch(tr.scrollIntoView());
+        view.focus();
+      }).catch(function (err) { o.say(String(err && err.message || err), true); });
+    }
+
     function boxAction(action, node, getPos, v) {
       var pos = getPos(), n = v.state.schema.nodes;
       if (typeof pos !== 'number') return;
@@ -1088,9 +1170,8 @@ var schemaCache = null;
         /* The blocks lose their place in the box, so they are written where
            they land, after a blank line, as a new block is. */
         var blocks = [];
-        function loose(b) { blocks.push(b.type.create(Object.assign({}, b.attrs, { uid: null, gap: null, src: b.type === n.source_block ? b.attrs.src : null }), b.content, b.marks)); }
-        if (node.type === n.columns) node.forEach(function (c) { c.forEach(loose); });
-        else node.forEach(loose);
+        if (node.type === n.columns) node.forEach(function (c) { c.forEach(function (b) { blocks.push(looseCopy(b, n)); }); });
+        else node.forEach(function (b) { blocks.push(looseCopy(b, n)); });
         var lifted = v.state.tr.replaceWith(pos, pos + node.nodeSize, PM.Fragment.fromArray(blocks));
         lifted.setSelection(PM.TextSelection.near(lifted.doc.resolve(pos + 1)));
         v.dispatch(lifted.scrollIntoView());
@@ -1249,6 +1330,8 @@ var schemaCache = null;
       find: find, goToMatch: goToMatch, matchText: matchText, replaceMatch: replaceMatch, replaceAllMatches: replaceAllMatches, selectionText: selectionText,
       run: run,
       insertMarkdown: insertMarkdown,
+      insertInline: insertInline,
+      wrap: wrap,
       /* The page's blocks the selection touches, as a document of their
          own for markdownOf, or null with nothing selected: what a chat
          takes as the passage, widened to whole blocks as

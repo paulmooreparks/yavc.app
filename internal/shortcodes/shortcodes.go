@@ -19,6 +19,7 @@ package shortcodes
 import (
 	"bytes"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -123,6 +124,8 @@ type Inline struct {
 	ast.BaseInline
 	Call    Call
 	Closing bool
+	// Raw is the shortcode as written, for an editor to write back.
+	Raw string
 	// For a span shortcode, set as its paragraph is drawn: an opener that
 	// found its {{/name}} in the paragraph, and a closer that matched.
 	Matched bool
@@ -175,10 +178,50 @@ func IsShortcodeParagraph(n ast.Node) bool {
 			if _, _, isSpan := Span(in); isSpan {
 				continue
 			}
+			if IsInlineAtom(in) {
+				continue
+			}
 			return true
 		}
 	}
 	return false
+}
+
+// IsInlineAtom says whether an inline shortcode stands in a line of text on
+// its own, such as {{kbd:Ctrl+C}} or {{status:green Done}}, so an editor
+// keeps it as one piece of the line with a form of its own.
+func IsInlineAtom(n *Inline) bool {
+	d := table[n.Call.Name]
+	return d != nil && d.kind == inline && !n.Closing && n.Raw != ""
+}
+
+// InlineHTML draws one inline shortcode, as written, as the page draws it;
+// a shortcode it cannot draw is the page's marked problem.
+func InlineHTML(raw string) string {
+	m := tagRe.FindStringSubmatch(raw)
+	if m == nil || m[0] != raw || m[1] != "" {
+		return `<code class="sc-problem">` + esc(raw) + `</code>`
+	}
+	c := NewCall(m[2], m[3])
+	d := table[c.Name]
+	if d == nil || d.kind != inline {
+		return problemHTML(c, "There is no shortcode called "+c.Name+" that goes in a line of text.")
+	}
+	out, err := d.render(c, nil, nil)
+	if err != nil {
+		return problemHTML(c, err.Error())
+	}
+	return out
+}
+
+// GlyphNames lists PUDL's glyphs, for an editor's glyph choice.
+func GlyphNames() []string {
+	var out []string
+	for g := range glyphs {
+		out = append(out, g)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // Span says whether an inline shortcode is a paired span with its match
@@ -205,7 +248,7 @@ func (p *inlineParser) Parse(parent ast.Node, block text.Reader, pc parser.Conte
 	if m == nil {
 		return nil
 	}
-	node := &Inline{Call: NewCall(string(m[2]), string(m[3])), Closing: len(m[1]) > 0}
+	node := &Inline{Call: NewCall(string(m[2]), string(m[3])), Closing: len(m[1]) > 0, Raw: string(m[0])}
 	block.Advance(len(m[0]))
 	_ = seg
 	return node

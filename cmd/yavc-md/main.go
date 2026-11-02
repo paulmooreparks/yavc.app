@@ -100,6 +100,12 @@ func main() {
 		}
 		return out(map[string]any{"name": c.Name, "args": c.Args, "before": c.Before, "after": c.After, "sep": c.Separator, "open": shortcodes.OpenLine(c.Name, c.Args)}, nil)
 	}))
+	api.Set("inline", fn(func(raw string) string {
+		return out(map[string]any{"html": shortcodes.InlineHTML(raw)}, nil)
+	}))
+	api.Set("glyphs", fn(func(string) string {
+		return out(shortcodes.GlyphNames(), nil)
+	}))
 	api.Set("source", fn(func(src string) string {
 		blocks, _ := render(src)
 		html, diagrams := "", []preview.Diagram{}

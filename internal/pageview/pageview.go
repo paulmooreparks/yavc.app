@@ -350,6 +350,13 @@ func (p parser) walk(n ast.Node, marks []Mark, out *[]*Node) error {
 			}
 			name, value, ok := shortcodes.Span(node)
 			if !ok {
+				// A shortcode that stands in the line on its own, keys or a
+				// status label, is one piece of the line, written back as it
+				// was and changed through its form.
+				if shortcodes.IsInlineAtom(node) {
+					*out = append(*out, &Node{Type: "shortcode", Attrs: map[string]any{"src": node.Raw, "html": shortcodes.InlineHTML(node.Raw)}, Marks: append([]Mark(nil), marks...)})
+					continue
+				}
 				return ErrNotEditable
 			}
 			markType := ""
@@ -405,7 +412,10 @@ func (p parser) starred(e *ast.Emphasis) bool {
 	if !ok {
 		off, ok2 := firstText(e)
 		if !ok2 {
-			return false
+			// Emphasis around a shortcode alone has no text to find its
+			// delimiter by; Parse's check that the part writes back as it
+			// was read turns away anything not written with asterisks.
+			return true
 		}
 		return off >= e.Level && p.src[off-1] == '*'
 	}
@@ -687,6 +697,8 @@ func serializeInline(nodes []*Node, cell bool) (string, error) {
 			} else {
 				b.WriteString("\\\n")
 			}
+		case "shortcode":
+			b.WriteString(stringAttr(n, "src"))
 		default:
 			return "", fmt.Errorf("a %s cannot be written inline", n.Type)
 		}

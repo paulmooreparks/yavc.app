@@ -8,11 +8,13 @@ The page view is the Visual view of the Editor and the canvas of Slides: ProseMi
 
 2. **A column set is a row of columns** (2026-11-03). `{{columns}}` becomes a block holding one column per part of its body, divided by the `{{column}}` lines; each column is edited as a run of blocks, and the dividing lines are written back as they were, or as `{{column}}` for a column added in the editor.
 
-3. **A block shortcode is a form** (2026-11-03). A shortcode that stands alone and has no body (a picture, a video, an applet, a code listing, the contents, a page link) is drawn as the preview draws it and edited through a dialog of its settings, as the picture dialog already does; a click on it opens the dialog. Until a shortcode has its form, a click edits its Markdown in place, as before.
+3. **A standalone shortcode is a form** (2026-11-03, built the same day). A shortcode with no body is drawn as the preview draws it and edited through a dialog of its settings: on a line of its own a picture, a video, an applet, a code listing or the contents; in a line of text keys, a status label, a glyph, a link to a page or an anchor. A click on it opens the dialog, Insert and the `/` menu open it for a new one, and Remove takes it out. A shortcode in a line of text is one inline piece of a rich paragraph, written back exactly as it was written, so a sentence with keys in it is no longer edited as Markdown. The forms are the editing kit's (`apps/md-editor/kit.js`, `FORMS`), one table that the Editor and Slides share.
 
 4. **A span shortcode is a mark** (2026-11-03, already built). Coloured words and styled words are marks on the text, applied from Format and written back as `{{color:…}}…{{/color}}` and `{{class:…}}…{{/class}}`.
 
 5. **The box's settings and ways out** (2026-11-03). A box shows a small bar while the pointer or the keyboard is in it, with Settings for its title or arguments, Remove the Box, which lifts its content onto the page, and Edit as Markdown, which turns it back into a source block for anything the rich form cannot say. Enter on an empty last line of a box leaves the box, as Enter on an empty last item leaves a list.
+
+6. **Box wraps a selection** (2026-11-03). Format, Box, on the toolbar and in the menus, wraps the selected blocks, or the block the cursor is in, in a tip, note, information notice, warning, expand section, note to self or column set (the blocks become the first column). In the text it puts the selected lines between the box's opening and closing lines.
 
 ## Round trip
 
