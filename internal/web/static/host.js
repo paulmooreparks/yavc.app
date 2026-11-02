@@ -77,8 +77,9 @@
        only just drawn. Then a key such as F5 or Ctrl+S reaches the browser
        instead of the applet the person is looking at. So the applet in the
        active window, or the one page of its own, takes the focus when it
-       starts and when its window is pressed, and a key pressed with nothing
-       focused is offered to that applet first. */
+       starts and when its window is pressed. (PUDL 0.96.7's dispatcher
+       also sends a key pressed with nothing focused to the active window's
+       applet, so the host no longer re-dispatches it.) */
     function mountInFront() {
         var win = document.querySelector('.win.active');
         var mount = win ? win.querySelector('[data-applet]') : null;
@@ -105,16 +106,6 @@
         var win = e.target.closest && e.target.closest('.win');
         if (!win) { return; }
         setTimeout(function () { if (win.classList.contains('active')) { focusMount(win.querySelector('[data-applet]')); } }, 0);
-    });
-    document.addEventListener('keydown', function (e) {
-        if (e.defaultPrevented || e.yavcAgain || !unfocused()) { return; }
-        if (document.querySelector('dialog:modal')) { return; }
-        var mount = mountInFront();
-        if (!mount) { return; }
-        var again = new KeyboardEvent('keydown', e);
-        again.yavcAgain = true;
-        mount.dispatchEvent(again);
-        if (again.defaultPrevented) { e.preventDefault(); }
     });
 
     window.pudlHost = kit.host({

@@ -867,6 +867,63 @@
             setTimeout(function () { URL.revokeObjectURL(a.href); }, 2000);
             say('Downloaded ' + a.download + '.');
         }
+        /* === PowerPoint and PDF (export-pptx.js, export-pdf.js, import-pptx.js) === */
+
+        function officeContext() {
+            return { deck: deck, settingsOf: settingsOf, titleOf: titleOf, notesOf: notesOf, drawInto: drawIntoQuiet, buildShow: buildShow, sizeOf: sizeOf, loadScript: loadScript, here: HERE, stamp: STAMP };
+        }
+        function fileStem() { return (deck.front.title || 'deck').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'deck'; }
+        function download(name, blob) {
+            var a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = name;
+            document.body.appendChild(a); a.click(); a.remove();
+            setTimeout(function () { URL.revokeObjectURL(a.href); }, 2000);
+            say('Downloaded ' + name + '.');
+        }
+        async function pptxBlob() {
+            await loadScript(HERE + 'export-pptx.js' + STAMP);
+            return window.yavcSlidesPptx.build(officeContext());
+        }
+        async function pdfBytes(progress) {
+            await loadScript(HERE + 'export-pdf.js' + STAMP);
+            var ctx = officeContext();
+            ctx.pageCSS = await fetch('/applets/md-engine/page.css' + (window.yavcStaticVersion ? '?v=' + encodeURIComponent(window.yavcStaticVersion) : '')).then(function (r) { return r.text(); }).catch(function () { return ''; });
+            return window.yavcSlidesPdf.build(ctx, progress);
+        }
+        async function exportPPTX() {
+            say('Writing the PowerPoint file…');
+            try { download(fileStem() + '.pptx', await pptxBlob()); }
+            catch (err) { say('The PowerPoint file could not be written: ' + err.message, true); }
+        }
+        async function exportPDF() {
+            try {
+                var bytes = await pdfBytes(function (n, of) { say('Drawing slide ' + n + ' of ' + of + '…'); });
+                download(fileStem() + '.pdf', new Blob([bytes], { type: 'application/pdf' }));
+            } catch (err) { say('The PDF could not be written: ' + err.message, true); }
+        }
+        async function importPPTXBuffer(buffer, name) {
+            await loadScript(HERE + 'import-pptx.js' + STAMP);
+            var got = await window.yavcSlidesImport.pptx(buffer, officeContext());
+            await openInTab(got.text, null);
+            modified = true;
+            stash();
+            commandsChanged();
+            announce();
+            say('Imported ' + (name || 'the file') + ': ' + got.slides + ' slide' + (got.slides === 1 ? '' : 's') + (got.pictures ? ', with ' + got.pictures + ' picture' + (got.pictures === 1 ? '' : 's') + ' noted but not kept' : '') + '. Save it to keep it.');
+            return got;
+        }
+        function importPPTX() {
+            var input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation';
+            input.addEventListener('change', function () {
+                var f = input.files && input.files[0];
+                if (!f) { return; }
+                f.arrayBuffer().then(function (buf) { return importPPTXBuffer(buf, f.name); }).catch(function (err) { say('The file could not be imported: ' + err.message, true); });
+            });
+            input.click();
+        }
         function printDeck() {
             var box = document.createElement('div');
             box.className = 'deck-print';
@@ -926,6 +983,9 @@
                 cmd('save-as', 'Save As…', null, saveAs),
                 cmd('edit-whole', 'Edit the Whole Deck in the Editor', 'pencil', editWhole, { disabled: function () { return !path; } }),
                 cmd('export-html', 'Download as a Page', 'download', exportHTML),
+                cmd('export-pptx', 'Download as PowerPoint', 'download', exportPPTX, { disabled: function () { return !ready; } }),
+                cmd('export-pdf', 'Download as PDF', 'download', exportPDF, { disabled: function () { return !ready; } }),
+                cmd('import-pptx', 'Import from PowerPoint…', 'upload', importPPTX, { disabled: function () { return !ready; } }),
                 cmd('print', 'Print…', null, printDeck),
                 cmd('slide-new', 'New Slide', 'plus', null, { items: LAYOUTS.map(function (l) { return { id: 'slide-new-' + l[0], label: l[1], run: function () { addSlide(l[0]); } }; }) }),
                 cmd('slide-duplicate', 'Duplicate Slide', 'copy', duplicateSlide),
@@ -977,7 +1037,7 @@
         function menus() {
             return { titles: [
                 { label: 'Slides', glyph: 'document', items: H.identity ? H.identity(root, []) : [] },
-                { id: 'file', label: 'File', glyph: 'file', items: ['new-deck', 'open', 'save', 'save-as', '-', 'edit-whole', '-', 'export-html', 'print'] },
+                { id: 'file', label: 'File', glyph: 'file', items: ['new-deck', 'open', 'import-pptx', 'save', 'save-as', '-', 'edit-whole', '-', 'export-pptx', 'export-pdf', 'export-html', 'print'] },
                 { id: 'slide', label: 'Slide', glyph: 'plus', items: ['slide-new', 'slide-duplicate', 'slide-delete', '-', 'slide-up', 'slide-down', '-', 'layout', 'reveal', 'background', 'background-image', 'slide-transition'] },
                 { id: 'format', label: 'Format', glyph: 'paragraph', items: ['style', '-', 'bold', 'italic', 'code', 'link', '-', 'bullets', 'numbers', '-', 'insert'] },
                 { id: 'deck', label: 'Deck', glyph: 'gear', items: ['deck-title', 'theme', 'size', 'deck-transition'] },
@@ -1177,6 +1237,23 @@
                 await booted;
                 var page = await exportPage();
                 return { output: { title: deck.front.title || '' }, artifacts: [{ key: 'page', name: page.name, mime: 'text/html', data: page.html }] };
+            },
+            'export-pptx@1': async function () {
+                await booted;
+                var blob = await pptxBlob();
+                return { output: { title: deck.front.title || '', slides: deck.slides.length }, artifacts: [{ key: 'pptx', name: fileStem() + '.pptx', mime: 'application/vnd.openxmlformats-officedocument.presentationml.presentation', data: new Uint8Array(await blob.arrayBuffer()) }] };
+            },
+            'export-pdf@1': async function () {
+                await booted;
+                var bytes = await pdfBytes();
+                return { output: { title: deck.front.title || '', slides: deck.slides.length }, artifacts: [{ key: 'pdf', name: fileStem() + '.pdf', mime: 'application/pdf', data: bytes }] };
+            },
+            'import-pptx@1': async function (input) {
+                await booted;
+                var bin = atob(String(input.data)), bytes = new Uint8Array(bin.length);
+                for (var i = 0; i < bin.length; i++) { bytes[i] = bin.charCodeAt(i); }
+                var got = await importPPTXBuffer(bytes.buffer, input.name);
+                return { output: { index: active + 1, title: got.title, slides: got.slides, pictures: got.pictures } };
             }
         };
         var detachLive = window.pudlApplets && window.pudlApplets.attach ? window.pudlApplets.attach('yavc.slides', liveActions) : null;

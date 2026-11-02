@@ -1199,6 +1199,116 @@
         "artifact.create"
       ],
       "replay": "pure"
+    },
+    {
+      "ref": "yavc.slides/export-pptx@1",
+      "title": "Export the Deck as PowerPoint",
+      "description": "The open deck as a .pptx file, editable in PowerPoint: each slide's headings, text, lists, code, quotes, tables, pictures and notes laid out in its layout. Given as an artifact.",
+      "live": true,
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": [
+          "pptx"
+        ],
+        "properties": {
+          "pptx": {
+            "type": "object"
+          },
+          "title": {
+            "type": "string"
+          },
+          "slides": {
+            "type": "integer"
+          }
+        }
+      },
+      "capabilities": [
+        "artifact.create"
+      ],
+      "replay": "pure"
+    },
+    {
+      "ref": "yavc.slides/export-pdf@1",
+      "title": "Export the Deck as PDF",
+      "description": "The open deck as a PDF, one page per slide, each drawn as the show shows it. Given as an artifact.",
+      "live": true,
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": [
+          "pdf"
+        ],
+        "properties": {
+          "pdf": {
+            "type": "object"
+          },
+          "title": {
+            "type": "string"
+          },
+          "slides": {
+            "type": "integer"
+          }
+        }
+      },
+      "capabilities": [
+        "artifact.create"
+      ],
+      "replay": "pure"
+    },
+    {
+      "ref": "yavc.slides/import-pptx@1",
+      "title": "Import a PowerPoint File",
+      "description": "Read a .pptx file, given as base64, into a new unsaved deck in Slides: titles, text, lists, tables, two bodies side by side as columns, and notes. Pictures are noted by name, not kept.",
+      "live": true,
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "type": "string",
+            "description": "The file's bytes as base64."
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 256
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": [
+          "index",
+          "slides"
+        ],
+        "properties": {
+          "index": {
+            "type": "integer"
+          },
+          "title": {
+            "type": "string"
+          },
+          "slides": {
+            "type": "integer"
+          },
+          "pictures": {
+            "type": "integer"
+          }
+        }
+      },
+      "capabilities": [],
+      "replay": "once"
     }
   ]
 }

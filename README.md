@@ -53,7 +53,7 @@ The engine includes parkscomputing.com's shortcodes (`internal/shortcodes`): `{{
 
 ## Slides
 
-Slides (`apps/slides`, design in [docs/slides-design.md](docs/slides-design.md)) makes a slide deck from a Markdown file named `something.slides.md`: slides divided by `---`, a `{{slide:layout=title}}` line for a slide's settings, `{{notes}}` for the speaker's notes, and the front matter for the deck's title, theme, size and transition. The current slide is edited on its canvas, as the Editor's Visual view edits a page, or as its Markdown, and the deck presents full screen with a presenter window and exports as a page that presents itself.
+Slides (`apps/slides`, design in [docs/slides-design.md](docs/slides-design.md)) makes a slide deck from a Markdown file named `something.slides.md`: slides divided by `---`, a `{{slide:layout=title}}` line for a slide's settings, `{{notes}}` for the speaker's notes, and the front matter for the deck's title, theme, size and transition. The current slide is edited on its canvas, as the Editor's Visual view edits a page, or as its Markdown, and the deck presents full screen with a presenter window and exports as a page that presents itself, as a PowerPoint file (structural, editable) and as a PDF (each slide as drawn); a PowerPoint file imports as a deck. The libraries for those, PptxGenJS, pdf-lib and JSZip, are vendored under `apps/slides/vendor` with their MIT licences.
 
 ## For agents
 
