@@ -935,7 +935,7 @@
     {
       "ref": "yavc.slides/set-slide@1",
       "title": "Set a Slide's Settings",
-      "description": "Change a slide's layout, text colour (color), accent, background colour, background picture, reveal (steps, or empty for none), transition or class. An empty string removes a setting. Settings left out keep their values.",
+      "description": "Change a slide's layout, text colour (color), heading colour (heading), accent, background colour, background picture, reveal (steps, or empty for none), transition or class. An empty string removes a setting. Settings left out keep their values.",
       "live": true,
       "inputSchema": {
         "type": "object",
@@ -989,6 +989,10 @@
           "accent": {
             "type": "string",
             "maxLength": 64
+          },
+          "heading": {
+            "type": "string",
+            "maxLength": 64
           }
         }
       },
@@ -1013,7 +1017,7 @@
     {
       "ref": "yavc.slides/set-deck@1",
       "title": "Set the Deck's Front Matter",
-      "description": "Change the deck's title, author, theme, slide size, the transition every slide uses, or its colours over the theme's: ink (text), muted, accent and background, each any CSS colour or empty for the theme's own. Fields left out keep their values.",
+      "description": "Change the deck's title, author, theme, slide size, the transition every slide uses, or its colours over the theme's: ink (text), heading, muted (secondary text), accent and background, each any CSS colour or empty for the theme's own. Fields left out keep their values.",
       "live": true,
       "inputSchema": {
         "type": "object",
@@ -1060,6 +1064,10 @@
             "maxLength": 64
           },
           "background": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "heading": {
             "type": "string",
             "maxLength": 64
           }

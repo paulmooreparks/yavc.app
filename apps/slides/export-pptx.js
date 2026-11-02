@@ -174,7 +174,7 @@
         pptx.title = deck.front.title || 'A deck';
         if (deck.front.author) { pptx.author = deck.front.author; }
         var theme = Object.assign({}, THEMES[deck.front.theme] || THEMES.plain);
-        ['ink', 'muted', 'accent'].forEach(function (k) { var c = colourOf(deck.front[k]); if (c) { theme[k] = c; } });
+        ['ink', 'muted', 'accent', 'heading'].forEach(function (k) { var c = colourOf(deck.front[k]); if (c) { theme[k] = c; } });
         if (colourOf(deck.front.background)) { theme.bg = colourOf(deck.front.background); }
         var ink = theme.ink;
         var text = function (name, type, x, y, w, h, more) { return { placeholder: { options: Object.assign({ name: name, type: type, x: x, y: y, w: w, h: h, color: ink, fontFace: FONT, margin: 4 }, more) } }; };
@@ -216,7 +216,7 @@
             var slide = pptx.addSlide({ masterName: master });
             var bg = colourOf(st.background);
             if (bg) { slide.background = { color: bg }; }
-            var slideInk = colourOf(st.color) || ink;
+            var slideInk = colourOf(st.color) || ink, slideHeading = colourOf(st.heading) || theme.heading || slideInk;
             if (st.image) {
                 var bgImg = await imageData(st.image);
                 if (bgImg) { slide.background = { data: bgImg.data }; }
@@ -225,7 +225,7 @@
 
             if (master === 'TITLE' || master === 'SECTION') {
                 var sub = rest.filter(function (it) { return it.kind === 'heading' || it.kind === 'para'; });
-                slide.addText(heading ? toRuns(heading.runs, theme) : [{ text: ctx.titleOf(s, i) }], { placeholder: 'title', fit: 'shrink', color: slideInk });
+                slide.addText(heading ? toRuns(heading.runs, theme) : [{ text: ctx.titleOf(s, i) }], { placeholder: 'title', fit: 'shrink', color: slideHeading });
                 if (master === 'TITLE' && sub.length) {
                     var subRuns = [];
                     sub.forEach(function (it, k) { var r = toRuns(it.runs, theme, { bullet: false }); if (k && r.length) { r[0].options.breakLine = true; } subRuns = subRuns.concat(r); });
@@ -233,7 +233,7 @@
                 }
                 continue;
             }
-            if (heading) { slide.addText(toRuns(heading.runs, theme), { placeholder: 'title', fit: 'shrink', color: slideInk }); }
+            if (heading) { slide.addText(toRuns(heading.runs, theme), { placeholder: 'title', fit: 'shrink', color: slideHeading }); }
             var areaY = 1.5, areaH = H - 1.8;
             if (master === 'QUOTE') {
                 var q = rest.filter(function (it) { return it.kind === 'quote' || it.kind === 'para'; });

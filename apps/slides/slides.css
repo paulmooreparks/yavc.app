@@ -55,7 +55,7 @@
    type is sized for a screen: 30px text on a 1280 canvas reads from the
    back of a room. */
 .deck-slide {
-  --deck-bg: var(--surface); --deck-ink: var(--text); --deck-muted: var(--text-muted); --deck-accent: var(--accent); --deck-rule: var(--border); --deck-code: var(--surface-alt);
+  --deck-bg: var(--surface); --deck-ink: var(--text); --deck-muted: var(--text-muted); --deck-accent: var(--accent); --deck-rule: var(--border); --deck-code: var(--surface-alt); --deck-heading: var(--deck-ink);
   position: relative; width: 100%; height: 100%; box-sizing: border-box; overflow: hidden;
   background: var(--deck-bg); color: var(--deck-ink); background-size: cover; background-position: center;
   font-family: var(--font); font-size: 30px; line-height: 1.4;
@@ -91,6 +91,7 @@
 .deck-slide[data-layout="title"] .deck-body, .deck-slide[data-layout="section"] .deck-body, .deck-slide[data-layout="quote"] .deck-body { display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; padding: 56px 120px; }
 .deck-slide[data-layout="title"] .deck-body > *, .deck-slide[data-layout="section"] .deck-body > *, .deck-slide[data-layout="quote"] .deck-body > * { width: 100%; }
 .deck-slide[data-layout="title"] .deck-body h1 { font-size: 3em; margin-bottom: 0.2em; }
+.deck-body h1, .deck-body h2, .deck-body h3, .deck-body h4 { color: var(--deck-heading); }
 .deck-slide[data-layout="title"] .deck-body h2 { font-size: 1.3em; font-weight: 400; color: var(--deck-muted); border: 0; }
 .deck-slide[data-layout="section"] .deck-body h2 { font-size: 2.6em; border: 0; }
 .deck-slide[data-layout="section"] .deck-body h2::after { content: ""; display: block; width: 3em; height: 6px; margin: 0.3em auto 0; background: var(--deck-accent); }

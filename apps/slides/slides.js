@@ -238,7 +238,7 @@
             section.className = 'deck-slide' + (s['class'] ? ' ' + s['class'].replace(/[^A-Za-z0-9_ -]/g, '') : '');
             /* The deck's colours over the theme's, and the slide's over the
                deck's (docs/slides-design.md, decision 15). */
-            var f = deck.front, vars = { '--deck-ink': s.color || f.ink, '--deck-muted': f.muted, '--deck-accent': s.accent || f.accent };
+            var f = deck.front, vars = { '--deck-ink': s.color || f.ink, '--deck-heading': s.heading || f.heading, '--deck-muted': f.muted, '--deck-accent': s.accent || f.accent };
             Object.keys(vars).forEach(function (k) { if (vars[k]) { section.style.setProperty(k, vars[k]); } else { section.style.removeProperty(k); } });
             section.style.background = s.background || f.background || '';
             section.style.backgroundImage = s.image ? 'url("' + s.image.replace(/"/g, '') + '")' : '';
@@ -572,15 +572,20 @@
         function deckColours() {
             var f = deck.front;
             window.yavcMdEditor.askColours('The deck\'s colours', [
-                { key: 'ink', label: 'Text', value: f.ink, fallback: '#1a1a1a' }, { key: 'muted', label: 'Muted text', value: f.muted, fallback: '#5c6470' },
-                { key: 'accent', label: 'Accent', value: f.accent, fallback: '#1f5fbf' }, { key: 'background', label: 'Background', value: f.background, fallback: '#ffffff' }
+                { key: 'ink', label: 'Text', value: f.ink, fallback: '#1a1a1a', help: 'Paragraphs, lists and tables; headings too unless they have a colour of their own. Empty is the theme\'s own.' },
+                { key: 'heading', label: 'Headings', value: f.heading, fallback: '#1a1a1a', help: 'Every heading, including a title slide\'s title.' },
+                { key: 'muted', label: 'Secondary text', value: f.muted, fallback: '#5c6470', help: 'A title slide\'s subtitle, captions and the speaker notes.' },
+                { key: 'accent', label: 'Accent', value: f.accent, fallback: '#1f5fbf', help: 'The rule under a heading, links, and words coloured "accent".' },
+                { key: 'background', label: 'Background', value: f.background, fallback: '#ffffff', help: 'Every slide, unless the slide sets its own.' }
             ]).then(function (v) { if (!v) { return; } Object.keys(v).forEach(function (k) { setFront(k, v[k]); }); });
         }
         function slideColours() {
             var st = settingsOf(current());
             window.yavcMdEditor.askColours('This slide\'s colours', [
-                { key: 'color', label: 'Text', value: st.color, fallback: '#1a1a1a', placeholder: 'The deck\'s own' }, { key: 'accent', label: 'Accent', value: st.accent, fallback: '#1f5fbf', placeholder: 'The deck\'s own' },
-                { key: 'background', label: 'Background', value: st.background, fallback: '#ffffff', placeholder: 'The deck\'s own' }
+                { key: 'color', label: 'Text', value: st.color, fallback: '#1a1a1a', placeholder: 'The deck\'s own', help: 'Paragraphs, lists and tables on this slide.' },
+                { key: 'heading', label: 'Headings', value: st.heading, fallback: '#1a1a1a', placeholder: 'The deck\'s own', help: 'This slide\'s headings.' },
+                { key: 'accent', label: 'Accent', value: st.accent, fallback: '#1f5fbf', placeholder: 'The deck\'s own', help: 'The rule under the heading, links, and words coloured "accent".' },
+                { key: 'background', label: 'Background', value: st.background, fallback: '#ffffff', placeholder: 'The deck\'s own', help: 'This slide alone.' }
             ]).then(function (v) { if (!v) { return; } Object.keys(v).forEach(function (k) { setSlideSetting(k, v[k]); }); });
         }
         /* Cancel is not a submit button, so Enter in the field is OK. */
@@ -1223,14 +1228,14 @@
             'set-slide@1': async function (input) {
                 await booted;
                 var i = await atSlide(input.index);
-                ['layout', 'background', 'image', 'reveal', 'transition', 'class', 'color', 'accent'].forEach(function (k) {
+                ['layout', 'background', 'image', 'reveal', 'transition', 'class', 'color', 'heading', 'accent'].forEach(function (k) {
                     if (input[k] != null) { setSlideSetting(k, String(input[k])); }
                 });
                 return { output: { index: i + 1, settings: settingsOf(current()) } };
             },
             'set-deck@1': async function (input) {
                 await booted;
-                ['title', 'author', 'theme', 'size', 'transition', 'ink', 'muted', 'accent', 'background'].forEach(function (k) {
+                ['title', 'author', 'theme', 'size', 'transition', 'ink', 'heading', 'muted', 'accent', 'background'].forEach(function (k) {
                     if (input[k] != null) { setFront(k, String(input[k])); }
                 });
                 return { output: { front: Object.assign({}, deck.front) } };
