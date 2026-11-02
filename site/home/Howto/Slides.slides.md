@@ -116,11 +116,11 @@ This is a tip, drawn on a slide exactly as it is on a page.
 - Every command here is also an action an AI agent can call
 - Pair an agent in Settings, under Agents; it works on the page you have open
 - The page asks you before an agent does more than you allowed
-- Help, For agents has the details
+- Help, For Agents has the details
 
 ---
 
 {{slide:layout=quote}}
 > Now open this deck's Markdown and change something.
 
-Howto/Slides.md has the longer version of all of this.
+[Slides Help](/help/slides) has the longer version of all of this.

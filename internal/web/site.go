@@ -33,12 +33,94 @@ var (
 		goldmark.WithRendererOptions(html.WithUnsafe()))
 )
 
-// A site page: its slug, title (the first heading) and rendered body.
+// A site page: its slug, which is also its window's key, its address on
+// the site, its title (the first heading) and its rendered body.
 type sitePage struct {
-	Slug, Title string
-	Body        template.HTML
-	Text        string
-	Modified    time.Time
+	Slug, Path, Title string
+	Body              template.HTML
+	Text              string
+	Modified          time.Time
+}
+
+// The applications' help (DESIGN.md, decision 19) is a set of site pages
+// under the pages folder's help folder: help/{app}.md for each installed
+// application that has one, and help/index.md, the contents, whose
+// {{help-list}} the engine writes as the list of them. They are at /help
+// and /help/{app}, and their slugs, which name their windows and their
+// entries in the site tree, are help and help-{app}, since a window's key
+// has no slash.
+const (
+	helpSlug   = "help"
+	helpPrefix = "help-"
+)
+
+// movedPages are pages that have moved to an address of their own, with
+// where they went, so a link or a bookmark to the old address still
+// arrives.
+var movedPages = map[string]string{
+	"files-guide":    "/help/files",
+	"terminal-guide": "/help/terminal",
+}
+
+// pagePath is a page's address on the site, from its slug.
+func pagePath(slug string) string {
+	if slug == helpSlug {
+		return "/help"
+	}
+	if app, ok := strings.CutPrefix(slug, helpPrefix); ok {
+		return "/help/" + app
+	}
+	return "/" + slug
+}
+
+// helpFor says whether an installed application has a help page.
+func (s *Server) helpFor(app string) bool {
+	_, _, ok := s.pageFile(helpPrefix + app)
+	return ok
+}
+
+// helpApplets is the installed applications that have a help page, in the
+// catalogue's order.
+func (s *Server) helpApplets() []applet {
+	var out []applet
+	for _, a := range s.applets() {
+		if s.helpFor(a.Name) {
+			out = append(out, a)
+		}
+	}
+	return out
+}
+
+// helpSlugs is the slugs of the applications' help pages.
+func helpSlugs(apps []applet) []string {
+	out := make([]string, len(apps))
+	for i, a := range apps {
+		out[i] = helpPrefix + a.Name
+	}
+	return out
+}
+
+// helpEntries is the help pages, for the Help menus.
+func (s *Server) helpEntries() []map[string]string {
+	var out []map[string]string
+	for _, a := range s.helpApplets() {
+		out = append(out, map[string]string{"Name": a.Name, "Title": a.Title})
+	}
+	return out
+}
+
+// helpList is the contents page's list of the applications' help, as
+// Markdown, for {{help-list}}.
+func (s *Server) helpList() string {
+	var b strings.Builder
+	for _, a := range s.helpApplets() {
+		b.WriteString("- [" + a.Title + " Help](/help/" + a.Name + ")")
+		if a.Description != "" {
+			b.WriteString(": " + a.Description)
+		}
+		b.WriteString("\n")
+	}
+	return b.String()
 }
 
 // cachedPage is a page as last rendered, with its file's modification time
@@ -49,12 +131,21 @@ type cachedPage struct {
 }
 
 // pageFile is a page's file, when the slug is a page's and the file is
-// there.
+// there. A help page's slug finds its file in the help folder, and only
+// for an application that is installed.
 func (s *Server) pageFile(slug string) (string, os.FileInfo, bool) {
 	if s.Pages == "" || !slugRe.MatchString(slug) {
 		return "", nil, false
 	}
 	path := filepath.Join(s.Pages, slug+".md")
+	if slug == helpSlug {
+		path = filepath.Join(s.Pages, "help", "index.md")
+	} else if app, ok := strings.CutPrefix(slug, helpPrefix); ok {
+		if _, installed := s.appletByName(app); !installed {
+			return "", nil, false
+		}
+		path = filepath.Join(s.Pages, "help", app+".md")
+	}
 	fi, err := os.Stat(path)
 	if err != nil || fi.IsDir() {
 		return "", nil, false
@@ -64,17 +155,23 @@ func (s *Server) pageFile(slug string) (string, os.FileInfo, bool) {
 
 // pageSource is a page's text as written, with {{retention}} made the
 // engine's setting, so the privacy policy and the terms never contradict
-// the flag.
+// the flag, and {{help-list}} the list of the applications' help.
 func (s *Server) pageSource(path string) (string, bool) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		return "", false
 	}
-	return strings.ReplaceAll(string(raw), "{{retention}}", s.retention()), true
+	text := strings.ReplaceAll(string(raw), "{{retention}}", s.retention())
+	if strings.Contains(text, "{{help-list}}") {
+		text = strings.ReplaceAll(text, "{{help-list}}", s.helpList())
+	}
+	return text, true
 }
 
 // page reads a page from the pages folder, or reports that there is none.
-// A page is rendered once and again only when its file changes.
+// A page is rendered once and again only when its file changes. The help
+// contents is rendered every time, since its list follows the installed
+// applications rather than its file.
 func (s *Server) page(slug string) (sitePage, bool) {
 	path, fi, ok := s.pageFile(slug)
 	if !ok {
@@ -83,7 +180,7 @@ func (s *Server) page(slug string) (sitePage, bool) {
 	s.pageMu.Lock()
 	c, hit := s.pageCache[slug]
 	s.pageMu.Unlock()
-	if hit && c.page.Modified.Equal(fi.ModTime()) && c.size == fi.Size() {
+	if hit && slug != helpSlug && c.page.Modified.Equal(fi.ModTime()) && c.size == fi.Size() {
 		return c.page, true
 	}
 	text, ok := s.pageSource(path)
@@ -94,7 +191,7 @@ func (s *Server) page(slug string) (sitePage, bool) {
 	if err := markdown.Convert([]byte(text), &out); err != nil {
 		return sitePage{}, false
 	}
-	p := sitePage{Slug: slug, Title: pageTitle(slug, text), Body: template.HTML(out.String()), Text: text, Modified: fi.ModTime()}
+	p := sitePage{Slug: slug, Path: pagePath(slug), Title: pageTitle(slug, text), Body: template.HTML(out.String()), Text: text, Modified: fi.ModTime()}
 	s.pageMu.Lock()
 	s.pageCache[slug] = cachedPage{page: p, size: fi.Size()}
 	s.pageMu.Unlock()
@@ -165,6 +262,18 @@ func (s *Server) tree(r *http.Request) *treeEntry {
 		for _, p := range pages {
 			d := p.Modified
 			dir.Children = append(dir.Children, &treeEntry{Name: p.Slug, Kind: "page", Title: str(p.Title), Tags: []string{}, Date: &d})
+		}
+		root.Children = append(root.Children, dir)
+	}
+	// The help pages, by slug, so a page opened from the tree goes to the
+	// help page's window and its address.
+	if apps := s.helpApplets(); len(apps) > 0 {
+		dir := &treeEntry{Name: "help", Kind: "dir", Title: str("Help"), Description: str("Each application's help"), Children: []*treeEntry{}}
+		for _, slug := range append([]string{helpSlug}, helpSlugs(apps)...) {
+			if p, ok := s.page(slug); ok {
+				d := p.Modified
+				dir.Children = append(dir.Children, &treeEntry{Name: p.Slug, Kind: "page", Title: str(p.Title), Tags: []string{}, Date: &d})
+			}
 		}
 		root.Children = append(root.Children, dir)
 	}

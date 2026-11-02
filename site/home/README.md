@@ -4,7 +4,7 @@ Everything under `~` is yours. It lives in this browser's storage, under this ad
 
 ## What is here
 
-- `Howto/` holds the guides: a slide deck about Slides you can open and present, and longer notes on the Editor and on Slides. Open them in the Editor or in Slides, or read them in the Terminal with `cat`.
+- `Howto/` holds samples to open and change: a slide deck about Slides that you can present, a document for the Editor, and notes for a talk. Each one links to its application's help page, and Help, Help Contents lists them all.
 - `Documents/` is for what you write. Slides and the Editor start their Save As dialogs here.
 - `bin/` holds your scripts. `hello` is a first one to copy; scripts here run by name in the Terminal.
 - `glider.cells` is a pattern for Conway's Game of Life and `puzzle.sudoku` a puzzle for Sudoku.
@@ -17,9 +17,9 @@ In the Terminal:
 edit glider.cells
 conway glider.cells
 sudoku puzzle.sudoku
-cat Howto/Slides.md
-ls /site/apps
+ls /site/help
+guide
 hello
 ```
 
-`man edit` lists the Editor's keys, and `help` lists every command. The site keeps this folder's stock files up to date: a guide that changes on the site replaces your copy only while your copy is still as it came, and a file you delete stays deleted.
+`man edit` lists the editor's keys, `help` lists every command, and `guide` reads the Terminal's help a screen at a time. The site keeps this folder's stock files up to date: a guide that changes on the site replaces your copy only while your copy is still as it came, and a file you delete stays deleted.

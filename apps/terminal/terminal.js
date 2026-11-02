@@ -1021,8 +1021,9 @@
         run: function (args, io) { return io.exit(args.length ? (parseInt(args[0], 10) || 0) : 0); }
     });
 
-    /* The guide is an ordinary page, terminal-guide, wherever the site's
-       navigation lists it. */
+    /* The guide is the Terminal's help page, help-terminal (at
+       /help/terminal; DESIGN.md, decision 19), wherever the site's tree
+       lists it. */
     function findNamed(node, name) {
         var kids = node.children || [];
         for (var i = 0; i < kids.length; i++) {
@@ -1036,13 +1037,13 @@
         summary: 'read the full guide to this terminal',
         help: 'guide [-w]\n\nShows the terminal guide a screen at a time, with the same keys as less. With -w it opens as a page instead: a window in the window view, or the page itself in the classic view.',
         run: async function (args, io) {
-            var n = findNamed(io.fs.resolve('/'), 'terminal-guide');
+            var n = findNamed(io.fs.resolve('/'), 'help-terminal');
             if (!n) { io.err('guide: the guide is not on this site yet'); return 1; }
             if (args[0] === '-w') { io.open(realOf(n)); return; }
             var text;
             try { text = await io.read(pathOf(n)); } catch (err) { io.err('guide: ' + err.message); return 1; }
             if (!io.interactive) { io.out(text); return; }
-            return io.pager(text, 'Terminal Guide');
+            return io.pager(text, 'Terminal Help');
         }
     });
 

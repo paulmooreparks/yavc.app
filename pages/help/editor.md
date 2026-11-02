@@ -1,0 +1,72 @@
+# Editor Help
+
+The [Editor](/editor) edits text and Markdown files. Your own files under `~` can be changed, and the site's pages open read-only. For a Markdown file it also draws the page as it will look and lets you edit it there. It runs in a window on the desktop, as a page at `yavc.app/editor`, and on its own at `editor.yavc.app`.
+
+![The Editor on the desktop](/static/shots/desktop.jpg)
+
+## Files and tabs
+
+File, Open opens one of your files or a page of the site, and File, New starts an untitled document. The Files button on the toolbar shows a pane of your files on the left, where a click opens one. Open documents sit in tabs across the top once there is more than one. A tab with unsaved changes says so, and closing it asks first. Save is Ctrl+S, and Save As asks where to put the file, starting in `~/Documents`. Unsaved changes survive a reload of the page.
+
+A file of the site opens read-only, and Save As keeps an editable copy under `~`. A file named `something.slides.md` is a deck, and File, Present the Deck opens it in [Slides](/help/slides).
+
+File, Properties edits a Markdown file's front matter, which is the block between two lines of three dashes at its top. It offers the title, author, subject, keywords, language and date, and any property of your own. Only the lines of the properties you change are rewritten, and front matter that is not valid YAML is reported and left as it is.
+
+## Views
+
+The site's View menu offers four views of a Markdown file.
+
+- **Text** shows the Markdown in a code editor with syntax colouring, line wrapping and the usual keys.
+- **Visual** shows the page as it will look, and you edit it in place. A tip, a note, an expand section or a set of columns is a box on the page, edited inside as any text is; a bar at its top changes its title, removes the box or edits it as Markdown. A picture, a video, an applet or a code listing opens a form when clicked. A block the page cannot draw as rich text, such as a code block or a diagram, is drawn as it will show and edited as its Markdown in place.
+- **Split** shows the Markdown and the page side by side, kept in step.
+- **Preview** shows the page as it will look, read-only.
+
+View, Open Markdown As chooses the view a Markdown file opens in, and each tab remembers the view you last chose for it. View, Wrap Lines turns line wrapping on and off in Text view.
+
+## Formatting
+
+The Format menu and the toolbar offer Bold (Ctrl+B), Italic (Ctrl+I), Strike Through, Code, Text Colour, Style, Bulleted List and Numbered List, and Paragraph Style, which is Paragraph (Ctrl+0) or Heading 1 to 6 (Ctrl+1 to Ctrl+6). In Text view a format wraps the selection in its Markdown or takes it off again, and a heading or a list marks each selected line. In Visual view the page is formatted directly.
+
+Text Colour wraps the selected words in `{{color:…}}…{{/color}}` with one of the site's colours (ink, muted, accent, danger, warn or positive) or any CSS colour. Style wraps them in `{{class:…}}…{{/class}}` with a class from a `{{style}}` block in the document. Both stay editable as rich text in Visual view.
+
+## Inserting
+
+The Insert menu offers Link (Ctrl+K), and under Insert it lists headings, lists, a quote, a checklist, a table, a code block and the shortcodes. It also has Box, which wraps the selected paragraphs in a box, Insert Date and Time (Ctrl+;) and Update Last-Modified (Ctrl+Shift+;). On an empty line in Visual view, typing `/` opens a menu of the same things as Insert; typing more narrows it, and Enter inserts the one chosen.
+
+Insert, Picture opens a dialog for a picture. It asks for the picture's address, with Browse for one already in your home folder or on the site and Upload for one from your computer, and for what it shows, its largest width and a caption. An uploaded picture is kept beside the document when the document is saved under `~`, and in `~/Pictures` otherwise; either way it lives in this browser, as your files do. In Visual view a click on a picture opens the same dialog to change it or remove it.
+
+## Shortcodes
+
+A shortcode is written `{{name:args}}`, or `{{name}}` and `{{/name}}` around some content. The Editor draws shortcodes in Visual view and Preview as the site does. These are the ones most used.
+
+- `{{figure:cat.png alt="What it shows" width=60% caption="…"}}` shows a picture beside the document, in your home folder (`~/Pictures/cat.png`), on the site (`/static/shots/desktop.jpg`) or on the web.
+- `{{columns}}`, `{{column}}` and `{{/columns}}` set content side by side.
+- `{{tip:A title}}` and `{{/tip}}` make a notice, and so do `note`, `info` and `warning`.
+- `{{expand:The title}}` and `{{/expand}}` make a section that opens and closes.
+- `{{video:https://youtu.be/…}}` shows a hosted video from YouTube or Vimeo.
+- `{{applet:dice}}` puts one of the site's games or tools on the page.
+- `{{code:~/bin/hello}}` shows a file as a listing.
+- `{{style}}` and `{{/style}}` hold CSS for the document.
+- `{{kbd:Ctrl+S}}`, `{{status:green Done}}`, `{{glyph:check}}`, `{{toc}}`, `{{page:author}}` and `{{anchor:name}}` draw keys, a status label, a glyph, the contents, a link to a page and a place to link to.
+
+A shortcode written wrongly shows a marked problem in its place, and hovering over it gives the reason.
+
+## Finding and moving around
+
+Edit, Find and Replace (Ctrl+F) opens a bar with the two fields, Match Case, Whole Word and Regular Expression, and Replace and Replace All. It works on the Markdown in Text view and on the page in Visual view. Go, Go to Line (Ctrl+Alt+G) moves to a line by its number.
+
+A right-click on the text or the page gives Undo, Redo, Find and the Format menu. On a tab it gives Close and Close the Others, and on a file in the pane it gives Open. Shift+F10 and the Menu key open the same menus from the keyboard.
+
+## Keys
+
+Editor, Key Bindings opens `~/.config/editor.json`, where each key is bound to a command by its name. A key set to null does nothing, and saved changes apply at once. The file lists the commands you can bind.
+
+## Where your files live
+
+Your files are kept in this browser. Settings are shared by every address of the site, but files are kept per address, so a file saved on the desktop is not seen at `editor.yavc.app`, and the other way round. Download a file to keep a copy anywhere else. [Files Help](/help/files) says more about storage and its limits.
+
+## Agents
+
+An AI agent paired in [Settings](/help/settings) can open, read, change, search, save and close documents here through the site's MCP endpoint, as you would. The page [For Agents](/agents) has the details.
+
+Your home folder has a sample document, `~/Howto/Editor.md`, which uses many of the things above and is there to open and change.

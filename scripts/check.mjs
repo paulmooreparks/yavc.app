@@ -218,6 +218,30 @@ rules.push({ id: 'not-embedded-complete', run() {
   }
 } });
 
+// Every one of the site's own applications has a help page, a Markdown
+// file at pages/help/{name}.md served at /help/{name}, and every link to a
+// help page leads to one that exists (DESIGN.md, decision 19). Files' help
+// had been a dialog inside the applet and the guides had drifted from the
+// commands, so the help is pages and this keeps the set whole. A help page
+// for an installed package under applets/ is allowed too.
+rules.push({ id: 'help-pages', run() {
+  const packages = new Set(files.filter((f) => /^(apps|applets)\/[^/]+\/applet\.json$/.test(f)).map((f) => f.split('/')[1]));
+  const helpPages = new Set(files.filter((f) => /^pages\/help\/[^/]+\.md$/.test(f)).map((f) => f.slice('pages/help/'.length, -3)));
+  for (const f of files.filter((f) => /^apps\/[^/]+\/applet\.json$/.test(f))) {
+    const name = f.split('/')[1];
+    if (!helpPages.has(name)) report('help-pages', f, null, `the site's own applet ${name} has no help page at pages/help/${name}.md`);
+  }
+  for (const name of helpPages) {
+    if (name !== 'index' && !packages.has(name)) report('help-pages', `pages/help/${name}.md`, null, `no package is called ${name}, so this help page is never served`);
+  }
+  const sources = files.filter((f) => /^(pages|site\/home|apps|internal\/web)\//.test(f) && /\.(md|js|html|go)$/.test(f) && !f.endsWith('_test.go'));
+  for (const f of sources) {
+    each(/["'(]\/help\/([a-z][a-z0-9-]*)/g, text.get(f), (m) => {
+      if (!helpPages.has(m[1]) || m[1] === 'index') report('help-pages', f, m.index, `a link to /help/${m[1]}, which is not a help page`);
+    });
+  }
+} });
+
 // One shared implementation of each small thing (review of 2026-11-03):
 // the escaper, the script loader, the download and the dialogs live in
 // static/yavc-util.js and static/dialogs.js, and nothing else in the site's

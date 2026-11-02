@@ -1,10 +1,10 @@
-# Terminal Guide
+# Terminal Help
 
 The [terminal](/terminal) is another way to read this site. Instead of clicking through pages, you move around them with commands like `ls` and `cd`, read them with `cat` and `less`, and launch the applications by name. It also gives you a small home directory of your own, with an editor, where you can keep notes, Conway patterns, Sudoku puzzles and scripts.
 
 If you've used a Unix shell, most of it will feel familiar. If you haven't, start with the next section and try each command as you go. You can't break anything: the site itself is read-only, and your own files live only in your browser.
 
-Inside the terminal, type `guide` to read this page a screen at a time, or `guide -w` to open it here.
+This page is at `yavc.app/help/terminal`, and it is under Help, Terminal Help. Inside the terminal, type `guide` to read it a screen at a time, or `guide -w` to open it as a page.
 
 ## Getting started
 
@@ -68,7 +68,8 @@ The terminal shows the site as a tree of directories and files. The top, `/`, ha
 ├── home/guest/        your own home directory, also called ~
 └── site/
     ├── apps/          the applications: sudoku, terminal, files, editor and the rest
-    ├── pages/         the site's pages, including this guide
+    ├── pages/         the site's pages
+    ├── help/          each application's help, including this page
     └── bin/           the site's scripts
 ```
 
@@ -164,7 +165,7 @@ All of these change only your home directory. Anything that would change the sit
 | `man <command>` | Explain a command, or show the comments at the top of a script. |
 | `history [-c]` | List, or clear, the commands you've typed. |
 | `clear` | Clear the screen. |
-| `guide [-w]` | Read this guide in the terminal, or open it with `-w`. |
+| `guide [-w]` | Read this help in the terminal, or open it as a page with `-w`. |
 
 ## Pipes and saving output
 
@@ -235,8 +236,8 @@ A few details:
 
 The terminal has two graphical companions under **Applets**, and all three see the same files. A file you save in one appears in the others straight away, even in another tab at the same address.
 
-- **[Files](/files)** shows the site and your home directory as folders, with your home directory at the top. Double-click a folder to open it, a page to read it, an application to launch it, or one of your files to edit it. Inside `~`, and only there, you can make files and folders, rename, move (drag an entry onto a folder), delete, download, and upload, including by dropping files from your computer onto the list. The Actions menu has "Open a terminal here", which opens another terminal in the folder you're looking at, and "Run in the terminal", which types a script's name at the prompt for you.
-- **[Editor](/editor)** is a full graphical editor, with tabs for several files, syntax colouring for Markdown, JSON and scripts, search and replace, and undo. Ctrl+S saves. A page of the site opens read-only, with "Save a copy to ~" to keep a copy you can change. `~/barcode-layouts.json` is checked as you type, and won't save while it has a mistake.
+- **[Files](/files)** shows the site and your home directory as folders, with your home directory at the top. Double-click a folder to open it, a page to read it, an application to launch it, or one of your files to edit it. Inside `~`, and only there, you can make files and folders, rename, move (drag an entry onto a folder), delete, download, and upload, including by dropping files from your computer onto the list. Its File menu has New Terminal Window Here, which opens another terminal in the folder you're looking at, and Run in the Terminal, which types a script's name at the prompt for you. [Files Help](/help/files) has the rest.
+- **[Editor](/editor)** is a full graphical editor, with tabs for several files, syntax colouring for Markdown, JSON and scripts, search and replace, and undo. Ctrl+S saves. A page of the site opens read-only, and Save As keeps a copy under `~` that you can change. [Editor Help](/help/editor) has the rest. `~/barcode-layouts.json` is checked as you type, and won't save while it has a mistake.
 
 From the terminal, `edit -g <file>` and `open <file>` send one of your files to the Editor.
 

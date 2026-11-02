@@ -259,6 +259,8 @@ func New(s *Server) (*Server, error) {
 	m.HandleFunc("GET /pages", s.listPage)
 	m.HandleFunc("GET /about", s.aboutPage)
 	m.HandleFunc("GET /about/pudl", s.aboutPage)
+	m.HandleFunc("GET /help", s.helpPage)
+	m.HandleFunc("GET /help/{app}", s.helpPage)
 	m.HandleFunc("GET /{slug}", s.classicPage)
 	return s, nil
 }
@@ -554,6 +556,7 @@ func (s *Server) pageData(r *http.Request, title string) map[string]any {
 		"State": state, "Config": config,
 		"Applets": s.appletEntries(r), "Dialog": "", "PUDLVersion": s.pudlVersion, "Retention": s.retention(), "StaticVersion": s.staticVersion, "SiteOrigin": strings.TrimSuffix(s.siteURL(r), "/"),
 		"Agents": agentCount(sess), "Registry": "/applets/registry.js?v=" + s.catalogDigest(),
+		"Help": s.helpEntries(),
 	}
 }
 
@@ -579,6 +582,7 @@ func (s *Server) rootWith(w http.ResponseWriter, r *http.Request, dialog string)
 		data["Applet"] = a
 		data["Mount"] = appletBody(a, true)
 		data["Standalone"] = true
+		data["AppletHelp"] = s.helpFor(name)
 		data["Dialog"] = dialog
 		s.render(w, http.StatusOK, "standalone", data)
 	case "desktop":
@@ -650,14 +654,21 @@ func (s *Server) classicPage(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, s.siteURL(r)+slug, http.StatusTemporaryRedirect)
 		return
 	}
-	if p, ok := s.page(r.PathValue("slug")); ok {
-		data := s.pageData(r, p.Title)
-		data["Article"] = p.Body
-		data["Slug"] = p.Slug
-		s.render(w, http.StatusOK, "article", data)
+	slug := r.PathValue("slug")
+	if p, ok := s.page(slug); ok {
+		// A help page reached by its slug goes to its own address.
+		if p.Path != "/"+slug {
+			http.Redirect(w, r, p.Path, http.StatusPermanentRedirect)
+			return
+		}
+		s.article(w, r, p)
 		return
 	}
-	a, ok := s.appletByName(r.PathValue("slug"))
+	if to, ok := movedPages[slug]; ok {
+		http.Redirect(w, r, to, http.StatusPermanentRedirect)
+		return
+	}
+	a, ok := s.appletByName(slug)
 	if !ok {
 		s.notFound(w, r)
 		return
@@ -666,6 +677,49 @@ func (s *Server) classicPage(w http.ResponseWriter, r *http.Request) {
 	data["Applet"] = a
 	data["Mount"] = appletBody(a, false)
 	s.render(w, http.StatusOK, "page", data)
+}
+
+// article draws a site page as a page of the site.
+func (s *Server) article(w http.ResponseWriter, r *http.Request, p sitePage) {
+	data := s.pageData(r, p.Title)
+	data["Article"] = p.Body
+	data["Slug"] = p.Slug
+	s.render(w, http.StatusOK, "article", data)
+}
+
+// helpPage is /help, the contents of the applications' help, and
+// /help/{app}, an application's help (DESIGN.md, decision 19). They are
+// pages of the desktop's host, as every site page is; at an applet's
+// subdomain, /help goes to that applet's help, or to the contents when it
+// has none, and /help/{app} to the same address at the desktop's host.
+func (s *Server) helpPage(w http.ResponseWriter, r *http.Request) {
+	app := r.PathValue("app")
+	slug := helpSlug
+	if app != "" {
+		if !appletName.MatchString(app) {
+			s.notFound(w, r)
+			return
+		}
+		slug = helpPrefix + app
+	}
+	switch kind, name := s.hostKind(r); kind {
+	case "desktop":
+	case "applet":
+		if app == "" && s.helpFor(name) {
+			slug = helpPrefix + name
+		}
+		http.Redirect(w, r, strings.TrimSuffix(s.siteURL(r), "/")+pagePath(slug), http.StatusTemporaryRedirect)
+		return
+	default:
+		http.Redirect(w, r, s.siteURL(r), http.StatusTemporaryRedirect)
+		return
+	}
+	p, ok := s.page(slug)
+	if !ok {
+		s.notFound(w, r)
+		return
+	}
+	s.article(w, r, p)
 }
 
 // window serves an applet's window, which PUDL's windows fetch by key.
@@ -707,7 +761,7 @@ func (s *Server) windowMarkup(r *http.Request, base map[string]any, d desktopSta
 		}
 		data["Title"] = p.Title
 		data["Article"], data["Slug"], data["Key"] = p.Body, p.Slug, key
-		data["Page"] = s.siteURL(r) + p.Slug
+		data["Page"] = strings.TrimSuffix(s.siteURL(r), "/") + p.Path
 		data["Minimize"], data["Maximize"], data["Close"] = d.minimize(key), d.maximize(key, "0.6", "0.8"), d.close(key)
 		data["Style"] = template.CSS("--win-x:0.08; --win-y:0.06; --win-w:0.6; --win-h:0.8")
 		var b strings.Builder
