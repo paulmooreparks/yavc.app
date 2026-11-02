@@ -111,7 +111,7 @@ func typeable(s string) ([]string, bool) {
 var autolinks = regexp.MustCompile(`<a href="[^"]*">|</a>`)
 
 func FuzzSerializeTyped(f *testing.F) {
-	for _, s := range []string{"# not a heading", "a\n---", "a\n===", "-", "1.", "~", "[foo]: /url", "    indented", "trailing  ", "Title #", "{{tip}}", "{{kbd:x}}", "&copy;", "<div>", "a\\", "a|b\n-|-", "* * *", "+++"} {
+	for _, s := range []string{"# not a heading", "a\n---", "a\n===", "-", "1.", "~", "[foo]: /url", "    indented", "trailing  ", "Title #", "{{tip}}", "{{kbd:x}}", "&copy;", "<div>", "a\\", "a|b\n-|-", "* * *", "+++", "[x]", "a [b] c [d", "x _y_ z", "\\ a"} {
 		f.Add(s)
 	}
 	f.Fuzz(func(t *testing.T, s string) {

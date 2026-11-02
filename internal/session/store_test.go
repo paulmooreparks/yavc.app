@@ -134,6 +134,42 @@ func TestExpiry(t *testing.T) {
 	}
 }
 
+// A session that is only read stays alive: touching it once a day moves its
+// Seen time, and touching it more often does not write the file.
+func TestTouchKeepsSessionAlive(t *testing.T) {
+	s := newStore(t, 90*24*time.Hour)
+	now := time.Now()
+	s.now = func() time.Time { return now }
+	sess, err := s.Create()
+	if err != nil {
+		t.Fatal(err)
+	}
+	fi, _ := os.Stat(s.path(sess.ID))
+	now = now.Add(time.Hour)
+	if wrote, err := s.Touch(sess.ID); err != nil || wrote {
+		t.Fatalf("a touch within SeenEvery: wrote %v, %v", wrote, err)
+	}
+	if fi2, _ := os.Stat(s.path(sess.ID)); !fi2.ModTime().Equal(fi.ModTime()) || fi2.Size() != fi.Size() {
+		t.Error("a touch within SeenEvery rewrote the session")
+	}
+	for i := 0; i < 100; i++ {
+		now = now.Add(SeenEvery)
+		if wrote, err := s.Touch(sess.ID); err != nil || !wrote {
+			t.Fatalf("after %d days of reading only: wrote %v, %v", i+1, wrote, err)
+		}
+	}
+	got, err := s.Load(sess.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if now.Sub(got.Seen) >= SeenEvery {
+		t.Errorf("Seen is %v behind after a touch", now.Sub(got.Seen))
+	}
+	if _, err := s.Touch("not-a-session"); err == nil {
+		t.Error("touching a session that does not exist succeeded")
+	}
+}
+
 func TestMalformedAndEmptyFiles(t *testing.T) {
 	s := newStore(t, time.Hour)
 	for name, body := range map[string]string{

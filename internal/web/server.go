@@ -297,6 +297,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		r.Body = http.MaxBytesReader(w, r.Body, bodyLimit(r.URL.Path))
 	}
+	s.touchSession(w, r)
 	rc := http.NewResponseController(w)
 	if streaming(r.URL.Path) {
 		// An error says only that the writer underneath has no deadlines,
@@ -385,6 +386,29 @@ func (s *Server) cookie(value string, maxAge int) *http.Cookie {
 		c.Domain = s.Domain
 	}
 	return c
+}
+
+// touchSession records that the request's session was used, at most once a
+// day (session.Store.Touch), and when it does, sets the cookie again with
+// the full retention period, so the browser drops the cookie when the
+// store drops the session and not before. Files whose addresses carry a
+// version are skipped: every page that loads them makes other requests.
+func (s *Server) touchSession(w http.ResponseWriter, r *http.Request) {
+	p := r.URL.Path
+	if strings.HasPrefix(p, "/static/") || strings.HasPrefix(p, "/pudl/") || strings.HasPrefix(p, "/applets/") {
+		return
+	}
+	c, err := r.Cookie(cookieName)
+	if err != nil {
+		return
+	}
+	wrote, err := s.Sessions.Touch(c.Value)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		log.Printf("session: %v", err)
+	}
+	if wrote {
+		http.SetCookie(w, s.cookie(c.Value, int(s.Sessions.Retain/time.Second)))
+	}
 }
 
 // lookup is the request's session: nil with no error when the request has

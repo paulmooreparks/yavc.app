@@ -229,6 +229,43 @@ func (s *Store) Load(id string) (*Session, error) {
 	return s.loadLocked(id)
 }
 
+// SeenEvery is how stale a session's Seen time may grow before Touch writes
+// it again, so reading costs at most one write a day. A short retention
+// period shortens it (seenEvery), so a session in use never expires.
+const SeenEvery = 24 * time.Hour
+
+// Touch records that a session was used, when its Seen time is SeenEvery
+// or more behind, and says whether it did. A reader who only reads is
+// still a reader, so the engine touches the session of every request that
+// carries one, and renews the cookie when Touch reports a write, so the
+// browser keeps the cookie as long as the store keeps the session.
+func (s *Store) Touch(id string) (bool, error) {
+	if !ValidID(id) {
+		return false, os.ErrNotExist
+	}
+	l := s.lock(id)
+	l.Lock()
+	defer l.Unlock()
+	sess, err := s.loadLocked(id)
+	if err != nil {
+		return false, err
+	}
+	if s.now().Sub(sess.Seen) < s.seenEvery() {
+		return false, nil
+	}
+	return true, s.saveLocked(sess)
+}
+
+// seenEvery is SeenEvery, or a quarter of the retention period when that
+// is shorter, so a store that keeps sessions only briefly still keeps the
+// ones in use.
+func (s *Store) seenEvery() time.Duration {
+	if s.Retain > 0 && s.Retain/4 < SeenEvery {
+		return s.Retain / 4
+	}
+	return SeenEvery
+}
+
 // errMalformed is a session file that is not a session. It is reported to
 // callers as os.ErrNotExist.
 var errMalformed = errors.New("session: the file is not a session")

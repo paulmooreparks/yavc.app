@@ -582,6 +582,12 @@ func serializeList(n *Node, indent string) (string, error) {
 				return "", err
 			}
 			if len(blocks) == 0 {
+				// An item whose text starts "[ ] " or "[x] " is a checklist
+				// item, as it is when typed in the source, so its bracket is
+				// not escaped.
+				if box == "" && b.Type == "paragraph" && taskStart.MatchString(s) {
+					s = s[1:]
+				}
 				blocks = append(blocks, indent+marker+box+s)
 			} else {
 				blocks = append(blocks, inner+strings.TrimLeft(s, " "))
@@ -702,6 +708,14 @@ func serializeInline(nodes []*Node, cell bool) (string, error) {
 			open = open[:len(open)-1]
 		}
 	}
+	// Markdown does not read "** bold**" or "**bold **" as emphasis: a
+	// delimiter run with a space on its inner side neither opens nor
+	// closes. So spaces at the start of text that opens marks are written
+	// before the marks open, and spaces at the end of text are held in
+	// pending until it is known whether marks close after them, and then
+	// written after the closing delimiters.
+	pending := ""
+	flush := func() { b.WriteString(pending); pending = "" }
 	for at, n := range nodes {
 		// A text node with no text is not one ProseMirror makes, and would
 		// write a pair of delimiters around nothing.
@@ -725,6 +739,19 @@ func serializeInline(nodes []*Node, cell bool) (string, error) {
 			keep++
 		}
 		closeTo(keep)
+		flush()
+		// Plain text is escaped whole, so each character is escaped for
+		// what really stands beside it, and its spaces are then split off.
+		var body string
+		if n.Type == "text" && !code && !auto {
+			esc := escapeText(n.Text, cell, neighbour(nodes, at, at-1), neighbour(nodes, at, at+1))
+			body = strings.TrimLeft(esc, " \t")
+			b.WriteString(esc[:len(esc)-len(body)])
+			if body == "" {
+				// Only spaces: nothing for marks to hold, so none open.
+				continue
+			}
+		}
 		for _, m := range outer[keep:] {
 			if has(open, m) {
 				continue
@@ -740,7 +767,14 @@ func serializeInline(nodes []*Node, cell bool) (string, error) {
 			} else if auto {
 				b.WriteString(n.Text)
 			} else {
-				b.WriteString(escapeText(n.Text, cell, neighbour(nodes, at, at-1), neighbour(nodes, at, at+1)))
+				trimmed := strings.TrimRight(body, " \t")
+				// A backslash left last would escape a closing delimiter
+				// written after it, so its space stays where it is.
+				if strings.HasSuffix(trimmed, `\`) {
+					trimmed = body
+				}
+				b.WriteString(trimmed)
+				pending = body[len(trimmed):]
 			}
 		case "soft_break":
 			if cell {
@@ -761,6 +795,7 @@ func serializeInline(nodes []*Node, cell bool) (string, error) {
 		}
 	}
 	closeTo(0)
+	flush()
 	return b.String(), nil
 }
 
@@ -839,6 +874,13 @@ func escapeText(s string, cell bool, before, after rune) string {
 			}
 		case '&':
 			if entityRe.MatchString(string(rs[i:min(len(rs), i+42)])) {
+				b.WriteRune('\\')
+			}
+		case '[':
+			// "[x]" would be a link wherever the document defines x, which
+			// this text cannot see, so an opening bracket with a closing one
+			// after it is escaped.
+			if strings.ContainsRune(string(rs[i+1:]), ']') {
 				b.WriteRune('\\')
 			}
 		case ']':
@@ -932,6 +974,9 @@ var (
 	// definitionStart is the start of a link reference definition, which
 	// Markdown takes out of the text.
 	definitionStart = regexp.MustCompile(`^\[(?:[^\]\\]|\\.)*\]:`)
+	// taskStart is a list item's escaped text that starts as a checklist
+	// box: "\[ ] ", "\[x] " or "\[X] ", or the box alone.
+	taskStart = regexp.MustCompile(`^\\\[[ xX]\](?: |$)`)
 )
 
 // escapeLineStart escapes one line of a paragraph, its first or one after

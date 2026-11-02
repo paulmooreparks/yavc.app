@@ -4,7 +4,7 @@ yavc.app is built so that an AI agent can do anything a person can do in an appl
 
 ## Decisions
 
-1. **Every application publishes an actions manifest** (2026-11-03). Each package under `apps/` has an `actions.json` in the PUDL applet actions form, which `pudl-actions.js` brokers in the page and the PUDL specification's chapter 9 states for any host. The manifest lists the provider's id, `yavc.<slug>` for the site's own applications, and every action with a reference such as `yavc.slides/go@1`, a title and description, JSON Schemas for its input and output, the capabilities it needs and its replay rule. Installed packages under `applets/` keep the manifests they came with and their own provider ids; a package without one still publishes its `handles` verbs, which the broker turns into actions. The rule for what goes in a manifest is that every command in the application's command table that does not merely open a dialog has an action, every piece of state a person can see has an action that reads it, and anything a person can change has an action that changes it. A command that asks the person a question, such as Save As, has an action that takes the answer as input instead.
+1. **Every application publishes an actions manifest** (2026-11-03). Each package under `apps/` has an `actions.json` in the PUDL applet actions form, which `pudl-actions.js` brokers in the page and the PUDL specification's chapter 9 states for any host. The manifest lists the provider's id, `yavc.<slug>` for the site's own applications, and every action with a reference such as `yavc.slides/go@1`, a title and description, JSON Schemas for its input and output, the capabilities it needs and its replay rule. Installed packages under `applets/` keep the manifests they came with and their own provider ids. A package's `handles` verbs that have no action in its manifest are not in the catalogue, and an agent cannot invoke them, because the MCP server refuses any action the catalogue does not list (decision 9). The rule for what goes in a manifest is that every command in the application's command table that does not merely open a dialog has an action, every piece of state a person can see has an action that reads it, and anything a person can change has an action that changes it. A command that asks the person a question, such as Save As, has an action that takes the answer as input instead.
 
 2. **Two kinds of action, and the open applet answers the second** (2026-11-03). An action over data alone, such as parsing a deck or rendering Markdown, is `pure` and lives in the manifest's `module`, so it runs with no window open and anywhere the broker runs. An action over the application's live state, such as going to a slide or saving, is `live`, and the running applet attaches its handlers with `pudlApplets.attach(id, handlers)` as it starts. A live action with no open applet is answered by opening one: the broker waits for an attach, and the host's `yavc.<slug>/open@1`-style handles actions bring the window. On a standalone page the applet is always open.
 
@@ -19,6 +19,14 @@ yavc.app is built so that an AI agent can do anything a person can do in an appl
 7. **Which page runs it** (2026-11-03). A session may have several pages open, the desktop and standalone ones. The engine sends an invocation to the page that most recently told it that it was in front; every page reports that when it gains focus or becomes visible. An invocation whose action is live, when its applet is not open on that page, is answered as decision 2 says. The person therefore sees the agent's work on the page they are looking at.
 
 8. **Invocation records live in the engine only while they run** (2026-11-03). The engine keeps the records of relayed invocations in memory, with the views the page posted, for one hour after they finish, so an agent whose call timed out can still read the result with `applet_status`. Nothing about invocations is written to the session file. A page that closes mid-invocation leaves the record running until the broker's own limit passes; the next report after that is refused and the record is marked failed with that reason.
+
+9. **The relay and the MCP server are bounded** (2026-11-03, from the review in `docs/review.md`). Nothing an agent or a page sends can make the engine hold unbounded memory or work. The limits are these.
+   - An artifact is at most 4 MB, and one record's artifacts at most 16 MB, taken only with the report that finishes the record.
+   - One session runs at most 32 records at once, and a record still running 660 seconds after it was sent fails, which is the longest wait of 600 seconds and a margin.
+   - One session keeps 8 event streams, and a ninth closes the oldest. The engine keeps 4096 streams in all and answers 503 beyond that. A page that opens a second stream with its id takes over the first.
+   - The MCP server keeps 1024 sessions and forgets one unused for an hour. One token may have 4 calls waiting for their results. A request body over 16 MB is answered 413.
+   - The MCP server refuses an action the catalogue does not list.
+   - A pairing token is made and revoked only on the desktop's host, lasts 90 days from when it was made however often it is used, and is forgotten with its session. A report on a finished invocation is answered 409.
 
 ## What this is not
 
@@ -43,7 +51,7 @@ The engine does not translate an application's menus into tools. An agent gets t
 }
 ```
 
-The entries are the manifests' own, unchanged, with `module` resolved to an absolute address. `handles` verbs the package declares without an action are listed as the broker publishes them.
+The entries are the manifests' own, unchanged, with `module` resolved to an absolute address. `handles` verbs the package declares without an action are not listed.
 
 ### Pairing
 

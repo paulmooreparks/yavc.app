@@ -716,6 +716,7 @@ var schemaCache = null;
         return true;
       }
       return [
+        listShortcuts(schema),
         taskBoxes(schema),
         suggestionPlugin(),
         findPlugin(),
@@ -749,6 +750,49 @@ var schemaCache = null;
           }
         })
       ];
+    }
+
+    /* Typing a list's Markdown at the start of a line makes the list, as it
+       would in the source: "- ", "* " or "+ " a bulleted list, "1. " a
+       numbered one, "- [ ] " or "- [x] " a checklist item, and "[ ] " or
+       "[x] " at the start of a list item makes that item a checklist item.
+       The space that finishes the shortcut is not typed; Undo brings the
+       typed text back. */
+    function listShortcuts(schema) {
+      var n = schema.nodes;
+      function itemDepth($p) { return $p.depth > 1 && $p.node($p.depth - 1).type === n.list_item && $p.index($p.depth - 1) === 0 ? $p.depth - 1 : -1; }
+      function tick(view, box) {
+        var $p = view.state.selection.$from, d = itemDepth($p);
+        if (d < 0) return;
+        var item = $p.node(d);
+        view.dispatch(view.state.tr.setNodeMarkup($p.before(d), null, Object.assign({}, item.attrs, { checked: /x/i.test(box) })));
+      }
+      return new PM.Plugin({
+        props: {
+          handleTextInput: function (view, from, to, text) {
+            if (text !== ' ' || from !== to) return false;
+            var state = view.state, $p = state.doc.resolve(from);
+            if ($p.parent.type !== n.paragraph) return false;
+            var before = $p.parent.textBetween(0, $p.parentOffset, null, '￼');
+            var start = $p.start(), m;
+            if ((m = /^\[([ xX])\]$/.exec(before)) && itemDepth($p) >= 0 && $p.node(itemDepth($p)).attrs.checked === null) {
+              var d = itemDepth($p), item = $p.node(d);
+              view.dispatch(state.tr.delete(start, from).setNodeMarkup($p.before(d), null, Object.assign({}, item.attrs, { checked: /x/i.test(m[1]) })));
+              return true;
+            }
+            var bullet = /^([-*+])(?: \[([ xX])\])?$/.exec(before), number = /^([0-9]{1,9})\.$/.exec(before);
+            if (!bullet && !number) return false;
+            var list = bullet ? n.bullet_list : n.ordered_list;
+            var attrs = bullet ? { marker: bullet[1] } : { order: parseInt(number[1], 10) };
+            var after = state.apply(state.tr.delete(start, from));
+            if (!PM.wrapInList(list, attrs)(after)) return false;
+            view.dispatch(state.tr.delete(start, from));
+            PM.wrapInList(list, attrs)(view.state, view.dispatch);
+            if (bullet && bullet[2] !== undefined) tick(view, bullet[2]);
+            return true;
+          }
+        }
+      });
     }
 
     /* Clicking a task item's box ticks or unticks the item, as one change
