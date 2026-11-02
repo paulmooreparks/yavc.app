@@ -27,9 +27,20 @@
         return window.yavcUtil.siteFs().then(function (F) { if (!watching) { watching = true; watch(); } return F; });
     }
 
-    var entries = {};   /* name -> { defaults, values, text, listeners: [] } */
+    /* name -> { defaults, values, text, listeners: [] }, with no prototype,
+       so a setting called "constructor" is a setting like any other. */
+    var entries = Object.create(null);
 
-    function pathOf(name) { return '~/.config/' + name + '.json'; }
+    /* A settings name becomes a file name under ~/.config, and applets
+       choose it, so it must be a plain word: no slash or dot that could
+       lead out of the folder, and never something that is not a string
+       (a page element once became "[object HTMLDivElement].json"). */
+    var NAME = /^[a-z0-9][a-z0-9_-]{0,63}$/i;
+    function pathOf(name) {
+        if (typeof name !== 'string' || !NAME.test(name)) { throw new TypeError('a settings name is a word of letters, digits, - and _'); }
+        return '~/.config/' + name + '.json';
+    }
+    function plain(obj) { return !!obj && typeof obj === 'object' && !Array.isArray(obj); }
 
     /* Settings come from a file anyone could have edited, so only a
        setting's own name is copied: never __proto__, constructor or
@@ -85,6 +96,7 @@
     }
 
     async function load(name, defaults) {
+        pathOf(name);
         var F = await fs();
         var e = entry(name);
         e.defaults = Object.assign({}, own(e.defaults), own(defaults));
@@ -99,12 +111,14 @@
         return entries[name] || (entries[name] = { defaults: {}, values: {}, text: undefined, loaded: false, listeners: [], version: 0, saving: 0, queue: null });
     }
 
-    function get(name) { var e = entries[name]; return e ? merged(e) : {}; }
+    function get(name) { var e = typeof name === 'string' ? entries[name] : null; return e ? merged(e) : {}; }
 
     /* Saves of one file go one at a time, each after the last has
        finished, so two changes made in quick succession don't both write
        the file at once and collide; each merges into what the last wrote. */
     async function set(name, changes) {
+        pathOf(name);
+        if (!plain(changes)) { throw new TypeError('settings changes are an object of names and values'); }
         var F = await fs();
         var e = entry(name);
         if (!e.loaded) { await load(name, {}); }
@@ -142,6 +156,7 @@
     }
 
     function onChange(name, fn) {
+        pathOf(name);
         var e = entry(name);
         if (!e.loaded) { load(name, {}).catch(function () { }); }
         e.listeners.push(fn);
