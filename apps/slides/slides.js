@@ -1119,7 +1119,11 @@
                 cmd('background-image', 'Background Picture…', 'image', function () { askText('Background picture', 'The picture\'s address, such as /images/x.png; empty for none', settingsOf(current()).image || '').then(function (v) { if (v != null) { setSlideSetting('image', v.trim()); } }); }),
                 { id: 'slide-transition', label: 'Transition', items: TRANSITIONS.map(function (t) { return { id: 'slide-transition-' + t[0], label: t[1], choice: 'deck-slide-transition', value: t[0], checked: function () { return (settingsOf(current()).transition || deck.front.transition || 'fade') === t[0]; }, run: function () { setSlideSetting('transition', t[0] === (deck.front.transition || 'fade') ? null : t[0]); } }; }) },
                 cmd('deck-title', 'Title and Author…', 'tag', function () {
-                    askText('The deck\'s title', 'Title', deck.front.title).then(function (t) { if (t == null) { return; } setFront('title', t.trim()); return askText('The author', 'Author', deck.front.author).then(function (a) { if (a != null) { setFront('author', a.trim()); } }); });
+                    kit().then(function (k) {
+                        return k.askFields('Title and author', [
+                            { key: 'title', label: 'Title', value: deck.front.title },
+                            { key: 'author', label: 'Author', value: deck.front.author, help: 'Kept in the deck\'s front matter and written into its PowerPoint and PDF files.' }]);
+                    }).then(function (v) { if (!v) { return; } setFront('title', v.title); setFront('author', v.author); });
                 }),
                 { id: 'theme', label: 'Theme', glyph: 'theme', current: function () { var f = THEMES.find(function (x) { return x[0] === deck.front.theme; }); return f ? f[1] : null; },
                     items: THEMES.map(function (t) { return { id: 'theme-' + t[0], label: t[1], choice: 'deck-theme', value: t[0], checked: function () { return (deck.front.theme || 'plain') === t[0]; }, run: function () { setFront('theme', t[0]); } }; }) },

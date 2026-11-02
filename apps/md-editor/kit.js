@@ -334,6 +334,23 @@
         return dialog(title, '<div class="form-group"><label class="form-label" for="' + id + '">' + esc(label) + '</label><input class="form-input" id="' + id + '" value="' + esc(value || '') + '" autocomplete="off" spellcheck="false"></div>',
             [{ id: 'cancel', label: 'Cancel' }, { id: 'ok', label: 'OK', primary: true }]).then(function (r) { return r.value === 'ok' ? r.body.querySelector('input').value : null; });
     }
+    /* Several text fields in one dialog: fields is [{ key, label, value,
+       placeholder, help }]; resolves to the values by key, or null. */
+    function askFields(title, fields, okLabel) {
+        var n = dlgCount + 1;
+        var html = fields.map(function (f, k) {
+            var id = 'md-dlg-' + n + '-' + k;
+            return '<div class="form-group"><label class="form-label" for="' + id + '">' + esc(f.label) + '</label>' +
+                '<input class="form-input" id="' + id + '" data-key="' + esc(f.key) + '" value="' + esc(f.value || '') + '" autocomplete="off"' + (f.placeholder ? ' placeholder="' + esc(f.placeholder) + '"' : '') + '>' +
+                (f.help ? '<p class="form-help">' + esc(f.help) + '</p>' : '') + '</div>';
+        }).join('');
+        return dialog(title, html, [{ id: 'cancel', label: 'Cancel' }, { id: 'ok', label: okLabel || 'OK', primary: true }]).then(function (r) {
+            if (r.value !== 'ok') { return null; }
+            var out = {};
+            r.body.querySelectorAll('[data-key]').forEach(function (i) { out[i.getAttribute('data-key')] = i.value.trim(); });
+            return out;
+        });
+    }
     function askChoice(title, body, buttons) {
         return dialog(title, '<p>' + esc(body) + '</p>', buttons.map(function (b) { return { id: b[0], label: b[1], primary: !!b[2] }; })).then(function (r) { return r.value || null; });
     }
@@ -791,7 +808,7 @@
         libs: libs, pageView: pageView, mermaid: mermaid, loadScript: loadScript,
         FORMATS: FORMATS, STYLES: STYLES, INSERTS: INSERTS, SHORTCODES: SHORTCODES, MENU: MENU,
         commands: commands, apply: apply, classesOf: classesOf, insertItem: insertItem, inserts: inserts, textFormat: textFormat, textInsert: textInsert,
-        askText: askText, askChoice: askChoice, askColour: askColour, askColours: askColours, askClass: askClass,
+        askText: askText, askFields: askFields, askChoice: askChoice, askColour: askColour, askColours: askColours, askClass: askClass,
         askFigure: askFigure, editBlock: editBlock, askShortcode: askShortcode, FORMS: FORMS, boxCommand: boxCommand, BOXES: BOXES, loadImages: loadImages, parseFigure: parseFigure, buildFigure: buildFigure, parseShortcode: parseShortcode,
         _page: null
     };
