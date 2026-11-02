@@ -140,5 +140,7 @@
    Dinah's document page, whose type the preview and the Visual view share. */
 .pc-editor .ed-scroll { flex: 1 1 0; min-height: 0; overflow: auto; border: 1px solid var(--input-border); border-radius: var(--radius-sm); background: var(--surface); box-shadow: var(--recess-shadow); }
 .pc-editor .ed-scroll:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+/* The page sits in from its frame, as a page does; the margin scales with the pane. */
+.pc-editor .ed-scroll > .doc-page { padding: clamp(16px, 4vw, 48px) clamp(20px, 6vw, 72px); box-sizing: border-box; max-width: 100%; }
 .pc-editor.ed-reading .ed-scroll { cursor: default; }
 .pc-editor .editor-dialog { width: min(36rem, 92vw); }

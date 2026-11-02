@@ -1126,6 +1126,25 @@
                 { id: 'show', label: 'Show', glyph: 'play', items: ['present', 'present-here', 'leave', '-', 'presenter', 'presenter-auto'] }
             ], into: { view: ['view-visual', 'view-text', 'view-split', '-', 'dock', 'toggle-film'], help: ['help', 'styles-help'] } };
         }
+        /* Right-clicks (PUDL's pudl:contextmenu): a slide in the filmstrip
+           gets the Slide menu, the canvas and the Markdown pane get Format
+           with the slide's own settings after it. */
+        root.addEventListener('pudl:contextmenu', function (e) {
+            var t = e.detail.target, thumb = t.closest && t.closest('.deck-thumb');
+            var own = function (ids) { return window.pudlCommands ? window.pudlCommands.menuRows(ids, root) : ids; };
+            if (thumb) {
+                var i = +thumb.getAttribute('data-slide');
+                /* Going there redraws the filmstrip, so the mark goes on the thumb drawn after. */
+                if (i !== at) { goTo(i); }
+                e.detail.mark(root.querySelector('.deck-thumb[data-slide="' + i + '"]') || thumb);
+                e.detail.add(own(['slide-new', 'slide-duplicate', 'slide-delete', '-', 'slide-up', 'slide-down', '-', 'layout', 'reveal', 'slide-colours', 'slide-class', 'background-image', 'slide-transition']));
+                return;
+            }
+            if (t.closest && (t.closest('.deck-stagebox') || t.closest('.deck-text'))) {
+                var rows = window.yavcMdEditor ? window.yavcMdEditor.MENU.format.slice() : [];
+                e.detail.add(own(rows.concat(['-', 'layout', 'slide-colours', '-', 'view-visual', 'view-text', 'view-split'])));
+            }
+        });
         root.addEventListener('keydown', function (e) {
             /* Ctrl+Enter presents, since F5 is the browser's reload; F5 still
                works while the deck itself has the focus. */

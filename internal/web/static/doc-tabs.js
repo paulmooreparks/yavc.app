@@ -42,6 +42,20 @@
             var b = e.target.closest('[data-tab]');
             if (b) { host.activate(+b.getAttribute('data-tab')); }
         });
+        /* A right-click on a tab: close it, or every other one. */
+        list.addEventListener('pudl:contextmenu', function (e) {
+            var b = e.detail.target.closest && e.detail.target.closest('[data-tab]');
+            if (!b) { return; }
+            var i = +b.getAttribute('data-tab'), n = (host.tabs() || []).length;
+            e.detail.mark(b);
+            e.detail.add([
+                { label: 'Close', glyph: 'close', run: function () { host.close(i); } },
+                { label: 'Close the Others', glyph: 'close-all', disabled: n < 2, run: function () {
+                    /* From the last down, so the numbers of those still to close hold. */
+                    (async function () { for (var k = n - 1; k >= 0; k--) { if (k !== i) { await host.close(k); } } })();
+                } }
+            ]);
+        });
         list.addEventListener('pudl:tab-close', function (e) {
             var fromList = list.contains(document.activeElement);
             Promise.resolve(host.close(+e.target.getAttribute('data-tab'))).then(function () {

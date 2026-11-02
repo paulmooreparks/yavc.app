@@ -504,6 +504,30 @@
             if (destroyed) { return; }
             build();
             root.addEventListener('click', onClick);
+        /* A right-click (PUDL's pudl:contextmenu) on a row gives the row's
+           commands, on a folder in the tree the way there, and on the list
+           itself the folder's. The commands are the table's own, by id. */
+        root.addEventListener('pudl:contextmenu', function (e) {
+            if (!b || !F) { return; }
+            var own = function (ids) { return window.pudlCommands ? window.pudlCommands.menuRows(ids, root) : ids; };
+            var t = e.detail.target, row = t.closest && t.closest('tr.fm-row'), node = t.closest && t.closest('.fm-tree a[data-path]');
+            if (row) {
+                b.select(row.getAttribute('data-name'), false);
+                e.detail.mark(row);
+                e.detail.add(own(['open', 'edit', 'run', 'download', '-', 'rename', 'move', 'copy', 'delete', '-', 'new-file', 'new-folder', 'upload']));
+                return;
+            }
+            if (node) {
+                var target = F.resolve(null, node.getAttribute('data-path'));
+                if (!target) { return; }
+                e.detail.mark(node);
+                e.detail.add([{ label: 'Open', glyph: 'folder', run: function () { b.go(target); } }, '-'].concat(own(['new-file', 'new-folder', 'upload'])));
+                return;
+            }
+            if (t.closest && t.closest('.fm-list, .fm-rows, table')) {
+                e.detail.add(own(['new-file', 'new-folder', 'upload', '-', 'hidden', 'terminal']));
+            }
+        });
             el.fileInput.addEventListener('change', function () { if (el.fileInput.files && el.fileInput.files.length) { uploadFiles(Array.prototype.slice.call(el.fileInput.files)); } });
             b = FB.create(root, F, {
                 start: F.upgradePath(startPath),

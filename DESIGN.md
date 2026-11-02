@@ -102,7 +102,7 @@ The Editor gained Dinah Desktop's page view the same evening: Visual, Split and 
 
 Slides, the first application written for the site, arrived as a prototype on 2026-11-03, designed in `docs/slides-design.md`: a deck is a Markdown file of slides divided by `---`, with a `{{slide}}` line for each slide's layout and background and `{{notes}}` for the speaker; the current slide is edited on its canvas with the Editor's page view or as its Markdown in CodeMirror; the deck presents full screen from the window or `slides.yavc.app`, with a presenter window following over a BroadcastChannel; and it exports as a page that presents itself. The Markdown engine moved to `apps/md-engine`, a shared folder with its loader, the HTML cleaner and the page's stylesheet, which the Editor and Slides both use.
 
-The editing layer the Editor and Slides share lives in `apps/md-editor` (docs/slides-design.md, decision 16). The Editor shows its tab row only while more than one document is open (Paul, 2026-11-03); the same rule applies to Slides when it gains tabs.
+Right-clicks answer PUDL's `pudl:contextmenu` with rows from each application's own command table (Files: the row's commands; Slides: the slide's or Format; the Editor: Edit and Format, or Open in the file pane; the shared tab row: Close and Close the Others), so a context menu never has a command of its own (Paul, 2026-11-03). The editing layer the Editor and Slides share lives in `apps/md-editor` (docs/slides-design.md, decision 16). The Editor shows its tab row only while more than one document is open (Paul, 2026-11-03); the same rule applies to Slides when it gains tabs.
 
 ## Order of work
 

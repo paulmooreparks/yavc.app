@@ -48,6 +48,10 @@ A shortcode is `{{name:args}}`, or `{{name}}` … `{{/name}}` around content. Th
 
 A shortcode written wrongly shows a marked problem in its place, with the reason on hover.
 
+## Right-click
+
+A right-click on the text or the page gives Undo, Redo, Find and the Format menu; on a tab, Close and Close the Others; on a file in the pane, Open. Shift+F10 and the Menu key open the same menus from the keyboard.
+
 ## Find and replace
 
 Edit, Find and Replace (Ctrl+F) opens a bar with the two fields, Match Case, Whole Word and Regular Expression, and Replace and Replace All, working in Text view on the Markdown and in Visual view on the page.

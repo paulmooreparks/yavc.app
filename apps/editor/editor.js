@@ -453,6 +453,26 @@
            pudl:tab-close, for the tab to close. */
         /* The tab row is the site's document tabs (static/doc-tabs.js),
            shown only while more than one document is open. */
+        /* Right-clicks (PUDL's pudl:contextmenu): the text and the page get
+           Edit and Format, a file in the pane gets Open. */
+        root.addEventListener('pudl:contextmenu', function (e) {
+            var t = e.detail.target;
+            if (!t.closest) { return; }
+            var node = t.closest('.ed-explorer a[data-path]');
+            if (node) {
+                var target = F && F.resolve(null, node.getAttribute('data-path'));
+                if (!target) { return; }
+                e.detail.mark(node);
+                if (target.children) { e.detail.add([{ label: target.getAttribute ? 'Open' : 'Open', glyph: 'folder', run: function () { if (explorer) { explorer.go(target); } } }]); }
+                else { e.detail.add([{ label: 'Open', glyph: 'document', run: function () { openPath(F.displayPath(F.realOf(target))); } }]); }
+                return;
+            }
+            if (t.closest('.ed-surface, .ed-page, .cm-editor, .ProseMirror, [data-role="surface"], [data-role="page"]')) {
+                var rows = ['undo', 'redo', '-', 'find', '-'];
+                if (formatOffered) { rows = rows.concat(window.yavcMdEditor ? window.yavcMdEditor.MENU.format : []); }
+                e.detail.add(window.pudlCommands ? window.pudlCommands.menuRows(rows, root) : rows);
+            }
+        });
         var tabRow = window.yavcDocTabs ? window.yavcDocTabs.attach(el.tabs, {
             tabs: function () { return tabs.map(function (t) { return { name: t.name, path: t.path, modified: t.modified, note: t.readOnly ? '(read-only)' : '' }; }); },
             active: function () { return active; },

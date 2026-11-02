@@ -53,6 +53,10 @@ Between slides: Page Up and Page Down, or the filmstrip, or Slide, Previous Slid
 
 Open decks sit in tabs across the top once there is more than one. Save is Ctrl+S; a new deck asks where to go, starting in `~/Documents`. Unsaved changes survive a reload.
 
+## Right-click
+
+A right-click on a slide in the filmstrip gives the Slide menu for that slide; on the canvas or the Markdown, Format with the slide's layout and colours after it; on a tab, Close and Close the Others. Shift+F10 and the Menu key open the same menus from the keyboard.
+
 ## Presenting
 
 Show, Present from the Start (Ctrl+Enter) presents full screen from the first slide, Present from This Slide (Ctrl+Shift+Enter) from the current one. In the show, the arrow keys, Space, Page Up and Down, Home and End move; a number followed by Enter jumps to that slide; Escape leaves. A slide marked `reveal=steps` shows its points one by one.
