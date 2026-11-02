@@ -630,24 +630,11 @@
             return { ink: 'var(--text)', muted: 'var(--text-muted)', accent: 'var(--accent)', danger: 'var(--danger)', warn: 'var(--warn)', positive: 'var(--positive)' }[name] || name;
         }
         function colourWords(colour) {
-            var open = '{{colour:' + colour.replace(/[{}\s]/g, '') + '}}', close = '{{/colour}}';
+            var value = colour.replace(/[{}\s]/g, ''), open = '{{color:' + value + '}}', close = '{{/color}}';
             if (pageActive() && (mode === 'visual' || !(cm && cm.hasFocus))) {
-                /* On the canvas the words are found in the slide's Markdown
-                   and wrapped there, so the heading or paragraph they sit in
-                   keeps its shape and is drawn again with the colour. */
-                var sel = ((page.selectionText && page.selectionText()) || '').trim();
-                if (!sel) { say('Select the words to colour first.', true); return; }
-                var lines = current().text.split('\n'), done = false;
-                var loose = new RegExp(sel.split(/\s+/).map(function (w) { return w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }).join('[\\s*_`]+'));
-                for (var i = 0; i < lines.length && !done; i++) {
-                    if (/^\s*\{\{/.test(lines[i]) && !/\}\}.*\S/.test(lines[i])) { continue; }
-                    var at = lines[i].indexOf(sel), m = at < 0 ? loose.exec(lines[i]) : null;
-                    if (at >= 0) { lines[i] = lines[i].slice(0, at) + open + sel + close + lines[i].slice(at + sel.length); done = true; }
-                    else if (m) { lines[i] = lines[i].slice(0, m.index) + open + m[0] + close + lines[i].slice(m.index + m[0].length); done = true; }
-                }
-                if (!done) { say('Those words were not found in the slide\'s Markdown; colour them in the Text view.', true); return; }
-                takeText(lines.join('\n'), 'command');
-                if (pageActive()) { applySlideSettings(el.slide, current()); }
+                /* On the canvas a colour is a mark, as bold is. */
+                page.run('color', value);
+                page.focus();
                 return;
             }
             if (!cm) { return; }

@@ -731,7 +731,7 @@
     {
       "ref": "yavc.slides/insert@1",
       "title": "Add to a Slide",
-      "description": "Append Markdown to the end of a slide, or of the current one: a paragraph, a list, a picture ({{figure:…}}), a hosted video ({{video:https://youtu.be/ID}}), columns, a note. Words in a colour are {{colour:accent}}words{{/colour}}, with one of ink, muted, accent, danger, warn, positive or any CSS colour.",
+      "description": "Append Markdown to the end of a slide, or of the current one: a paragraph, a list, a picture ({{figure:…}}), a hosted video ({{video:https://youtu.be/ID}}), columns, a note. Words in a colour are {{color:accent}}words{{/color}}, with one of ink, muted, accent, danger, warn, positive or any CSS colour.",
       "live": true,
       "inputSchema": {
         "type": "object",

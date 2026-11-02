@@ -51,7 +51,7 @@ The Docker image builds it itself. Neither file is committed.
 
 The engine includes parkscomputing.com's shortcodes (`internal/shortcodes`): `{{tip:Title}} … {{/tip}}` and the other notices, `{{expand}}`, `{{columns}}` with `{{column}}`, `{{figure:/path alt="…"}}`, `{{applet:name}}`, `{{video:youtube ID}}`, `{{code:~/bin/hello}}`, `{{toc}}`, `{{status:green Done}}`, `{{kbd:Ctrl+S}}`, `{{glyph:check}}`, `{{page:slug}}`, `{{anchor:name}}` and `{{draft-note}}`. The Editor's Insert menu offers each with an example.
 
-The `colour` shortcode is the engine's first paired inline shortcode, `{{colour:accent}}words{{/colour}}`, matched within a paragraph and open to Markdown inside; a project adds another by giving a definition the kind `span`.
+The `color` shortcode (`colour` is an alias) is the engine's first paired inline shortcode, `{{color:accent}}words{{/color}}`, matched within a paragraph and open to Markdown inside; a project adds another by giving a definition the kind `span`. The page view edits a colour span as a mark, so a coloured heading stays rich text.
 
 ## Slides
 

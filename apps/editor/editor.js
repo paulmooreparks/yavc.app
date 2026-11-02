@@ -1195,7 +1195,7 @@
             ['columns', 'Columns', '{{columns}}\nThe first column.\n\n{{column}}\n\nThe second.\n{{/columns}}'],
             ['figure', 'Figure', '{{figure:/images/picture.png alt="What it shows" width=80% caption="The caption, in Markdown."}}'],
             ['video', 'Video', '{{video:https://youtu.be/dQw4w9WgXcQ title="What it is"}}'],
-            ['colour', 'Colour', '{{colour:accent}}these words{{/colour}}'],
+            ['color', 'Colour', '{{color:accent}}these words{{/color}}'],
             ['code-file', 'Code Listing from a File', '{{code:~/bin/hello}}'],
             ['applet', 'Applet', '{{applet:conway fit=flow}}'],
             ['toc', 'Contents', '{{toc}}'],
@@ -1450,7 +1450,25 @@
            keyboard where it was, so Split can still tell. */
         function formatsThePage() { return pageActive() && (viewMode === 'visual' || (viewMode === 'split' && !(view && view.hasFocus))); }
         function applyFormat(name) {
+            if (name === 'color') { textColour(); return; }
             if (formatsThePage()) { visual.api.run(name); } else { textFormat(name); }
+        }
+        /* Words in a colour: one of the site's names or any CSS colour, as
+           the color shortcode takes it; on the page it is a mark, in the
+           Markdown the shortcode around the selection. */
+        function textColour() {
+            ask('Colour the words', 'One of ink, muted, accent, danger, warn or positive, or any colour such as #c0392b or tomato. Empty takes the colour off.', '', null, null, true).then(function (v) {
+                if (v == null) { return; }
+                v = String(v).trim().replace(/[{}\s]/g, '');
+                if (formatsThePage()) { visual.api.run('color', v || null); visual.api.focus(); return; }
+                var t = current();
+                if (!view || !t || t.readOnly) { return; }
+                var state = view.state, sel = state.selection.main, text = state.sliceDoc(sel.from, sel.to) || 'these words';
+                if (!v) { return; }
+                var open = '{{color:' + v + '}}', close = '{{/color}}';
+                view.dispatch({ changes: { from: sel.from, to: sel.to, insert: open + text + close }, selection: { anchor: sel.from + open.length, head: sel.from + open.length + text.length }, userEvent: 'input' });
+                view.focus();
+            });
         }
 
         /* The same formatting on the Markdown itself: a mark wraps the
@@ -2040,7 +2058,7 @@
         var FORMATS = [
             ['bold', 'Bold', 'bold', 'Mod-b'], ['italic', 'Italic', 'italic', 'Mod-i'], ['strike', 'Strike Through', 'strike'],
             ['code', 'Code', 'code', 'Mod-`'], ['link', 'Link…', 'link', 'Mod-k'],
-            ['bullets', 'Bulleted List', 'list'], ['numbers', 'Numbered List', 'list-numbered']
+            ['bullets', 'Bulleted List', 'list'], ['numbers', 'Numbered List', 'list-numbered'], ['color', 'Text Colour…', 'colour']
         ];
         /* The paragraph style, as GK Companion's Editor has it: one menu that
            shows the style of the line the cursor is in, holding Paragraph
@@ -2129,7 +2147,7 @@
             return [{ label: 'Editor', ribbon: 'hide', groups: [
                 { label: 'File', glyph: 'file', priority: 3, items: ['toggle-files', 'new', 'open', 'save', 'save-as'] },
                 { label: 'Edit', glyph: 'undo', priority: 2, items: ['undo', 'redo', 'find', 'toggle-wrap'] },
-                { label: 'Format', glyph: 'bold', priority: 1, items: ['style', 'bold', 'italic', 'strike', 'code', 'link', 'bullets', 'numbers', 'insert'] },
+                { label: 'Format', glyph: 'bold', priority: 1, items: ['style', 'bold', 'italic', 'strike', 'code', 'link', 'color', 'bullets', 'numbers', 'insert'] },
                 { label: 'View', glyph: 'new-window', priority: 4, end: true, items: ['source', { choice: 'ed-view' }, 'preview'] }
             ] }];
         }
@@ -2152,7 +2170,7 @@
                 { id: 'insert', label: 'Insert', glyph: 'plus', items: ['link', 'insert', '-', 'insert-timestamp', 'insert-date', 'stamp-modified'] }
             ];
             /* Format, where there is formatting to do. */
-            if (formatOffered) { titles.push({ id: 'format', label: 'Format', glyph: 'paragraph', items: ['style', '-', 'bold', 'italic', 'strike', 'code', '-', 'bullets', 'numbers'] }); }
+            if (formatOffered) { titles.push({ id: 'format', label: 'Format', glyph: 'paragraph', items: ['style', '-', 'bold', 'italic', 'strike', 'code', 'color', '-', 'bullets', 'numbers'] }); }
             titles.push({ id: 'layout', label: 'Layout', glyph: 'panel', items: LAYOUT });
             return { titles: titles, into: { view: LAYOUT } };
         }

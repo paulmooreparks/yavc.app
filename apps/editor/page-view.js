@@ -59,7 +59,15 @@
      Markdown keeps that Markdown in a data attribute. */
   var place = { uid: { default: null }, gap: { default: null }, src: { default: null } };
   function withPlace(attrs) { return Object.assign({}, place, attrs || {}); }
-  var schemaCache = null;
+      /* A colour as the engine writes it in a style: the site's names as
+       its tokens, anything else as given, kept to what a colour can be. */
+    function colorCSS(v) {
+      v = String(v || '').trim();
+      var named = { ink: 'var(--deck-ink, var(--dinah-ink, var(--text)))', text: 'var(--deck-ink, var(--dinah-ink, var(--text)))', muted: 'var(--deck-muted, var(--dinah-muted-ink, var(--text-muted)))', accent: 'var(--deck-accent, var(--accent))', danger: 'var(--danger)', warn: 'var(--warn)', warning: 'var(--warn)', positive: 'var(--positive)', ok: 'var(--positive)' };
+      if (named[v.toLowerCase()]) return named[v.toLowerCase()];
+      return /^(#[0-9a-fA-F]{3,8}|[a-zA-Z]{3,24}|(rgb|rgba|hsl|hsla|oklch|oklab)\([0-9a-zA-Z%.,\/ -]{1,60}\))$/.test(v) ? v : 'inherit';
+    }
+var schemaCache = null;
   function schemaOf(PM) {
     if (schemaCache) return schemaCache;
     var table = PM.tableNodes({ tableGroup: 'block', cellContent: 'inline*' });
@@ -140,7 +148,12 @@
         em: { parseDOM: [{ tag: 'em' }, { tag: 'i' }], toDOM: function () { return ['em', 0]; } },
         underline: { parseDOM: [{ tag: 'u' }], toDOM: function () { return ['u', 0]; } },
         strike: { parseDOM: [{ tag: 's' }, { tag: 'del' }], toDOM: function () { return ['s', 0]; } },
-        code: { parseDOM: [{ tag: 'code' }], toDOM: function () { return ['code', 0]; } }
+        code: { parseDOM: [{ tag: 'code' }], toDOM: function () { return ['code', 0]; } },
+        /* Words in a colour, {{color:…}}…{{/color}}: the value as written,
+           one of the site's names or any CSS colour. */
+        color: { attrs: { value: { default: 'accent' } },
+          parseDOM: [{ tag: 'span.sc-colour', getAttrs: function (d) { return { value: d.getAttribute('data-value') || d.style.color || 'accent' }; } }],
+          toDOM: function (m) { return ['span', { class: 'sc-colour', 'data-value': m.attrs.value, style: 'color:' + colorCSS(m.attrs.value) }, 0]; } }
       }
     });
     return schemaCache;
@@ -921,7 +934,7 @@
     }
 
     /* The Editor's commands, on the page. Each returns true when it acted. */
-    function run(name) {
+    function run(name, arg) {
       if (!view) return false;
       var v = view, s = v.state.schema, n = s.nodes, cmd = null;
       function list(type) {
@@ -948,6 +961,20 @@
         case 'bullets': cmd = list(n.bullet_list); break;
         case 'numbers': cmd = list(n.ordered_list); break;
         case 'link': linkDialog(); return true;
+        case 'color':
+          /* With a value, the selection takes that colour (or the next
+             words typed, when nothing is selected); without, it loses it. */
+          cmd = function (state, dispatch) {
+            var sel = state.selection, type = s.marks.color;
+            if (!arg) {
+              if (dispatch) dispatch(sel.empty ? state.tr.removeStoredMark(type) : state.tr.removeMark(sel.from, sel.to, type).scrollIntoView());
+              return true;
+            }
+            var mark = type.create({ value: String(arg) });
+            if (dispatch) dispatch(sel.empty ? state.tr.removeStoredMark(type).addStoredMark(mark) : state.tr.removeMark(sel.from, sel.to, type).addMark(sel.from, sel.to, mark).scrollIntoView());
+            return true;
+          };
+          break;
         default:
           if (TABLE_COMMANDS[name]) { cmd = TABLE_COMMANDS[name](); break; }
           if (!insertOf(name)) return false;
@@ -1042,7 +1069,7 @@
       marks: function () {
         if (!view) return {};
         var st = view.state, s = st.schema, out = {}, $f = st.selection.$from;
-        ['strong', 'em', 'code', 'underline', 'strike', 'link'].forEach(function (m) {
+        ['strong', 'em', 'code', 'underline', 'strike', 'link', 'color'].forEach(function (m) {
           var type = s.marks[m];
           out[m] = st.selection.empty ? !!type.isInSet(st.storedMarks || $f.marks()) : st.doc.rangeHasMark(st.selection.from, st.selection.to, type);
         });

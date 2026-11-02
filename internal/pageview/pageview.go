@@ -22,6 +22,7 @@ import (
 	"strconv"
 	"strings"
 	"unicode"
+	"yavc.app/internal/shortcodes"
 
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
@@ -49,7 +50,7 @@ type Mark struct {
 // its other text, so it is edited as source.
 var ErrNotEditable = errors.New("this part is edited as source")
 
-var md = goldmark.New(goldmark.WithExtensions(extension.GFM))
+var md = goldmark.New(goldmark.WithExtensions(extension.GFM, shortcodes.Extension))
 
 // Parse reads one part of a document as an editor's document. A part that
 // would not be written back exactly as it is returns ErrNotEditable.
@@ -234,6 +235,7 @@ func (p parser) table(t *extast.Table) (*Node, error) {
 // inline reads a block's inline content: text with its marks, and breaks.
 func (p parser) inline(n ast.Node) ([]*Node, error) {
 	var out []*Node
+	shortcodes.MatchSpans(n)
 	err := p.walk(n, nil, &out)
 	return out, err
 }
@@ -339,6 +341,27 @@ func (p parser) walk(n ast.Node, marks []Mark, out *[]*Node) error {
 				marks = marks[:len(marks)-1]
 			default:
 				return ErrNotEditable
+			}
+		case *shortcodes.Inline:
+			// A colour span is the color mark; any other shortcode in the
+			// text keeps the block as its Markdown.
+			if err := flush(); err != nil {
+				return err
+			}
+			name, value, ok := shortcodes.Span(node)
+			if !ok {
+				return ErrNotEditable
+			}
+			if name != "color" && name != "colour" {
+				return ErrNotEditable
+			}
+			if node.Closing {
+				if len(marks) == 0 || marks[len(marks)-1].Type != "color" {
+					return ErrNotEditable
+				}
+				marks = marks[:len(marks)-1]
+			} else {
+				marks = withMark(marks, Mark{Type: "color", Attrs: map[string]any{"value": value}})
 			}
 		case *ast.AutoLink:
 			if err := flush(); err != nil {
@@ -552,7 +575,7 @@ func intAttr(n *Node, key string, def int) int {
 }
 
 // markOrder is the order marks are opened in, outermost first.
-var markOrder = []string{"link", "strong", "em", "underline", "strike", "code"}
+var markOrder = []string{"color", "link", "strong", "em", "underline", "strike", "code"}
 
 func delimiters(m Mark) (string, string) {
 	switch m.Type {
@@ -562,6 +585,9 @@ func delimiters(m Mark) (string, string) {
 		return "*", "*"
 	case "underline":
 		return "<u>", "</u>"
+	case "color":
+		v, _ := m.Attrs["value"].(string)
+		return "{{color:" + strings.ReplaceAll(strings.TrimSpace(v), "}", "") + "}}", "{{/color}}"
 	case "strike":
 		return "~~", "~~"
 	case "link":
@@ -662,6 +688,8 @@ func sameMark(a, b Mark) bool {
 	switch a.Type {
 	case "link":
 		return a.Attrs["href"] == b.Attrs["href"] && isAuto(a) == isAuto(b)
+	case "color":
+		return a.Attrs["value"] == b.Attrs["value"]
 	}
 	return true
 }

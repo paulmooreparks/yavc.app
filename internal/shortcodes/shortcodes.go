@@ -150,15 +150,34 @@ func (n *Block) Dump(src []byte, level int) {
 }
 
 // IsShortcodeParagraph reports whether a paragraph holds a shortcode, so a
-// page editor keeps it as its Markdown rather than as rich text.
+// page editor keeps it as its Markdown rather than as rich text. A span
+// paired with its closer is rich text (a mark), not a shortcode here.
 func IsShortcodeParagraph(n ast.Node) bool {
+	MatchSpans(n)
 	for ch := n.FirstChild(); ch != nil; ch = ch.NextSibling() {
-		if ch.Kind() == KindInline {
+		if in, ok := ch.(*Inline); ok {
+			if _, _, isSpan := Span(in); isSpan {
+				continue
+			}
 			return true
 		}
 	}
 	return false
 }
+
+// Span says whether an inline shortcode is a paired span with its match
+// found, and gives its name and its value (the first argument).
+func Span(n *Inline) (name, value string, ok bool) {
+	d := table[n.Call.Name]
+	if d == nil || d.kind != span || !n.Matched {
+		return "", "", false
+	}
+	v, _ := n.Call.Get(n.Call.Name, 0)
+	return n.Call.Name, v, true
+}
+
+// MatchSpans pairs the span shortcodes in a block with their closers.
+func MatchSpans(block ast.Node) { matchSpans(block) }
 
 type inlineParser struct{}
 
@@ -504,12 +523,12 @@ func init() {
 			}
 			return `<pre><code` + cls + ` data-code-src="` + esc(s) + `"></code></pre>`, nil
 		}})
-	add(&def{name: "colour", kind: span, title: "Colour", what: "Words in a colour: one of the site's (ink, muted, accent, danger, warn, positive), or any CSS colour such as #c0392b or tomato. Markdown works inside it.",
-		example: "{{colour:accent}}these words{{/colour}}",
+	add(&def{name: "color", kind: span, title: "Colour", what: "Words in a colour: one of the site's (ink, muted, accent, danger, warn, positive), or any CSS colour such as #c0392b or tomato. Markdown works inside it.",
+		example: "{{color:accent}}these words{{/color}}",
 		wrap: func(c Call) (string, string, error) {
 			v, ok := c.Get("colour", 0)
 			if !ok || v == "" {
-				return "", "", problem{"colour needs a colour, such as accent or #c0392b."}
+				return "", "", problem{"color needs a colour, such as accent or #c0392b."}
 			}
 			css, ok := cssColour(v)
 			if !ok {
@@ -517,8 +536,8 @@ func init() {
 			}
 			return `<span class="sc-colour" style="color:` + css + `">`, `</span>`, nil
 		}})
-	add(&def{name: "color", kind: span, title: "Colour", what: "The same as colour.", example: "{{color:tomato}}these words{{/color}}",
-		wrap: func(c Call) (string, string, error) { return table["colour"].wrap(c) }})
+	add(&def{name: "colour", kind: span, title: "Colour", what: "The same as color, spelt the other way.", example: "{{colour:tomato}}these words{{/colour}}",
+		wrap: func(c Call) (string, string, error) { return table["color"].wrap(c) }})
 	add(&def{name: "kbd", kind: inline, title: "Keys", what: "Keys to press, each drawn as a key, joined by +.",
 		example: "{{kbd:Ctrl+Shift+P}}",
 		render: func(c Call, doc ast.Node, src []byte) (string, error) {
@@ -581,7 +600,7 @@ func init() {
 		wrap: func(c Call) (string, string, error) {
 			return `<aside class="sc-notes"><p class="sc-notes-label">Speaker notes</p>`, `</aside>`, nil
 		}})
-	for _, name := range []string{"expand", "status", "toc", "anchor", "page", "figure", "applet", "video", "code", "colour", "kbd", "glyph", "columns", "column", "draft-note", "slide", "notes"} {
+	for _, name := range []string{"expand", "status", "toc", "anchor", "page", "figure", "applet", "video", "code", "color", "kbd", "glyph", "columns", "column", "draft-note", "slide", "notes"} {
 		order = append(order, name)
 	}
 }
