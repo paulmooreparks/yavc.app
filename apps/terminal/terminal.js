@@ -1445,9 +1445,9 @@
         root.innerHTML = '<div class="pc-terminal-screen" data-role="screen"></div>' +
             '<dialog class="dialog pc-terminal-settings" data-role="settings" aria-labelledby="' + setId + '-title">' +
               '<form method="dialog">' +
-                '<h3 class="dialog-title" id="' + setId + '-title">Terminal settings</h3>' +
+                '<h3 class="dialog-title" id="' + setId + '-title">Terminal Settings</h3>' +
                 '<div class="dialog-body">' +
-                  '<div class="form-group"><label class="form-label" for="' + setId + '-font">Text size</label>' +
+                  '<div class="form-group"><label class="form-label" for="' + setId + '-font">Text Size</label>' +
                     '<span class="form-select-wrap"><select class="form-select" id="' + setId + '-font" data-role="font-size">' +
                       FONT_SIZES.map(function (n) { return '<option value="' + n + '">' + n + ' px</option>'; }).join('') +
                     '</select></span></div>' +
@@ -1466,7 +1466,7 @@
         function commands() {
             var list = [
                 { label: 'Settings…', run: function () { setDialog.showModal(); fontSel.focus(); } },
-                { label: 'Clear the screen', run: function () { if (term) { term.clear(); term.focus(); } } }
+                { label: 'Clear the Screen', run: function () { if (term) { term.clear(); term.focus(); } } }
             ];
             if (window.pudlApplets && window.pudlApplets.can && window.pudlApplets.can('shell')) {
                 list.push({ label: 'New Terminal Window Here', run: function () { window.pudlApplets.request('shell', { path: cwd ? pathOf(cwd) : '/' }, root); } });
@@ -1493,7 +1493,7 @@
            the site's continuity expects, so a link to a folder opens there. */
         var initialCwd = (opts.ownsUrl ? cwdFrom(location.search) : null) || cwdFrom(opts.state) || '/site';
         /* A command to put at the prompt, never to run: from the page's own
-           address, or handed over by Files' "Run in the terminal". */
+           address, or handed over by Files' "Run in the Terminal". */
         var prefill = (opts.ownsUrl ? (new URLSearchParams(location.search).get('run') || '') : '') ||
             (opts.state && new URLSearchParams(String(opts.state)).get('run')) || '';
 
@@ -2294,7 +2294,7 @@
             function textLines() { return lines.length - 1; }
             var row = 0, col = 0, goal = 0, top = 0, left = 0, modified = false;
             var message = node ? '' : 'New file', messageIsError = false, cut = [], lastWasCut = false, confirming = false, saving = false;
-            var KEYS = [['^S', 'Save'], ['^X', 'Exit'], ['^K', 'Cut line'], ['^U', 'Paste'], ['^G', 'Keys']];
+            var KEYS = [['^S', 'Save'], ['^X', 'Exit'], ['^K', 'Cut Line'], ['^U', 'Paste'], ['^G', 'Keys']];
 
             return new Promise(function (done) {
                 var resizeSub = term.onResize(function () { draw(); });
@@ -2621,7 +2621,7 @@
             commands: commands,
             menus: function () {
                 var items = commands(), settingsCommand = items.shift();
-                settingsCommand.label = 'Settings for all terminals…';
+                settingsCommand.label = 'Settings for All Terminals…';
                 return { titles: [
                     { label: 'Terminal', items: window.pcAppletIdentity(root, [settingsCommand]) },
                     { label: 'Session', items: items }

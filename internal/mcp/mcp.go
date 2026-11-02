@@ -66,10 +66,14 @@ type Server struct {
 	// waits is how many applet_invoke calls are waiting, by token.
 	waits map[string]int
 	now   func() time.Time
+	// uses counts every making or use of a session, so the one used longest
+	// ago is known exactly even when the clock gives two uses the same time.
+	uses uint64
 }
 
 type session struct {
 	used time.Time
+	use  uint64
 }
 
 // The server's limits.
@@ -189,15 +193,16 @@ func (s *Server) initialize(w http.ResponseWriter, req rpcRequest) {
 	s.mu.Lock()
 	s.sweepLocked()
 	if len(s.sessions) >= MaxSessions {
-		oldest, at := "", time.Time{}
+		oldest, at := "", uint64(0)
 		for k, sess := range s.sessions {
-			if oldest == "" || sess.used.Before(at) {
-				oldest, at = k, sess.used
+			if oldest == "" || sess.use < at {
+				oldest, at = k, sess.use
 			}
 		}
 		delete(s.sessions, oldest)
 	}
-	s.sessions[id] = &session{used: s.now()}
+	s.uses++
+	s.sessions[id] = &session{used: s.now(), use: s.uses}
 	s.mu.Unlock()
 	w.Header().Set("Mcp-Session-Id", id)
 	reply(w, req.ID, map[string]any{
@@ -217,7 +222,8 @@ func (s *Server) session(id string) *session {
 		sess = nil
 	}
 	if sess != nil {
-		sess.used = s.now()
+		s.uses++
+		sess.used, sess.use = s.now(), s.uses
 	}
 	return sess
 }

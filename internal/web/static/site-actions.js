@@ -164,8 +164,8 @@
             '<p>To do it, it would ' + esc(missing.map(function (c) { return WORDS[c] || c; }).join(' and ')) + '.</p>' +
             (standing ? '' : '<p class="form-help">This changes what runs later, so it is asked about every time.</p>');
         var buttons = [{ id: 'no', label: 'Refuse' }];
-        if (standing) { buttons.push({ id: 'page', label: 'Allow while this page is open', submit: true }); }
-        buttons.push({ id: 'once', label: 'Allow once', primary: true });
+        if (standing) { buttons.push({ id: 'page', label: 'Allow While This Page Is Open', submit: true }); }
+        buttons.push({ id: 'once', label: 'Allow Once', primary: true });
         return window.yavcDialog.open({
             title: ownerName(q.owner) + ' asks: ' + (q.action.title || q.action.ref), body: body, buttons: buttons, className: 'yavc-allow',
             onOpen: function (api) {

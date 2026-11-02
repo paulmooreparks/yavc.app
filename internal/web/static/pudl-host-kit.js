@@ -91,12 +91,12 @@
                 if (!command) { return; }
                 if (result.length && (id === 'page' || id === 'close')) { result.push('-'); }
                 result.push(Object.assign({}, command, {
-                    label: id === 'page' ? 'Open as a page' : id === 'copy-link' ? 'Copy link to this applet' : 'Close window'
+                    label: id === 'page' ? 'Open as a Page' : id === 'copy-link' ? 'Copy Link to This Applet' : 'Close Window'
                 }, id === 'close' ? { danger: false } : {}));
             });
         } else if (navigator.clipboard) {
             if (result.length) { result.push('-'); }
-            result.push({ label: 'Copy link to this applet', run: function () {
+            result.push({ label: 'Copy Link to This Applet', run: function () {
                 return navigator.clipboard.writeText(location.href).catch(function () {
                     window.alert('The link could not be copied. Copy the address from your browser.');
                 });

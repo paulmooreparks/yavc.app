@@ -89,12 +89,12 @@
             {{/* The other layout, as a link; the segment in the top bar shows which one this is. */}}
             {{if .Desktop}}<li><a href="{{.SiteURL}}pages">Pages</a></li>{{else}}<li><a href="{{.SiteURL}}">Windowed</a></li>{{end}}
             <li>-</li>
-            {{if .Desktop}}<li><button type="button" data-site-command="sidebar" aria-checked="false">Hide the list</button></li>
+            {{if .Desktop}}<li><button type="button" data-site-command="sidebar" aria-checked="false">Hide the List</button></li>
             <li>-</li>{{end}}
             <li>Mode<ul data-menu-radio>
               <li><button type="button" data-site-command="mode" data-args="light" {{checked .Appearance.Mode "light"}}>Light</button></li>
               <li><button type="button" data-site-command="mode" data-args="dark" {{checked .Appearance.Mode "dark"}}>Dark</button></li>
-              <li><button type="button" data-site-command="mode" data-args="system" {{checked .Appearance.Mode "system"}}>Follow the system</button></li>
+              <li><button type="button" data-site-command="mode" data-args="system" {{checked .Appearance.Mode "system"}}>Follow the System</button></li>
             </ul></li>
             <li>Skin<ul data-menu-radio>
               {{range .Skins}}<li><button type="button" data-site-command="skin" data-args="{{.ID}}" {{checked $.Appearance.Skin .ID}}>{{.Label}}</button></li>
@@ -107,9 +107,9 @@
           </ul></li>
           {{if .Desktop}}<li data-menubar-if="windows" data-menubar-id="window" data-menubar-windows>Window<ul></ul></li>{{end}}
           <li data-menubar-id="help">Help<ul>
-            <li><a href="{{.SiteURL}}?open=author&amp;top=author"{{if .Desktop}} data-win-open="author"{{end}}>About the author</a></li>
+            <li><a href="{{.SiteURL}}?open=author&amp;top=author"{{if .Desktop}} data-win-open="author"{{end}}>About the Author</a></li>
             <li><a href="{{.SiteURL}}about/pudl" data-dialog="about-pudl">About PUDL</a></li>
-            <li><a href="{{.SiteURL}}?open=agents&amp;top=agents"{{if .Desktop}} data-win-open="agents"{{end}}>For agents</a></li>
+            <li><a href="{{.SiteURL}}?open=agents&amp;top=agents"{{if .Desktop}} data-win-open="agents"{{end}}>For Agents</a></li>
             <li>-</li>
             <li><a href="{{.SiteURL}}?open=privacy&amp;top=privacy"{{if .Desktop}} data-win-open="privacy"{{end}}>Privacy Policy</a></li>
             <li><a href="{{.SiteURL}}?open=terms&amp;top=terms"{{if .Desktop}} data-win-open="terms"{{end}}>Terms &amp; Conditions</a></li>
@@ -138,7 +138,7 @@
     <div class="md-body">
       <nav class="md-sidebar" aria-label="Applications">
         <div class="md-sidebar-head">
-          <input class="md-filter" type="search" placeholder="Filter the list…" aria-label="Filter the list" data-list-filter>
+          <input class="md-filter" type="search" placeholder="Filter the List…" aria-label="Filter the List" data-list-filter>
         </div>
         <div class="site-list">
           <div class="md-section-label">Applications</div>
@@ -148,7 +148,7 @@
           {{end}}
         </div>
       </nav>
-      <div class="md-resize" role="separator" tabindex="0" aria-orientation="vertical" aria-label="Application list"></div>
+      <div class="md-resize" role="separator" tabindex="0" aria-orientation="vertical" aria-label="Application List"></div>
       <div class="md-detail reader-stage" tabindex="0">
         <div class="reader-col">
           <main class="win-host">
@@ -165,13 +165,13 @@
       </div>
     </div>
     <div class="win-bar">
-      <button class="icon-btn sidebar-toggle" type="button" data-md-action="toggle" aria-label="Show or hide the list" data-tooltip="Show or hide the list">
+      <button class="icon-btn sidebar-toggle" type="button" data-md-action="toggle" aria-label="Show or Hide the List" data-tooltip="Show or Hide the List">
         <span class="glyph" style="--glyph: var(--glyph-panel)" aria-hidden="true"></span>
       </button>
-      <nav class="win-dock" data-win-dock aria-label="Open windows"></nav>
-      <a class="icon-btn" data-win-back href="{{.Bar.Back}}"{{if .Bar.NoneShown}} aria-disabled="true"{{end}} aria-label="Minimize all windows" data-tooltip="Minimize all windows"></a>
-      <a class="icon-btn" data-win-restore href="{{.Bar.Restore}}"{{if .Bar.NoneMinimized}} aria-disabled="true"{{end}} aria-label="Restore all windows" data-tooltip="Restore all windows"></a>
-      <a class="icon-btn" data-win-close-all href="{{.Bar.CloseAll}}"{{if .Bar.NoneOpen}} aria-disabled="true"{{end}} aria-label="Close all windows" data-tooltip="Close all windows"></a>
+      <nav class="win-dock" data-win-dock aria-label="Open Windows"></nav>
+      <a class="icon-btn" data-win-back href="{{.Bar.Back}}"{{if .Bar.NoneShown}} aria-disabled="true"{{end}} aria-label="Minimize All Windows" data-tooltip="Minimize All Windows"></a>
+      <a class="icon-btn" data-win-restore href="{{.Bar.Restore}}"{{if .Bar.NoneMinimized}} aria-disabled="true"{{end}} aria-label="Restore All Windows" data-tooltip="Restore All Windows"></a>
+      <a class="icon-btn" data-win-close-all href="{{.Bar.CloseAll}}"{{if .Bar.NoneOpen}} aria-disabled="true"{{end}} aria-label="Close All Windows" data-tooltip="Close All Windows"></a>
     </div>
   </div>
   {{template "dialogs" .}}
@@ -184,17 +184,17 @@
      and as the desktop draws it for the windows the address names. */}}
 {{define "window"}}<section class="win" data-win="{{.Key}}"{{if .Applet.Icon}} data-win-icon="{{.Applet.IconURL}}"{{end}} data-win-mode="floating"{{if .Content}} data-win-size="content"{{end}}{{if .Applet.Min}} data-win-min="{{.Applet.Min}}"{{end}}{{if .Applet.Max}} data-win-max="{{.Applet.Max}}"{{end}} role="dialog" aria-labelledby="win-{{.Key}}-title"{{if .Style}} style="{{.Style}}"{{end}}>
   <header class="win-head">
-    <button type="button" class="win-btn" data-win-action="menu" aria-label="Window menu" title="Window menu"></button>
+    <button type="button" class="win-btn" data-win-action="menu" aria-label="Window Menu" title="Window Menu"></button>
     <h2 class="win-title" id="win-{{.Key}}-title">{{.Title}}</h2>
     <nav class="win-chrome" aria-label="Window">
-      <a class="win-btn" data-win-action="page" href="{{.Page}}" aria-label="Open as a page" title="Open as a page"></a>
+      <a class="win-btn" data-win-action="page" href="{{.Page}}" aria-label="Open as a Page" title="Open as a Page"></a>
       <a class="win-btn" data-win-action="minimize" href="{{.Minimize}}" aria-label="Minimize" title="Minimize"></a>
       <a class="win-btn" data-win-action="maximize" href="{{.Maximize}}" aria-label="Maximize" title="Maximize"></a>
       <a class="win-btn" data-win-action="close" href="{{.Close}}" aria-label="Close" title="Close"></a>
     </nav>
   </header>
   <div class="win-body"><div class="win-content">
-    <nav data-page-menu hidden aria-label="Page menu"><ul></ul></nav>
+    <nav data-page-menu hidden aria-label="Page Menu"><ul></ul></nav>
     {{.Mount}}</div></div>
 </section>
 {{end}}
@@ -211,13 +211,13 @@
             <li><a href="{{.SiteURL}}">Desktop</a></li>
           </ul></li>
           <li data-menubar-id="go">Go<ul>
-            <li><a href="{{.SiteURL}}?open={{.Applet.Name}}&amp;top={{.Applet.Name}}">{{.Title}} on the desktop</a></li>
+            <li><a href="{{.SiteURL}}?open={{.Applet.Name}}&amp;top={{.Applet.Name}}">{{.Title}} on the Desktop</a></li>
           </ul></li>
           <li data-menubar-id="view">View<ul>
             <li>Mode<ul data-menu-radio>
               <li><button type="button" data-site-command="mode" data-args="light" {{checked .Appearance.Mode "light"}}>Light</button></li>
               <li><button type="button" data-site-command="mode" data-args="dark" {{checked .Appearance.Mode "dark"}}>Dark</button></li>
-              <li><button type="button" data-site-command="mode" data-args="system" {{checked .Appearance.Mode "system"}}>Follow the system</button></li>
+              <li><button type="button" data-site-command="mode" data-args="system" {{checked .Appearance.Mode "system"}}>Follow the System</button></li>
             </ul></li>
             <li>Skin<ul data-menu-radio>
               {{range .Skins}}<li><button type="button" data-site-command="skin" data-args="{{.ID}}" {{checked $.Appearance.Skin .ID}}>{{.Label}}</button></li>
@@ -230,9 +230,9 @@
           </ul></li>
           <li data-menubar-id="help">Help<ul>
             <li><a href="{{.SiteURL}}about" data-dialog="about-site">About yavc.app</a></li>
-            <li><a href="{{.SiteURL}}author">About the author</a></li>
+            <li><a href="{{.SiteURL}}author">About the Author</a></li>
             <li><a href="{{.SiteURL}}about/pudl" data-dialog="about-pudl">About PUDL</a></li>
-            <li><a href="{{.SiteURL}}agents">For agents</a></li>
+            <li><a href="{{.SiteURL}}agents">For Agents</a></li>
             <li>-</li>
             <li><a href="{{.SiteURL}}privacy">Privacy Policy</a></li>
             <li><a href="{{.SiteURL}}terms">Terms &amp; Conditions</a></li>
@@ -243,7 +243,7 @@
     </div>
   </header>
   <main class="standalone-main" data-applet-page>
-    <nav data-page-menu hidden aria-label="Page menu"><ul></ul></nav>
+    <nav data-page-menu hidden aria-label="Page Menu"><ul></ul></nav>
     {{.Mount}}
   </main>
   {{template "dialogs" .}}
@@ -265,7 +265,7 @@
     </div>
   </header>
   <main class="site-main" id="main-content" tabindex="-1">
-    <nav data-page-menu hidden aria-label="Page menu"><ul></ul></nav>
+    <nav data-page-menu hidden aria-label="Page Menu"><ul></ul></nav>
     {{.Mount}}
   </main>
   {{template "dialogs" .}}
@@ -295,7 +295,7 @@
       {{range .Applets}}<section class="card">
         <h2 class="card-title">{{if .Icon}}<img class="site-list-icon" src="{{.Icon}}" alt="">{{end}}<a href="{{$.SiteURL}}{{.Name}}">{{.Title}}</a></h2>
         <p class="card-desc">{{.Description}}</p>
-        <p class="card-desc app-links"><a href="{{.Page}}">Open as a page</a> · <a href="{{$.SiteURL}}?open={{.Name}}&amp;top={{.Name}}">Open in a window</a></p>
+        <p class="card-desc app-links"><a href="{{.Page}}">Open as a Page</a> · <a href="{{$.SiteURL}}?open={{.Name}}&amp;top={{.Name}}">Open in a Window</a></p>
       </section>
       {{end}}
     </div>
@@ -313,7 +313,7 @@
   <header class="site-header"><div class="topbar">{{template "menubar" .}}</div></header>
   <main class="site-main" id="main-content" tabindex="-1">
     <article class="post-content">
-      <nav data-page-menu hidden aria-label="Page menu"><ul></ul></nav>
+      <nav data-page-menu hidden aria-label="Page Menu"><ul></ul></nav>
       {{.Article}}
     </article>
   </main>
@@ -325,17 +325,17 @@
 
 {{define "window-article"}}<section class="win" data-win="{{.Key}}" data-win-mode="floating" role="dialog" aria-labelledby="win-{{.Key}}-title"{{if .Style}} style="{{.Style}}"{{end}}>
   <header class="win-head">
-    <button type="button" class="win-btn" data-win-action="menu" aria-label="Window menu" title="Window menu"></button>
+    <button type="button" class="win-btn" data-win-action="menu" aria-label="Window Menu" title="Window Menu"></button>
     <h2 class="win-title" id="win-{{.Key}}-title">{{.Title}}</h2>
     <nav class="win-chrome" aria-label="Window">
-      <a class="win-btn" data-win-action="page" href="{{.Page}}" aria-label="Open as a page" title="Open as a page"></a>
+      <a class="win-btn" data-win-action="page" href="{{.Page}}" aria-label="Open as a Page" title="Open as a Page"></a>
       <a class="win-btn" data-win-action="minimize" href="{{.Minimize}}" aria-label="Minimize" title="Minimize"></a>
       <a class="win-btn" data-win-action="maximize" href="{{.Maximize}}" aria-label="Maximize" title="Maximize"></a>
       <a class="win-btn" data-win-action="close" href="{{.Close}}" aria-label="Close" title="Close"></a>
     </nav>
   </header>
   <div class="win-body"><div class="win-content"><article class="post-content">
-    <nav data-page-menu hidden aria-label="Page menu"><ul></ul></nav>
+    <nav data-page-menu hidden aria-label="Page Menu"><ul></ul></nav>
     {{.Article}}</article></div></div>
 </section>
 {{end}}
@@ -346,7 +346,7 @@
   <main class="site-main">
     <h1>{{.Title}}</h1>
     <p>{{.Message}}</p>
-    <p><a href="{{.SiteURL}}">Go to the desktop</a></p>
+    <p><a href="{{.SiteURL}}">Go to the Desktop</a></p>
   </main>
   {{template "dialogs" .}}
   {{template "scripts" .}}

@@ -38,7 +38,7 @@
                 '<div class="seg" role="group" aria-label="Mode">' +
                   '<button type="button" data-mode="light">Light</button>' +
                   '<button type="button" data-mode="dark">Dark</button>' +
-                  '<button type="button" data-mode="system">Follow the system</button>' +
+                  '<button type="button" data-mode="system">Follow the System</button>' +
                 '</div>' +
               '</fieldset>' +
               '<div class="form-group">' +
@@ -53,17 +53,17 @@
               '</div>' +
             '</section>' +
             '<section class="card">' +
-              '<h2 class="card-title">What this site keeps</h2>' +
+              '<h2 class="card-title">What This Site Keeps</h2>' +
               '<p class="card-desc">Your appearance choices and each application\'s state, such as a game in progress, are kept on this site under an anonymous session, so the same game is on the desktop and on the application\'s own address. Nothing in it identifies you.' + kept + '</p>' +
               '<p class="card-desc">Files you make, in the editor, the terminal or a game\'s saves, are kept in this browser alone, under the address you made them at, and this site never sees them. The desktop and each application\'s own address keep separate files. Clearing this browser\'s site data removes them, so download anything you want to keep.</p>' +
-              '<div class="settings-actions"><button type="button" class="btn btn-danger" commandfor="yavc-forget-' + n + '" command="show-modal">Forget everything this site keeps for you…</button></div>' +
+              '<div class="settings-actions"><button type="button" class="btn btn-danger" commandfor="yavc-forget-' + n + '" command="show-modal">Forget Everything This Site Keeps for You…</button></div>' +
               '<p class="settings-status" data-status role="status"></p>' +
               '<dialog class="dialog" id="yavc-forget-' + n + '" aria-labelledby="yavc-forget-title-' + n + '">' +
                 '<h3 class="dialog-title" id="yavc-forget-title-' + n + '">Forget everything this site keeps for you?</h3>' +
                 '<p class="dialog-body">Your appearance choices and every application\'s state go, and the page starts afresh. Nothing can bring them back. Your files in this browser are kept.</p>' +
                 '<form class="dialog-actions" method="dialog">' +
-                  '<button class="btn" value="keep" autofocus>Keep them</button>' +
-                  '<button class="btn btn-danger" value="forget">Forget them</button>' +
+                  '<button class="btn" value="keep" autofocus>Keep Them</button>' +
+                  '<button class="btn btn-danger" value="forget">Forget Them</button>' +
                 '</form>' +
               '</dialog>' +
             '</section>' +
@@ -72,24 +72,24 @@
               '<p class="card-desc">An AI agent can drive the applications here, through the site\'s MCP endpoint, as you: it runs on a page you have open, with your files and your state, and the page asks you before it does anything its token does not already allow. Make a token for each agent and give it to the agent; it is shown once. <a href="' + esc((window.pcPublicOrigin || '') + '/agents') + '">How agents use this site</a>.</p>' +
               '<ul class="row-list" data-token-list aria-label="Tokens"></ul>' +
               '<p class="card-desc" data-token-none>No agent is paired.</p>' +
-              '<div class="settings-actions"><button type="button" class="btn btn-primary" commandfor="yavc-token-' + n + '" command="show-modal">Make a token…</button></div>' +
+              '<div class="settings-actions"><button type="button" class="btn btn-primary" commandfor="yavc-token-' + n + '" command="show-modal">Make a Token…</button></div>' +
               '<pre class="settings-token" data-token-shown data-code-actions="copy" hidden tabindex="0"></pre>' +
               '<p class="settings-status" data-token-status role="status"></p>' +
               '<dialog class="dialog" id="yavc-token-' + n + '" aria-labelledby="yavc-token-title-' + n + '">' +
                 '<form method="dialog" data-token-form>' +
-                  '<h3 class="dialog-title" id="yavc-token-title-' + n + '">Make a token for an agent</h3>' +
+                  '<h3 class="dialog-title" id="yavc-token-title-' + n + '">Make a Token for an Agent</h3>' +
                   '<div class="dialog-body">' +
-                    '<div class="form-group"><label class="form-label" for="yavc-token-name-' + n + '">The agent\'s name</label>' +
+                    '<div class="form-group"><label class="form-label" for="yavc-token-name-' + n + '">The Agent\'s Name</label>' +
                       '<input class="form-input" id="yavc-token-name-' + n + '" name="name" required maxlength="64" autocomplete="off" placeholder="Claude">' +
                       '<p class="form-help">Shown to you when the agent asks to do something.</p></div>' +
-                    '<fieldset class="form-fieldset"><legend>What it may do without asking</legend>' +
-                      '<label class="check"><input type="checkbox" name="grant" value="files.read"> Read your files</label>' +
-                      '<label class="check"><input type="checkbox" name="grant" value="files.write"> Change your files</label>' +
-                      '<label class="check"><input type="checkbox" name="grant" value="window.open"> Open windows</label>' +
-                      '<label class="check"><input type="checkbox" name="grant" value="attention.request"> Ask you questions</label>' +
+                    '<fieldset class="form-fieldset"><legend>What It May Do Without Asking</legend>' +
+                      '<label class="check"><input type="checkbox" name="grant" value="files.read"> Read Your Files</label>' +
+                      '<label class="check"><input type="checkbox" name="grant" value="files.write"> Change Your Files</label>' +
+                      '<label class="check"><input type="checkbox" name="grant" value="window.open"> Open Windows</label>' +
+                      '<label class="check"><input type="checkbox" name="grant" value="attention.request"> Ask You Questions</label>' +
                       '<p class="form-help">For anything else it needs, the page asks you each time.</p></fieldset>' +
                   '</div>' +
-                  '<div class="dialog-actions"><button class="btn" type="button" data-token-cancel>Cancel</button><button class="btn btn-primary" value="make">Make the token</button></div>' +
+                  '<div class="dialog-actions"><button class="btn" type="button" data-token-cancel>Cancel</button><button class="btn btn-primary" value="make">Make the Token</button></div>' +
                 '</form>' +
               '</dialog>' +
             '</section>';

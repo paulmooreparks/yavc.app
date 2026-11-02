@@ -83,7 +83,7 @@
             var both = tree && list;
             return '<div class="fm-body' + (both ? ' split' : '') + (list ? '' : ' fm-body-tree') + (tree ? '' : ' fm-body-list') + '">' +
                 (tree ? '<div class="fm-tree-pane' + (both ? ' split-pane' : '') + '" data-fb="tree-pane"><ul class="tree fm-tree" data-fb="tree" aria-label="' + esc(o.treeLabel || 'Folders') + '"></ul></div>' : '') +
-                (both ? '<div class="split-handle fm-split" data-fb="split" aria-label="Resize the folders" data-split-min="140" data-split-max="60%"></div>' : '') +
+                (both ? '<div class="split-handle fm-split" data-fb="split" aria-label="Resize the Folders" data-split-min="140" data-split-max="60%"></div>' : '') +
                 (list
                     ? '<div class="fm-main' + (both ? ' split-pane' : '') + (o.drop ? ' drop-zone' : '') + '" data-fb="main">' +
                         '<table class="data-table fm-list" data-fb="list" role="grid" aria-label="Contents">' +
@@ -554,7 +554,7 @@
            canSaveIn(dir)  Save as: why nothing can be saved in this
                       folder, or null; while it answers, Save is off and
                       Download instead is the main button
-           computer   true for "From your computer…" (Open) or "Download
+           computer   true for "From Your Computer…" (Open) or "Download
                       instead" (Save as)
            commit(choice)  optional: does what was chosen while the dialog
                       stays open and busy. It may throw, or reject, and the
@@ -588,16 +588,16 @@
         dlg.setAttribute('aria-labelledby', id + '-title');
         dlg.innerHTML =
             '<form method="dialog" class="fb-pick-form">' +
-              '<h3 class="dialog-title" id="' + id + '-title">' + esc(o.title || (save ? 'Save as' : 'Open')) + '</h3>' +
+              '<h3 class="dialog-title" id="' + id + '-title">' + esc(o.title || (save ? 'Save As' : 'Open')) + '</h3>' +
               '<div class="dialog-body fb-pick-body">' +
                 '<div class="fb-pick-bar">' +
-                  '<button type="button" class="icon-btn" data-pick="up" aria-label="Up one folder" title="Up one folder"><span class="glyph" style="--glyph: var(--glyph-arrow-up)" aria-hidden="true"></span></button>' +
-                  '<button type="button" class="icon-btn" data-pick="home" aria-label="Your home directory" title="Your home directory">' + glyph('home') + '</button>' +
+                  '<button type="button" class="icon-btn" data-pick="up" aria-label="Up One Folder" title="Up One Folder"><span class="glyph" style="--glyph: var(--glyph-arrow-up)" aria-hidden="true"></span></button>' +
+                  '<button type="button" class="icon-btn" data-pick="home" aria-label="Your Home Directory" title="Your Home Directory">' + glyph('home') + '</button>' +
                   markup.pathBar() +
-                  '<button type="button" class="btn btn-sm" data-pick="newfolder" title="Make a folder here">New folder</button>' +
+                  '<button type="button" class="btn btn-sm" data-pick="newfolder" title="Make a Folder Here">New Folder</button>' +
                 '</div>' +
                 '<div class="fb-pick-newfolder" data-pick="newrow" hidden>' +
-                  '<label class="form-label" for="' + id + '-nf">Name of the new folder</label>' +
+                  '<label class="form-label" for="' + id + '-nf">Name of the New Folder</label>' +
                   '<input class="form-input mono" id="' + id + '-nf" data-pick="newname" autocomplete="off" spellcheck="false" />' +
                   '<button type="button" class="btn btn-sm" data-pick="make">Create</button>' +
                   '<button type="button" class="btn btn-sm" data-pick="nomake">Cancel</button>' +
@@ -605,7 +605,7 @@
                 '<div class="fb-pick-browse">' + markup.body({}) + '</div>' +
                 '<p class="fb-pick-note" data-pick="note" hidden></p>' +
                 '<div class="form-group fb-pick-field">' +
-                  '<label class="form-label" for="' + id + '-input">' + (save ? 'File name' : 'Path') + '</label>' +
+                  '<label class="form-label" for="' + id + '-input">' + (save ? 'File Name' : 'Path') + '</label>' +
                   '<input class="form-input mono" id="' + id + '-input" data-pick="input" autocomplete="off" spellcheck="false"' +
                     (save ? '' : ' placeholder="Choose a file, or type a path such as ~/README"') + ' />' +
                 '</div>' +
@@ -614,7 +614,7 @@
               '<div class="dialog-actions fb-pick-actions">' +
                 (o.computer ? (save
                     ? '<button type="button" class="btn" data-pick="download">' + glyph('download') + 'Download instead</button>'
-                    : '<button type="button" class="btn" data-pick="computer">From your computer…</button>' +
+                    : '<button type="button" class="btn" data-pick="computer">From Your Computer…</button>' +
                       '<input type="file" data-pick="chooser" hidden' + (accept.length ? ' accept="' + esc(accept.join(',')) + '"' : '') + ' />') : '') +
                 '<span class="fb-pick-spacer"></span>' +
                 '<button type="button" class="btn" data-pick="cancel">Cancel</button>' +

@@ -26,7 +26,7 @@
         return loadScript(window.yavcUtil.versioned(KIT + 'kit.js')).then(function () { return window.yavcMdEditor; });
     }
     var LAYOUTS = [['content', 'Content'], ['title', 'Title'], ['section', 'Section'], ['two-column', 'Two Columns'], ['image', 'Picture'], ['quote', 'Quote'], ['blank', 'Blank']];
-    var THEMES = [['plain', 'Plain, the site\'s own'], ['paper', 'Paper'], ['midnight', 'Midnight']];
+    var THEMES = [['plain', 'Plain, the Site\'s Own'], ['paper', 'Paper'], ['midnight', 'Midnight']];
     var SIZES = [['16:9', 'Widescreen, 16:9'], ['4:3', 'Standard, 4:3']];
     var TRANSITIONS = [['none', 'None'], ['fade', 'Fade'], ['slide', 'Slide']];
     var FRONT = { title: '', author: '', theme: 'plain', size: '16:9', transition: 'fade' };
@@ -186,13 +186,13 @@
         root.tabIndex = -1;
         root.innerHTML =
             '<div class="deck-toolbar-slot" data-toolbar-slot></div>' +
-            '<div class="tablist doc-tabs deck-tabs" role="tablist" aria-label="Open decks" data-role="tabs" hidden></div>' +
+            '<div class="tablist doc-tabs deck-tabs" role="tablist" aria-label="Open Decks" data-role="tabs" hidden></div>' +
             '<div class="deck-main" data-role="main">' +
               '<div class="deck-film" data-role="film" role="listbox" aria-label="Slides"></div>' +
               '<div class="deck-work split" data-role="work" data-split-pane="first">' +
                 '<div class="deck-stagebox split-pane" data-role="stagebox"><div class="deck-float-bar" data-role="float-bar" hidden><span>Slide</span></div><div class="deck-stage" data-role="stage"><div class="deck-canvas" data-role="canvas"><section class="deck-slide" data-role="slide"><div class="deck-body doc-page" data-role="body" data-ed-page></div></section></div></div>' +
                   '<div class="deck-notes-view" data-role="notes-view" hidden></div></div>' +
-                '<div class="split-handle deck-split" data-role="split" aria-label="Resize the text" data-split-min="240" data-split-max="60%"></div>' +
+                '<div class="split-handle deck-split" data-role="split" aria-label="Resize the Text" data-split-min="240" data-split-max="60%"></div>' +
                 '<div class="deck-text split-pane code-surface" data-role="text"></div>' +
               '</div>' +
             '</div>' +
@@ -349,7 +349,7 @@
             var notes = notesNodes(tmp), has = !!notes.childNodes.length;
             el.notesView.hidden = !has;
             if (has) {
-                var label = document.createElement('p'); label.className = 'deck-notes-label'; label.textContent = 'Speaker notes';
+                var label = document.createElement('p'); label.className = 'deck-notes-label'; label.textContent = 'Speaker Notes';
                 el.notesView.replaceChildren(label, notes);
             } else { el.notesView.replaceChildren(); }
         }
@@ -367,7 +367,7 @@
             cmReady = codeMirror().then(function (CM) {
                 if (destroyed) { return null; }
                 var ext = [CM.history(), CM.drawSelection(), CM.highlightActiveLine(), CM.keymap.of([].concat(CM.defaultKeymap, CM.historyKeymap, [CM.indentWithTab])),
-                    CM.EditorView.lineWrapping, CM.EditorView.contentAttributes.of({ 'aria-label': 'The slide\'s Markdown' }),
+                    CM.EditorView.lineWrapping, CM.EditorView.contentAttributes.of({ 'aria-label': 'The Slide\'s Markdown' }),
                     CM.EditorView.updateListener.of(function (u) { if (u.docChanged && !fromPage) { takeText(u.state.doc.toString(), 'text'); } })];
                 if (CM.markdown) { try { ext.push(CM.markdown()); } catch (err) { } }
                 if (CM.EditorView.theme) { ext.push(CM.EditorView.theme({ '&': { height: '100%', fontSize: 'var(--text-sm)' }, '.cm-scroller': { fontFamily: 'var(--mono)' }, '.cm-content': { caretColor: 'var(--text)' } })); }
@@ -581,17 +581,17 @@
         function askChoice(title, body, buttons) { return window.yavcDialog.askChoice(title, body, buttons); }
         function deckColours() {
             var f = deck.front;
-            window.yavcMdEditor.askColours('The deck\'s colours', [
+            window.yavcMdEditor.askColours('The Deck\'s Colours', [
                 { key: 'ink', label: 'Text', value: f.ink, fallback: '#1a1a1a', help: 'Paragraphs, lists and tables; headings too unless they have a colour of their own. Empty is the theme\'s own.' },
                 { key: 'heading', label: 'Headings', value: f.heading, fallback: '#1a1a1a', help: 'Every heading, including a title slide\'s title.' },
-                { key: 'muted', label: 'Secondary text', value: f.muted, fallback: '#5c6470', help: 'A title slide\'s subtitle, captions and the speaker notes.' },
+                { key: 'muted', label: 'Secondary Text', value: f.muted, fallback: '#5c6470', help: 'A title slide\'s subtitle, captions and the speaker notes.' },
                 { key: 'accent', label: 'Accent', value: f.accent, fallback: '#1f5fbf', help: 'The rule under a heading, links, and words coloured "accent".' },
                 { key: 'background', label: 'Background', value: f.background, fallback: '#ffffff', help: 'Every slide, unless the slide sets its own.' }
             ]).then(function (v) { if (!v) { return; } Object.keys(v).forEach(function (k) { setFront(k, v[k]); }); });
         }
         function slideColours() {
             var st = settingsOf(current());
-            window.yavcMdEditor.askColours('This slide\'s colours', [
+            window.yavcMdEditor.askColours('This Slide\'s Colours', [
                 { key: 'color', label: 'Text', value: st.color, fallback: '#1a1a1a', placeholder: 'The deck\'s own', help: 'Paragraphs, lists and tables on this slide.' },
                 { key: 'heading', label: 'Headings', value: st.heading, fallback: '#1a1a1a', placeholder: 'The deck\'s own', help: 'This slide\'s headings.' },
                 { key: 'accent', label: 'Accent', value: st.accent, fallback: '#1f5fbf', placeholder: 'The deck\'s own', help: 'The rule under the heading, links, and words coloured "accent".' },
@@ -663,7 +663,7 @@
 
         /* === Tabs: one for each open deck ================================ */
 
-        function tabTitle(t) { return t.path ? t.path.replace(/^.*\//, '') : (t.deck.front.title || 'A new deck'); }
+        function tabTitle(t) { return t.path ? t.path.replace(/^.*\//, '') : (t.deck.front.title || 'A New Deck'); }
         function stash() {
             var t = active >= 0 ? tabs[active] : null;
             if (t) { t.deck = deck; t.path = path; t.modified = modified; t.at = at; }
@@ -747,7 +747,7 @@
         }
         async function open() {
             if (!H.fs || !H.fs.open) { return; }
-            var res = await H.fs.open({ title: 'Open a deck', host: root, start: '~', accept: ['.md'] });
+            var res = await H.fs.open({ title: 'Open a Deck', host: root, start: '~', accept: ['.md'] });
             if (!res) { return; }
             if (res.path) { await openPath(res.path); return; }
             await openInTab(res.text, null);
@@ -767,7 +767,7 @@
             if (!H.fs || !H.fs.save) { return; }
             var name = (deck.front.title || 'deck').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'deck';
             var blob = new Blob([fullText()], { type: 'text/markdown' });
-            var res = await H.fs.save({ title: 'Save the deck as', name: name + '.slides.md', host: root, start: '~/Documents', blob: blob }).catch(function (e) { say(e.message, true); return null; });
+            var res = await H.fs.save({ title: 'Save the Deck As', name: name + '.slides.md', host: root, start: '~/Documents', blob: blob }).catch(function (e) { say(e.message, true); return null; });
             if (!res) { return; }
             if (res.path) { path = res.path; modified = false; say('Saved ' + path + '.'); announce(); }
             /* "Download instead": the dialog leaves the download to the
@@ -1113,21 +1113,21 @@
                 cmd('slide-colours', 'Slide Colours…', 'colour', slideColours),
                 cmd('deck-colours', 'Colours…', 'colour', deckColours),
                 cmd('deck-stylesheet', 'Stylesheet File…', 'file', function () {
-                    askText('The deck\'s stylesheet', 'A CSS file of yours, such as ~/themes/mine.css; empty for none', deck.front.stylesheet || '').then(function (v) { if (v != null) { setFront('stylesheet', v.trim()); } });
+                    askText('The Deck\'s Stylesheet', 'A CSS file of yours, such as ~/themes/mine.css; empty for none', deck.front.stylesheet || '').then(function (v) { if (v != null) { setFront('stylesheet', v.trim()); } });
                 }),
                 cmd('deck-style-block', 'Add a Style Block', 'code', function () { insertMarkdown('{{style}}\n.deck-body h2 { letter-spacing: 0.02em; }\n{{/style}}'); }),
                 cmd('slide-class', 'Slide Style…', 'tag', function () {
-                    askText('This slide\'s style classes', 'Class names from the stylesheet, separated by spaces; empty for none', settingsOf(current())['class'] || '').then(function (v) { if (v != null) { setSlideSetting('class', v.trim()); } });
+                    askText('This Slide\'s Style Classes', 'Class names from the stylesheet, separated by spaces; empty for none', settingsOf(current())['class'] || '').then(function (v) { if (v != null) { setSlideSetting('class', v.trim()); } });
                 }),
                 cmd('styles-help', 'Styling a Deck', 'info', function () { window.open(publicOrigin() + '/slides-styles', '_blank', 'noopener'); }),
-                cmd('background-image', 'Background Picture…', 'image', function () { askText('Background picture', 'The picture\'s address, such as /images/x.png; empty for none', settingsOf(current()).image || '').then(function (v) { if (v != null) { setSlideSetting('image', v.trim()); } }); }),
+                cmd('background-image', 'Background Picture…', 'image', function () { askText('Background Picture', 'The picture\'s address, such as /images/x.png; empty for none', settingsOf(current()).image || '').then(function (v) { if (v != null) { setSlideSetting('image', v.trim()); } }); }),
                 { id: 'slide-transition', label: 'Transition', items: TRANSITIONS.map(function (t) { return { id: 'slide-transition-' + t[0], label: t[1], choice: 'deck-slide-transition', value: t[0], checked: function () { return (settingsOf(current()).transition || deck.front.transition || 'fade') === t[0]; }, run: function () { setSlideSetting('transition', t[0] === (deck.front.transition || 'fade') ? null : t[0]); } }; }) },
                 cmd('deck-title', 'Properties…', 'tag', function () {
                     if (!ENGINE) { return; }
                     serializeDeck(deck);
                     var front = deck.frontProblem ? { problem: deck.frontProblem } : ENGINE.front(deck.frontText || '');
                     kit().then(function (k) {
-                        return k.askProperties(front, { title: 'Deck properties', hidden: DECK_KEYS, hiddenWhere: 'in the Deck menu',
+                        return k.askProperties(front, { title: 'Deck Properties', hidden: DECK_KEYS, hiddenWhere: 'in the Deck menu',
                             hiddenNote: 'The theme, slide size, transition, colours and stylesheet are set from the Deck menu.' });
                     }).then(function (r) {
                         if (!r || !r.order.length) { return; }
