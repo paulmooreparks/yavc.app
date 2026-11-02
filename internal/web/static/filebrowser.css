@@ -32,7 +32,7 @@
 .fm-cell { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .fm-name { font-family: var(--mono); }
 .fm-title { color: var(--text-muted); font-size: var(--text-xs); }
-.fm-empty { margin: var(--space-4); color: var(--text-muted); }
+.fm-empty { margin: var(--space-4); }
 
 /* Open and Save as (pcFileBrowser.pick): the browser in a dialog, with
    the field under it and the computer's way in beside the buttons. */

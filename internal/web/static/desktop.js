@@ -114,11 +114,18 @@
         var field = document.querySelector('[data-list-filter]');
         var list = document.querySelector('.md-sidebar .site-list');
         if (!field || !list) { return; }
+        var none = document.createElement('div');
+        none.className = 'empty-state site-list-none';
+        none.hidden = true;
+        none.innerHTML = '<p class="empty-state-title">Nothing matches</p><p class="empty-state-body">No application or page has those words in its name or description.</p>';
+        list.parentNode.insertBefore(none, list.nextSibling);
         field.addEventListener('input', function () {
-            var q = field.value.trim().toLowerCase();
+            var q = field.value.trim().toLowerCase(), shown = 0;
             list.querySelectorAll('.md-row').forEach(function (row) {
                 row.hidden = !!q && row.textContent.toLowerCase().indexOf(q) < 0;
+                if (!row.hidden) { shown++; }
             });
+            none.hidden = shown > 0;
         });
     }
 

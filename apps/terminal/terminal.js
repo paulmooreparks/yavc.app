@@ -1469,7 +1469,7 @@
                 { label: 'Clear the screen', run: function () { if (term) { term.clear(); term.focus(); } } }
             ];
             if (window.pudlApplets && window.pudlApplets.can && window.pudlApplets.can('shell')) {
-                list.push({ label: 'New terminal window here', run: function () { window.pudlApplets.request('shell', { path: cwd ? pathOf(cwd) : '/' }, root); } });
+                list.push({ label: 'New Terminal Window Here', run: function () { window.pudlApplets.request('shell', { path: cwd ? pathOf(cwd) : '/' }, root); } });
             }
             return list;
         }

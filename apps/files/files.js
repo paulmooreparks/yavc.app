@@ -465,7 +465,7 @@
                 showHidden: showHidden,
                 treeWidth: treeWidth,
                 onResize: function (w) { if (cfg) { cfg.set('files', { treeWidth: w }); } },
-                emptyText: function (dir) { return inHome(dir) ? 'This folder is empty. Make a file or a folder, or drop files here.' : 'This folder is empty.'; }
+                emptyText: function (dir) { return inHome(dir) ? 'Create a file or a folder, or drop files here to upload them.' : ''; }
             });
             /* A reload brings back the selection, the open folders and the
                scroll (js/snapshot.js). */

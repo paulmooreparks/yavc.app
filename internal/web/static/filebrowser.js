@@ -90,7 +90,7 @@
                           '<thead><tr><th scope="col" class="fm-c-name">Name</th><th scope="col" class="fm-c-kind">Kind</th><th scope="col" class="fm-c-date">Date</th><th scope="col" class="fm-c-size num">Size</th></tr></thead>' +
                           '<tbody data-fb="rows"></tbody>' +
                         '</table>' +
-                        '<p class="fm-empty" data-fb="empty" hidden></p>' +
+                        '<div class="empty-state fm-empty" data-fb="empty" hidden><p class="empty-state-title">This folder is empty</p><p class="empty-state-body" data-fb="empty-body"></p></div>' +
                         (o.drop ? '<p class="drop-hint">' + esc(o.hint || 'Drop files here to upload them') + '</p>' : '') +
                       '</div>'
                     : '') +
@@ -299,7 +299,10 @@
             el.rows.innerHTML = html;
             if (window.pudlGrid) { window.pudlGrid.enhance(el.list); }
             el.empty.hidden = list.length > 0;
-            el.empty.textContent = o.emptyText ? o.emptyText(cwd) : 'This folder is empty.';
+            /* o.emptyText(cwd) says what can be done here, or nothing. */
+            var hint = el.empty.querySelector('[data-fb="empty-body"]'), what = o.emptyText ? o.emptyText(cwd) : '';
+            hint.textContent = what || '';
+            hint.hidden = !what;
         }
 
         /* === Selection =================================================== */
@@ -596,7 +599,7 @@
                 '<div class="fb-pick-newfolder" data-pick="newrow" hidden>' +
                   '<label class="form-label" for="' + id + '-nf">Name of the new folder</label>' +
                   '<input class="form-input mono" id="' + id + '-nf" data-pick="newname" autocomplete="off" spellcheck="false" />' +
-                  '<button type="button" class="btn btn-sm" data-pick="make">Make</button>' +
+                  '<button type="button" class="btn btn-sm" data-pick="make">Create</button>' +
                   '<button type="button" class="btn btn-sm" data-pick="nomake">Cancel</button>' +
                 '</div>' +
                 '<div class="fb-pick-browse">' + markup.body({}) + '</div>' +

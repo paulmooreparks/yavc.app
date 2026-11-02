@@ -1,7 +1,7 @@
 {
   "name": "terminal",
   "title": "Terminal",
-  "version": "44.1.0",
+  "version": "44.1.1",
   "description": "The site in terminal mode, with your own files, a shell and Lua.",
   "license": "Apache-2.0",
   "src": "terminal.js",
