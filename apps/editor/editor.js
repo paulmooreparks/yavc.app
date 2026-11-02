@@ -977,8 +977,12 @@
            Markdown engine, md/yavc-md.wasm, which runs here in the browser,
            so the text never leaves it. */
         /* Loads a script or stylesheet into the page, once. */
+        var assetWaits = {};
         function into(doc, tag, url) {
-            return new Promise(function (resolve, reject) {
+            /* A second ask for an asset still loading waits for the first,
+               rather than finding its element and going on too soon. */
+            if (assetWaits[url]) { return assetWaits[url]; }
+            return assetWaits[url] = new Promise(function (resolve, reject) {
                 if (doc.querySelector('[data-ed-asset="' + url + '"]')) { resolve(); return; }
                 var e = doc.createElement(tag);
                 e.setAttribute('data-ed-asset', url);
