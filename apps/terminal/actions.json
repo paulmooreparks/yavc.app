@@ -1,28 +1,127 @@
 {
-  "id": "parks.terminal",
-  "version": "1.0.0",
+  "id": "yavc.terminal",
+  "version": "2.0.0",
   "apiVersion": 1,
   "title": "Terminal",
   "description": "The site's command line, with scripts in its own language, Lua and a POSIX shell.",
   "actions": [
     {
-      "ref": "parks.terminal/shell@1",
+      "ref": "yavc.terminal/shell@1",
       "title": "Open a Terminal",
       "description": "Open a new Terminal for the person at the page, in a folder, and optionally run a command line there for them to see. The command's output appears in that Terminal and is not returned.",
       "handles": "shell",
       "inputSchema": {
-        "type": "object", "additionalProperties": false, "required": ["path"],
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "path"
+        ],
         "properties": {
-          "path": { "type": "string", "minLength": 1, "maxLength": 1024, "description": "The folder the Terminal starts in, such as ~ or /site." },
-          "run": { "type": "string", "maxLength": 4096, "description": "A command line to run once the Terminal is open." }
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024,
+            "description": "The folder the Terminal starts in, such as ~ or /site."
+          },
+          "run": {
+            "type": "string",
+            "maxLength": 4096,
+            "description": "A command line to run once the Terminal is open."
+          }
         }
       },
       "outputSchema": {
-        "type": "object", "additionalProperties": false, "required": ["opened"],
-        "properties": { "opened": { "const": true }, "view": { "enum": ["window", "tab"] } }
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "opened"
+        ],
+        "properties": {
+          "opened": {
+            "const": true
+          },
+          "view": {
+            "enum": [
+              "window",
+              "tab"
+            ]
+          }
+        }
       },
-      "capabilities": ["window.open"],
+      "capabilities": [
+        "window.open"
+      ],
       "replay": "once"
+    },
+    {
+      "ref": "yavc.terminal/run@1",
+      "title": "Run a Command Line",
+      "description": "Run a command line in the open Terminal, as if the person typed it, and give what it printed and its status. The person sees it run. Commands that read or change files act on the person's files; \"help\" lists the commands.",
+      "live": true,
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "command": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": [
+          "status",
+          "output"
+        ],
+        "properties": {
+          "status": {
+            "type": "integer"
+          },
+          "output": {
+            "type": "string"
+          },
+          "cwd": {
+            "type": "string"
+          }
+        }
+      },
+      "capabilities": [
+        "files.write"
+      ],
+      "replay": "once"
+    },
+    {
+      "ref": "yavc.terminal/screen@1",
+      "title": "Read the Screen",
+      "description": "The text on the Terminal's screen, and its working folder.",
+      "live": true,
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": [
+          "text",
+          "cwd"
+        ],
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "cwd": {
+            "type": "string"
+          }
+        }
+      },
+      "capabilities": [],
+      "replay": "pure"
     }
   ]
 }

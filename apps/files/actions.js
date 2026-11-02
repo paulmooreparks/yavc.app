@@ -6,7 +6,7 @@
 (function () {
     'use strict';
 
-    window.pudlApplets.provide('parks.files', {
+    window.pudlApplets.provide('yavc.files', {
         'list@1': async function (input, ctx) {
             var at = await ctx.files.stat(input.path);
             if (!at) { throw new Error(input.path + ': no such file or directory'); }

@@ -1,27 +1,640 @@
 {
-  "id": "parks.editor",
-  "version": "1.0.0",
+  "id": "yavc.editor",
+  "version": "2.0.0",
   "apiVersion": 1,
   "title": "Editor",
-  "description": "The site's text editor.",
+  "description": "The text and Markdown editor: the documents it has open, their text, and everything its commands do to them.",
   "actions": [
     {
-      "ref": "parks.editor/open@1",
+      "ref": "yavc.editor/open@1",
       "title": "Open in the Editor",
       "description": "Open a file in the Editor for the person at the page, in a new tab of the Editor's window. A file in the reader's home (~) that does not exist yet opens as a new file, which saving creates. Files outside ~ open read-only unless the reader is an admin.",
       "handles": "open",
       "inputSchema": {
-        "type": "object", "additionalProperties": false, "required": ["path"],
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "path"
+        ],
         "properties": {
-          "path": { "type": "string", "minLength": 1, "maxLength": 1024 },
-          "kind": { "enum": ["file", "script", "page"], "default": "file" }
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024
+          },
+          "kind": {
+            "enum": [
+              "file",
+              "script",
+              "page"
+            ],
+            "default": "file"
+          }
         }
       },
       "outputSchema": {
-        "type": "object", "additionalProperties": false, "required": ["opened"],
-        "properties": { "opened": { "const": true }, "view": { "enum": ["window", "tab"] } }
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "opened"
+        ],
+        "properties": {
+          "opened": {
+            "const": true
+          },
+          "view": {
+            "enum": [
+              "window",
+              "tab"
+            ]
+          }
+        }
       },
-      "capabilities": ["window.open"],
+      "capabilities": [
+        "window.open"
+      ],
+      "replay": "once"
+    },
+    {
+      "ref": "yavc.editor/documents@1",
+      "title": "The Open Documents",
+      "description": "Every document the Editor has open, and which is current.",
+      "live": true,
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": [
+          "active",
+          "documents"
+        ],
+        "properties": {
+          "active": {
+            "type": "integer"
+          },
+          "documents": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "index",
+                "name",
+                "path",
+                "lang",
+                "modified",
+                "readOnly"
+              ],
+              "properties": {
+                "index": {
+                  "type": "integer"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "lang": {
+                  "type": "string"
+                },
+                "modified": {
+                  "type": "boolean"
+                },
+                "readOnly": {
+                  "type": "boolean"
+                },
+                "text": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "capabilities": [],
+      "replay": "pure"
+    },
+    {
+      "ref": "yavc.editor/document@1",
+      "title": "Read a Document",
+      "description": "One open document, by its number or the current one, with its text.",
+      "live": true,
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "index": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "A document's number among the open ones; the current one when left out."
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": [
+          "index",
+          "name",
+          "path",
+          "lang",
+          "modified",
+          "readOnly",
+          "text"
+        ],
+        "properties": {
+          "index": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "path": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "lang": {
+            "type": "string"
+          },
+          "modified": {
+            "type": "boolean"
+          },
+          "readOnly": {
+            "type": "boolean"
+          },
+          "text": {
+            "type": "string"
+          }
+        }
+      },
+      "capabilities": [],
+      "replay": "pure"
+    },
+    {
+      "ref": "yavc.editor/open-file@1",
+      "title": "Open a File",
+      "description": "Open one of the person's files (~/…) or a page of the site in the Editor, and make it current. A file already open comes to the front.",
+      "live": true,
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024
+          }
+        },
+        "required": [
+          "path"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": [
+          "index",
+          "name",
+          "path",
+          "lang",
+          "modified",
+          "readOnly"
+        ],
+        "properties": {
+          "index": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "path": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "lang": {
+            "type": "string"
+          },
+          "modified": {
+            "type": "boolean"
+          },
+          "readOnly": {
+            "type": "boolean"
+          },
+          "text": {
+            "type": "string"
+          }
+        }
+      },
+      "capabilities": [
+        "files.read"
+      ],
+      "replay": "once"
+    },
+    {
+      "ref": "yavc.editor/new@1",
+      "title": "New Document",
+      "description": "Open a new document: untitled, or at a path in ~ that saving creates, with the text given.",
+      "live": true,
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "type": "string",
+            "maxLength": 1024
+          },
+          "text": {
+            "type": "string"
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": [
+          "index",
+          "name",
+          "path",
+          "lang",
+          "modified",
+          "readOnly"
+        ],
+        "properties": {
+          "index": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "path": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "lang": {
+            "type": "string"
+          },
+          "modified": {
+            "type": "boolean"
+          },
+          "readOnly": {
+            "type": "boolean"
+          },
+          "text": {
+            "type": "string"
+          }
+        }
+      },
+      "capabilities": [],
+      "replay": "once"
+    },
+    {
+      "ref": "yavc.editor/set-text@1",
+      "title": "Replace a Document's Text",
+      "description": "Replace the whole text of a document, or of the current one, unsaved. The person watches it change.",
+      "live": true,
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "index": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "A document's number among the open ones; the current one when left out."
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": [
+          "index",
+          "name",
+          "path",
+          "lang",
+          "modified",
+          "readOnly"
+        ],
+        "properties": {
+          "index": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "path": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "lang": {
+            "type": "string"
+          },
+          "modified": {
+            "type": "boolean"
+          },
+          "readOnly": {
+            "type": "boolean"
+          },
+          "text": {
+            "type": "string"
+          }
+        }
+      },
+      "capabilities": [],
+      "replay": "once"
+    },
+    {
+      "ref": "yavc.editor/insert@1",
+      "title": "Insert Text",
+      "description": "Insert text at the cursor of the current document, replacing a selection.",
+      "live": true,
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": [
+          "index",
+          "name",
+          "path",
+          "lang",
+          "modified",
+          "readOnly"
+        ],
+        "properties": {
+          "index": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "path": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "lang": {
+            "type": "string"
+          },
+          "modified": {
+            "type": "boolean"
+          },
+          "readOnly": {
+            "type": "boolean"
+          },
+          "text": {
+            "type": "string"
+          }
+        }
+      },
+      "capabilities": [],
+      "replay": "once"
+    },
+    {
+      "ref": "yavc.editor/replace@1",
+      "title": "Find and Replace",
+      "description": "Replace every match, or the first, of a string or a regular expression in a document, or the current one.",
+      "live": true,
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "index": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "A document's number among the open ones; the current one when left out."
+          },
+          "find": {
+            "type": "string",
+            "minLength": 1
+          },
+          "replace": {
+            "type": "string"
+          },
+          "all": {
+            "type": "boolean",
+            "default": true
+          },
+          "regex": {
+            "type": "boolean",
+            "default": false
+          },
+          "ignoreCase": {
+            "type": "boolean",
+            "default": false
+          }
+        },
+        "required": [
+          "find",
+          "replace"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": [
+          "replaced"
+        ],
+        "properties": {
+          "replaced": {
+            "type": "integer"
+          }
+        }
+      },
+      "capabilities": [],
+      "replay": "once"
+    },
+    {
+      "ref": "yavc.editor/save@1",
+      "title": "Save a Document",
+      "description": "Write a document, or the current one, to its file, or to the path given (~/notes/a.md), which becomes its file.",
+      "live": true,
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "index": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "A document's number among the open ones; the current one when left out."
+          },
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": [
+          "index",
+          "name",
+          "path",
+          "lang",
+          "modified",
+          "readOnly"
+        ],
+        "properties": {
+          "index": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "path": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "lang": {
+            "type": "string"
+          },
+          "modified": {
+            "type": "boolean"
+          },
+          "readOnly": {
+            "type": "boolean"
+          },
+          "text": {
+            "type": "string"
+          }
+        }
+      },
+      "capabilities": [
+        "files.write"
+      ],
+      "replay": "once"
+    },
+    {
+      "ref": "yavc.editor/close@1",
+      "title": "Close a Document",
+      "description": "Close a document, or the current one. One with unsaved changes asks the person first.",
+      "live": true,
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "index": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "A document's number among the open ones; the current one when left out."
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": [
+          "closed",
+          "open"
+        ],
+        "properties": {
+          "closed": {
+            "type": "boolean"
+          },
+          "open": {
+            "type": "integer"
+          }
+        }
+      },
+      "capabilities": [],
+      "replay": "once"
+    },
+    {
+      "ref": "yavc.editor/view@1",
+      "title": "Set the View",
+      "description": "How the person sees the current document: its text, the page as it looks (Markdown only), both, or a preview.",
+      "live": true,
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "mode": {
+            "enum": [
+              "text",
+              "visual",
+              "split",
+              "preview"
+            ]
+          }
+        },
+        "required": [
+          "mode"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": [
+          "mode"
+        ],
+        "properties": {
+          "mode": {
+            "type": "string"
+          }
+        }
+      },
+      "capabilities": [],
+      "replay": "once"
+    },
+    {
+      "ref": "yavc.editor/go-to@1",
+      "title": "Go to a Line",
+      "description": "Put the cursor at a line of the current document and show it.",
+      "live": true,
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "line": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "column": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "line"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": [
+          "line"
+        ],
+        "properties": {
+          "line": {
+            "type": "integer"
+          }
+        }
+      },
+      "capabilities": [],
       "replay": "once"
     }
   ]

@@ -1539,7 +1539,7 @@
 
         var line = '', cursor = 0, histPos = -1, draft = '', busy = false, keyWaiter = null, lastTab = 0;
 
-        function write(s) { if (term) { term.write(String(s).replace(/\r?\n/g, '\r\n')); } }
+        function write(s) { if (capture) { capture.push(String(s)); } if (term) { term.write(String(s).replace(/\r?\n/g, '\r\n')); } }
         function prompt() {
             /* With the server mounted the prompt is the admin's, at the
                host they are on (edit.parkscomputing, beta.parkscomputing),
@@ -2610,6 +2610,36 @@
             screen.classList.add('pc-terminal-failed');
         });
 
+
+        /* === The live actions (actions.json; docs/agents-design.md) ===== */
+
+        var capture = null;
+        function cwdPath() { try { return fs && cwd ? fs.displayPath(cwd) : '~'; } catch (err) { return '~'; } }
+        function screenText() {
+            if (!term || !term.buffer) { return ''; }
+            var b = term.buffer.active, lines = [];
+            for (var i = 0; i < b.length; i++) { var l = b.getLine(i); lines.push(l ? l.translateToString(true) : ''); }
+            return lines.join('\n').replace(/\n+$/, '');
+        }
+        var liveActions = {
+            'run@1': async function (input) {
+                if (!term) { throw new Error('the terminal is not ready'); }
+                if (busy) { throw new Error('the terminal is busy with another command'); }
+                var text = String(input.command).replace(/[\r\n]+/g, ' ').trim();
+                if (!text) { throw new Error('give a command line'); }
+                line = text; cursor = line.length;
+                term.write(text);
+                capture = [];
+                try { await submit(); } finally { var got = capture.join(''); capture = null; }
+                var out = got.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '').replace(/\r/g, '');
+                var p = prompt().replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '');
+                if (p && out.endsWith(p)) { out = out.slice(0, -p.length); }
+                return { output: { status: lastStatus | 0, output: out.replace(/^\n/, ''), cwd: cwdPath() } };
+            },
+            'screen@1': async function () { if (term) { await new Promise(function (r) { term.write('', r); }); } return { output: { text: screenText(), cwd: cwdPath() } }; }
+        };
+        var detachLive = window.pudlApplets && window.pudlApplets.attach ? window.pudlApplets.attach('yavc.terminal', liveActions) : null;
+
         return {
             state: stateString,
             setState: takeState,
@@ -2624,6 +2654,7 @@
             },
             destroy: function () {
                 destroyed = true;
+                if (detachLive) { detachLive(); }
                 if (snap) { snap.leave(); }
                 if (raw && raw.close) { raw.close(); }
                 if (unConfig) { unConfig(); }

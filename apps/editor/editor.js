@@ -2207,6 +2207,70 @@
             root.innerHTML = '<p class="ed-failed">The editor could not start: ' + esc(err.message) + '.</p>';
         });
 
+
+        /* === The live actions (actions.json; docs/agents-design.md) ===== */
+
+        function docNo(i) {
+            if (i == null) { if (active < 0 || !tabs[active]) { throw new Error('no document is open'); } return active; }
+            i = Math.floor(Number(i));
+            if (!(i >= 1 && i <= tabs.length)) { throw new Error('there is no document ' + i + '; ' + tabs.length + ' are open'); }
+            return i - 1;
+        }
+        function docText(i) { return i === active && view ? view.state.doc.toString() : tabs[i].state.doc.toString(); }
+        function docView(i, withText) {
+            var t = tabs[i];
+            var v = { index: i + 1, name: t.name, path: t.path || null, lang: t.lang, modified: !!t.modified, readOnly: !!t.readOnly };
+            if (withText) { v.text = docText(i); }
+            return v;
+        }
+        function setDocText(i, text) {
+            if (i !== active) { activate(i); }
+            if (tabs[i].readOnly) { throw new Error('the document is read-only'); }
+            view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: String(text) }, userEvent: 'input' });
+            markModified(tabs[i]);
+        }
+        var liveActions = {
+            'documents@1': async function () { return { output: { active: active + 1, documents: tabs.map(function (t, i) { return docView(i, false); }) } }; },
+            'document@1': async function (input) { var i = docNo(input.index); return { output: docView(i, true) }; },
+            'open-file@1': async function (input) { await openPath(String(input.path), true); return { output: docView(active, false) }; },
+            'new@1': async function (input) {
+                if (input.path) { newNamed(String(input.path)); } else { newTab(); }
+                if (input.text != null) { setDocText(active, input.text); }
+                return { output: docView(active, false) };
+            },
+            'set-text@1': async function (input) { var i = docNo(input.index); setDocText(i, input.text); return { output: docView(i, false) }; },
+            'insert@1': async function (input) { docNo(); if (current().readOnly) { throw new Error('the document is read-only'); } insertText(String(input.text)); return { output: docView(active, false) }; },
+            'replace@1': async function (input) {
+                var i = docNo(input.index), text = docText(i), n = 0;
+                var flags = (input.all !== false ? 'g' : '') + (input.ignoreCase ? 'i' : '');
+                var re = new RegExp(input.regex ? input.find : String(input.find).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), flags);
+                var out = text.replace(re, function () { n++; return input.regex ? String(input.replace).replace(/\$(\d)/g, function (m, d) { return arguments.length > 3 ? (arguments[d] || '') : m; }) : input.replace; });
+                if (n) { setDocText(i, out); }
+                return { output: { replaced: n } };
+            },
+            'save@1': async function (input) {
+                var i = docNo(input.index);
+                if (i !== active) { activate(i); }
+                var t = tabs[i];
+                if (t.readOnly) { throw new Error('the document is read-only; save a copy under ~ instead'); }
+                var path = input.path ? String(input.path) : t.path;
+                if (!path) { throw new Error('the document has no file yet; give a path such as ~/notes/a.md'); }
+                await writeTo(t, path, true);
+                return { output: docView(i, false) };
+            },
+            'close@1': async function (input) { var i = docNo(input.index); var before = tabs.length; await closeTab(i); return { output: { closed: tabs.length < before, open: tabs.length } }; },
+            'view@1': async function (input) { docNo(); await setView(input.mode); return { output: { mode: viewMode } }; },
+            'go-to@1': async function (input) {
+                docNo();
+                var line = Math.min(view.state.doc.lines, Math.max(1, Math.floor(Number(input.line))));
+                var l = view.state.doc.line(line), col = Math.min(l.length, Math.max(1, Math.floor(Number(input.column || 1))) - 1);
+                view.dispatch({ selection: { anchor: l.from + col }, scrollIntoView: true });
+                view.focus();
+                return { output: { line: line } };
+            }
+        };
+        var detachLive = window.pudlApplets && window.pudlApplets.attach ? window.pudlApplets.attach('yavc.editor', liveActions) : null;
+
         return {
             state: function () { return stateString() || null; },
             setState: takeFile,
@@ -2215,6 +2279,7 @@
             toolbars: toolbars,
             destroy: function () {
                 /* The session as the Editor closes, for when it opens again. */
+                if (detachLive) { detachLive(); }
                 keepSession();
                 destroyed = true;
                 if (snap) { snap.leave(); }
