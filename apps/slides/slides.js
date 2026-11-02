@@ -288,6 +288,14 @@
                 text: function () { return current().text; },
                 setText: function (text) { fromPage = true; try { takeText(text, 'page'); } finally { fromPage = false; } },
                 docOf: function (text) { return engine().then(function (m) { return m.doc(text); }); },
+                /* The / menu on the canvas offers the Insert menu's items. */
+                inserts: function () {
+                    return INSERTS.filter(function (i) { return !/^(Checklist|Table|Code Block)$/.test(i[0]); }).map(function (i) {
+                        var label = i[0].replace(/…$/, ''), id = 'insert-' + label.toLowerCase().replace(/[^a-z]+/g, '-');
+                        if (typeof i[1] === 'function') { return { id: id, label: i[0], words: label.toLowerCase(), run: function () { Promise.resolve(i[1]()).then(function (md) { if (md) { insertMarkdown(md); } }); } }; }
+                        return { id: id, label: label, words: label.toLowerCase(), markdown: i[1] };
+                    });
+                },
                 markdownOf: function (doc) { return engine().then(function (m) { return m.markdown(doc); }); },
                 sourceOf: function (src) { return engine().then(function (m) { return m.source(src); }); },
                 blocksOf: function (text) { return engine().then(function (m) { return m.blocks(text); }); },

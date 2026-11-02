@@ -665,6 +665,15 @@ var schemaCache = null;
     /* The / menu: typed at the start of an empty line, it lists the blocks
        that can be inserted, narrowed by what follows the /; the arrow keys
        and Enter choose one, and Escape closes it. */
+    var STRUCTURE = [
+      { id: 'h1', label: 'Heading 1', words: 'heading title h1' }, { id: 'h2', label: 'Heading 2', words: 'heading h2' }, { id: 'h3', label: 'Heading 3', words: 'heading h3' },
+      { id: 'paragraph', label: 'Paragraph', words: 'text body' }, { id: 'bullets', label: 'Bulleted List', words: 'list bullets' }, { id: 'numbers', label: 'Numbered List', words: 'list numbers ordered' },
+      { id: 'quote', label: 'Quote', words: 'blockquote quotation' }
+    ];
+    function slashItems() {
+      var host = typeof o.inserts === 'function' ? (o.inserts() || []) : [];
+      return STRUCTURE.concat(INSERTS, host.filter(function (i) { return i && i.label; }));
+    }
     function slashMenu(schema) {
       var menu = null, shown = [], active = 0, closed = '';
       /* PUDL places the menu under its anchor (data-menu-anchor) and keeps
@@ -687,10 +696,12 @@ var schemaCache = null;
         var q = query(v.state);
         close();
         if (q) v.dispatch(v.state.tr.delete(q.from, q.to));
+        if (typeof item.run === 'function') { item.run(); return; }
+        if (item.markdown && !insertOf(item.id)) { insertMarkdown(item.markdown); return; }
         run(item.id);
       }
       function draw(v, q) {
-        shown = INSERTS.filter(function (i) { return !q.q || i.label.toLowerCase().indexOf(q.q) >= 0 || i.words.indexOf(q.q) >= 0; });
+        shown = slashItems().filter(function (i) { return !q.q || i.label.toLowerCase().indexOf(q.q) >= 0 || (i.words || '').indexOf(q.q) >= 0; });
         if (!shown.length) { close(); return; }
         if (!menu) {
           menu = document.createElement('div');
@@ -762,7 +773,7 @@ var schemaCache = null;
             var $c = blockLine(state, schema);
             if (!$c || $c.parent.content.size) return null;
             var at = $c.before();
-            return PM.DecorationSet.create(state.doc, [PM.Decoration.node(at, at + $c.parent.nodeSize, { class: 'pm-hint', 'data-hint': 'Type / to insert a checklist, table or code block' })]);
+            return PM.DecorationSet.create(state.doc, [PM.Decoration.node(at, at + $c.parent.nodeSize, { class: 'pm-hint', 'data-hint': 'Type / to insert a heading, a list, a picture, or more' })]);
           }
         }
       });
@@ -958,6 +969,7 @@ var schemaCache = null;
         case 'strike': cmd = PM.toggleMark(s.marks.strike); break;
         case 'h1': case 'h2': case 'h3': case 'h4': cmd = PM.setBlockType(n.heading, { level: +name.charAt(1) }); break;
         case 'paragraph': cmd = PM.setBlockType(n.paragraph); break;
+        case 'quote': cmd = n.blockquote ? PM.wrapIn(n.blockquote) : null; break;
         case 'bullets': cmd = list(n.bullet_list); break;
         case 'numbers': cmd = list(n.ordered_list); break;
         case 'link': linkDialog(); return true;

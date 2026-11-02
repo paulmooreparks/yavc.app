@@ -60,6 +60,7 @@
 .doc-page.page-view .pm-source > div > .doc-block { margin: 0; }
 .doc-page.page-view .pm-hint::before { content: attr(data-hint); float: left; height: 0; pointer-events: none; color: var(--dinah-muted-ink); }
 .doc-page.page-view .pm-slash-anchor { display: inline-block; width: 0; height: 1em; vertical-align: text-bottom; }
+.page-slash { max-height: 50vh; overflow-y: auto; }
 .page-slash .menu-action[aria-selected="true"] { background: var(--surface-alt); }
 .page-source { display: block; width: 100%; min-height: 3em; font: var(--text-sm)/1.5 var(--mono); resize: none; overflow: hidden; }
 

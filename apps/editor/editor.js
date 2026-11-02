@@ -1009,6 +1009,16 @@
         function pageActive() { return !!(visual.api && visual.api.active()); }
         function pageHost() {
             return {
+                /* The / menu on the page offers the Insert menu's shortcodes. */
+                inserts: function () {
+                    var out = SHORTCODES.map(function (i) { return { id: 'insert-sc-' + i[0], label: i[1], words: i[0] + ' ' + i[1].toLowerCase(), markdown: i[2] }; });
+                    if (F && F.mounted && shortcodes) {
+                        shortcodes.filter(function (s) { return s.name !== 'column' && !SHORTCODES.some(function (i) { return i[0] === s.name; }); }).forEach(function (s) {
+                            out.push({ id: 'insert-' + s.name, label: s.title, words: s.name + ' ' + s.title.toLowerCase(), markdown: s.example });
+                        });
+                    }
+                    return out;
+                },
                 root: root, page: el.page, scroll: el.scroll,
                 text: function () { return view.state.doc.toString(); },
                 setText: takeVisualText,
