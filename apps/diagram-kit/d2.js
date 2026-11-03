@@ -175,7 +175,23 @@
         var req = { text: source, themeID: dark() ? THEME.dark : THEME.light, pad: 16 };
         var bg = backgroundOf(place);
         if (bg) { req.background = bg; }
+        /* PUDL's loading state (README, empty and loading) while a diagram
+           takes a moment, which the first one on a page always does while
+           the engine starts. It waits 400 ms, so a drawing that is ready at
+           once never flashes it, and it has words, so it is announced and
+           never rests on the spinner alone. */
+        var loading = null;
+        var cue = setTimeout(function () {
+            if (!place.isConnected || place.getAttribute('aria-busy') !== 'true' || place.querySelector(':scope > .loading')) { return; }
+            loading = document.createElement('div');
+            loading.className = 'loading';
+            loading.setAttribute('role', 'status');
+            loading.innerHTML = '<span class="spinner" aria-hidden="true"></span><span>' + (worker ? 'Drawing the diagram…' : 'Starting the diagram engine, which takes a few seconds the first time…') + '</span>';
+            place.insertBefore(loading, place.firstChild);
+        }, 400);
+        function settled() { clearTimeout(cue); if (loading) { loading.remove(); loading = null; } }
         return compile(req, place.__yavcD2Key).then(function (out) {
+            settled();
             if (!out || !place.isConnected) { return; }
             place.removeAttribute('aria-busy');
             if (out.problems && out.problems.length) { showProblems(place, out.problems); return; }
@@ -203,6 +219,7 @@
                 }
             }
         }, function (err) {
+            settled();
             if (!place.isConnected) { return; }
             place.removeAttribute('aria-busy');
             showProblems(place, [{ message: String((err && err.message) || err) }]);

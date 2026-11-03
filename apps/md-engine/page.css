@@ -56,7 +56,7 @@
    source; on a slide, left-out icons are a muted line under it. */
 .doc-page .dinah-diagram-placeholder[data-d2].ed-diagram { text-align: center; }
 .doc-page .sc-diagram-note { margin: var(--space-1) 0 0; color: var(--dinah-muted-ink); font-size: var(--text-xs); }
-.doc-page .dinah-diagram-placeholder > .yavc-notice { margin: 0 0 var(--space-2); text-align: start; }
+.doc-page .dinah-diagram-placeholder > .yavc-notice, .doc-page .dinah-diagram-placeholder > .loading { margin: 0 0 var(--space-2); text-align: start; }
 .doc-page .dinah-diagram-placeholder[data-d2] > pre { text-align: start; }
 .doc-page .dinah-attachment-image { max-width: 100%; height: auto; border: 1px solid var(--dinah-content-border); border-radius: 2px; }
 .doc-page .ed-missing-image { display: inline-block; padding: 2px 8px; border: 1px dashed var(--dinah-warning-accent); border-radius: 3px; color: var(--dinah-warning-accent); font-size: 0.9em; }
