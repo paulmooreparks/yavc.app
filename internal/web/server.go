@@ -334,11 +334,45 @@ func (s *Server) hostKind(r *http.Request) (kind, name string) {
 	}
 	if strings.HasSuffix(host, "."+d) {
 		slug := strings.TrimSuffix(host, "."+d)
+		if a, ok := hostAliases[slug]; ok {
+			if _, ok := s.appletByName(a.applet); ok {
+				return "applet", a.applet
+			}
+		}
 		if _, ok := s.appletByName(slug); ok {
 			return "applet", slug
 		}
 	}
 	return "other", ""
+}
+
+// hostAlias is an address that serves an applet started another way. Its
+// page has its own title, and the applet's mount is marked with
+// data-{applet}-start, which the applet reads to know how to start.
+type hostAlias struct {
+	applet, title, start string
+}
+
+// hostAliases are the subdomains that serve an applet under another name.
+// docs is the Editor started for documents (docs-design, decision 17). An
+// alias is looked up before the applets, so an applet given the same name
+// later does not take the address over silently.
+var hostAliases = map[string]hostAlias{
+	"docs": {applet: "editor", title: "Docs", start: "documents"},
+}
+
+// aliasOf is the alias the request's host is, if it is one.
+func (s *Server) aliasOf(r *http.Request) (hostAlias, bool) {
+	host := strings.ToLower(r.Host)
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+	d := strings.ToLower(s.Domain)
+	if d == "" || !strings.HasSuffix(host, "."+d) {
+		return hostAlias{}, false
+	}
+	a, ok := hostAliases[strings.TrimSuffix(host, "."+d)]
+	return a, ok
 }
 
 func (s *Server) scheme() string {
@@ -578,9 +612,15 @@ func (s *Server) rootWith(w http.ResponseWriter, r *http.Request, dialog string)
 	switch kind {
 	case "applet":
 		a, _ := s.appletByName(name)
-		data := s.pageData(r, a.Title)
+		title, mount := a.Title, appletBody(a, true)
+		if al, ok := s.aliasOf(r); ok {
+			title = al.title
+			mount = template.HTML(strings.Replace(string(mount), `data-applet="`+a.Name+`"`,
+				`data-`+a.Name+`-start="`+al.start+`" data-applet="`+a.Name+`"`, 1))
+		}
+		data := s.pageData(r, title)
 		data["Applet"] = a
-		data["Mount"] = appletBody(a, true)
+		data["Mount"] = mount
 		data["Standalone"] = true
 		data["AppletHelp"] = s.helpFor(name)
 		data["Dialog"] = dialog

@@ -2,6 +2,8 @@ package web
 
 import (
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -70,6 +72,39 @@ func TestRibbonSlot(t *testing.T) {
 		if strings.Count(body, "data-menubar-ribbon-slot") != 1 {
 			t.Errorf("%s has %d ribbon slots, want 1", target, strings.Count(body, "data-menubar-ribbon-slot"))
 		}
+	}
+}
+
+// An alias address serves its applet standalone under its own title, with
+// the mount marked so the applet starts its own way, and the rest of the
+// applet's address (help, files) behaves as at the applet's own address.
+// docs is the Editor started for documents (docs-design, decision 17).
+func TestHostAlias(t *testing.T) {
+	if a := hostAliases["docs"]; a.applet != "editor" || a.title != "Docs" || a.start != "documents" {
+		t.Fatalf("docs alias is %+v", a)
+	}
+	if _, err := os.Stat(filepath.Join("..", "..", "apps", "editor", "applet.json")); err != nil {
+		t.Fatalf("docs serves an applet that is not installed: %v", err)
+	}
+	hostAliases["roll"] = hostAlias{applet: "dice", title: "Roll", start: "quick"}
+	hostAliases["gone"] = hostAlias{applet: "nosuch", title: "Gone", start: "x"}
+	defer delete(hostAliases, "roll")
+	defer delete(hostAliases, "gone")
+	s := newSite(t, testDomain)
+	body := req(t, s, "GET", "http://roll."+testDomain+"/", "").Body.String()
+	for _, want := range []string{`<title>Roll`, `data-dice-start="quick" data-applet="dice"`, `>Dice on the Desktop<`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the alias's page lacks %s", want)
+		}
+	}
+	if own := req(t, s, "GET", "http://dice."+testDomain+"/", "").Body.String(); strings.Contains(own, "data-dice-start") {
+		t.Error("the applet's own address is marked as the alias")
+	}
+	if w := req(t, s, "GET", "http://roll."+testDomain+"/applets/dice/dice.js", ""); w.Code != 200 {
+		t.Errorf("the applet's files at the alias answer %d", w.Code)
+	}
+	if w := req(t, s, "GET", "http://gone."+testDomain+"/", ""); w.Code != http.StatusTemporaryRedirect {
+		t.Errorf("an alias of an applet that is not installed answers %d, want a redirect to the desktop", w.Code)
 	}
 }
 

@@ -32,7 +32,7 @@
     /* The Editor's settings are its own toolbar's Wrap lines and Explorer
        controls, which remember themselves in ~/.config/editor.json
        (js/config.js), so they follow the reader wherever ~ does. */
-    var SETTINGS = { wrap: true, explorer: null, explorerWidth: null, keys: null, markdownView: 'visual' };
+    var SETTINGS = { wrap: true, explorer: null, explorerWidth: null, keys: null, markdownView: 'visual', documentView: 'visual' };
     var MARKDOWN_VIEWS = [['visual', 'Visual'], ['text', 'Text'], ['split', 'Split']];
 
     /* === Key bindings ===================================================
@@ -524,8 +524,16 @@
             say(display + ' is a new file. Saving creates it.');
         }
 
+        /* At docs.yavc.app the Editor starts for documents (docs-design,
+           decision 17): the server marks the mount, and a new file is then
+           a .docs.md document, which opens on its page. */
+        var forDocuments = root.getAttribute('data-editor-start') === 'documents';
         function newTab() {
             untitled++;
+            if (forDocuments) {
+                addTab({ path: null, name: 'untitled-' + untitled + '.docs.md', lang: 'markdown', readOnly: false }, '');
+                return;
+            }
             addTab({ path: null, name: 'untitled-' + untitled, lang: 'text', readOnly: false }, '');
         }
 
@@ -722,12 +730,17 @@
         }
         /* Wrap lines, as the toolbar, the View menu or a key switches it,
            kept with the settings when the reader changes it. */
+        /* Settings are shared by every address of the site, so the view a
+           Markdown file opens in at docs.yavc.app is a setting of its own,
+           which starts at Visual whatever the Editor's is. */
+        var viewKey = forDocuments ? 'documentView' : 'markdownView';
         function markdownDefault() {
-            return MARKDOWN_VIEWS.some(function (v) { return v[0] === settings.markdownView; }) ? settings.markdownView : 'visual';
+            return MARKDOWN_VIEWS.some(function (v) { return v[0] === settings[viewKey]; }) ? settings[viewKey] : 'visual';
         }
         function setMarkdownDefault(v) {
-            settings.markdownView = v;
-            saveSetting({ markdownView: v });
+            var change = {};
+            change[viewKey] = v;
+            saveSetting(change);
             commandsChanged();
         }
         function setWrap(on, keepIt) {
@@ -1504,7 +1517,7 @@
                 if (!k || typeof k !== 'object') { continue; }
                 if (!k.path) {
                     if (typeof k.draft !== 'string') { continue; }
-                    var n = /^untitled-(\d+)$/.exec(k.name || '');
+                    var n = /^untitled-(\d+)(\.docs\.md)?$/.exec(k.name || '');
                     if (n) { untitled = Math.max(untitled, +n[1]); }
                     addTab({ path: null, name: k.name || 'untitled', lang: k.lang || 'text', readOnly: false }, '');
                     t = current();
