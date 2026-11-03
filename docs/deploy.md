@@ -36,15 +36,15 @@ chmod 600 .env
 
 The tunnel is managed in the Cloudflare dashboard, and the server holds only its token.
 
-1. In the Cloudflare dashboard, open **Zero Trust**, then **Networks**, then **Tunnels**, and choose **Create a tunnel**.
-2. Choose **Cloudflared**, name it `yavc-linode`, and save.
-3. On the install page choose **Docker**. The command shown ends in `--token` followed by a long string. Copy only that string into `TUNNEL_TOKEN=` in `/opt/yavc/.env`.
-4. Add the published routes (called public hostnames in older versions of the dashboard). Each one uses the service type **HTTP** and the address `yavc:8400`, which is the engine's name on the compose network.
-   - `yavc.app`
+1. In the Cloudflare dashboard, open **Networking**, then **Tunnels** (they moved out of Zero Trust in 2026), and choose **Create a tunnel**.
+2. Name it `yavc-linode` and create it.
+3. On the install page choose **Docker**. The command shown ends in `--token` followed by a long string beginning `eyJ`. Copy only that string into `TUNNEL_TOKEN=` in `/opt/yavc/.env`, with no quotes or spaces. The safest way is to paste it at a hidden prompt: `read -rs T; sed -i "s|^TUNNEL_TOKEN=.*|TUNNEL_TOKEN=${T}|" .env; unset T`. A token changed after the container was made needs `sudo docker compose up -d --force-recreate tunnel`, since a plain restart keeps the old one.
+4. On the tunnel's **Routes** tab, add three published applications, each with the service URL `http://yavc:8400`, which is the engine's name on the compose network. The protocol is required.
+   - `yavc.app` (no subdomain)
    - `www.yavc.app`
    - `*.yavc.app`
 
-   The dashboard cannot create a route's DNS record while the old tunnel's record for the same name exists. Leave those records alone until the cut-over below, and add any route the dashboard refuses at that point instead.
+   A tunnel with no routes answers 503 to everything and logs "No ingress rules were defined". The dashboard cannot create a route's DNS record while another record for the same name exists, so routes are added at the cut-over below.
 
 ## The first release
 
@@ -90,7 +90,9 @@ sudo docker compose start yavc
 rm /tmp/yavc-data.tgz
 ```
 
-Then point DNS at the new tunnel. In the yavc.app zone's **DNS** records, the records for `yavc.app`, `www` and `*` are CNAMEs to the old tunnel's address, `<old id>.cfargotunnel.com`. Edit each one to `<new id>.cfargotunnel.com`, where the new id is shown on the `yavc-linode` tunnel's page, and keep each one proxied. Changes take effect within a minute or so because the records are proxied.
+Then point DNS at the new tunnel. The site needs only three records in the yavc.app zone, each a proxied CNAME to `<new id>.cfargotunnel.com`, where the new id is shown on the `yavc-linode` tunnel's page: `yavc.app`, `www` and `*`. Delete any record for a single applet's subdomain, such as `editor` or `files`, that an older setup made, because a specific record beats the wildcard and would keep sending that name to the old tunnel. Then add the three routes from the tunnel section above. Changes take effect within a minute or so because the records are proxied.
+
+The cut-over on 3 November 2026 switched DNS before moving the sessions, so readers started with fresh sessions on the Linode. Moving the sessions first, as above, avoids that.
 
 Check from anywhere that the site answers and that the new server served it, for example by loading `https://yavc.app/` and watching `sudo docker compose logs -f yavc` on the server. When it is confirmed, delete `yavc-data.tgz` on the workstation. The workstation's container can then be started again as staging at another address, or left stopped.
 
@@ -109,4 +111,6 @@ To roll back, do the same with the previous tag. Sessions are kept in the `yavc-
 ## Still to do
 
 - Nightly copies of the `yavc-data` volume to Cloudflare R2, which needs an R2 bucket and an access key with write access to it only.
-- The Cloudflare cache rule that makes `/static/`, `/pudl/` and `/applets/` eligible for the edge cache, so the 7 MB Markdown engine is served by Cloudflare rather than the server.
+- Removing yavc.app from the workstation's own tunnel, which no longer serves it.
+
+The Cloudflare cache rule "Versioned assets" (Rules, Cache Rules) makes every path starting `/static/`, `/pudl/` or `/applets/` eligible for the edge cache and respects the engine's headers, so the 7 MB Markdown engine and the rest are served by Cloudflare. Without it, Cloudflare does not cache WebAssembly, and every reader fetched the engine from Chicago.
