@@ -162,12 +162,13 @@ func TestRerouting(t *testing.T) {
 func TestErrBusyAt32(t *testing.T) {
 	h, _ := testHub()
 	events, _ := subscribe(t, h, "s", "p")
-	go func() {
-		for range events {
-		}
-	}()
 	for i := 0; i < MaxLive; i++ {
 		invoke(t, h, "s", "r"+strings.Repeat("x", i+1))
+	}
+	// Read the page's events here, not in a goroutine: a goroutine that has
+	// not run yet leaves the queue full and the last Invoke fails with ErrBusy.
+	for i := 0; i < MaxLive; i++ {
+		<-events
 	}
 	if _, err := h.Invoke("s", Invocation{ID: "one-more", Action: "x/y@1"}); !errors.Is(err, ErrTooMany) {
 		t.Fatalf("want ErrTooMany, got %v", err)
