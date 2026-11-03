@@ -96,6 +96,30 @@ The cut-over on 3 November 2026 switched DNS before moving the sessions, so read
 
 Check from anywhere that the site answers and that the new server served it, for example by loading `https://yavc.app/` and watching `sudo docker compose logs -f yavc` on the server. When it is confirmed, delete `yavc-data.tgz` on the workstation. The workstation's container can then be started again as staging at another address, or left stopped.
 
+## Trying a branch before it is merged
+
+A branch can be tried on the workstation in the same image the server runs, built from the branch and started on the workstation's own address. This also tests the image build, which CI does not do, since only a release tag builds the image. From the repository folder, with Docker Desktop running, fetch the branch and check it out without making a local branch of it:
+
+```bash
+git fetch origin BRANCH
+git switch --detach FETCH_HEAD
+```
+
+Build the image and start it on port 8401:
+
+```bash
+docker build -t yavc-app:test .
+docker run --rm -p 127.0.0.1:8401:8400 yavc-app:test -domain localhost
+```
+
+The desktop is then at `http://localhost:8401`, and each application on its own at its name before `localhost`, such as `http://editor.localhost:8401`. Chrome, Edge and Firefox send every name under `localhost` to the workstation itself, so nothing needs setting up. The image's own command would serve `yavc.app` over HTTPS only, which a browser cannot reach on this address, so the run gives it `-domain localhost` and leaves out `-secure`.
+
+The reader's files and settings are kept per address, so `localhost:8401` starts empty and leaves everything on yavc.app alone. Sessions are kept inside the container, and Ctrl+C stops it and discards them. Afterwards, return to the main branch:
+
+```bash
+git switch main
+```
+
 ## Deploying and rolling back
 
 To deploy, push a new tag from the workstation, wait for the workflow, then on the server:

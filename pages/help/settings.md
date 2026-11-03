@@ -1,6 +1,6 @@
 # Settings Help
 
-[Settings](/settings) chooses how the site looks, says what the site keeps for you and forgets it on request, and pairs AI agents with the site. It opens from the site's own menu, at the left of the menu bar. On the desktop it opens in a window, and it is also a page at `yavc.app/settings` and runs on its own at `settings.yavc.app`.
+[Settings](/settings) chooses how the site looks, says what the site keeps for you and forgets it on request, and pairs AI agents with the site. It opens from the site's own menu, at the left of the menu bar. On the desktop it opens in a window, and it also runs on its own at `settings.yavc.app`.
 
 ## Appearance
 

@@ -1,6 +1,6 @@
 # Slides Help
 
-[Slides](/slides) makes a slide deck out of a Markdown file. The file is the whole deck, with no layout data kept beside it, so anything that can open a text file can read it. Slides runs in a window on the desktop, as a page at `yavc.app/slides`, and on its own at `slides.yavc.app`.
+[Slides](/slides) makes a slide deck out of a Markdown file. The file is the whole deck, with no layout data kept beside it, so anything that can open a text file can read it. Slides runs in a window on the desktop and on its own at `slides.yavc.app`.
 
 ## The file
 

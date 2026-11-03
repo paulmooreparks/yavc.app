@@ -166,7 +166,7 @@
             '</div>' +
             '<div class="ed-status" data-role="status-bar">' +
               '<span class="ed-readonly" data-role="readonly" hidden><span class="glyph" style="--glyph: var(--glyph-pencil-off)" aria-hidden="true"></span>Read-only</span>' +
-              '<span data-role="where"></span><span data-role="lang"></span><span data-role="pos"></span>' +
+              '<span data-role="where"></span><span data-role="lang"></span><span data-role="count"></span><span data-role="pos"></span>' +
               '<span class="ed-message" data-role="message" role="status" aria-live="polite"></span>' +
             '</div>' +
             '';
@@ -175,7 +175,7 @@
         var el = {
             tabs: q('[data-role="tabs"]'), surface: q('[data-role="surface"]'), where: q('[data-role="where"]'),
             panes: q('[data-role="panes"]'), pageBox: q('[data-role="page-box"]'), scroll: q('[data-role="scroll"]'), page: q('[data-role="page"]'), findPlace: q('[data-role="find-place"]'),
-            lang: q('[data-role="lang"]'), pos: q('[data-role="pos"]'), message: q('[data-role="message"]'),
+            lang: q('[data-role="lang"]'), count: q('[data-role="count"]'), pos: q('[data-role="pos"]'), message: q('[data-role="message"]'),
             readonly: q('[data-role="readonly"]'),
             explorer: q('[data-role="explorer"]'), explorerSplit: q('[data-role="explorer-split"]')
         };
@@ -335,8 +335,10 @@
                     /* The Editor's own bindings come first, so they win over
                        CodeMirror's for the same key. */
                     keyComp.of(keyBindings()),
+                    /* CodeMirror's history keys include Ctrl+U, undo selection,
+                       which would answer before the menu's Underline does. */
                     CM.keymap.of([].concat(
-                        CM.closeBracketsKeymap, CM.defaultKeymap, CM.searchKeymap, CM.historyKeymap, CM.lintKeymap, [CM.indentWithTab])),
+                        CM.closeBracketsKeymap, CM.defaultKeymap, CM.searchKeymap, CM.historyKeymap.filter(function (b) { return b.key !== 'Mod-u'; }), CM.lintKeymap, [CM.indentWithTab])),
                     CM.search({ top: true, createPanel: findPanel }),
                     makeTheme(CM),
                     wrapComp.of(wrapOn ? CM.EditorView.lineWrapping : []),
@@ -349,7 +351,7 @@
                         /* In Split, the page follows the text. */
                         if (u.docChanged && tabs[active] === tab && !visual.fromVisual) { textChangedForPage(); }
                         /* The paragraph style shows the line the cursor is on. */
-                        if (u.selectionSet || u.docChanged) { showPos(); if (tab.lang === 'markdown') { commandsChanged(); } }
+                        if (u.selectionSet || u.docChanged) { showPos(); showCount(); if (tab.lang === 'markdown') { commandsChanged(); } }
                         if (tabs[active] === tab && (u.selectionSet || u.docChanged ||
                             CM.searchPanelOpen(u.state) !== CM.searchPanelOpen(u.startState))) { keep(); }
                     })
@@ -399,6 +401,7 @@
             var t = current();
             el.where.textContent = t ? (t.path || 'Not saved yet') : '';
             el.lang.textContent = t ? LANG_NAMES[t.lang] : '';
+            showCount();
             showFormat(viewMode);
             el.readonly.hidden = !(t && t.readOnly);
             var node = t && t.path && F ? F.resolve(F.home(), t.path) : null;
@@ -416,6 +419,22 @@
             return r.server === 'wwwroot' && /^content\/[A-Za-z0-9_-]+\.(md|html)$/.test(r.rel);
         }
 
+        /* The words in a Markdown file, or in the text selected in it, with
+           the time they take to read in the tooltip. It waits for a pause in
+           typing, since counting reads the whole document. Every view
+           counts the text, which the page keeps up to date as it is edited. */
+        var countTimer = 0;
+        function showCount() {
+            clearTimeout(countTimer);
+            countTimer = setTimeout(function () {
+                var t = current(), K = window.yavcMdEditor;
+                if (destroyed || !view || !K || !t || t.lang !== 'markdown') { el.count.textContent = ''; el.count.removeAttribute('title'); return; }
+                var sel = view.state.selection.main, nf = new Intl.NumberFormat();
+                var total = K.wordCount(view.state.doc.toString()), picked = sel.empty ? 0 : K.wordCount(view.state.sliceDoc(sel.from, sel.to));
+                el.count.textContent = (picked ? nf.format(picked) + ' of ' : '') + nf.format(total) + (total === 1 ? ' word' : ' words');
+                if (total) { el.count.title = 'About ' + K.readingMinutes(total) + ' min to read'; } else { el.count.removeAttribute('title'); }
+            }, 250);
+        }
         function showPos() {
             if (!view) { return; }
             var head = view.state.selection.main.head, line = view.state.doc.lineAt(head);
@@ -1760,7 +1779,10 @@
                         checked: function () { return blockStyle() === s[0]; }, hidden: unformatted, disabled: noEdit,
                         run: function () { applyFormat(s[0]); } };
                 }) });
-            if (window.yavcMdEditor) { table.push(window.yavcMdEditor.boxCommand(editCtx(), { hidden: unformatted, disabled: noEdit })); }
+            if (window.yavcMdEditor) {
+                table.push(window.yavcMdEditor.tableCommand(editCtx(), { hidden: unformatted, disabled: noEdit }));
+                table.push(window.yavcMdEditor.boxCommand(editCtx(), { hidden: unformatted, disabled: noEdit }));
+            }
             /* The document's front matter as a form (DESIGN.md, decision 17). */
             table.push(cmd('properties', 'Properties…', 'tag', editProperties, {
                 hidden: function () { var t = current(); return !(t && t.lang === 'markdown'); },
@@ -1790,7 +1812,7 @@
             return [{ label: 'Editor', ribbon: 'hide', groups: [
                 { label: 'File', glyph: 'file', priority: 3, items: ['toggle-files', 'new', 'open', 'save', 'save-as'] },
                 { label: 'Edit', glyph: 'yavc-undo', priority: 2, items: ['undo', 'redo', 'find', 'toggle-wrap'] },
-                { label: 'Format', glyph: 'bold', priority: 1, items: ['style', 'bold', 'italic', 'strike', 'code', 'link', 'color', 'bullets', 'numbers', 'insert', 'box'] },
+                { label: 'Format', glyph: 'bold', priority: 1, items: ['style', 'bold', 'italic', 'underline', 'strike', 'code', 'link', 'color', 'bullets', 'numbers', 'insert', 'table', 'box'] },
                 { label: 'View', glyph: 'new-window', priority: 4, end: true, items: ['source', { choice: 'ed-view' }, 'preview'] }
             ] }];
         }
@@ -1810,10 +1832,10 @@
                 { label: 'Editor', glyph: 'document', items: window.pcAppletIdentity(root, ['key-bindings']) },
                 { id: 'file', label: 'File', glyph: 'file', items: ['new', 'open', 'save', 'save-as', '-', 'properties', 'present', '-', 'close-document'] },
                 { id: 'edit', label: 'Edit', glyph: 'pencil', items: ['undo', 'redo', '-', 'find'] },
-                { id: 'insert', label: 'Insert', glyph: 'plus', items: ['link', 'insert', 'box', '-', 'insert-timestamp', 'insert-date', 'stamp-modified'] }
+                { id: 'insert', label: 'Insert', glyph: 'plus', items: ['link', 'insert', 'table', 'box', '-', 'insert-timestamp', 'insert-date', 'stamp-modified'] }
             ];
             /* Format, where there is formatting to do. */
-            if (formatOffered) { titles.push({ id: 'format', label: 'Format', glyph: 'paragraph', items: ['style', '-', 'bold', 'italic', 'strike', 'code', 'color', '-', 'bullets', 'numbers'] }); }
+            if (formatOffered) { titles.push({ id: 'format', label: 'Format', glyph: 'paragraph', items: ['style', '-', 'bold', 'italic', 'underline', 'strike', 'code', '-', 'highlight', 'superscript', 'subscript', '-', 'color', 'class', '-', 'bullets', 'numbers'] }); }
             return { titles: titles, into: { view: LAYOUT, go: ['go-to-line'] } };
         }
 

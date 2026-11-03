@@ -1160,7 +1160,7 @@
             return [{ label: 'Slides', ribbon: 'hide', groups: [
                 { label: 'File', glyph: 'file', priority: 3, items: ['new-deck', 'open', 'save'] },
                 { label: 'Slide', glyph: 'plus', priority: 4, items: ['slide-new', 'slide-duplicate', 'slide-delete', 'slide-up', 'slide-down'] },
-                { label: 'Format', glyph: 'bold', priority: 2, items: ['layout', 'style', 'bold', 'italic', 'strike', 'code', 'link', 'color', 'bullets', 'numbers', 'insert', 'box'] },
+                { label: 'Format', glyph: 'bold', priority: 2, items: ['layout', 'style', 'bold', 'italic', 'underline', 'strike', 'code', 'link', 'color', 'bullets', 'numbers', 'insert', 'table', 'box'] },
                 { label: 'Show', glyph: 'play', priority: 5, items: ['present', 'presenter'] },
                 { label: 'View', glyph: 'panel', priority: 1, end: true, items: [{ choice: 'deck-view' }, 'dock', 'toggle-film'] }
             ] }];

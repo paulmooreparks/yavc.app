@@ -23,7 +23,7 @@ const since = args.includes('--since') ? args[args.indexOf('--since') + 1] : nul
 
 // Code that is not the project's own: vendored libraries, built output.
 const SKIP = [/^\.claude\//, /(^|\/)vendor\//, /^web\/pudl\//, /(^|\/)node_modules\//, /^\.git\//, /^data\//, /^\.local\//,
-  /^apps\/md-engine\/(yavc-md\.wasm|wasm_exec\.js)$/, /\.min\.js$/];
+  /^apps\/md-engine\/(yavc-md\.wasm|wasm_exec\.js)$/, /^apps\/diagram-kit\/(yavc-d2\.wasm|wasm_exec\.js)$/, /\.min\.js$/];
 const TEXT = new Set(['.js', '.mjs', '.go', '.css', '.html', '.md', '.json', '.sh', '.yml', '.yaml', '.xfer']);
 
 function walk(dir, out = []) {
@@ -109,6 +109,24 @@ rules.push({ id: 'glyph-defined', run() {
   }
 } });
 
+// The editing kit's FORMATS table gives each format's glyph as the third
+// entry of its row, ['bold', 'Bold', 'bold', 'Mod-b'], which the rule above
+// does not read, so a format with a glyph nobody defined drew a blank square
+// in every menu and toolbar (found when Highlight, Superscript and Subscript
+// were added, 2026-11-03).
+rules.push({ id: 'format-glyph-defined', run() {
+  const f = 'apps/md-editor/kit.js';
+  const src = text.get(f);
+  if (!src) return;
+  const block = /var FORMATS = \[([\s\S]*?)\n    \];/.exec(src);
+  if (!block) { report('format-glyph-defined', f, null, 'the FORMATS table was not found, so its glyphs were not checked'); return; }
+  const defined = rootGlyphs();
+  const from = src.indexOf(block[1]);
+  each(/\['[a-z]+',\s*'(?:[^'\\]|\\.)*',\s*'([a-z0-9-]+)'/g, block[1], (m) => {
+    if (!defined.has(m[1])) report('format-glyph-defined', f, from + m.index, `the format glyph "${m[1]}" is neither PUDL's nor defined on :root in a stylesheet`);
+  });
+} });
+
 // The site's own glyphs are named yavc-*, so none shadows a glyph PUDL
 // has or adds later (PUDL review, 2026-11-03). The installed packages
 // under applets/ keep their own names.
@@ -138,6 +156,27 @@ rules.push({ id: 'window-open-noopener', run() {
 
 // An applet's version changes with its files, so the registry and the
 // browser's cache take the new code (a standing rule of the repository).
+// Every Go module compiled into the D2 engine has its licence listed in
+// apps/diagram-kit/LICENSES.md, which is served beside the engine, so a
+// dependency that D2 or a later change brings in cannot reach readers
+// without its notice (docs/diagrams-design.md, safety). The list comes from
+// the Go tool itself, building for the browser as the image does.
+rules.push({ id: 'engine-licences', run() {
+  const f = 'apps/diagram-kit/LICENSES.md';
+  const listed = text.get(f) || '';
+  let modules;
+  try {
+    modules = execFileSync('go', ['list', '-deps', '-f', '{{with .Module}}{{.Path}}{{end}}', './cmd/yavc-d2'],
+      { cwd: ROOT, encoding: 'utf8', env: { ...process.env, GOOS: 'js', GOARCH: 'wasm' }, stdio: ['ignore', 'pipe', 'pipe'] });
+  } catch (err) {
+    report('engine-licences', 'cmd/yavc-d2', null, 'the Go tool could not list the engine\'s modules: ' + String(err.stderr || err.message).split('\n')[0]);
+    return;
+  }
+  for (const m of new Set(modules.split('\n').map((s) => s.trim()).filter((s) => s && s !== 'yavc.app'))) {
+    if (!listed.includes('`' + m + '`')) report('engine-licences', f, null, `the module ${m} is compiled into the D2 engine but its licence is not listed here`);
+  }
+} });
+
 rules.push({ id: 'applet-version-bump', needsSince: true, run() {
   const changed = execFileSync('git', ['diff', '--name-only', since, '--', 'apps', 'applets'], { cwd: ROOT, encoding: 'utf8' }).split('\n').filter(Boolean);
   const folders = new Set(changed.map((f) => f.split('/').slice(0, 2).join('/')).filter((d) => {

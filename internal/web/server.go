@@ -256,12 +256,12 @@ func New(s *Server) (*Server, error) {
 	m.HandleFunc("GET /{$}", s.root)
 	s.agentRoutes(m)
 	s.retain = s.Sessions.Retain
-	m.HandleFunc("GET /pages", s.listPage)
+	m.HandleFunc("GET /pages", s.pagesGone)
 	m.HandleFunc("GET /about", s.aboutPage)
 	m.HandleFunc("GET /about/pudl", s.aboutPage)
 	m.HandleFunc("GET /help", s.helpPage)
 	m.HandleFunc("GET /help/{app}", s.helpPage)
-	m.HandleFunc("GET /{slug}", s.classicPage)
+	m.HandleFunc("GET /{slug}", s.slugPage)
 	return s, nil
 }
 
@@ -619,14 +619,11 @@ func (s *Server) aboutPage(w http.ResponseWriter, r *http.Request) {
 	s.rootWith(w, r2, dialog)
 }
 
-// listPage is /pages at the site's domain, the Classic view: the
-// applications as a list of pages.
-func (s *Server) listPage(w http.ResponseWriter, r *http.Request) {
-	if kind, _ := s.hostKind(r); kind != "desktop" {
-		http.Redirect(w, r, s.siteURL(r)+"pages", http.StatusTemporaryRedirect)
-		return
-	}
-	s.render(w, http.StatusOK, "list", s.pageData(r, "Applications"))
+// pagesGone is /pages, where the Pages view listed the applications until
+// the site became windowed only (DESIGN.md, decision 26). An old link
+// arrives at the desktop.
+func (s *Server) pagesGone(w http.ResponseWriter, r *http.Request) {
+	http.Redirect(w, r, s.siteURL(r), http.StatusMovedPermanently)
 }
 
 // pageRedirect is /page/{slug}, where parkscomputing.com's applets link to
@@ -641,9 +638,15 @@ func (s *Server) pageRedirect(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/"+slug, http.StatusPermanentRedirect)
 }
 
-// classicPage is /{slug} at the site's domain: the applet as a page of
-// the site, with the site's topbar, which is also what a window shows.
-func (s *Server) classicPage(w http.ResponseWriter, r *http.Request) {
+// slugPage is /{slug}. At the site's domain it is a site page, drawn as a
+// page of its own, which is where the Open as a Page button of that page's
+// window leads; or an application, which opens in its window on the
+// desktop, since the site is windowed only and an application's page of
+// its own is at its subdomain (DESIGN.md, decision 26). A link to an
+// application in an article, or one kept from the Pages view, therefore
+// still arrives. At any other host it goes to the same address at the
+// site's domain.
+func (s *Server) slugPage(w http.ResponseWriter, r *http.Request) {
 	kind, _ := s.hostKind(r)
 	if kind != "desktop" {
 		slug := r.PathValue("slug")
@@ -668,15 +671,36 @@ func (s *Server) classicPage(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, to, http.StatusPermanentRedirect)
 		return
 	}
-	a, ok := s.appletByName(slug)
-	if !ok {
+	if _, ok := s.appletByName(slug); !ok {
 		s.notFound(w, r)
 		return
 	}
-	data := s.pageData(r, a.Title)
-	data["Applet"] = a
-	data["Mount"] = appletBody(a, false)
-	s.render(w, http.StatusOK, "page", data)
+	http.Redirect(w, r, s.siteURL(r)+"?open="+slug+"&top="+slug, http.StatusTemporaryRedirect)
+}
+
+// windowLink is a link a site page's Markdown makes to another of the
+// site's windows: an application at /{name}, a page at /{slug}, or help at
+// /help and /help/{app}, whose window keys are help and help-{app}.
+var windowLink = regexp.MustCompile(`<a href="/((?:help/)?[a-z][a-z0-9-]*)"`)
+
+// windowLinks gives each link in a page drawn in a window that leads to
+// another of the site's windows PUDL's data-win-open, so on the desktop it
+// opens that window beside the others rather than leaving the desktop
+// (DESIGN.md, decision 26). The address stays as written, which is where a
+// browser without script, or a page of its own, still goes.
+func (s *Server) windowLinks(body template.HTML) template.HTML {
+	return template.HTML(windowLink.ReplaceAllStringFunc(string(body), func(m string) string {
+		key := strings.Replace(windowLink.FindStringSubmatch(m)[1], "/", "-", 1)
+		if !winKey.MatchString(key) {
+			return m
+		}
+		if _, ok := s.appletByName(key); !ok {
+			if _, ok := s.page(key); !ok {
+				return m
+			}
+		}
+		return m + ` data-win-open="` + key + `"`
+	}))
 }
 
 // article draws a site page as a page of the site.
@@ -760,7 +784,7 @@ func (s *Server) windowMarkup(r *http.Request, base map[string]any, d desktopSta
 			return ""
 		}
 		data["Title"] = p.Title
-		data["Article"], data["Slug"], data["Key"] = p.Body, p.Slug, key
+		data["Article"], data["Slug"], data["Key"] = s.windowLinks(p.Body), p.Slug, key
 		data["Page"] = strings.TrimSuffix(s.siteURL(r), "/") + p.Path
 		data["Minimize"], data["Maximize"], data["Close"] = d.minimize(key), d.maximize(key, "0.6", "0.8"), d.close(key)
 		data["Style"] = template.CSS("--win-x:0.08; --win-y:0.06; --win-w:0.6; --win-h:0.8")
@@ -839,6 +863,9 @@ func (s *Server) appletFile(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	} else if dir, ok := s.sharedFolder(name); ok {
+		if name+"/"+file == engineWorker {
+			w.Header().Set("Content-Security-Policy", workerPolicy)
+		}
 		if serveDir(w, r, dir, file, cacheFor(r, s.staticVersion)) {
 			return
 		}

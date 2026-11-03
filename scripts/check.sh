@@ -22,7 +22,7 @@ if [[ -n "$unformatted" ]]; then echo "gofmt would change:"; echo "$unformatted"
 
 step "go vet, server and WebAssembly"
 go vet ./...
-GOOS=js GOARCH=wasm go vet ./cmd/yavc-md
+GOOS=js GOARCH=wasm go vet ./cmd/yavc-md ./cmd/yavc-d2
 
 step "Go tests"
 # The race detector needs cgo; CI has it, a Windows machine without a C
@@ -39,9 +39,10 @@ step "Known vulnerabilities in the Go code and its modules"
 # installed; it reads the Go vulnerability database over the network.
 go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
 
-step "Builds: the engine and the Markdown engine for the browser"
+step "Builds: the engine, and the Markdown and D2 engines for the browser"
 go build -o /dev/null ./cmd/yavc
 GOOS=js GOARCH=wasm go build -o /dev/null ./cmd/yavc-md
+GOOS=js GOARCH=wasm go build -o /dev/null ./cmd/yavc-d2
 
 step "The project's own rules"
 node scripts/check.mjs "${since[@]}"

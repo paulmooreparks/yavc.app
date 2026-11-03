@@ -794,7 +794,29 @@ func init() {
 		wrap: func(c Call) (string, string, error) {
 			return `<aside class="sc-notes"><p class="sc-notes-label">Speaker Notes</p>`, `</aside>`, nil
 		}})
-	for _, name := range []string{"expand", "status", "toc", "anchor", "page", "figure", "applet", "video", "code", "color", "class", "style", "kbd", "glyph", "columns", "column", "draft-note", "slide", "notes"} {
+	// What a document needs and Markdown cannot say (docs/docs-design.md,
+	// decision 3). Underline is not here: the page view already reads and
+	// writes <u>, so a second spelling would only split documents in two.
+	// Each span is the HTML element of its name, so an export can map it.
+	markup := func(name, title, what, open, close string) {
+		add(&def{name: name, kind: span, title: title, what: what,
+			example: "{{" + name + "}}these words{{/" + name + "}}",
+			wrap:    func(c Call) (string, string, error) { return open, close, nil }})
+	}
+	markup("mark", "Highlight", "Words highlighted, as with a marker. Markdown works inside it.", `<mark class="sc-mark">`, `</mark>`)
+	markup("sup", "Superscript", "Words raised above the line, as in a footnote number or a power. Markdown works inside it.", `<sup>`, `</sup>`)
+	markup("sub", "Subscript", "Words lowered below the line, as in a chemical formula. Markdown works inside it.", `<sub>`, `</sub>`)
+	add(&def{name: "page-break", kind: block, title: "Page Break", what: "Ends the page here: what follows starts on a new page when the document is printed or shown as pages.",
+		example: "{{page-break}}",
+		render: func(c Call, doc ast.Node, src []byte) (string, error) {
+			return `<div class="sc-page-break" role="separator" aria-label="Page break"></div>`, nil
+		}})
+	add(&def{name: "caption", kind: container, title: "Caption", what: "The words under a figure or a table, on lines of their own after it. A document may number them.",
+		example: "{{caption}}\nWhat the figure shows.\n{{/caption}}",
+		wrap: func(c Call) (string, string, error) {
+			return `<div class="sc-caption">`, `</div>`, nil
+		}})
+	for _, name := range []string{"expand", "status", "toc", "anchor", "page", "figure", "applet", "video", "code", "color", "class", "style", "kbd", "glyph", "columns", "column", "draft-note", "slide", "notes", "mark", "sup", "sub", "page-break", "caption"} {
 		order = append(order, name)
 	}
 }
@@ -1035,7 +1057,14 @@ func (r *htmlRenderer) inline(w util.BufWriter, src []byte, node ast.Node, enter
 	}
 	if n.Closing {
 		if n.Matched && isSpan(d) {
-			_, _ = w.WriteString("</span>")
+			// A closer has no arguments, so a span whose opening needs
+			// them (a colour, a class) gives an error here and closes a
+			// span; one that needs none (mark, sup, sub) says its own tag.
+			_, closeTag, err := spanOf(d)(NewCall(n.Call.Name, ""))
+			if err != nil || closeTag == "" {
+				closeTag = "</span>"
+			}
+			_, _ = w.WriteString(closeTag)
 			return ast.WalkContinue, nil
 		}
 		_, _ = w.WriteString(problemSource(n.Raw, "This closes "+n.Call.Name+", which is not open."))

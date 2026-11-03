@@ -5,22 +5,35 @@
    Desktop's preview.css and editor-applet.css and parkscomputing.com's
    pudl-site.css. */
 .doc-page {
+  /* The page's own tokens (docs/docs-design.md, decision 4). A theme, a
+     stylesheet or a {{style}} block sets these, and everything below reads
+     them, so a few lines restyle a whole document. They follow the site
+     until something changes them. */
+  --doc-font: var(--font);
+  --doc-font-heading: var(--doc-font);
+  --doc-size: var(--text-sm);
+  --doc-leading: 1.5;
+  --doc-ink: var(--text);
+  --doc-muted: var(--text-muted);
+  --doc-accent: var(--accent);
+  --doc-rule: var(--border);
+  --doc-page: var(--surface);
   --dinah-warning-surface: color-mix(in srgb, var(--danger) 8%, var(--surface));
   --dinah-warning-accent: var(--danger);
   --dinah-tip-surface: color-mix(in srgb, var(--positive) 8%, var(--surface));
   --dinah-tip-accent: var(--positive);
-  --dinah-ink: var(--text);
-  --dinah-link-on-surface: var(--accent);
-  --dinah-page-surface: var(--surface);
-  --dinah-content-border: var(--border);
+  --dinah-ink: var(--doc-ink);
+  --dinah-link-on-surface: var(--doc-accent);
+  --dinah-page-surface: var(--doc-page);
+  --dinah-content-border: var(--doc-rule);
   --dinah-content-code-surface: var(--surface-alt);
-  --dinah-muted-ink: var(--text-muted);
+  --dinah-muted-ink: var(--doc-muted);
   display: block; box-sizing: border-box; min-height: 100%; min-width: fit-content; margin: 0;
-  padding: var(--space-5) var(--space-6) 40vh; font-family: var(--font); font-size: var(--text-sm); line-height: 1.5;
+  padding: var(--space-5) var(--space-6) 40vh; font-family: var(--doc-font); font-size: var(--doc-size); line-height: var(--doc-leading);
   color: var(--dinah-ink); background-color: var(--dinah-page-surface); color-scheme: inherit;
 }
 .doc-page a { color: var(--dinah-link-on-surface); }
-.doc-page h1, .doc-page h2, .doc-page h3, .doc-page h4, .doc-page h5, .doc-page h6 { line-height: 1.25; margin: 1.1em 0 0.5em 0; color: var(--dinah-ink); }
+.doc-page h1, .doc-page h2, .doc-page h3, .doc-page h4, .doc-page h5, .doc-page h6 { font-family: var(--doc-font-heading); line-height: 1.25; margin: 1.1em 0 0.5em 0; color: var(--dinah-ink); }
 .doc-page h1 { margin-top: 0.75em; }
 .doc-page > :first-child, .doc-page > .ProseMirror > :first-child { margin-top: 0; }
 .doc-page pre { padding: 8px 10px; overflow-x: auto; border: 1px solid var(--dinah-content-border); border-radius: 3px; background-color: var(--dinah-content-code-surface); }
@@ -38,6 +51,13 @@
 .doc-page .dinah-diagram-placeholder { margin: 8px 0; padding: 12px; border: 1px dashed var(--dinah-content-border); border-radius: 3px; color: var(--dinah-muted-ink); text-align: center; }
 .doc-page .dinah-diagram-placeholder.ed-diagram { border: 0; padding: 0; text-align: start; }
 .doc-page .dinah-diagram-placeholder.ed-diagram svg { max-width: 100%; height: auto; }
+/* A diagram is an image (apps/diagram-kit/d2.js), centred and never wider
+   than the page. A fault is the site's notice above it or above its
+   source; on a slide, left-out icons are a muted line under it. */
+.doc-page .dinah-diagram-placeholder[data-d2].ed-diagram { text-align: center; }
+.doc-page .sc-diagram-note { margin: var(--space-1) 0 0; color: var(--dinah-muted-ink); font-size: var(--text-xs); }
+.doc-page .dinah-diagram-placeholder > .yavc-notice, .doc-page .dinah-diagram-placeholder > .loading { margin: 0 0 var(--space-2); text-align: start; }
+.doc-page .dinah-diagram-placeholder[data-d2] > pre { text-align: start; }
 .doc-page .dinah-attachment-image { max-width: 100%; height: auto; border: 1px solid var(--dinah-content-border); border-radius: 2px; }
 .doc-page .ed-missing-image { display: inline-block; padding: 2px 8px; border: 1px dashed var(--dinah-warning-accent); border-radius: 3px; color: var(--dinah-warning-accent); font-size: 0.9em; }
 /* Find's matches on the page, as the text marks them. */
@@ -93,6 +113,29 @@
 .doc-page :is(.sc-draft-note-label + *, .sc-expand > summary + *, .sc-column > :first-child, .sc-notice .notice-body > :first-child) { margin-top: 0; }
 .doc-page [data-applet] { margin: 0.6em 0 1.1em; }
 .doc-page .sc-problem { color: var(--danger); text-decoration: wavy underline var(--danger); cursor: help; }
+
+/* What a document says that Markdown cannot (docs/docs-design.md, decision
+   3): highlighted, raised and lowered words, a page break and a caption. */
+.doc-page mark { background: color-mix(in srgb, var(--warn) 38%, transparent); color: inherit; padding: 0 0.15em; border-radius: 2px; }
+.doc-page :is(sup, sub) { line-height: 0; }
+.doc-page .sc-page-break { margin: 1.4em 0; border-top: 1px dashed var(--dinah-content-border); text-align: center; break-after: page; }
+.doc-page .sc-page-break::after { content: "Page break"; position: relative; top: -0.8em; padding: 0 var(--space-3); background: var(--dinah-page-surface); color: var(--dinah-muted-ink); font-size: var(--text-2xs); text-transform: uppercase; letter-spacing: 0.04em; }
+.doc-page .sc-caption { margin: -0.4em 0 1.1em; text-align: center; color: var(--dinah-muted-ink); font-size: 0.9em; }
+.doc-page .sc-caption > :is(p, ul, ol) { margin: 0; }
+
+/* The classes every document has, applied with {{class:name}} or from
+   Format, Style (apps/md-editor/kit.js lists them as STOCK_CLASSES). */
+.doc-page .center { text-align: center; }
+.doc-page .right { text-align: right; }
+.doc-page .justify { text-align: justify; hyphens: auto; }
+.doc-page .indent { margin-inline-start: 2em; }
+.doc-page .small { font-size: 0.85em; }
+.doc-page .lead { font-size: 1.2em; line-height: 1.4; }
+.doc-page .no-break { break-inside: avoid; }
+@media print {
+  .doc-page .sc-page-break { margin: 0; border: 0; height: 0; }
+  .doc-page .sc-page-break::after { content: none; }
+}
 
 /* The editing kit's colour dialogs (apps/md-editor/kit.js). */
 .md-colour-pair { display: flex; gap: var(--space-2); align-items: center; }

@@ -250,7 +250,7 @@ func str(s string) *string {
 // installed package, a page per site page, and bin, the site's scripts.
 func (s *Server) tree(r *http.Request) *treeEntry {
 	root := &treeEntry{Name: "", Kind: "dir", Title: str(s.Title), Description: str("The " + s.Title + " desktop"), Children: []*treeEntry{}}
-	apps := &treeEntry{Name: "apps", Kind: "dir", Title: str("Applications"), Description: str("Each runs in a window, as a page, and at its own address"), Children: []*treeEntry{}}
+	apps := &treeEntry{Name: "apps", Kind: "dir", Title: str("Applications"), Description: str("Each runs in a window and at its own address"), Children: []*treeEntry{}}
 	for _, a := range s.applets() {
 		url := s.appletPageURL(r, a.Name)
 		apps.Children = append(apps.Children, &treeEntry{Name: a.Name, Kind: "app", Title: str(a.Title), Description: str(a.Description),

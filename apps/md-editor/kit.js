@@ -61,8 +61,9 @@
     /* === The tables ======================================================= */
 
     var FORMATS = [
-        ['bold', 'Bold', 'bold', 'Mod-b'], ['italic', 'Italic', 'italic', 'Mod-i'], ['strike', 'Strike Through', 'strike'],
-        ['code', 'Code', 'code', 'Mod-`'], ['link', 'Link…', 'link', 'Mod-k'],
+        ['bold', 'Bold', 'bold', 'Mod-b'], ['italic', 'Italic', 'italic', 'Mod-i'], ['underline', 'Underline', 'underline', 'Mod-u'], ['strike', 'Strike Through', 'strike'],
+        ['code', 'Code', 'code', 'Mod-`'], ['highlight', 'Highlight', 'yavc-highlight', 'Mod-Shift-h'],
+        ['superscript', 'Superscript', 'yavc-superscript'], ['subscript', 'Subscript', 'yavc-subscript'], ['link', 'Link…', 'link', 'Mod-k'],
         ['bullets', 'Bulleted List', 'list'], ['numbers', 'Numbered List', 'list-numbered'], ['color', 'Text Colour…', 'colour'], ['class', 'Style…', 'tag']
     ];
     /* The classes a stylesheet defines, for the Style dialog. */
@@ -71,6 +72,11 @@
         while ((m = re.exec(css || ''))) { if (!/^(deck|sc|doc|pm|dinah|md|win|btn|menu|notice|form)(-|$)/.test(m[1])) { out[m[1]] = true; } }
         return Object.keys(out).sort();
     }
+    /* The classes the site's page stylesheet (apps/md-engine/page.css)
+       defines for every document, so a person who writes no CSS still has
+       alignment, indenting, a smaller or a larger size, and a block that
+       stays on one page. */
+    var STOCK_CLASSES = ['center', 'right', 'justify', 'indent', 'small', 'lead', 'no-break'];
     var STYLES = [['paragraph', 'Paragraph', 'Mod-0']].concat([1, 2, 3, 4, 5, 6].map(function (n) { return ['h' + n, 'Heading ' + n, 'Mod-' + n]; }));
     var INSERTS = [
         { id: 'insert-checklist', label: 'Checklist', markdown: '- [ ] ' + PLACEHOLDER },
@@ -96,7 +102,9 @@
         ['glyph', 'Glyph…', null],
         ['page', 'Page Link…', null],
         ['anchor', 'Anchor…', null],
-        ['draft-note', 'Note to Self', '{{draft-note}}\n' + PLACEHOLDER + '\n{{/draft-note}}']
+        ['draft-note', 'Note to Self', '{{draft-note}}\n' + PLACEHOLDER + '\n{{/draft-note}}'],
+        ['caption', 'Caption', '{{caption}}\n' + PLACEHOLDER + '\n{{/caption}}'],
+        ['page-break', 'Page Break', '{{page-break}}']
     ].map(function (x) { return { id: 'insert-sc-' + x[0], name: x[0], label: x[1], markdown: x[2], shortcode: true }; });
 
     /* The Markdown an insert item puts in: its example, or for a shortcode
@@ -112,19 +120,25 @@
 
     /* === Formats on the Markdown ========================================= */
 
-    var WRAPS = { bold: '**', italic: '*', strike: '~~', code: '`' };
+    /* The text a format writes around words: what opens and what closes.
+       Underline is the HTML element the page view already reads and writes;
+       the other three are the engine's span shortcodes. */
+    var WRAPS = {
+        bold: ['**', '**'], italic: ['*', '*'], strike: ['~~', '~~'], code: ['`', '`'], underline: ['<u>', '</u>'],
+        highlight: ['{{mark}}', '{{/mark}}'], superscript: ['{{sup}}', '{{/sup}}'], subscript: ['{{sub}}', '{{/sub}}']
+    };
     function textFormat(view, name, ctx) {
         if (!view) { return; }
         var state = view.state, sel = state.selection.main;
         if (WRAPS[name]) {
-            var w = WRAPS[name], text = state.sliceDoc(sel.from, sel.to);
-            var before = state.sliceDoc(Math.max(0, sel.from - w.length), sel.from), after = state.sliceDoc(sel.to, Math.min(state.doc.length, sel.to + w.length));
-            if (text.startsWith(w) && text.endsWith(w) && text.length >= 2 * w.length) {
-                view.dispatch({ changes: { from: sel.from, to: sel.to, insert: text.slice(w.length, text.length - w.length) }, selection: { anchor: sel.from, head: sel.to - 2 * w.length }, userEvent: 'input' });
-            } else if (before === w && after === w) {
-                view.dispatch({ changes: [{ from: sel.from - w.length, to: sel.from }, { from: sel.to, to: sel.to + w.length }], selection: { anchor: sel.from - w.length, head: sel.to - w.length }, userEvent: 'input' });
+            var open = WRAPS[name][0], shut = WRAPS[name][1], text = state.sliceDoc(sel.from, sel.to);
+            var before = state.sliceDoc(Math.max(0, sel.from - open.length), sel.from), after = state.sliceDoc(sel.to, Math.min(state.doc.length, sel.to + shut.length));
+            if (text.length >= open.length + shut.length && text.startsWith(open) && text.endsWith(shut)) {
+                view.dispatch({ changes: { from: sel.from, to: sel.to, insert: text.slice(open.length, text.length - shut.length) }, selection: { anchor: sel.from, head: sel.to - open.length - shut.length }, userEvent: 'input' });
+            } else if (before === open && after === shut) {
+                view.dispatch({ changes: [{ from: sel.from - open.length, to: sel.from }, { from: sel.to, to: sel.to + shut.length }], selection: { anchor: sel.from - open.length, head: sel.to - open.length }, userEvent: 'input' });
             } else {
-                view.dispatch({ changes: { from: sel.from, to: sel.to, insert: w + text + w }, selection: { anchor: sel.from + w.length, head: sel.to + w.length }, userEvent: 'input' });
+                view.dispatch({ changes: { from: sel.from, to: sel.to, insert: open + text + shut }, selection: { anchor: sel.from + open.length, head: sel.to + open.length }, userEvent: 'input' });
             }
             view.focus();
             return;
@@ -249,9 +263,61 @@
             items.push({ id: i.id, label: i.label, run: function () { if (i.run) { i.run(); } else { insertItem(i, ctx); } } });
         });
         out.push({ id: 'insert', label: 'Insert', glyph: 'plus', items: items });
+        out.push(tableCommand(ctx));
         out.push(boxCommand(ctx));
         return out;
     }
+    /* Table: a new table, and, while the cursor is in one on the page, rows
+       and columns added and deleted there. Merged cells, which a Markdown
+       table cannot hold, are not offered (docs/docs-design.md, decision 9).
+       opts (hidden, disabled) apply to the command and every row, as
+       boxCommand's do. */
+    var TABLE_OPS = [
+        ['row-above', 'Insert Row Above'], ['row-below', 'Insert Row Below'], ['column-before', 'Insert Column Before'], ['column-after', 'Insert Column After'],
+        ['delete-row', 'Delete Row'], ['delete-column', 'Delete Column'], ['delete-table', 'Delete Table']
+    ];
+    function tableCommand(ctx, opts) {
+        var newTable = INSERTS.find(function (i) { return i.id === 'insert-table'; });
+        function pageHere() { var p = ctx.page && ctx.page(); return p && ctx.onPage && ctx.onPage() ? p : null; }
+        function row(item, offered) {
+            var r = Object.assign({}, item, opts || {});
+            if (offered) {
+                // A row that changes a table is there only where the cursor is in one.
+                r.hidden = function () { return !!(opts && opts.hidden && opts.hidden()) || !(pageHere() && pageHere().inTable && pageHere().inTable()); };
+                r.disabled = function () { var p = pageHere(); return !!(opts && opts.disabled && opts.disabled()) || !(p && p.can && p.can(item.op)); };
+            }
+            return r;
+        }
+        var items = [row({ id: 'table-new', label: 'Insert Table', run: function () { insertItem(newTable, ctx); } }, false)];
+        TABLE_OPS.forEach(function (t) {
+            items.push(row({ id: 'table-' + t[0], label: t[1], op: t[0], run: function () { var p = pageHere(); if (p) { p.run(t[0]); } } }, true));
+        });
+        return Object.assign({ id: 'table', label: 'Table', glyph: 'table', items: items }, opts || {});
+    }
+
+    /* The words in a document's text, for the status bar. The front matter,
+       the shortcodes' own tags and arguments, Markdown's marks and the
+       addresses of links and pictures are not words; what words are is the
+       browser's, through Intl.Segmenter (ECMA-402), which also finds them
+       in text written without spaces. Where a browser lacks it, words are
+       runs of letters and digits. */
+    var segmenter = typeof Intl !== 'undefined' && Intl.Segmenter ? new Intl.Segmenter(undefined, { granularity: 'word' }) : null;
+    function wordCount(text) {
+        var s = String(text || '').replace(/^---\r?\n[\s\S]*?\r?\n---[ \t]*(\r?\n|$)/, '')
+            .replace(/\{\{\/?[a-z][a-z0-9-]*(?::(?:[^}]|\}(?!\}))*)?\}\}/g, ' ')
+            .replace(/\]\([^)\s]*(?:\s+"[^"]*")?\)/g, ']')
+            .replace(/\bhttps?:\/\/\S+/g, ' ');
+        var n = 0;
+        if (segmenter) {
+            for (var seg of segmenter.segment(s)) { if (seg.isWordLike) { n++; } }
+            return n;
+        }
+        return (s.match(/[\p{L}\p{N}]+/gu) || []).length;
+    }
+    /* Minutes to read the words, at the 238 words a minute that Brysbaert's
+       2019 review found for adults silently reading non-fiction; never less
+       than one minute for any words at all. */
+    function readingMinutes(words) { return words ? Math.max(1, Math.round(words / 238)) : 0; }
     /* Box: the selection, or the line the cursor is on, wrapped in a box,
        a container shortcode (docs/page-view-design.md). On the page the
        selected blocks go into the box; in the text the selected lines go
@@ -276,7 +342,10 @@
         view.focus();
     }
     /* The ids a toolbar or menu lists, in the kit's order. */
-    var MENU = { format: ['style', '-', 'bold', 'italic', 'strike', 'code', 'link', 'color', 'class', '-', 'bullets', 'numbers', '-', 'insert', 'box'], toolbar: ['style', 'bold', 'italic', 'strike', 'code', 'link', 'color', 'class', 'bullets', 'numbers', 'insert', 'box'] };
+    var MENU = {
+        format: ['style', '-', 'bold', 'italic', 'underline', 'strike', 'code', '-', 'highlight', 'superscript', 'subscript', '-', 'link', 'color', 'class', '-', 'bullets', 'numbers', '-', 'insert', 'table', 'box'],
+        toolbar: ['style', 'bold', 'italic', 'underline', 'strike', 'code', 'link', 'color', 'class', 'bullets', 'numbers', 'insert', 'table', 'box']
+    };
 
     /* The / menu's items, for the page host's inserts(): the shortcodes,
        and the host's own after them. */
@@ -367,10 +436,14 @@
     }
     /* A class of the document's stylesheet: one of those it defines, or
        any name; '' takes the class off; null is Cancel. */
+    function classGroup(label, list) {
+        return list.length ? '<div class="form-group"><span class="form-label">' + label + '</span><div class="md-swatches" role="group" aria-label="' + label + '">' +
+            list.map(function (c) { return '<button type="button" class="btn md-swatch" data-swatch="' + esc(c) + '">' + esc(c) + '</button>'; }).join('') + '</div></div>' : '';
+    }
     function askClass(names) {
-        var id = 'md-dlg-field-' + (dlgCount + 1);
-        var html = (names && names.length ? '<div class="form-group"><span class="form-label">The Stylesheet\'s Classes</span><div class="md-swatches" role="group" aria-label="Classes">' +
-            names.map(function (c) { return '<button type="button" class="btn md-swatch" data-swatch="' + esc(c) + '">' + esc(c) + '</button>'; }).join('') + '</div></div>' : '<p class="form-help">The deck has no stylesheet classes yet. A {{style}} block defines them, as .callout { … }.</p>') +
+        var id = 'md-dlg-field-' + (dlgCount + 1), own = names || [];
+        var html = classGroup('The Stylesheet\'s Classes', own) + classGroup('Provided by the Site', STOCK_CLASSES.filter(function (c) { return own.indexOf(c) < 0; })) +
+            '<p class="form-help">A {{style}} block defines more, as .callout { … }.</p>' +
             '<div class="form-group"><label class="form-label" for="' + id + '">Any Class</label><input class="form-input" id="' + id + '" autocomplete="off" spellcheck="false" placeholder="callout; empty takes the class off"></div>';
         return dialog('Style the Words', html, [{ id: 'cancel', label: 'Cancel' }, { id: 'ok', label: 'Use This Style', primary: true }], wireSwatches).then(function (r) {
             if (r.value && r.value.indexOf('swatch:') === 0) { return r.value.slice(7); }
@@ -827,7 +900,29 @@
             if (!place.isConnected) { return; }
             place.replaceChildren(window.yavcHTML.fragment(out.svg, { diagram: true }));
             place.classList.add('ed-diagram');
-        }).catch(function (err) { place.title = 'The diagram could not be drawn: ' + (err && err.message || err); });
+        }).catch(function (err) { diagramFailed(place, err); });
+    }
+    /* A diagram that could not be drawn at all says so in the site's
+       notice above it, as the house rules ask of every error. */
+    function diagramFailed(place, err) {
+        if (!place.isConnected) { return; }
+        var ref = place.firstElementChild;
+        if (!ref) { ref = document.createElement('span'); place.appendChild(ref); }
+        window.yavcUtil.notice(ref, 'The diagram could not be drawn: ' + ((err && err.message) || err), 'problem');
+    }
+    /* A D2 diagram drawn into its place by the D2 engine in its worker
+       (apps/diagram-kit/d2.js; docs/diagrams-design.md), loaded the first
+       time a page has one, since the engine is large. */
+    var d2Ready = null;
+    function drawD2(place, source) {
+        if (!d2Ready) {
+            d2Ready = loadScript(window.yavcUtil.versioned('/applets/diagram-kit/d2.js')).then(function () { return window.yavcD2Engine; });
+            d2Ready.catch(function () { d2Ready = null; });
+        }
+        /* The engine reports a fault in the diagram itself; what reaches
+           this catch is the engine failing to load. */
+        d2Ready.then(function (engine) { return engine.draw(place, source); })
+            .catch(function () { diagramFailed(place, 'the diagram engine did not load. Reloading the page tries again.'); });
     }
     /* Draws the engine's preview blocks into an element. A block whose
        HTML is the same as one already there keeps its element, with its
@@ -865,6 +960,7 @@
                 (f.diagrams || []).forEach(function (d) {
                     var place = f.el.querySelector('[data-preview-diagram="' + CSS.escape(d.id) + '"]');
                     if (place && d.language === 'mermaid') { drawDiagram(place, d.source); }
+                    else if (place && d.language === 'd2') { drawD2(place, d.source); }
                 });
             }
             if (opts.applets !== false && window.pudlApplets && window.pudlApplets.boot && f.el.querySelector('[data-applet]')) { try { window.pudlApplets.boot(f.el); } catch (err) { } }
@@ -987,7 +1083,8 @@
     window.yavcMdEditor = {
         here: HERE, stamp: STAMP, placeholder: PLACEHOLDER,
         libs: libs, pageView: pageView, mermaid: mermaid, loadScript: loadScript,
-        FORMATS: FORMATS, STYLES: STYLES, INSERTS: INSERTS, SHORTCODES: SHORTCODES, MENU: MENU,
+        FORMATS: FORMATS, STYLES: STYLES, INSERTS: INSERTS, SHORTCODES: SHORTCODES, MENU: MENU, STOCK_CLASSES: STOCK_CLASSES,
+        tableCommand: tableCommand, wordCount: wordCount, readingMinutes: readingMinutes,
         commands: commands, apply: apply, classesOf: classesOf, insertItem: insertItem, inserts: inserts, textFormat: textFormat, textInsert: textInsert,
         askText: askText, askFields: askFields, askChoice: askChoice, askProperties: askProperties, STOCK: STOCK, askColour: askColour, askColours: askColours, askClass: askClass,
         askFigure: askFigure, editBlock: editBlock, drawBlocks: drawBlocks, drawDiagram: drawDiagram, pictureFor: pictureFor, askShortcode: askShortcode, FORMS: FORMS, boxCommand: boxCommand, BOXES: BOXES, loadImages: loadImages, parseFigure: parseFigure, buildFigure: buildFigure, parseShortcode: parseShortcode,

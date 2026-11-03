@@ -137,12 +137,24 @@ Each target ran for 30 seconds on 2026-11-02, after the last change to its packa
 
 FuzzSerializeTyped found seven failures, all fixed; their inputs are kept as seeds under `internal/pageview/testdata/fuzz`. Run the fuzzers with `-fuzzminimizetime=5s`, because with the default of 60 seconds the minimising of a failure can take the whole run and look like a hang.
 
+## The D2 engine (2026-11-03)
+
+The D2 engine (docs/diagrams-design.md, milestone D1) brought a third-party engine into the browser, so it was built with these guards, each with a test. They are verified in Chromium against a local build and not yet deployed.
+
+- **`eval` is allowed in one worker only.** D2 runs its layout's JavaScript through `eval`, which the page's policy refuses. The engine's worker is served with a policy of its own that allows `eval` and WebAssembly and can contact no host, and `TestEngineWorkerPolicy` keeps the page's policy from ever allowing `eval`. A browser check showed a worker under the page's policy is refused `eval`.
+- **Icons from other hosts are never drawn.** The engine removes every icon that is not a data address from the compiled diagram before drawing it, so a diagram cannot make a reader's browser contact another host. An image shape whose picture was removed gets a dashed frame, because D2's renderer crashed on an image shape with no picture.
+- **Imports read only the files given.** The compile reads from an in-memory map containing the diagram and the files the page passes, and nothing else.
+- **Limits.** A source over 256 KB and a diagram over 2,000 shapes are refused before layout, and a request that runs over 20 seconds stops its worker.
+- **A diagram's own settings win.** D2 lets a caller's options override a file's `d2-config`, which would have ignored a file's own theme and layout engine; the engine passes the page's choices only where the file sets none.
+- **ELK is refused in the browser,** because D2 provides it there only through a private setup in its own worker (open question 7 of the design).
+- **Dependencies.** Adding D2 required `golang.org/x/image` 0.20.0, which had nine known vulnerabilities in code this site does not call; it was raised to 0.45.0, and the scan is clean. The rule `engine-licences` fails the build when a module compiled into the engine has no notice in `apps/diagram-kit/LICENSES.md`.
+
 ## Items for other projects
 
 These problems belong to PUDL or to applets that are maintained elsewhere, so they were reported instead of patched here.
 
 - The PUDL menu bar measures its items once and does not re-measure when content grows, which is why the top bar can cut off a menu.
 - PUDL's confirm hook should pass the input being confirmed, so the permission dialog would not need to wrap the applet API to capture it.
-- yavc.app moved from PUDL 0.96.7 to 0.97.7 on 2026-11-03. The one change it needed was a `title` on each place in the file browser's path bar, which 0.97.7 keeps to one line and shortens.
+- yavc.app moved from PUDL 0.96.7 to 0.97.7 on 2026-11-03. The one change it needed was a `title` on each place in the file browser's path bar, which 0.97.7 keeps to one line and shortens. PUDL 0.97.8 then fixed the gap 0.97.7 left after a short place such as "/" or "~" (reported as paulmooreparks/pudl#30), so nothing here overrides it.
 - The sight-reader applet uses glyphs and a colour outside PUDL's set, the sudoku applet uses a hard-coded colour, and the dice applet has no minimum width.
 - The barcode scanner applet uses `confirm()` and the host kit uses `alert()`. Both should use PUDL dialogs.

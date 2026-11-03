@@ -42,6 +42,8 @@ func newSite(t testing.TB, domain string) *Server {
 	write(t, apps, "dice/picture.png", "\x89PNG\r\n\x1a\nnot really")
 	write(t, apps, "shared/lib.js", "var shared = 1;\n")
 	write(t, apps, "shared/engine.wasm", "\x00asm"+strings.Repeat("\x00", 2000))
+	write(t, apps, "diagram-kit/worker.js", "self.onmessage = null;\n")
+	write(t, apps, "diagram-kit/d2.js", "var d2 = 1;\n")
 	write(t, dir, "pages/hello.md", "# Hello\n\nSessions last {{retention}}.\n")
 	write(t, dir, "home/README.md", "Read me.\r\n")
 	write(t, dir, "home/Documents/.keep", "")

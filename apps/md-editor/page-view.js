@@ -180,7 +180,14 @@ var schemaCache = null;
            drawn as u-name as the engine draws it. */
         class: { attrs: { value: { default: '' }, name: { default: 'class' } },
           parseDOM: [{ tag: 'span[data-class]', getAttrs: function (d) { return { value: d.getAttribute('data-class') }; } }],
-          toDOM: function (m) { var c = String(m.attrs.value).replace(/[^A-Za-z0-9-]/g, ''); return ['span', { class: c, 'data-class': c }, 0]; } }
+          toDOM: function (m) { var c = String(m.attrs.value).replace(/[^A-Za-z0-9-]/g, ''); return ['span', { class: c, 'data-class': c }, 0]; } },
+        /* Highlighted, raised and lowered words, {{mark}}…{{/mark}},
+           {{sup}}…{{/sup}} and {{sub}}…{{/sub}}: each the HTML element of its
+           name, as the engine draws it. Raised and lowered exclude each
+           other, so words are one or the other. */
+        mark: { parseDOM: [{ tag: 'mark' }], toDOM: function () { return ['mark', { class: 'sc-mark' }, 0]; } },
+        sup: { excludes: 'sup sub', parseDOM: [{ tag: 'sup' }], toDOM: function () { return ['sup', 0]; } },
+        sub: { excludes: 'sup sub', parseDOM: [{ tag: 'sub' }], toDOM: function () { return ['sub', 0]; } }
       }
     });
     return schemaCache;
@@ -1354,6 +1361,9 @@ var schemaCache = null;
         case 'italic': cmd = PM.toggleMark(s.marks.em); break;
         case 'code': cmd = PM.toggleMark(s.marks.code); break;
         case 'underline': cmd = PM.toggleMark(s.marks.underline); break;
+        case 'highlight': cmd = PM.toggleMark(s.marks.mark); break;
+        case 'superscript': cmd = PM.toggleMark(s.marks.sup); break;
+        case 'subscript': cmd = PM.toggleMark(s.marks.sub); break;
         case 'strike': cmd = PM.toggleMark(s.marks.strike); break;
         case 'h1': case 'h2': case 'h3': case 'h4': cmd = PM.setBlockType(n.heading, { level: +name.charAt(1) }); break;
         case 'paragraph': cmd = PM.setBlockType(n.paragraph); break;
@@ -1459,7 +1469,7 @@ var schemaCache = null;
       marks: function () {
         if (!view) return {};
         var st = view.state, s = st.schema, out = {}, $f = st.selection.$from;
-        ['strong', 'em', 'code', 'underline', 'strike', 'link', 'color', 'class'].forEach(function (m) {
+        ['strong', 'em', 'code', 'underline', 'strike', 'link', 'color', 'class', 'mark', 'sup', 'sub'].forEach(function (m) {
           var type = s.marks[m];
           out[m] = st.selection.empty ? !!type.isInSet(st.storedMarks || $f.marks()) : st.doc.rangeHasMark(st.selection.from, st.selection.to, type);
         });
