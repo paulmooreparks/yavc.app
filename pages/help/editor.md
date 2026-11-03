@@ -2,6 +2,8 @@
 
 The [Editor](/editor) edits text and Markdown files. Your own files under `~` can be changed, and the site's pages open read-only. For a Markdown file it also draws the page as it will look and lets you edit it there. It runs in a window on the desktop and on its own at `editor.yavc.app`.
 
+At `docs.yavc.app` the same Editor starts for writing documents. File, New there makes a document named like `untitled-1.docs.md`, and a Markdown file opens on its page. Which view a Markdown file opens in at Docs is remembered apart from the Editor's own choice. Files are kept per address, so a document saved at `docs.yavc.app` is not seen at `editor.yavc.app`.
+
 ![The Editor on the desktop](/static/shots/desktop.jpg)
 
 ## Files and tabs

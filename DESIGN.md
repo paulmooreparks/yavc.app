@@ -56,6 +56,8 @@ Each decision is dated and numbered so that later documents and cards can refer 
 
 `yavc.app` serves the desktop, which is windowed only (decision 26). A window's content comes from `/win/{key}`. `yavc.app/{slug}` opens the desktop with that application's window, or draws a site page as a page of its own. `{slug}.yavc.app` serves the same application standalone, and it is the application's page form. The engine answers both from one deployment: a wildcard DNS record points every subdomain at it, and the engine reads the host header to choose the standalone layout for the application whose slug matches. A subdomain whose slug matches no application redirects to the desktop.
 
+A few subdomains are aliases that serve an application started another way, listed in the engine's `hostAliases`. `docs.yavc.app` is the only one so far. It serves the Editor standalone under the title Docs and marks the Editor's mount so that it starts for documents (docs/docs-design.md, decision 17).
+
 The PUDL applet definition's `page` field for each application is its subdomain address, so Open as a page from a window goes to `{slug}.yavc.app`, and `ownsUrl` is true only there.
 
 ## State and identity

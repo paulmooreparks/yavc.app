@@ -1,9 +1,9 @@
 package preview
 
 import (
+	"runtime"
 	"strings"
 	"testing"
-	"time"
 )
 
 func kinds(blocks []Block) []string {
@@ -122,8 +122,13 @@ func BenchmarkRender1600(b *testing.B) {
 
 // Drawing a document takes time in proportion to its length: four times
 // the sections take well under five times as long, as BenchmarkRender400
-// and BenchmarkRender1600 measure at length. Each size is drawn five times
-// and the fastest kept, so a busy machine does not decide it.
+// and BenchmarkRender1600 measure at length. Each size is timed by Go's
+// benchmark runner, averaged over as many renders as fit in its second,
+// and the faster of two such averages kept. Five single renders were not
+// enough: in CI the other packages' tests run on the same cores at the same
+// time, and a burst of their work landing on the large render made a
+// linear renderer look 5.2 times slower at four times the size (see
+// docs/review.md).
 func TestRenderIsLinear(t *testing.T) {
 	if testing.Short() {
 		t.Skip("measures time")
@@ -131,10 +136,14 @@ func TestRenderIsLinear(t *testing.T) {
 	fastest := func(n int) float64 {
 		text := sections(n)
 		best := 0.0
-		for range 5 {
-			start := time.Now()
-			Render(text)
-			if ns := float64(time.Since(start)); best == 0 || ns < best {
+		for range 2 {
+			runtime.GC()
+			r := testing.Benchmark(func(b *testing.B) {
+				for b.Loop() {
+					Render(text)
+				}
+			})
+			if ns := float64(r.NsPerOp()); best == 0 || ns < best {
 				best = ns
 			}
 		}
