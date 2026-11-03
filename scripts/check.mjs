@@ -109,6 +109,24 @@ rules.push({ id: 'glyph-defined', run() {
   }
 } });
 
+// The editing kit's FORMATS table gives each format's glyph as the third
+// entry of its row, ['bold', 'Bold', 'bold', 'Mod-b'], which the rule above
+// does not read, so a format with a glyph nobody defined drew a blank square
+// in every menu and toolbar (found when Highlight, Superscript and Subscript
+// were added, 2026-11-03).
+rules.push({ id: 'format-glyph-defined', run() {
+  const f = 'apps/md-editor/kit.js';
+  const src = text.get(f);
+  if (!src) return;
+  const block = /var FORMATS = \[([\s\S]*?)\n    \];/.exec(src);
+  if (!block) { report('format-glyph-defined', f, null, 'the FORMATS table was not found, so its glyphs were not checked'); return; }
+  const defined = rootGlyphs();
+  const from = src.indexOf(block[1]);
+  each(/\['[a-z]+',\s*'(?:[^'\\]|\\.)*',\s*'([a-z0-9-]+)'/g, block[1], (m) => {
+    if (!defined.has(m[1])) report('format-glyph-defined', f, from + m.index, `the format glyph "${m[1]}" is neither PUDL's nor defined on :root in a stylesheet`);
+  });
+} });
+
 // The site's own glyphs are named yavc-*, so none shadows a glyph PUDL
 // has or adds later (PUDL review, 2026-11-03). The installed packages
 // under applets/ keep their own names.

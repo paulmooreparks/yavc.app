@@ -25,9 +25,15 @@ View, Open Markdown As chooses the view a Markdown file opens in, and each tab r
 
 ## Formatting
 
-The Format menu and the toolbar offer Bold (Ctrl+B), Italic (Ctrl+I), Strike Through, Code, Text Colour, Style, Bulleted List and Numbered List, and Paragraph Style, which is Paragraph (Ctrl+0) or Heading 1 to 6 (Ctrl+1 to Ctrl+6). In Text view a format wraps the selection in its Markdown or takes it off again, and a heading or a list marks each selected line. In Visual view the page is formatted directly.
+The Format menu and the toolbar offer Bold (Ctrl+B), Italic (Ctrl+I), Underline (Ctrl+U), Strike Through, Code, Highlight (Ctrl+Shift+H), Superscript, Subscript, Text Colour, Style, Bulleted List and Numbered List, and Paragraph Style, which is Paragraph (Ctrl+0) or Heading 1 to 6 (Ctrl+1 to Ctrl+6). In Text view a format wraps the selection in its Markdown or takes it off again, and a heading or a list marks each selected line. In Visual view the page is formatted directly.
 
-Text Colour wraps the selected words in `{{color:…}}…{{/color}}` with one of the site's colours (ink, muted, accent, danger, warn or positive) or any CSS colour. Style wraps them in `{{class:…}}…{{/class}}` with a class from a `{{style}}` block in the document. Both stay editable as rich text in Visual view.
+Underline is written `<u>…</u>`, and Highlight, Superscript and Subscript are written `{{mark}}…{{/mark}}`, `{{sup}}…{{/sup}}` and `{{sub}}…{{/sub}}`. Superscript and Subscript replace each other, since words are raised or lowered and never both.
+
+Text Colour wraps the selected words in `{{color:…}}…{{/color}}` with one of the site's colours (ink, muted, accent, danger, warn or positive) or any CSS colour. Style wraps them in `{{class:…}}…{{/class}}` with a class: one of those the site provides for every document (`center`, `right`, `justify`, `indent`, `small`, `lead` and `no-break`), one from a `{{style}}` block in the document, or any name. Both stay editable as rich text in Visual view.
+
+## Tables
+
+Insert, Table (also under Format and in the right-click menu) opens a submenu. Insert Table adds a small table. While the cursor is in a table on the page, the same submenu also offers Insert Row Above and Below, Insert Column Before and After, Delete Row, Delete Column and Delete Table. Tab in the last cell adds a row. A Markdown table has one heading row and no merged cells, so the page does not offer them.
 
 ## Inserting
 
@@ -50,6 +56,10 @@ A shortcode is written `{{name:args}}`, or `{{name}}` and `{{/name}}` around som
 - `{{kbd:Ctrl+S}}`, `{{status:green Done}}`, `{{glyph:check}}`, `{{toc}}`, `{{page:author}}` and `{{anchor:name}}` draw keys, a status label, a glyph, the contents, a link to a page and a place to link to.
 
 A shortcode written wrongly shows a marked problem in its place, and hovering over it gives the reason.
+
+## Words
+
+The status bar shows the number of words in a Markdown file, and for the text you have selected in Text view, as in "12 of 340 words". Pointing at it shows about how many minutes the document takes to read. The front matter, the shortcodes' own tags and the addresses of links and pictures are not counted.
 
 ## Finding and moving around
 

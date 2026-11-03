@@ -63,6 +63,19 @@ func TestShortcodes(t *testing.T) {
 		{"{{column}}", `means nothing outside one`},
 		{"{{slide:layout=title background=#123 reveal=steps}}", `<div class="sc-slide" hidden data-layout="title" data-background="#123" data-reveal="steps"></div>`},
 		{"{{notes}}\nSay this.\n{{/notes}}", `<aside class="sc-notes"><p class="sc-notes-label">Speaker Notes</p>`},
+		// The marks a document needs: each closes with its own element, and
+		// Markdown works inside them.
+		{"A {{mark}}key **idea**{{/mark}} here.", `A <mark class="sc-mark">key <strong>idea</strong></mark> here.`},
+		{"10{{sup}}3{{/sup}} and H{{sub}}2{{/sub}}O", `10<sup>3</sup> and H<sub>2</sub>O`},
+		{"{{mark}}outer {{sup}}inner{{/sup}} more{{/mark}}", `<mark class="sc-mark">outer <sup>inner</sup> more</mark>`},
+		{"- {{sub}}an item{{/sub}}", `<li><sub>an item</sub></li>`},
+		{"Unclosed {{mark}}words.", `needs {{/mark}}`},
+		{"Stray {{/sup}} closer.", `which is not open`},
+		{"{{page-break}}", `<div class="sc-page-break" role="separator" aria-label="Page break"></div>`},
+		{"{{caption}}\nSales by *quarter*.\n{{/caption}}", `<div class="sc-caption">`},
+		{"{{caption}}\nSales by *quarter*.\n{{/caption}}", `<em>quarter</em>`},
+		// The closer of a colour or a class is still a span.
+		{"{{colour:tomato}}x{{/colour}} {{mark}}y{{/mark}}", `<span class="sc-colour" style="color:tomato">x</span> <mark class="sc-mark">y</mark>`},
 	}
 	for _, c := range cases {
 		got := render(t, c.md)

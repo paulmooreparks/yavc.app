@@ -367,6 +367,8 @@ func (p parser) walk(n ast.Node, marks []Mark, out *[]*Node) error {
 				markType = "color"
 			case "class":
 				markType = "class"
+			case "mark", "sup", "sub":
+				markType = name
 			default:
 				return ErrNotEditable
 			}
@@ -375,6 +377,9 @@ func (p parser) walk(n ast.Node, marks []Mark, out *[]*Node) error {
 					return ErrNotEditable
 				}
 				marks = marks[:len(marks)-1]
+			} else if markType == "mark" || markType == "sup" || markType == "sub" {
+				// These take no arguments, so there is no spelling to keep.
+				marks = withMark(marks, Mark{Type: markType})
 			} else {
 				// The spelling used is kept, so the text writes back as it was.
 				marks = withMark(marks, Mark{Type: markType, Attrs: map[string]any{"value": value, "name": name}})
@@ -650,7 +655,7 @@ func intAttr(n *Node, key string, def int) int {
 }
 
 // markOrder is the order marks are opened in, outermost first.
-var markOrder = []string{"class", "color", "link", "strong", "em", "underline", "strike", "code"}
+var markOrder = []string{"class", "color", "mark", "sup", "sub", "link", "strong", "em", "underline", "strike", "code"}
 
 func delimiters(m Mark) (string, string) {
 	switch m.Type {
@@ -670,6 +675,8 @@ func delimiters(m Mark) (string, string) {
 	case "class":
 		v, _ := m.Attrs["value"].(string)
 		return "{{class:" + strings.ReplaceAll(strings.TrimSpace(v), "}", "") + "}}", "{{/class}}"
+	case "mark", "sup", "sub":
+		return "{{" + m.Type + "}}", "{{/" + m.Type + "}}"
 	case "strike":
 		return "~~", "~~"
 	case "link":

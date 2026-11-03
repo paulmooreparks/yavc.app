@@ -16,7 +16,7 @@ Three gaps matter most. The Editor does not apply a document's `{{style}}` CSS a
 
 2. **Document view is a fifth view, and the rich editing goes into the page view every view shares** (2026-11-03). Visual stays what decision 15 of DESIGN.md made it, the page drawn for reading and wrapped to the pane. Document view is the same page view laid out as sheets of a page size with margins, with a header and a footer on each, a page count in the status bar, and zoom. Everything that is not about pages, which is most of what a word processor does (the Table menu, the styles pane, underline and highlight, footnotes, captions, the outline), is added to the page view itself, so Visual, Split and Document view all gain it, for every Markdown file. Only paging is Document view's own.
 
-3. **What Markdown cannot say, a shortcode says, and what a shortcode would say badly, a style says** (2026-11-03). Markdown has no underline, highlight, superscript, subscript, alignment, page break, footnote reference beyond the GFM extension, or font. The rule for filling that in is the one Slides took with layouts (docs/slides-design.md, decision 4): add the few things every document needs as shortcodes that still read as text, and put everything else behind named styles, so that a document never says "12 point Garamond, centred" in its text. The shortcodes added are span ones, `{{u}}`, `{{mark}}`, `{{sup}}` and `{{sub}}`, drawn as the HTML elements of those names so an export can map them, and block ones, `{{page-break}}` and `{{caption}}`. Alignment, indentation, spacing, fonts, sizes and colours beyond the six state colours are styles: a class in the document's stylesheet, applied with the existing `{{class}}`. A base stylesheet ships the common ones (`center`, `right`, `justify`, `indent`, `small`, `lead`, `no-break`), so a person who never writes CSS still has them under Format, Style. Direct font and size controls on a run of words, as Word has, are left out on purpose, as dragging boxes was left out of Slides.
+3. **What Markdown cannot say, a shortcode says, and what a shortcode would say badly, a style says** (2026-11-03). Markdown has no underline, highlight, superscript, subscript, alignment, page break, footnote reference beyond the GFM extension, or font. The rule for filling that in is the one Slides took with layouts (docs/slides-design.md, decision 4): add the few things every document needs as shortcodes that still read as text, and put everything else behind named styles, so that a document never says "12 point Garamond, centred" in its text. The shortcodes added are span ones, `{{mark}}`, `{{sup}}` and `{{sub}}`, drawn as the HTML elements of those names so an export can map them, a block one, `{{page-break}}`, and a container, `{{caption}}`, whose body is rich text. Underline is not a shortcode: the page view already reads and writes the HTML element `<u>`, so it stays that (amended while building milestone 1, since a second spelling would have split documents in two). Alignment, indentation, spacing, fonts, sizes and colours beyond the six state colours are styles: a class in the document's stylesheet, applied with the existing `{{class}}`. A base stylesheet ships the common ones (`center`, `right`, `justify`, `indent`, `small`, `lead`, `no-break`), so a person who never writes CSS still has them under Format, Style. Direct font and size controls on a run of words, as Word has, are left out on purpose, as dragging boxes was left out of Slides.
 
 4. **A document's look is a stylesheet in three layers, and the Editor applies it at last** (2026-11-03). The layers are those of Slides' decision 17, with the same mechanics moved into the editing kit so both applications use one implementation (the `one-shared-implementation` rule): a theme, which is a stock CSS file of the site chosen by the front matter's `theme` line (`plain`, which follows the site's own look, `manuscript`, `report` and `letter` to begin with); a CSS file of the person's from the front matter's `stylesheet` line, for styles shared across documents; and `{{style}}` blocks in the document itself. All three are scoped with `@scope` to the pages of that one document, so two documents open in two tabs never style each other or the Editor, and they apply in Visual, Split, Preview and Document view, in print and in the exports. The base stylesheet defines the tokens a theme and a document set, `--doc-font`, `--doc-font-heading`, `--doc-size`, `--doc-leading`, `--doc-ink`, `--doc-muted`, `--doc-accent`, `--doc-rule` and `--doc-page`, which every element on the page reads, so a theme or a document restyles a whole document by setting a few of them; the page's existing `--dinah-*` tokens become aliases of these. Document, Typography… is the quick path, as Colours… is in Slides: it offers the body and heading fonts, the size and the line spacing, and writes the front matter's `font`, `heading-font`, `size` and `spacing` lines, which the base stylesheet reads into the tokens. Fonts are the reader's machine's or PUDL's own; no page ever loads a font from another host (DESIGN.md, decision 6), and uploading a font file of one's own waits for a home on the server, as videos do.
 
@@ -82,10 +82,13 @@ h1 { page-break-before: always; }
 The suffix is `.docs.md`, and the Editor opens it in Document view.
 {{/decision}}
 
-A sentence with a footnote[^1] and {{u}}underlined{{/u}} words, {{mark}}highlighted{{/mark}} words and H{{sub}}2{{/sub}}O.
+A sentence with a footnote[^1] and <u>underlined</u> words, {{mark}}highlighted{{/mark}} words and H{{sub}}2{{/sub}}O.
 
 {{figure:~/Pictures/chart.png alt="Sales by quarter" width=80%}}
-{{caption}}Sales by quarter, 2026.{{/caption}}
+
+{{caption}}
+Sales by quarter, 2026.
+{{/caption}}
 
 See {{ref:sales}} on the next page.
 
@@ -130,6 +133,27 @@ Dragging boxes to a point on the page, text boxes and floating shapes have no re
 6. **Scholarly and review.** Footnotes in the page view, numbered captions and `{{ref}}`, heading numbering, and CriticMarkup review marks with Accept and Reject.
 
 Each milestone ends with the checks in `scripts/check.sh`, the engine's round-trip tests holding an untouched block to byte-for-byte output (docs/page-view-design.md), a new rule or test for anything that broke on the way, and a note in docs/review.md.
+
+## Progress
+
+Milestone 1 is being built in two pull requests, and the first holds everything that does not touch how a document's CSS is contained.
+
+The first pull request (2026-11-03) added these.
+
+- The shortcodes `mark`, `sup`, `sub`, `page-break` and `caption`, with page view marks for the first three, tested to write back byte for byte and fuzzed
+- Underline (Ctrl+U), Highlight (Ctrl+Shift+H), Superscript and Subscript in the Format menu and keys of the Editor and Slides, working on the page and in the Markdown text, with CodeMirror's own Ctrl+U removed so that it cannot shadow Underline
+- A Table menu under Insert and Format and in the right-click menu, with Insert Table everywhere and the row and column commands only while the cursor is in a table
+- The page's tokens (`--doc-font`, `--doc-font-heading`, `--doc-size`, `--doc-leading`, `--doc-ink`, `--doc-muted`, `--doc-accent`, `--doc-rule` and `--doc-page`), with the existing `--dinah-*` tokens mapped onto them
+- The stock classes `center`, `right`, `justify`, `indent`, `small`, `lead` and `no-break`, listed by Format, Style
+- A word count with the reading time in the Editor's status bar, which also counts the selection
+- A rule in `scripts/check.mjs` that reads the kit's FORMATS table for glyphs nobody defined
+
+The rest of milestone 1 waits for the following reasons.
+
+- Quotes as rich blocks wait because a quote's lazy continuation lines make byte-for-byte writing back the hard part, so they go with their own round-trip tests and a second reader.
+- The shared and contained application of a document's `{{style}}` CSS in the Editor, with Slides moved onto it (decisions 4 and 5), waits because containment is where a mistake looks fine in testing and leaves a hole.
+- The styles and stylesheet panes with a CSS mode wait for a rebuild of the CodeMirror bundle, and the Outline tab waits with them.
+- Table column alignment waits because the engine cannot yet represent it: the page view treats a table with any alignment as source, so supporting it means reading and writing GFM's alignment row in `internal/pageview` as well as a cell attribute in the page.
 
 ## Open questions
 
