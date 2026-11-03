@@ -1,6 +1,6 @@
 /* ==========================================================================
    PUDL, the Pleasantly Usable Design Language (pronounced "puddle").
-   Version 0.96.7.
+   Version 0.97.7.
 
    PUDL gives every affordance one visual representation, so that somebody
    who has learned it once can use any application built with it on sight.
@@ -519,6 +519,12 @@
 }
 
 :root[data-theme="dark"] { color-scheme: dark; }
+/* A destructive button's words at rest, in the dark theme, lean nearly
+   half way to the text colour (0.97.5), so they keep 4.5:1 against the
+   lightest of every skin's raised fill under them in every palette; the
+   lighter red alone falls below it. The rule outranks a skin's own, which
+   still sets the light theme's. */
+:root[data-theme="dark"], :root [data-theme="dark"] { --danger-rest-fg: color-mix(in srgb, var(--danger) 55%, var(--text)); }
 :root[data-theme="light"] { color-scheme: light; }
 
 * { box-sizing: border-box; }
@@ -854,9 +860,11 @@ table, input, select, textarea, time, data, output, code, kbd, samp, .num,
   color: color-mix(in srgb, var(--text) 80%, var(--surface-alt));
 }
 .menubar-pin > span:not(.glyph) { overflow: hidden; text-overflow: ellipsis; }
-.menubar-pin img, .menubar-pin .glyph, .menubar-panel .menubar-icon { flex: none; width: 16px; height: 16px; }
-.menubar-panel .menubar-icon { display: inline-flex; }
-.menubar-panel .menubar-icon > * { width: 100%; height: 100%; }
+.menubar-pin img, .menubar-pin .glyph, :is(.menubar-panel, .menu-panel) .menubar-icon { flex: none; width: 16px; height: 16px; }
+:is(.menubar-panel, .menu-panel) .menubar-icon { display: inline-flex; }
+:is(.menubar-panel, .menu-panel) .menubar-icon > * { width: 100%; height: 100%; }
+/* A row's mark, such as a window's state mark, stands after its words. */
+.menu-action > .menu-mark { display: inline-flex; align-items: center; flex: none; }
 .menubar-pin:hover { color: var(--text); background: color-mix(in srgb, var(--text) 12%, transparent); }
 .menubar-pin:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--focus-ring); }
 .menubar-row.menubar-pins-collapsed .menubar-pin,
@@ -1503,6 +1511,19 @@ button.link {
   text-transform: uppercase; color: var(--text-muted);
 }
 .listbox [role="group"] > .listbox-row { padding-inline-start: 24px; }
+/* A rich list box's row (0.97.0) holds a title, a second line in muted
+   small text, and a badge at its end, each held to one line; the check
+   box or radio button stands beside both lines. */
+.listbox:has(.listbox-title) { --listbox-row: 44px; }
+.listbox-row:has(> .listbox-title) {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto;
+  column-gap: var(--space-2); row-gap: 0; align-content: center; padding-block: 4px;
+}
+.listbox-row:has(> .listbox-title) > input { grid-column: 1; grid-row: 1 / span 2; }
+.listbox-title, .listbox-detail { grid-column: 2; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.listbox-detail { font-size: var(--text-xs); color: var(--text-muted); }
+.listbox-row > .badge { grid-column: 3; grid-row: 1 / span 2; justify-self: end; }
+.listbox-row[aria-disabled="true"] > :is(.listbox-title, .listbox-detail, .badge) { opacity: .55; }
 .listbox[aria-disabled="true"] { opacity: .55; cursor: not-allowed; }
 .listbox[aria-disabled="true"] .listbox-row { cursor: not-allowed; }
 .listbox[aria-disabled="true"] .listbox-row:hover { background: none; }
@@ -3042,10 +3063,15 @@ button.filter-chip-x { padding: 0; flex: none; cursor: pointer; }
    Each toggle is a small raised button, since pressing it opens or closes
    its branch. */
 .tree, .tree ul { list-style: none; margin: 0; padding: 0; }
-.tree ul { padding-inline-start: var(--space-4); }
+/* A host lines the tree up with what stands around it through two
+   properties set on the tree (0.96.8): --tree-indent, the step each
+   nested level moves in by, and --tree-row-pad-start, the space before a
+   row's toggle or glyph. The toggle, glyph and gap are not theirs. */
+.tree { --tree-indent: var(--space-4); --tree-row-pad-start: 6px; }
+.tree ul { padding-inline-start: var(--tree-indent); }
 .tree a {
   display: flex; align-items: center; gap: 6px;
-  padding: 3px 10px 3px 6px;
+  padding: 3px 10px 3px var(--tree-row-pad-start);
   border-inline-end: 3px solid transparent;
   font-size: var(--text-sm); line-height: 1.5;
   color: var(--text); text-decoration: none; white-space: nowrap;
@@ -3090,13 +3116,41 @@ button.filter-chip-x { padding: 0; flex: none; cursor: pointer; }
    for a browsed hierarchy only. A site's own sections are its tabs, and a
    record's way back is its back link, so a path bar is never a site's
    breadcrumb trail. The separators are drawn, and say nothing to
-   assistive technology, which hears the list. */
+   assistive technology, which hears the list.
+
+   The bar keeps to one line (0.97.7). When its places do not fit, the
+   places above the current one shrink, each to an ellipsis, and the
+   current place shrinks last; when they still do not fit, the bar scrolls
+   sideways, and it starts scrolled to its end, so the current place is in
+   sight at load without script. The bar is a scroll container of the
+   opposite direction to the page, holding the list in the page's own
+   direction, packed toward its end: a scroll container starts at its
+   start edge, which for the bar is the page's end, and what the list
+   overflows toward the page's start is the bar's scrollable overflow. The
+   list's order, and what assistive technology hears, do not change. A
+   scrolled-off place stays in the Tab order and is scrolled into view as
+   it takes focus. The host gives each place its title, so a shortened
+   name can be read by the pointer. A bar marked .wrap wraps as it did
+   before. */
+.path { display: flex; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.path::-webkit-scrollbar { display: none; }
+.path:dir(ltr) { direction: rtl; }
+.path:dir(ltr) > ol { direction: ltr; margin-right: auto; }
+.path:dir(rtl) { direction: ltr; }
+.path:dir(rtl) > ol { direction: rtl; margin-left: auto; }
 .path ol {
-  display: flex; flex-wrap: wrap; align-items: center; gap: 0 2px;
+  display: flex; flex-wrap: nowrap; align-items: center; justify-content: flex-end; gap: 0 2px;
   margin: 0; padding: 0; list-style: none; min-width: 0;
   font-size: var(--text-sm);
 }
-.path li { display: inline-flex; align-items: center; min-width: 0; }
+.path li { display: inline-flex; align-items: center; flex: 0 1 auto; min-width: 3em; }
+.path li:last-child { flex-shrink: 0; min-width: 0; max-width: 100%; }
+.path.wrap:where(:dir(ltr), :dir(rtl)) { direction: inherit; display: block; overflow: visible; }
+.path.wrap:where(:dir(ltr), :dir(rtl)) > ol { direction: inherit; margin: 0; flex-wrap: wrap; justify-content: flex-start; }
+.path.wrap li { flex: none; min-width: 0; }
+/* In a toolbar the bar takes the room between the buttons, so it shrinks
+   and scrolls there instead of taking a line of its own. */
+.toolbar > .path { flex: 1 1 0; }
 .path li + li::before {
   content: ""; flex: none; width: 12px; height: 12px; margin-inline: 1px;
   background: var(--text-muted);
@@ -3569,7 +3623,7 @@ a.seg-choice { text-decoration: none; }
    whole label in its title. */
 .notice, .toast { min-width: 0; max-width: 100%; box-sizing: border-box; }
 .notice > *, .toast > * { min-width: 0; }
-.notice :is(.notice-content, .notice-body, .notice-title), .toast :is(.toast-content, .toast-body, .toast-title) { overflow-wrap: anywhere; }
+.notice :is(.notice-content, .notice-body, .notice-title), .toast :is(.toast-content, .toast-body, .toast-title, .toast-text) { overflow-wrap: anywhere; }
 .notice pre, .toast pre { max-width: 100%; overflow-x: auto; }
 .notice-actions .btn, .toast-actions .btn { max-width: 100%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
@@ -3814,6 +3868,40 @@ a.seg-choice { text-decoration: none; }
 }
 .drop-zone[data-drop-over]:dir(rtl) > .drop-hint { translate: 50% 0; }
 
+/* === Reorderable lists (0.97.0) =========================================
+   pudl-reorder.js gives each movable item of a list in reorder mode a
+   grip, the handle it is dragged by and moved with the keys. The grip is
+   a handle, like a splitter's, so it is flat and carries the grip glyph
+   at rest, taking the accent when hovered, focused or dragged. In such a
+   list the drop mark is a line where the item will land rather than a
+   ring, since it lands between items, not on one: at the start of the
+   item it will land before, or at the end of the list. The list's
+   data-reorder-active says its axis, x or y. */
+.reorder-grip {
+  flex: none; display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; margin: 0; margin-inline-end: var(--space-1); padding: 0;
+  border: 0; border-radius: var(--radius-sm); background: none; color: var(--text-muted);
+  vertical-align: middle; cursor: grab; touch-action: none;
+}
+.reorder-grip::before {
+  content: ""; width: 16px; height: 16px; background: currentColor;
+  -webkit-mask: var(--glyph-grip) center / 16px 16px no-repeat;
+  mask: var(--glyph-grip) center / 16px 16px no-repeat;
+}
+.reorder-grip:hover, .reorder-grip:focus-visible, .dragging .reorder-grip { color: var(--accent); }
+.reorder-grip:focus-visible { outline: none; box-shadow: 0 0 0 var(--focus-ring-width, 3px) var(--focus-ring); }
+[data-reorder-active] > .dragging {
+  position: relative; z-index: 2; cursor: grabbing;
+  background: var(--surface); box-shadow: var(--shadow-card);
+}
+[data-reorder-active] > [data-drop-target], [data-reorder-active][data-drop-target] { background-color: transparent; }
+[data-reorder-active="y"] > [data-drop-target] { box-shadow: inset 0 2px 0 var(--accent); }
+[data-reorder-active="x"] > [data-drop-target] { box-shadow: inset 2px 0 0 var(--accent); }
+[data-reorder-active="x"]:dir(rtl) > [data-drop-target] { box-shadow: inset -2px 0 0 var(--accent); }
+[data-reorder-active="y"][data-drop-target] { box-shadow: inset 0 -2px 0 var(--accent); }
+[data-reorder-active="x"][data-drop-target] { box-shadow: inset -2px 0 0 var(--accent); }
+[data-reorder-active="x"][data-drop-target]:dir(rtl) { box-shadow: inset 2px 0 0 var(--accent); }
+
 /* === Reduced motion ======================================================
    A reader who has asked their system for less motion gets none: every
    transition and animation completes at once. */
@@ -3969,6 +4057,8 @@ del.diff-word { text-decoration-color: var(--diff-del); }
   .tree-toggle::before, .card-toggle::before { forced-color-adjust: none; background: ButtonText; }
   .glyph, .path li + li::before { forced-color-adjust: none; background: CanvasText; }
   .drop-zone[data-drop-over], [data-drop-target] { outline: 2px dashed Highlight; outline-offset: -2px; }
+  .reorder-grip::before { forced-color-adjust: none; background: ButtonText; }
+  .reorder-grip:focus-visible { outline: 2px solid Highlight; }
   .drop-zone[data-drop-over] > .drop-hint { forced-color-adjust: none; background: Highlight; color: HighlightText; }
   .doc-tab-dirty { forced-color-adjust: none; background: CanvasText; }
   .doc-tab-close { border: 1px solid ButtonText; }

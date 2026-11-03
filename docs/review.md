@@ -143,6 +143,6 @@ These problems belong to PUDL or to applets that are maintained elsewhere, so th
 
 - The PUDL menu bar measures its items once and does not re-measure when content grows, which is why the top bar can cut off a menu.
 - PUDL's confirm hook should pass the input being confirmed, so the permission dialog would not need to wrap the applet API to capture it.
-- PUDL 0.97.1 is available. yavc.app is on 0.96.7.
+- yavc.app moved from PUDL 0.96.7 to 0.97.7 on 2026-11-03. The one change it needed was a `title` on each place in the file browser's path bar, which 0.97.7 keeps to one line and shortens.
 - The sight-reader applet uses glyphs and a colour outside PUDL's set, the sudoku applet uses a hard-coded colour, and the dice applet has no minimum width.
 - The barcode scanner applet uses `confirm()` and the host kit uses `alert()`. Both should use PUDL dialogs.

@@ -28,8 +28,26 @@
   function invokerOf(panel) {
     var anchor = panel.getAttribute('data-menu-anchor');
     var explicit = anchor ? document.getElementById(anchor) : null;
-    if (explicit) return explicit;
-    return panel.id ? document.querySelector('[popovertarget="' + CSS.escape(panel.id) + '"]') : null;
+    if (explicit) return shownFor(explicit);
+    var btn = panel.id ? document.querySelector('[popovertarget="' + CSS.escape(panel.id) + '"]') : null;
+    return btn ? shownFor(btn) : null;
+  }
+  /* A control folded away by its toolbar (0.96.9) is stood in for by the
+     control that shows it: its group's fold button, else the toolbar's
+     More button. A control that is showing, or that no toolbar folded,
+     is its own anchor. */
+  function shownFor(ctl) {
+    if (ctl.getClientRects().length) return ctl;
+    /* An item a folding status area has folded is stood in for by the
+       area's Status item (0.97.0). */
+    var area = ctl.closest('.status-area[data-status-fold]');
+    if (area) { var sf = area.querySelector(':scope > .status-fold'); return sf && sf.getClientRects().length ? sf : ctl; }
+    if (!ctl.closest('.toolbar')) return ctl;
+    var group = ctl.closest('[data-toolbar-group], .toolbar-group');
+    var fold = group && group.querySelector(':scope > .toolbar-fold > .menu-btn');
+    if (fold && fold.getClientRects().length) return fold;
+    var more = ctl.closest('.toolbar').querySelector(':scope > .toolbar-more > .menu-btn');
+    return more && more.getClientRects().length ? more : ctl;
   }
 
   function isOpen(panel) { return panel.matches(':popover-open'); }
@@ -530,8 +548,11 @@
      can see what the commands act on. One element is marked at a time.
 
      A row is the menu bar's: { label, run, disabled, checked, radio,
-     danger, detail, shortcut, glyph, items }, or '-' for a separator, or a
-     command's id, which pudl-commands.js turns into its row. A shortcut is
+     danger, detail, shortcut, glyph, icon, mark, items }, or '-' for a
+     separator, or a command's id, which pudl-commands.js turns into its
+     row. icon is the elements drawn in the glyph's place, an img or a
+     glyph span, and mark the elements drawn after the words, such as a
+     window's state mark, both cloned (0.97.7). A shortcut is
      shown in the platform's form and bound by nothing here, since the key
      belongs to whatever owns it, such as the field for Ctrl+C. Rows with
      items open a submenu beside them.
@@ -604,7 +625,16 @@
       r.className = 'menu-action';
       r.setAttribute('role', 'menuitem');
       r.tabIndex = -1;
-      if (c.glyph) {
+      /* A row's picture is the elements it gives as icon, an img or a glyph
+         span, cloned, as the menu bar's rows take them (0.97.7); else its
+         glyph token. */
+      if (c.icon && c.icon.length) {
+        var icon = document.createElement('span');
+        icon.className = 'menubar-icon';
+        icon.setAttribute('aria-hidden', 'true');
+        c.icon.forEach(function (n) { icon.appendChild(n.cloneNode(true)); });
+        r.appendChild(icon);
+      } else if (c.glyph) {
         var g = document.createElement('span');
         g.className = 'glyph';
         g.setAttribute('aria-hidden', 'true');
@@ -625,6 +655,15 @@
         words.appendChild(d);
       }
       r.appendChild(words);
+      /* A row's mark is the elements it gives as mark, cloned, after its
+         words: a window's state mark, for one (0.97.7). What they say to
+         assistive technology, they keep. */
+      if (c.mark && c.mark.length) {
+        var mark = document.createElement('span');
+        mark.className = 'menu-mark';
+        c.mark.forEach(function (n) { mark.appendChild(n.cloneNode(true)); });
+        r.appendChild(mark);
+      }
       if (c.checked !== undefined && c.checked !== null) {
         r.setAttribute('role', c.radio ? 'menuitemradio' : 'menuitemcheckbox');
         r.setAttribute('aria-checked', c.checked ? 'true' : 'false');
