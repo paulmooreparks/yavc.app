@@ -152,6 +152,40 @@
         }
         return null;
     }
+    /* The site's colours where the diagram stands, as D2's palette by the
+       role D2 gives each colour (docs/diagrams-design.md, decision 12): the
+       text as N1 down to the background as N7, the accent as B1 and B2, and
+       tints of the accent toward the background as B3 to B6. They are read
+       through the page's own tokens in place, so on a slide a deck's
+       colours win, and mixed here, so every value is a plain #rrggbb. Null
+       where something cannot be read. */
+    function rgbOf(css) {
+        var m = /^rgba?\((\d+(?:\.\d+)?),\s*(\d+(?:\.\d+)?),\s*(\d+(?:\.\d+)?)/.exec(css);
+        if (m) { return [+m[1], +m[2], +m[3]]; }
+        m = /^color\(srgb ([\d.]+) ([\d.]+) ([\d.]+)/.exec(css);
+        return m ? [m[1] * 255, m[2] * 255, m[3] * 255] : null;
+    }
+    function hex(c) { return '#' + c.map(function (v) { return ('0' + Math.round(Math.max(0, Math.min(255, v))).toString(16)).slice(-2); }).join(''); }
+    function mix(a, b, t) { return [0, 1, 2].map(function (i) { return a[i] * t + b[i] * (1 - t); }); }
+    function paletteOf(place, bgHex) {
+        if (!bgHex) { return null; }
+        var probe = document.createElement('span');
+        probe.setAttribute('aria-hidden', 'true');
+        probe.style.cssText = 'position:absolute;visibility:hidden;pointer-events:none';
+        place.appendChild(probe);
+        function read(css) { probe.style.color = css; return rgbOf(getComputedStyle(probe).color); }
+        var text = read('var(--dinah-ink, var(--text))'), muted = read('var(--dinah-muted-ink, var(--text-muted))');
+        var accent = read('var(--dinah-link-on-surface, var(--accent))'), rule = read('var(--dinah-content-border, var(--border))');
+        probe.remove();
+        var bg = rgbOf('rgb(' + [1, 3, 5].map(function (i) { return parseInt(bgHex.substr(i, 2), 16); }).join(',') + ')');
+        if (!text || !muted || !accent || !rule || !bg) { return null; }
+        var tint = function (t) { return hex(mix(accent, bg, t)); };
+        return {
+            n1: hex(text), n2: hex(muted), n3: hex(mix(text, bg, 0.55)), n4: hex(rule), n5: hex(mix(text, bg, 0.18)), n6: hex(mix(text, bg, 0.08)), n7: bgHex,
+            b1: hex(accent), b2: hex(accent), b3: tint(0.30), b4: tint(0.22), b5: tint(0.14), b6: tint(0.07),
+            aa2: hex(accent), aa4: tint(0.14), aa5: tint(0.07), ab4: tint(0.14), ab5: tint(0.07)
+        };
+    }
     /* A mistake in the text is the site's notice (yavcUtil.notice) above
        the diagram's source, which stays in view so the place can be found.
        It is a 'problem', announced politely, since a preview redraws as the
@@ -175,6 +209,8 @@
         var req = { text: source, themeID: dark() ? THEME.dark : THEME.light, pad: 16 };
         var bg = backgroundOf(place);
         if (bg) { req.background = bg; }
+        var palette = paletteOf(place, bg);
+        if (palette) { req.theme = palette; }
         /* PUDL's loading state (README, empty and loading) while a diagram
            takes a moment, which the first one on a page always does while
            the engine starts. It waits 400 ms, so a drawing that is ready at
@@ -226,8 +262,6 @@
         });
     }
 
-    /* The site's mode chooses the theme, so a change of mode draws every
-       diagram on the page again. */
     var redrawTimer = 0;
     function redrawAll() {
         clearTimeout(redrawTimer);
@@ -237,7 +271,9 @@
             });
         }, 50);
     }
-    new MutationObserver(redrawAll).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    /* The site's mode, colour theme and skin choose the colours, so a
+       change of any of them draws every diagram on the page again. */
+    new MutationObserver(redrawAll).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'data-palette', 'data-skin'] });
     if (window.matchMedia) { window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', redrawAll); }
 
     window.yavcD2Engine = Object.freeze({ compile: compile, draw: draw, version: function () { return request('version', '').then(function (o) { return o && o.d2; }); } });

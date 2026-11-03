@@ -218,6 +218,28 @@ func TestBackground(t *testing.T) {
 	}
 }
 
+// The page's palette replaces D2's by role, only plain hex colours under
+// D2's names are taken, and a diagram with a theme of its own keeps it.
+func TestPagePalette(t *testing.T) {
+	theme := map[string]string{"b1": "#123456", "b2": "#123456", "n1": "#654321", "b6": "#fedcba", "zz": "#111111", "b4": "red", "b3": "#12345"}
+	res := call(t, CompileRequest{Text: "a -> b: label\n", Theme: theme})
+	svg := strings.ToLower(res.SVG)
+	for _, want := range []string{"#123456", "#654321", "#fedcba"} {
+		if !strings.Contains(svg, want) {
+			t.Errorf("the page's %s is not in the drawing", want)
+		}
+	}
+	if strings.Contains(svg, "#0d32b2") {
+		t.Error("D2's own accent is still drawn where the page gave one")
+	}
+	for _, own := range []string{"vars: {d2-config: {theme-id: 200}}\n", "vars: {d2-config: {theme-overrides: {B1: \"#aa0000\"}}}\n"} {
+		got := strings.ToLower(call(t, CompileRequest{Text: own + "a -> b\n", Theme: theme}).SVG)
+		if strings.Contains(got, "#123456") {
+			t.Errorf("the page's palette replaced the diagram's own with %q", own)
+		}
+	}
+}
+
 func TestUnknownFunctionAndBadJSON(t *testing.T) {
 	if out := Call("nothing", ""); !strings.Contains(out, "no function") {
 		t.Fatal(out)

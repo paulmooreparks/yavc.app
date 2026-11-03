@@ -79,6 +79,12 @@ type CompileRequest struct {
 	// box of its own. Anything that is not a plain hex colour is ignored, and
 	// a diagram's own theme-overrides win.
 	Background string `json:"background,omitempty"`
+	// Theme is the page's colours for D2's palette, by the names D2 gives
+	// its roles (n1 to n7 for the text through to the background, b1 to b6
+	// for the accent through to its faintest tint, and aa2, aa4, aa5, ab4
+	// and ab5), each #rrggbb, so a diagram takes the site's look
+	// (docs/diagrams-design.md, decision 12). Anything else is ignored.
+	Theme map[string]string `json:"theme,omitempty"`
 }
 
 // Problem is something in the text the engine cannot draw as written. Line
@@ -262,13 +268,12 @@ func compile(arg string) (any, error) {
 		return &CompileResponse{Problems: problemsOf(err, req.Text)}, nil
 	}
 
-	if hexColour.MatchString(req.Background) {
-		bg := req.Background
-		if ropts.ThemeOverrides == nil {
-			ropts.ThemeOverrides = &d2target.ThemeOverrides{}
-		}
-		if ropts.ThemeOverrides.N7 == nil {
-			ropts.ThemeOverrides.N7 = &bg
+	// The page's palette replaces D2's, unless the diagram chose its own
+	// theme or colours, which win. D2 lets a file's theme-overrides replace
+	// the caller's as the diagram compiles, so the page's are set after.
+	if config == nil || (config.ThemeID == nil && config.ThemeOverrides == nil) {
+		if ov := pagePalette(req); ov != nil {
+			ropts.ThemeOverrides = ov
 		}
 	}
 	icons := blockIcons(diagram)
@@ -317,6 +322,34 @@ func clamp(n, max int) int {
 		return max
 	}
 	return n
+}
+
+// pagePalette is the page's colours as D2's theme overrides, or nil when
+// the page gave none. The background, when given apart, is the canvas, N7.
+func pagePalette(req CompileRequest) *d2target.ThemeOverrides {
+	ov := &d2target.ThemeOverrides{}
+	slots := map[string]**string{
+		"n1": &ov.N1, "n2": &ov.N2, "n3": &ov.N3, "n4": &ov.N4, "n5": &ov.N5, "n6": &ov.N6, "n7": &ov.N7,
+		"b1": &ov.B1, "b2": &ov.B2, "b3": &ov.B3, "b4": &ov.B4, "b5": &ov.B5, "b6": &ov.B6,
+		"aa2": &ov.AA2, "aa4": &ov.AA4, "aa5": &ov.AA5, "ab4": &ov.AB4, "ab5": &ov.AB5,
+	}
+	any := false
+	for name, value := range req.Theme {
+		if slot, ok := slots[name]; ok && hexColour.MatchString(value) {
+			v := value
+			*slot = &v
+			any = true
+		}
+	}
+	if hexColour.MatchString(req.Background) {
+		bg := req.Background
+		ov.N7 = &bg
+		any = true
+	}
+	if !any {
+		return nil
+	}
+	return ov
 }
 
 // missingPicture is drawn where an image shape's picture was not allowed.
