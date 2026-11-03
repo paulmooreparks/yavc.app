@@ -178,15 +178,20 @@
             if (o.onRender) { o.onRender(); }
         }
 
-        /* PUDL's path bar: the folders above this one, each an address. */
+        /* PUDL's path bar: the folders above this one, each an address.
+           Since PUDL 0.97.7 the bar keeps to one line and shortens the
+           places that do not fit to an ellipsis, so each place gives its
+           whole name in title, as the contract asks. Home's title is its
+           path, since its label is only "~". */
         function renderCrumbs() {
             var chain = [];
             for (var x = cwd; x; x = x.parent) { chain.unshift(x); if (F.pathOf(x) === navigationRoot) break; }
             var h = chain.indexOf(F.home()), start = h >= 0 ? h : 0, html = '';
             for (var i = start; i < chain.length; i++) {
                 var c = chain[i], label = i === start && h >= 0 ? '~' : (c.parent ? c.name : '/');
-                html += '<li>' + (i === chain.length - 1 ? '<span aria-current="location">' + esc(label) + '</span>'
-                    : '<a href="' + esc(linkFor(c)) + '" data-path="' + esc(F.pathOf(c)) + '">' + esc(label) + '</a>') + '</li>';
+                var title = ' title="' + esc(label === '~' ? F.pathOf(c) : label) + '"';
+                html += '<li>' + (i === chain.length - 1 ? '<span aria-current="location"' + title + '>' + esc(label) + '</span>'
+                    : '<a href="' + esc(linkFor(c)) + '" data-path="' + esc(F.pathOf(c)) + '"' + title + '>' + esc(label) + '</a>') + '</li>';
             }
             el.crumbs.innerHTML = '<ol>' + html + '</ol>';
         }
