@@ -839,6 +839,9 @@ func (s *Server) appletFile(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	} else if dir, ok := s.sharedFolder(name); ok {
+		if name+"/"+file == engineWorker {
+			w.Header().Set("Content-Security-Policy", workerPolicy)
+		}
 		if serveDir(w, r, dir, file, cacheFor(r, s.staticVersion)) {
 			return
 		}

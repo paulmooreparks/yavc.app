@@ -35,6 +35,33 @@ func TestSecurityHeaders(t *testing.T) {
 	}
 }
 
+// The D2 engine's worker alone runs under a policy that allows eval, and
+// that policy lets it reach no host at all (docs/diagrams-design.md,
+// decision 3). Every other file of the same folder keeps the page's.
+func TestEngineWorkerPolicy(t *testing.T) {
+	s := newSite(t, testDomain)
+	for _, target := range []string{site("/applets/diagram-kit/worker.js"), "http://dice." + testDomain + "/applets/diagram-kit/worker.js"} {
+		w := req(t, s, "GET", target, "")
+		if w.Code != http.StatusOK {
+			t.Fatalf("%s: %d", target, w.Code)
+		}
+		if got := w.Header().Get("Content-Security-Policy"); got != workerPolicy {
+			t.Fatalf("%s: policy %q", target, got)
+		}
+	}
+	if !strings.Contains(workerPolicy, "default-src 'none'") || strings.Contains(workerPolicy, "connect-src") {
+		t.Fatal("the worker's policy must leave every fetch to default-src 'none'")
+	}
+	for _, target := range []string{site("/applets/diagram-kit/d2.js"), site("/applets/shared/lib.js"), site("/applets/dice/dice.js")} {
+		if got := req(t, s, "GET", target, "").Header().Get("Content-Security-Policy"); got != contentSecurityPolicy {
+			t.Errorf("%s: policy %q, want the page's", target, got)
+		}
+	}
+	if strings.Contains(contentSecurityPolicy, "'unsafe-eval'") {
+		t.Fatal("the page's policy must never allow eval")
+	}
+}
+
 // Every route that answers only on the site's own hosts says so in one
 // body, written once, on a host that is not one of them.
 func TestUnknownHostRoutes(t *testing.T) {

@@ -24,6 +24,20 @@ const contentSecurityPolicy = "default-src 'self'; " +
 	"worker-src 'self' blob:; " +
 	"object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'self'"
 
+// workerPolicy is the policy of the D2 engine's worker
+// (apps/diagram-kit/worker.js; docs/diagrams-design.md, decision 3). A
+// worker runs under the policy its own script was served with, which CSP
+// Level 3 specifies, and not under the page's. D2 runs its layout engines'
+// JavaScript through eval, which no page here may do, so the worker alone
+// may; in return it may load nothing but this origin's scripts and reach
+// no host at all, not even this one. The page compiles the engine and
+// hands it over, and a diagram's text arrives as a message, so whatever
+// ran in the worker could only answer the page that asked.
+const workerPolicy = "default-src 'none'; script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval'"
+
+// engineWorker is the one script served with workerPolicy.
+const engineWorker = "diagram-kit/worker.js"
+
 // securityHeaders sets the headers every response carries. secure says the
 // site is reached over HTTPS, so browsers are told to keep to it.
 func securityHeaders(h http.Header, secure bool) {

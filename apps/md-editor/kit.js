@@ -900,7 +900,29 @@
             if (!place.isConnected) { return; }
             place.replaceChildren(window.yavcHTML.fragment(out.svg, { diagram: true }));
             place.classList.add('ed-diagram');
-        }).catch(function (err) { place.title = 'The diagram could not be drawn: ' + (err && err.message || err); });
+        }).catch(function (err) { diagramFailed(place, err); });
+    }
+    /* A diagram that could not be drawn at all says so in the site's
+       notice above it, as the house rules ask of every error. */
+    function diagramFailed(place, err) {
+        if (!place.isConnected) { return; }
+        var ref = place.firstElementChild;
+        if (!ref) { ref = document.createElement('span'); place.appendChild(ref); }
+        window.yavcUtil.notice(ref, 'The diagram could not be drawn: ' + ((err && err.message) || err), 'problem');
+    }
+    /* A D2 diagram drawn into its place by the D2 engine in its worker
+       (apps/diagram-kit/d2.js; docs/diagrams-design.md), loaded the first
+       time a page has one, since the engine is large. */
+    var d2Ready = null;
+    function drawD2(place, source) {
+        if (!d2Ready) {
+            d2Ready = loadScript(window.yavcUtil.versioned('/applets/diagram-kit/d2.js')).then(function () { return window.yavcD2Engine; });
+            d2Ready.catch(function () { d2Ready = null; });
+        }
+        /* The engine reports a fault in the diagram itself; what reaches
+           this catch is the engine failing to load. */
+        d2Ready.then(function (engine) { return engine.draw(place, source); })
+            .catch(function () { diagramFailed(place, 'the diagram engine did not load. Reloading the page tries again.'); });
     }
     /* Draws the engine's preview blocks into an element. A block whose
        HTML is the same as one already there keeps its element, with its
@@ -938,6 +960,7 @@
                 (f.diagrams || []).forEach(function (d) {
                     var place = f.el.querySelector('[data-preview-diagram="' + CSS.escape(d.id) + '"]');
                     if (place && d.language === 'mermaid') { drawDiagram(place, d.source); }
+                    else if (place && d.language === 'd2') { drawD2(place, d.source); }
                 });
             }
             if (opts.applets !== false && window.pudlApplets && window.pudlApplets.boot && f.el.querySelector('[data-applet]')) { try { window.pudlApplets.boot(f.el); } catch (err) { } }

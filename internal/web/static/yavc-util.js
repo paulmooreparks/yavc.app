@@ -74,8 +74,12 @@
     }
 
     /* A message the person should see in full: PUDL's notice, dismissible,
-       placed before ref (one per place, reused). An error is a danger
-       notice and is announced; 'info' is a plain notice. A status line is
+       placed before ref (one per place, reused). An error (true or
+       'danger') is a danger notice and is announced at once; 'problem' is
+       a danger notice announced politely, for a fault in what the person
+       is typing, which a preview redraws as they type and must not
+       interrupt (PUDL review of the D2 drawings, 2026-11-03); 'warn' is a
+       warning, announced politely; 'info' is a plain notice. A status line is
        for passing messages only (PUDL README, notices and toasts; review of
        2026-11-03: errors were shown three ways). Resolves to the notice;
        an empty text hides it. */
@@ -92,9 +96,10 @@
             host.insertBefore(n, ref);
         }
         if (!text) { n.hidden = true; return n; }
-        var danger = kind === true || kind === 'danger';
-        n.classList.toggle('danger', danger);
-        n.setAttribute('role', danger ? 'alert' : 'status');
+        var urgent = kind === true || kind === 'danger';
+        n.classList.toggle('danger', urgent || kind === 'problem');
+        n.classList.toggle('warn', kind === 'warn');
+        n.setAttribute('role', urgent ? 'alert' : 'status');
         n.querySelector('.notice-body').textContent = text;
         n.hidden = false;
         return n;

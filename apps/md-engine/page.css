@@ -51,6 +51,13 @@
 .doc-page .dinah-diagram-placeholder { margin: 8px 0; padding: 12px; border: 1px dashed var(--dinah-content-border); border-radius: 3px; color: var(--dinah-muted-ink); text-align: center; }
 .doc-page .dinah-diagram-placeholder.ed-diagram { border: 0; padding: 0; text-align: start; }
 .doc-page .dinah-diagram-placeholder.ed-diagram svg { max-width: 100%; height: auto; }
+/* A diagram is an image (apps/diagram-kit/d2.js), centred and never wider
+   than the page. A fault is the site's notice above it or above its
+   source; on a slide, left-out icons are a muted line under it. */
+.doc-page .dinah-diagram-placeholder[data-d2].ed-diagram { text-align: center; }
+.doc-page .sc-diagram-note { margin: var(--space-1) 0 0; color: var(--dinah-muted-ink); font-size: var(--text-xs); }
+.doc-page .dinah-diagram-placeholder > .yavc-notice { margin: 0 0 var(--space-2); text-align: start; }
+.doc-page .dinah-diagram-placeholder[data-d2] > pre { text-align: start; }
 .doc-page .dinah-attachment-image { max-width: 100%; height: auto; border: 1px solid var(--dinah-content-border); border-radius: 2px; }
 .doc-page .ed-missing-image { display: inline-block; padding: 2px 8px; border: 1px dashed var(--dinah-warning-accent); border-radius: 3px; color: var(--dinah-warning-accent); font-size: 0.9em; }
 /* Find's matches on the page, as the text marks them. */

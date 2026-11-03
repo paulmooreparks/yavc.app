@@ -23,7 +23,7 @@ const since = args.includes('--since') ? args[args.indexOf('--since') + 1] : nul
 
 // Code that is not the project's own: vendored libraries, built output.
 const SKIP = [/^\.claude\//, /(^|\/)vendor\//, /^web\/pudl\//, /(^|\/)node_modules\//, /^\.git\//, /^data\//, /^\.local\//,
-  /^apps\/md-engine\/(yavc-md\.wasm|wasm_exec\.js)$/, /\.min\.js$/];
+  /^apps\/md-engine\/(yavc-md\.wasm|wasm_exec\.js)$/, /^apps\/diagram-kit\/(yavc-d2\.wasm|wasm_exec\.js)$/, /\.min\.js$/];
 const TEXT = new Set(['.js', '.mjs', '.go', '.css', '.html', '.md', '.json', '.sh', '.yml', '.yaml', '.xfer']);
 
 function walk(dir, out = []) {
@@ -156,6 +156,27 @@ rules.push({ id: 'window-open-noopener', run() {
 
 // An applet's version changes with its files, so the registry and the
 // browser's cache take the new code (a standing rule of the repository).
+// Every Go module compiled into the D2 engine has its licence listed in
+// apps/diagram-kit/LICENSES.md, which is served beside the engine, so a
+// dependency that D2 or a later change brings in cannot reach readers
+// without its notice (docs/diagrams-design.md, safety). The list comes from
+// the Go tool itself, building for the browser as the image does.
+rules.push({ id: 'engine-licences', run() {
+  const f = 'apps/diagram-kit/LICENSES.md';
+  const listed = text.get(f) || '';
+  let modules;
+  try {
+    modules = execFileSync('go', ['list', '-deps', '-f', '{{with .Module}}{{.Path}}{{end}}', './cmd/yavc-d2'],
+      { cwd: ROOT, encoding: 'utf8', env: { ...process.env, GOOS: 'js', GOARCH: 'wasm' }, stdio: ['ignore', 'pipe', 'pipe'] });
+  } catch (err) {
+    report('engine-licences', 'cmd/yavc-d2', null, 'the Go tool could not list the engine\'s modules: ' + String(err.stderr || err.message).split('\n')[0]);
+    return;
+  }
+  for (const m of new Set(modules.split('\n').map((s) => s.trim()).filter((s) => s && s !== 'yavc.app'))) {
+    if (!listed.includes('`' + m + '`')) report('engine-licences', f, null, `the module ${m} is compiled into the D2 engine but its licence is not listed here`);
+  }
+} });
+
 rules.push({ id: 'applet-version-bump', needsSince: true, run() {
   const changed = execFileSync('git', ['diff', '--name-only', since, '--', 'apps', 'applets'], { cwd: ROOT, encoding: 'utf8' }).split('\n').filter(Boolean);
   const folders = new Set(changed.map((f) => f.split('/').slice(0, 2).join('/')).filter((d) => {
