@@ -17,6 +17,8 @@ import (
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/extension"
 	"github.com/yuin/goldmark/renderer/html"
+
+	"yavc.app/internal/shortcodes"
 )
 
 // The site's pages and its tree, for the file system the Terminal, Files
@@ -353,6 +355,14 @@ func scriptSummary(name, source string) string {
 		return strings.TrimSpace(strings.TrimPrefix(text, name+":"))
 	}
 	return ""
+}
+
+// shortcodeList is the table of shortcodes as JSON, {"shortcodes": [...]},
+// for an editor's completion and hover help. It is the same for every
+// reader and changes only with a release, so it needs no session.
+func (s *Server) shortcodeList(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "public, max-age=60")
+	writeJSON(w, http.StatusOK, map[string]any{"shortcodes": shortcodes.Definitions()})
 }
 
 func (s *Server) siteTree(w http.ResponseWriter, r *http.Request) {

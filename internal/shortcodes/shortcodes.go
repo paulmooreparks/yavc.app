@@ -352,6 +352,10 @@ func (p problem) Error() string { return p.why }
 type def struct {
 	name, title, what, example string
 	kind                       kind
+	// params are the arguments the shortcode reads by name, for an
+	// editor's completion and hover help. A shortcode that reads none by
+	// name leaves it empty.
+	params []Param
 	// render draws an inline or block shortcode; wrap gives a container's
 	// HTML before and after its body.
 	render func(c Call, doc ast.Node, src []byte) (string, error)
@@ -425,12 +429,27 @@ func OpenLine(name, args string) string {
 	return "{{" + name + ":" + args + "}}"
 }
 
-// Definitions lists the shortcodes, for an editor's Insert menu.
-type Definition struct {
-	Name, Title, Description, Example string
-	Kind                              string
+// Param is one argument a shortcode reads by name, written name=value.
+// An argument that can also go first, without its name, is still listed
+// by its name.
+type Param struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Required    bool   `json:"required"`
 }
 
+// Definition describes a shortcode for an editor's Insert menu,
+// completion and hover help. The site serves the list at /api/shortcodes.
+type Definition struct {
+	Name        string  `json:"name"`
+	Title       string  `json:"title"`
+	Description string  `json:"description"`
+	Example     string  `json:"example"`
+	Kind        string  `json:"kind"`
+	Params      []Param `json:"params"`
+}
+
+// Definitions lists the shortcodes in the order they are offered.
 func Definitions() []Definition {
 	var out []Definition
 	for _, name := range order {
@@ -443,7 +462,7 @@ func Definitions() []Definition {
 		} else if d.kind == span {
 			k = "span"
 		}
-		out = append(out, Definition{Name: d.name, Title: d.title, Description: d.what, Example: d.example, Kind: k})
+		out = append(out, Definition{Name: d.name, Title: d.title, Description: d.what, Example: d.example, Kind: k, Params: append([]Param{}, d.params...)})
 	}
 	return out
 }
@@ -504,6 +523,9 @@ func init() {
 		}})
 	add(&def{name: "toc", kind: block, title: "Contents", what: "A list of the page's headings, linked, for a long page.",
 		example: "{{toc}}",
+		params: []Param{
+			{"min", "The shallowest heading level listed, from 1 to 6. The default is 2.", false},
+			{"max", "The deepest heading level listed, from min to 6. The default is 3.", false}},
 		render: func(c Call, doc ast.Node, src []byte) (string, error) {
 			min, max := 2, 3
 			if v, ok := c.Get("min", -1); ok {
@@ -581,6 +603,9 @@ func init() {
 		}})
 	add(&def{name: "page", kind: inline, title: "Page Link", what: "A link to one of the site's pages, by its slug, with text of its own or the slug.",
 		example: "{{page:about}}",
+		params: []Param{
+			{"slug", "The slug of the page to link to.", true},
+			{"text", "The words of the link. The slug is shown without it.", false}},
 		render: func(c Call, doc ast.Node, src []byte) (string, error) {
 			slug, ok := c.Get("slug", 0)
 			if !ok || slug == "" {
@@ -605,6 +630,11 @@ func init() {
 		}})
 	add(&def{name: "figure", kind: block, title: "Figure", what: "A picture with an optional caption, centred.",
 		example: `{{figure:/images/picture.png alt="What it shows" width=80% caption="The caption, in Markdown."}}`,
+		params: []Param{
+			{"src", "The address of the picture, or its path in the home folder.", true},
+			{"alt", "What the picture shows, for readers who cannot see it.", false},
+			{"width", "How wide the picture is, as a percentage or a length.", false},
+			{"caption", "The caption, in Markdown.", false}},
 		render: func(c Call, doc ast.Node, src []byte) (string, error) {
 			s, ok := c.Get("src", 0)
 			if !ok || s == "" {
@@ -633,6 +663,10 @@ func init() {
 		}})
 	add(&def{name: "applet", kind: block, title: "Applet", what: "One of the site's applications, running in the page.",
 		example: "{{applet:conway fit=flow}}",
+		params: []Param{
+			{"name", "The slug of the application to run in the page.", true},
+			{"fit", "How the application is sized to the page.", false},
+			{"state", "The state the application starts from.", false}},
 		render: func(c Call, doc ast.Node, src []byte) (string, error) {
 			name, ok := c.Get("name", 0)
 			if !ok || !appletRe.MatchString(name) {
@@ -653,6 +687,10 @@ func init() {
 		}})
 	add(&def{name: "video", kind: block, title: "Video", what: "A hosted video, by its link or by its service and id: YouTube (played without tracking until it is played, in its privacy-enhanced mode) or Vimeo (with do-not-track). A video of your own, uploaded to this site, is a feature to come.",
 		example: `{{video:https://youtu.be/dQw4w9WgXcQ title="What it is"}}`,
+		params: []Param{
+			{"src", "The video's link, or its service (youtube or vimeo) when id follows.", true},
+			{"id", "The video's id at the service src names.", false},
+			{"title", "What the video is, for readers who cannot see it.", false}},
 		render: func(c Call, doc ast.Node, src []byte) (string, error) {
 			first, _ := c.Get("src", 0)
 			second, _ := c.Get("id", 1)
@@ -673,6 +711,9 @@ func init() {
 		}})
 	add(&def{name: "code", kind: block, title: "Code Listing", what: "A file, shown as a listing with Copy and Download, fetched as the page loads: a path on the site from /, or one of your own files under ~.",
 		example: "{{code:~/bin/hello}}",
+		params: []Param{
+			{"src", "The file to list: a path on the site from /, or one of your own files under ~.", true},
+			{"lang", "The language the listing is coloured as.", false}},
 		render: func(c Call, doc ast.Node, src []byte) (string, error) {
 			s, ok := c.Get("src", 0)
 			if !ok || s == "" {

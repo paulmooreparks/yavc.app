@@ -232,7 +232,7 @@
            A {{shortcode}} is marked as one, its name and its arguments in
            their own colours; {{ offers the shortcodes' names and, inside a
            call, its parameters; and the pointer over one says what it is
-           and takes. All from the server's table (/api/admin/editor/shortcodes),
+           and takes. All from the server's table (/api/shortcodes),
            which the Insert menu reads too. */
         var SHORTCODE = /\{\{\/?[a-z][a-z0-9-]*(?::(?:[^}]|\}(?!\}))*)?\}\}/g;
         var shortcodeHighlight = null, shortcodeHover = null;
@@ -266,7 +266,7 @@
                         options: list.filter(function (s) { return !closing || s.kind === 'container'; }).map(function (s) {
                             /* The braces close themselves as {{ is typed (closeBrackets), so only the name goes in, with a colon where arguments follow. */
                             return { label: s.name, type: 'keyword', detail: s.title, info: s.description + (s.example ? '\n\n' + s.example : ''),
-                                apply: !closing && s.params.length ? s.name + ':' : s.name };
+                                apply: !closing && s.params.some(function (p) { return p.required; }) ? s.name + ':' : s.name };
                         })
                     };
                 });
@@ -1194,7 +1194,7 @@
         function loadShortcodes() {
             if (shortcodes) { return Promise.resolve(shortcodes); }
             if (!shortcodesLoading) {
-                shortcodesLoading = fetch('/api/admin/editor/shortcodes', { credentials: 'same-origin', headers: { Accept: 'application/json' } })
+                shortcodesLoading = fetch('/api/shortcodes', { credentials: 'same-origin', headers: { Accept: 'application/json' } })
                     /* The body is read either way: a refusal left unread (a
                        visitor not signed in) stays open in the browser. */
                     .then(function (r) { return r.json().catch(function () { return {}; }).then(function (b) { return r.ok ? b : { shortcodes: [] }; }); })
