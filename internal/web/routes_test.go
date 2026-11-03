@@ -35,6 +35,66 @@ func TestSecurityHeaders(t *testing.T) {
 	}
 }
 
+// The desktop is windowed only (DESIGN.md, decision 26): the Pages view's
+// list leads to the desktop, an application's address opens its window
+// there, and a site page is still a page of its own.
+func TestWindowedOnly(t *testing.T) {
+	s := newSite(t, testDomain)
+	if w := req(t, s, "GET", site("/pages"), ""); w.Code != http.StatusMovedPermanently || w.Header().Get("Location") != site("/") {
+		t.Fatalf("/pages: %d %q", w.Code, w.Header().Get("Location"))
+	}
+	if w := req(t, s, "GET", site("/dice"), ""); w.Code != http.StatusTemporaryRedirect || w.Header().Get("Location") != site("/")+"?open=dice&top=dice" {
+		t.Fatalf("/dice: %d %q", w.Code, w.Header().Get("Location"))
+	}
+	if w := req(t, s, "GET", site("/hello"), ""); w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "Hello") {
+		t.Fatalf("/hello: %d", w.Code)
+	}
+	body := req(t, s, "GET", site("/"), "").Body.String()
+	for _, gone := range []string{"view-seg", ">Pages<", "yavc-glyph-classic"} {
+		if strings.Contains(body, gone) {
+			t.Errorf("the desktop still has %q", gone)
+		}
+	}
+	// The application's window still opens its page at its subdomain.
+	if w := req(t, s, "GET", site("/win/dice"), ""); !strings.Contains(w.Body.String(), `data-win-action="page" href="http://dice.`+testDomain+`/"`) {
+		t.Fatal("the window's Open as a Page does not lead to the subdomain")
+	}
+}
+
+// Every top bar has PUDL's slot for Show as ribbon, which the site's
+// stylesheet puts at the bar's right (Paul, 2026-11-03).
+func TestRibbonSlot(t *testing.T) {
+	s := newSite(t, testDomain)
+	for _, target := range []string{site("/"), site("/hello"), "http://dice." + testDomain + "/"} {
+		body := req(t, s, "GET", target, "").Body.String()
+		if strings.Count(body, "data-menubar-ribbon-slot") != 1 {
+			t.Errorf("%s has %d ribbon slots, want 1", target, strings.Count(body, "data-menubar-ribbon-slot"))
+		}
+	}
+}
+
+// A link in a page drawn in a window that leads to another of the site's
+// windows opens that window on the desktop; any other link is left as it
+// was, and the page of its own is unchanged.
+func TestArticleLinksOpenWindows(t *testing.T) {
+	s := newSite(t, testDomain)
+	write(t, s.Pages, "links.md", "# Links\n\n[Dice](/dice), [Hello](/hello), [Nowhere](/nowhere), [Out](https://example.com/dice) and [Part](/hello#x).\n")
+	win := req(t, s, "GET", site("/win/links"), "").Body.String()
+	for _, want := range []string{`href="/dice" data-win-open="dice"`, `href="/hello" data-win-open="hello"`} {
+		if !strings.Contains(win, want) {
+			t.Errorf("window lacks %s", want)
+		}
+	}
+	for _, unchanged := range []string{`href="/nowhere">`, `href="https://example.com/dice">`, `href="/hello#x">`} {
+		if !strings.Contains(win, unchanged) {
+			t.Errorf("window changed or lost %s", unchanged)
+		}
+	}
+	if page := req(t, s, "GET", site("/links"), "").Body.String(); strings.Contains(page, "data-win-open=\"dice\">Dice") {
+		t.Error("the page of its own was given window links")
+	}
+}
+
 // The D2 engine's worker alone runs under a policy that allows eval, and
 // that policy lets it reach no host at all (docs/diagrams-design.md,
 // decision 3). Every other file of the same folder keeps the page's.

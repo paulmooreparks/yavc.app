@@ -8,7 +8,7 @@ This page is at `yavc.app/help/terminal`, and it is under Help, Terminal Help. I
 
 ## Getting started
 
-Open the terminal from **Applets**. In the Windowed view it opens as a window you can move, resize and keep beside other windows. In the Pages view it's a page of its own at `yavc.app/terminal`, and it also runs standalone at `terminal.yavc.app`.
+Open the terminal from **Applets**. It opens as a window you can move, resize and keep beside other windows, and it also runs on its own at `terminal.yavc.app`.
 
 You'll see a greeting and a prompt:
 
@@ -106,7 +106,7 @@ A page's name is the last part of its address on the site, so `/site/pages/autho
 | --- | --- |
 | `cat <file...>` | Print a file. A page prints as plain text, with each link's address after it in angle brackets and each image as `[image: its description]`. An application prints a line about itself. With nothing but a pipe feeding it, `cat` passes the text straight through. |
 | `less <file>` | Show a file a screen at a time (keys below). It can also page through whatever is piped into it, such as the long listing of every page. |
-| `open <path>` | Open a page or an application the way the site normally does: as a window in the Windowed view, or by going to its page in the Pages view. A link to another site opens in a new tab, and one of your own files opens in the graphical Editor. |
+| `open <path>` | Open a page or an application: in a window on the desktop, or, on the terminal's own page at `terminal.yavc.app`, by going to its own page. A link to another site opens in a new tab, and one of your own files opens in the graphical Editor. |
 | `grep [-i] [-l] [-r] pattern [path...]` | Print the lines that match a pattern, with the matches highlighted. The pattern is a regular expression, so `grep "^## "` finds the section headings in a page. `-i` ignores case, `-l` prints only the names of the files that match, and `-r` searches every file under a directory (the current one if you give none). Without a path, it searches what's piped into it. |
 
 **Keys in `less`:** Space, `f` or Page Down moves forward a screen; `b` or Page Up moves back; the arrow keys, `j`, `k` and Enter move a line; `g` or Home jumps to the top and `G` or End to the bottom; `q`, Esc or Ctrl+C quits.
@@ -137,9 +137,9 @@ Each application runs by its name, as it appears in `/site/apps`. Some also take
 | `terminal [dir]` | Open another terminal, in this directory or the one you give. |
 | `files [dir]` | Show this directory, or the one you give, in Files. |
 
-In the Windowed view each application opens as a window beside the terminal. In the Pages view the browser goes to the application's page, and Back brings you back to the terminal.
+On the desktop each application opens as a window beside the terminal. On the terminal's own page at `terminal.yavc.app`, the browser goes to the application's own page, and Back brings you back to the terminal.
 
-You can have up to four terminals open in the Windowed view, titled Terminal, Terminal 2 and so on. Each keeps its own directory and scrollback, and all of them share one command history, so the Up arrow in any of them finds what you typed in the others. With four open, `terminal` moves the newest one to the directory instead of opening a fifth. On the terminal's own page, in the Pages view, `terminal` opens the new one in a browser tab.
+You can have up to four terminals open on the desktop, titled Terminal, Terminal 2 and so on. Each keeps its own directory and scrollback, and all of them share one command history, so the Up arrow in any of them finds what you typed in the others. With four open, `terminal` moves the newest one to the directory instead of opening a fifth. On the terminal's own page, `terminal` opens the new one in a browser tab.
 
 ### Your files
 

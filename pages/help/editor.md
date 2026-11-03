@@ -1,6 +1,6 @@
 # Editor Help
 
-The [Editor](/editor) edits text and Markdown files. Your own files under `~` can be changed, and the site's pages open read-only. For a Markdown file it also draws the page as it will look and lets you edit it there. It runs in a window on the desktop, as a page at `yavc.app/editor`, and on its own at `editor.yavc.app`.
+The [Editor](/editor) edits text and Markdown files. Your own files under `~` can be changed, and the site's pages open read-only. For a Markdown file it also draws the page as it will look and lets you edit it there. It runs in a window on the desktop and on its own at `editor.yavc.app`.
 
 ![The Editor on the desktop](/static/shots/desktop.jpg)
 

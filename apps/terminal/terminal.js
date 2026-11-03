@@ -664,7 +664,7 @@
 
     command('open', {
         summary: 'open a page, an applet or a link',
-        help: 'open <path>\n\nOpens a page the way this view opens things: as a window in the window view, or as a page in the classic view. A link to another site opens in a new tab.',
+        help: 'open <path>\n\nOpens a page or an application: in a window on the desktop, or, where there are no windows, as on terminal.yavc.app, by going to its own page. A link to another site opens in a new tab.',
         complete: 'file',
         run: function (args, io) {
             if (!args.length) { io.err('open: which page?'); return 1; }
@@ -1035,7 +1035,7 @@
 
     command('guide', {
         summary: 'read the full guide to this terminal',
-        help: 'guide [-w]\n\nShows the terminal guide a screen at a time, with the same keys as less. With -w it opens as a page instead: a window in the window view, or the page itself in the classic view.',
+        help: 'guide [-w]\n\nShows the terminal guide a screen at a time, with the same keys as less. With -w it opens as a page instead: in a window on the desktop, or by going to the page where there are no windows.',
         run: async function (args, io) {
             var n = findNamed(io.fs.resolve('/'), 'help-terminal');
             if (!n) { io.err('guide: the guide is not on this site yet'); return 1; }
@@ -2228,6 +2228,11 @@
                 window.pudlWindows.open(n.name);
                 return;
             }
+            /* With no windows, as on the terminal's own page, an application
+               goes to its own page, which is at its subdomain now that the
+               site is windowed only (DESIGN.md, decision 26), at the address
+               the site's tree gives it; a site page goes to its page. */
+            if (n.kind === 'app' && n.url) { location.assign(n.url + (q ? '?' + q : '')); return; }
             location.assign('/page/' + encodeURIComponent(n.name) + (q ? '?' + q : ''));
         }
 

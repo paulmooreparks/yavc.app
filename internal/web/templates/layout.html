@@ -86,9 +86,6 @@
             {{end}}{{end}}
           </ul></li>
           <li data-menubar-id="view">View<ul>
-            {{/* The other layout, as a link; the segment in the top bar shows which one this is. */}}
-            {{if .Desktop}}<li><a href="{{.SiteURL}}pages">Pages</a></li>{{else}}<li><a href="{{.SiteURL}}">Windowed</a></li>{{end}}
-            <li>-</li>
             {{if .Desktop}}<li><button type="button" data-site-command="sidebar" aria-checked="false">Hide the List</button></li>
             <li>-</li>{{end}}
             <li>Mode<ul data-menu-radio>
@@ -123,7 +120,12 @@
         </ul>
         <a class="brand topbar-pill" href="{{.SiteURL}}" data-menubar-fallback><img src="{{asset "/static/icon.svg"}}" alt=""> <span class="site-menu-name">{{.Site}}</span></a>
       </nav>
+      {{template "ribbon-slot"}}
 {{end}}
+
+{{/* Where PUDL puts Show as ribbon (data-menubar-ribbon-slot, PUDL's
+     contract): at the right of the top bar. */}}
+{{define "ribbon-slot"}}<div class="ribbon-slot" data-menubar-ribbon-slot></div>{{end}}
 
 {{/* The desktop: parkscomputing.com's shell, after PUDL's article reader.
      The list of applications at the left, the windows as the detail pane,
@@ -133,11 +135,6 @@
   <header class="site-header">
     <div class="topbar">
       {{template "menubar" .}}
-      <nav class="seg view-seg" aria-label="View" data-seg-menu>
-        {{/* The current view is not a link: following it would open the default windows and close the reader's. */}}
-        <a aria-current="true"><span class="glyph" style="--glyph: var(--yavc-glyph-windowed)" aria-hidden="true"></span>Windowed</a>
-        <a href="{{.SiteURL}}pages"><span class="glyph" style="--glyph: var(--yavc-glyph-classic)" aria-hidden="true"></span>Pages</a>
-      </nav>
     </div>
   </header>
   <div class="md-layout" data-md-persistent data-md-peek data-md-default-width="300" data-md-min="40">
@@ -249,65 +246,12 @@
         </ul>
         <a class="brand topbar-pill" href="{{.SiteURL}}" data-menubar-fallback><img src="{{asset "/static/icon.svg"}}" alt=""> <span class="site-menu-name">{{.Site}}</span></a>
       </nav>
+      {{template "ribbon-slot"}}
     </div>
   </header>
   <main class="standalone-main" data-applet-page>
     <nav data-page-menu hidden aria-label="Page Menu"><ul></ul></nav>
     {{.Mount}}
-  </main>
-  {{template "dialogs" .}}
-  {{template "scripts" .}}
-</body>
-</html>
-{{end}}
-
-{{/* An applet as a page of the site, at /{name}, with the site's bar. */}}
-{{define "page"}}{{template "head" .}}
-<body>
-  <header class="site-header">
-    <div class="topbar">
-      {{template "menubar" .}}
-      <nav class="seg view-seg" aria-label="View" data-seg-menu>
-        <a href="{{.SiteURL}}?open={{.Applet.Name}}&amp;top={{.Applet.Name}}"><span class="glyph" style="--glyph: var(--yavc-glyph-windowed)" aria-hidden="true"></span>Windowed</a>
-        <a href="{{.SiteURL}}{{.Applet.Name}}" aria-current="true"><span class="glyph" style="--glyph: var(--yavc-glyph-classic)" aria-hidden="true"></span>Pages</a>
-      </nav>
-    </div>
-  </header>
-  <main class="site-main" id="main-content" tabindex="-1">
-    <nav data-page-menu hidden aria-label="Page Menu"><ul></ul></nav>
-    {{.Mount}}
-  </main>
-  {{template "dialogs" .}}
-  {{template "scripts" .}}
-</body>
-</html>
-{{end}}
-
-{{/* The Classic view: the applications as a list of pages, for a reader
-     who prefers pages to windows, a browser without script, or an agent
-     following links. */}}
-{{define "list"}}{{template "head" .}}
-<body>
-  <header class="site-header">
-    <div class="topbar">
-      {{template "menubar" .}}
-      <nav class="seg view-seg" aria-label="View" data-seg-menu>
-        <a href="{{.SiteURL}}"><span class="glyph" style="--glyph: var(--yavc-glyph-windowed)" aria-hidden="true"></span>Windowed</a>
-        <a href="{{.SiteURL}}pages" aria-current="true"><span class="glyph" style="--glyph: var(--yavc-glyph-classic)" aria-hidden="true"></span>Pages</a>
-      </nav>
-    </div>
-  </header>
-  <main class="site-main" id="main-content" tabindex="-1">
-    <h1>Applications</h1>
-    <p>Each application is a page of this site and also runs at an address of its own. On the desktop it opens in a window.</p>
-    <div class="auto-grid gap-4 app-list">
-      {{range .Applets}}<section class="card">
-        <h2 class="card-title">{{if .Icon}}<img class="site-list-icon" src="{{.Icon}}" alt="">{{end}}<a href="{{$.SiteURL}}{{.Name}}">{{.Title}}</a></h2>
-        <p class="card-desc">{{.Description}}</p>
-        <p class="card-desc app-links"><a href="{{.Page}}">Open as a Page</a> · <a href="{{$.SiteURL}}?open={{.Name}}&amp;top={{.Name}}">Open in a Window</a></p>
-      </section>
-      {{end}}
-    </div>
   </main>
   {{template "dialogs" .}}
   {{template "scripts" .}}

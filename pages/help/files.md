@@ -1,6 +1,6 @@
 # Files Help
 
-[Files](/files) shows yavc.app as folders and keeps your own files in your browser. The Editor and the Terminal see the same files. Files runs in a window on the desktop, as a page at `yavc.app/files`, and on its own at `files.yavc.app`.
+[Files](/files) shows yavc.app as folders and keeps your own files in your browser. The Editor and the Terminal see the same files. Files runs in a window on the desktop and on its own at `files.yavc.app`.
 
 ## Getting started
 
