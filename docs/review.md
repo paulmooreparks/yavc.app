@@ -56,6 +56,7 @@ The Markdown kit used by the Editor and Slides gained one implementation each of
 - **Block drawing** reuses a rendered block when its HTML has not changed, so typing in one paragraph no longer re-renders every Mermaid diagram and picture in the document. On a test document a keystroke reused the same diagram element and created no new object URLs.
 - **Picture URLs** are cached by path, blob, modification time and size, and the old object URL is revoked when a picture changes.
 - **The page view** re-parses only the blocks a change touched, with one block either side, instead of the whole document. A one-character edit in a large document parsed 73 characters and re-synced one node. Untouched blocks are kept as their original Markdown, so a round trip reproduces the source byte for byte.
+- **The linear-time test** (`TestRenderIsLinear` in `internal/preview`) failed in CI on 2026-11-03 with a ratio of 5.19 against its limit of 5, though the renderer had not changed. Benchmarks show the renderer is linear: four times the sections take four times the memory and allocations and about 3.7 times as long. The test had timed five single renders, and in CI the other packages' tests, the D2 layout tests among them, run on the same cores at the same time. It now times each size with Go's benchmark runner, which averages over as many renders as fit in a second, and keeps the faster of two averages. Measured locally, the ratio went from anywhere between 2.5 and 4.9 to a steady 3.3.
 
 ## PUDL compliance and UI
 
