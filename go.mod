@@ -2,6 +2,8 @@ module yavc.app
 
 go 1.26.0
 
+toolchain go1.26.10
+
 require github.com/yuin/goldmark v1.8.7
 
 require golang.org/x/net v0.62.0
