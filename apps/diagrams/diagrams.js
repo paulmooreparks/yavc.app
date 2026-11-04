@@ -83,7 +83,13 @@
     var VIEWS = [['text', 'Text'], ['preview', 'Preview'], ['split', 'Split']];
     /* Where the drawing sits beside the text, as Slides docks its canvas. */
     var DOCKS = [['left', 'Left'], ['right', 'Right'], ['top', 'Top'], ['bottom', 'Bottom']];
-    var SETTINGS = { view: 'split', dock: 'left', fit: true };
+    var SETTINGS = { view: 'split', dock: 'left', fit: true, inspector: true };
+    /* The inspector's choices (milestone D3): line styles as D2's
+       stroke-dash, and the arrowheads D2 draws. */
+    var DASHES = [['', 'Solid'], ['5', 'Dashed'], ['2', 'Dotted']];
+    var HEADS = [['', 'D2\'s Own'], ['triangle', 'Triangle'], ['arrow', 'Arrow'], ['diamond', 'Diamond'], ['circle', 'Circle'], ['box', 'Box'],
+        ['cf-one', 'One'], ['cf-one-required', 'Exactly One'], ['cf-many', 'Many'], ['cf-many-required', 'One or More'], ['cross', 'Cross']];
+    var ARROWS = [['->', 'Forward'], ['<-', 'Backward'], ['<->', 'Both Ways'], ['--', 'No Arrows']];
     var DRAW_DELAY = 300;
 
     function kindOf(path, text) {
@@ -122,7 +128,10 @@
                   '<div class="toolbar dg-palette" role="toolbar" aria-label="Palette" data-toolbar-fold><div class="toolbar-group" role="group" data-toolbar-group="Palette" data-toolbar-glyph="yavc-select">' +
                     ['select'].concat(PALETTE.map(function (k) { return k[0]; })).map(function (k) { return '<button type="button" data-command="tool-' + k + '"></button>'; }).join('') +
                   '</div></div>' +
-                  '<div class="dg-stage" data-role="stage" tabindex="0" role="region" aria-label="The Drawing" aria-describedby="dg-keys-' + n + '"><div class="dg-canvas" data-role="canvas"></div></div>' +
+                  '<div class="dg-body" data-role="body">' +
+                    '<div class="dg-stage" data-role="stage" tabindex="0" role="region" aria-label="The Drawing" aria-describedby="dg-keys-' + n + '"><div class="dg-canvas" data-role="canvas"></div></div>' +
+                    '<aside class="dg-inspector" data-role="inspector" aria-label="Inspector" hidden></aside>' +
+                  '</div>' +
                   '<p class="dg-keys visually-hidden" id="dg-keys-' + n + '">In a D2 diagram, the arrow keys select a shape or a connection, Enter edits its label, F2 renames it, N adds a shape of the palette\'s kind, C connects the selected shape to another, Delete deletes it, and Escape goes back to the palette\'s Select. The Shape menu moves a shape into another.</p>' +
                 '</div>' +
                 '<div class="split-handle dg-split" data-role="split" aria-label="Resize the Text" data-split-min="200" data-split-max="70%"></div>' +
@@ -131,7 +140,7 @@
             '</div>' +
             '<div class="dg-status" data-role="status"><span data-role="where"></span><span data-role="kind"></span><span data-role="state"></span><span class="dg-message" data-role="message" role="status" aria-live="polite"></span></div>';
         var q = function (sel) { return root.querySelector(sel); };
-        var el = { tabsEl: q('[data-role="tabs"]'), work: q('[data-role="work"]'), stagebox: q('[data-role="stagebox"]'), stage: q('[data-role="stage"]'), canvas: q('[data-role="canvas"]'),
+        var el = { body: q('[data-role="body"]'), inspector: q('[data-role="inspector"]'), tabsEl: q('[data-role="tabs"]'), work: q('[data-role="work"]'), stagebox: q('[data-role="stagebox"]'), stage: q('[data-role="stage"]'), canvas: q('[data-role="canvas"]'),
             split: q('[data-role="split"]'), text: q('[data-role="text"]'), where: q('[data-role="where"]'), kind: q('[data-role="kind"]'), state: q('[data-role="state"]'), message: q('[data-role="message"]') };
 
         function keepSetting(key, value) {
@@ -291,10 +300,10 @@
             if (p.length) {
                 var first = p[0], where = first.line > 0 ? 'Line ' + first.line + ': ' : '';
                 var more = p.length > 1 ? ' (and ' + (p.length - 1) + ' more)' : '';
-                window.yavcUtil.notice(el.stage, 'The diagram could not be drawn. ' + where + first.message + more + (stale ? ' The drawing shown is the last one that worked.' : ''), 'problem');
+                window.yavcUtil.notice(el.body, 'The diagram could not be drawn. ' + where + first.message + more + (stale ? ' The drawing shown is the last one that worked.' : ''), 'problem');
                 el.state.textContent = p.length === 1 ? 'One mistake' : p.length + ' mistakes';
             } else {
-                window.yavcUtil.notice(el.stage, '');
+                window.yavcUtil.notice(el.body, '');
                 el.state.textContent = 'Drawn';
             }
             commandsChanged();
@@ -344,7 +353,7 @@
             /* Where each shape and connection is written, for the selection
                in the text, and the labels the commands start from. */
             d2().then(function (E) { return E.call('outline', { text: text }, 'outline-' + n); }).then(function (o) {
-                if (o && t.text === text) { t.outline = o; commandsChanged(); }
+                if (o && t.text === text) { t.outline = o; commandsChanged(); renderInspector(); }
             }).catch(function () { });
         }
         function isConnection(key) { return /^\(/.test(key || ''); }
@@ -377,7 +386,128 @@
                 }
             } else if (how !== 'redraw') { say(''); }
             commandsChanged();
+            renderInspector();
         }
+        /* === The inspector ================================================
+           The selected shape's or connection's settings as a form of
+           PUDL's sunken fields (decision 15), beside the drawing. Each field
+           is one of D2's settings, changed as one edit when the field is
+           left or Enter is pressed, which Undo takes back; an empty field
+           takes the setting away. While a field has the keyboard the form is
+           not drawn again, so a drawing that finishes never takes the
+           person's typing away. */
+        var inspected = null;
+        function field(id, label, control, help) {
+            return '<div class="form-group"><label class="form-label" for="' + id + '">' + esc(label) + '</label>' + control +
+                (help ? '<p class="form-help">' + esc(help) + '</p>' : '') + '</div>';
+        }
+        function textField(id, key, label, value, help) {
+            return field(id, label, '<input class="form-input" id="' + id + '" data-set="' + esc(key) + '" value="' + esc(value || '') + '" autocomplete="off" spellcheck="false">', help);
+        }
+        function selectField(id, key, label, value, options) {
+            return field(id, label, '<span class="form-select-wrap"><select class="form-select" id="' + id + '" data-set="' + esc(key) + '">' +
+                options.map(function (o) { return '<option value="' + esc(o[0]) + '"' + (o[0] === (value || '') ? ' selected' : '') + '>' + esc(o[1]) + '</option>'; }).join('') + '</select></span>');
+        }
+        function numberField(id, key, label, value, min, max) {
+            return field(id, label, '<input class="form-input" type="number" min="' + min + '" max="' + max + '" id="' + id + '" data-set="' + esc(key) + '" value="' + esc(value || '') + '">');
+        }
+        function colourField(key, label, value) {
+            return window.yavcMdEditor.colourRows([{ key: key, label: label, value: value || '', fallback: '#808080', placeholder: 'The theme\'s own' }]).replace(/data-key="/, 'data-set="');
+        }
+        function checks(legend, items) {
+            return '<fieldset class="form-group dg-checks"><legend class="form-label">' + esc(legend) + '</legend>' + items.map(function (c) {
+                return '<label class="check"><input type="checkbox" data-set="' + esc(c[0]) + '"' + (c[2] ? ' checked' : '') + '> ' + esc(c[1]) + '</label>';
+            }).join('') + '</fieldset>';
+        }
+        function renderInspector() {
+            var t = current(), key = selection();
+            var show = !!(settings.inspector && t && t.kind === 'd2' && t.canvas);
+            el.inspector.hidden = !show;
+            if (!show) { inspected = null; return; }
+            if (el.inspector.contains(document.activeElement) && inspected === key) { return; }
+            inspected = key;
+            var p = 'dg-in-' + n + '-';
+            if (!key) {
+                el.inspector.innerHTML = '<p class="dg-inspector-empty">Select a shape or a connection to see its settings here.</p>';
+                return;
+            }
+            var html;
+            if (isConnection(key)) {
+                var c = connectionOf(t, key) || {}, st = c.style || {}, src = c.source || {}, dst = c.target || {};
+                html = '<h3 class="dg-inspector-title">Connection</h3><p class="dg-inspector-id">' + esc((c.from || '') + ' to ' + (c.to || '')) + '</p>' +
+                    textField(p + 'label', key, 'Label', c.label) +
+                    field(p + 'arrows', 'Direction', '<div class="dg-row"><span class="form-select-wrap"><select class="form-select" id="' + p + 'arrows" data-arrows>' +
+                        ARROWS.map(function (a) { return '<option value="' + esc(a[0]) + '"' + (a[0] === (c.arrows || '->') ? ' selected' : '') + '>' + esc(a[1] + ' (' + a[0] + ')') + '</option>'; }).join('') +
+                        '</select></span><button type="button" class="btn btn-sm" data-reverse>Reverse</button></div>') +
+                    selectField(p + 'src', key + '.source-arrowhead.shape', 'Start Arrowhead', src.shape, HEADS) +
+                    textField(p + 'srcl', key + '.source-arrowhead', 'Start Label', src.label) +
+                    selectField(p + 'dst', key + '.target-arrowhead.shape', 'End Arrowhead', dst.shape, HEADS) +
+                    textField(p + 'dstl', key + '.target-arrowhead', 'End Label', dst.label) +
+                    colourField(key + '.style.stroke', 'Line Colour', st.stroke) +
+                    selectField(p + 'dash', key + '.style.stroke-dash', 'Line Style', st['stroke-dash'] && st['stroke-dash'] !== '0' ? (st['stroke-dash'] <= 3 ? '2' : '5') : '', DASHES) +
+                    numberField(p + 'width', key + '.style.stroke-width', 'Line Width', st['stroke-width'], 1, 15) +
+                    checks('Effects', [[key + '.style.animated', 'Animated', st.animated === 'true']]);
+            } else {
+                var s = shapeOf(t, key) || {}, ss = s.style || {};
+                html = '<h3 class="dg-inspector-title">Shape</h3><p class="dg-inspector-id">' + esc(key) + '</p>' +
+                    textField(p + 'label', key, 'Label', s.label) +
+                    selectField(p + 'kind', key + '.shape', 'Kind', s.shape || 'rectangle', SHAPES) +
+                    colourField(key + '.style.fill', 'Fill', ss.fill) +
+                    colourField(key + '.style.stroke', 'Line Colour', ss.stroke) +
+                    selectField(p + 'dash', key + '.style.stroke-dash', 'Line Style', ss['stroke-dash'] && ss['stroke-dash'] !== '0' ? (ss['stroke-dash'] <= 3 ? '2' : '5') : '', DASHES) +
+                    numberField(p + 'width', key + '.style.stroke-width', 'Line Width', ss['stroke-width'], 1, 15) +
+                    colourField(key + '.style.font-color', 'Text Colour', ss['font-color']) +
+                    numberField(p + 'size', key + '.style.font-size', 'Text Size', ss['font-size'], 8, 100) +
+                    checks('Text', [[key + '.style.bold', 'Bold', ss.bold === 'true'], [key + '.style.italic', 'Italic', ss.italic === 'true'], [key + '.style.underline', 'Underline', ss.underline === 'true']]) +
+                    checks('Effects', [[key + '.style.shadow', 'Shadow', ss.shadow === 'true'], [key + '.style.3d', '3D', ss['3d'] === 'true'], [key + '.style.multiple', 'Multiple', ss.multiple === 'true'], [key + '.style.double-border', 'Double Border', ss['double-border'] === 'true']]) +
+                    textField(p + 'icon', key + '.icon', 'Icon', s.icon, 'An address of a picture. Diagrams draws only icons written into the diagram, as data: addresses.') +
+                    textField(p + 'link', key + '.link', 'Link', s.link) +
+                    textField(p + 'tip', key + '.tooltip', 'Tooltip', s.tooltip);
+            }
+            el.inspector.innerHTML = html;
+            window.yavcMdEditor.wireColours(el.inspector);
+        }
+        /* A field left changed is one edit. The label is the shape or the
+           connection itself; an empty label shows a shape's name. */
+        function inspectorChanged(e) {
+            var f = e.target, t = current(), key = inspected;
+            if (!t || !key || !canEdit()) { return; }
+            if (f.hasAttribute('data-arrows')) {
+                applyEdit({ op: 'arrows', key: key, value: f.value }).then(function (out) { if (out && out.key) { done(out, 'Changed the direction.'); } });
+                return;
+            }
+            var setKey = f.getAttribute('data-set');
+            if (!setKey) { return; }
+            var value = f.type === 'checkbox' ? (f.checked ? 'true' : null) : f.value.trim();
+            if (setKey === key) {
+                if (value === '' && !isConnection(key)) { value = lastName(key); }
+            } else if (value === '') { value = null; }
+            applyEdit({ op: 'set', key: setKey, value: value }, key).then(function (out) { done(out, 'Changed it.'); });
+        }
+        el.inspector.addEventListener('change', function (e) {
+            if (e.target.classList.contains('md-colour-pick')) {
+                var paired = el.inspector.querySelector('#' + e.target.getAttribute('data-for'));
+                if (paired) { paired.value = e.target.value; inspectorChanged({ target: paired }); }
+                return;
+            }
+            inspectorChanged(e);
+        });
+        el.inspector.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter' && e.target.matches('input.form-input')) { e.preventDefault(); e.target.blur(); }
+        });
+        el.inspector.addEventListener('click', function (e) {
+            if (!e.target.closest('[data-reverse]')) { return; }
+            var t = current(), key = inspected, c = t && connectionOf(t, key);
+            if (!c || !canEdit()) { return; }
+            applyEdit({ op: 'reconnect', key: key, from: c.to, to: c.from }).then(function (out) { done(out, 'Reversed it.'); });
+        });
+        function toggleInspector() {
+            settings.inspector = !settings.inspector;
+            keepSetting('inspector', settings.inspector);
+            renderInspector();
+            commandsChanged();
+        }
+
         function selectKey(t, key, how) {
             if (!t.canvas) { return; }
             t.canvas.select(key);
@@ -400,7 +530,7 @@
         /* One of D2's edits to the front diagram's text (internal/d2api
            edit). The first one in a file whose text is not as D2 writes it
            says so once, since D2 writes the whole text again. */
-        async function applyEdit(req) {
+        async function applyEdit(req, keep) {
             var t = current();
             if (!t || t.kind !== 'd2') { return null; }
             if (t.problems && t.problems.length) { say('The text has a mistake in it, so the drawing cannot be changed. Put the mistake right first.', 'warn'); return null; }
@@ -422,7 +552,7 @@
             if (t !== current()) { return null; }
             /* A change that worked puts right whatever a refused one said. */
             say('', 'warn');
-            t.pending = out.key || null;
+            t.pending = keep || out.key || null;
             replaceText(out.text);
             await drawNow();
             /* The first change to a file D2 did not write itself rewrites the
@@ -527,7 +657,7 @@
                 validate: function (v) { return /[{}]/.test(v) ? 'A label cannot hold a brace, { or }.' : null; }
             }).then(function (v) {
                 if (v == null || v === now) { return; }
-                applyEdit({ op: 'set', key: key, value: v === '' ? (conn ? null : lastName(key)) : v }).then(function (out) { done(out, 'Set the label.'); });
+                applyEdit({ op: 'set', key: key, value: v === '' ? (conn ? '' : lastName(key)) : v }).then(function (out) { done(out, 'Set the label.'); });
             });
         }
         function renameShape() {
@@ -676,6 +806,8 @@
             el.where.textContent = t.path || 'Not saved yet';
             el.kind.textContent = KIND_NAME[t.kind];
             root.setAttribute('data-kind', t.kind);
+            inspected = undefined;
+            renderInspector();
             applyDock();
             drawNow();
             commandsChanged();
@@ -940,6 +1072,7 @@
                 cmd('shape-move-top', 'Move to the Top', null, function () { moveTo(selection(), null); }, { hidden: function () { return !isD2(); }, disabled: function () { var k = selection(); return !!whyNot('shape') || k.indexOf('.') < 0; }, reason: function () { var w = whyNot('shape'); return w || (selection().indexOf('.') < 0 ? 'It is at the top already.' : null); } }),
                 cmd('shape-delete', 'Delete', 'yavc-bin', deleteSelected, { builtIn: 'Delete', danger: true, hidden: function () { return !isD2(); }, disabled: function () { return !!whyNot(true); }, reason: function () { return whyNot(true); } }),
                 cmd('redraw', 'Draw Again', 'reload', function () { drawNow(); }),
+                cmd('toggle-inspector', 'Show the Inspector', 'panel', toggleInspector, { hidden: function () { return !isD2(); }, checked: function () { return !!settings.inspector; } }),
                 cmd('fit', 'Fit the Drawing to the Pane', 'maximize', function () { settings.fit = !settings.fit; applyFit(); keepSetting('fit', settings.fit); commandsChanged(); }, { checked: function () { return !!settings.fit; } }),
                 { id: 'dock', label: 'Drawing', glyph: 'dock', current: function () { var d = DOCKS.find(function (x) { return x[0] === settings.dock; }); return d ? d[1] : null; },
                     items: DOCKS.map(function (d) { return { id: 'dock-' + d[0], label: d[1], choice: 'dg-dock', value: d[0], checked: function () { return settings.dock === d[0]; }, run: function () { setDock(d[0]); } }; }) }
@@ -955,7 +1088,7 @@
                 { label: 'Edit', glyph: 'pencil', priority: 4, items: ['undo', 'redo', 'find'] },
                 { label: 'Shape', glyph: 'square', priority: 5, items: ['shape-add', 'connect', 'shape-label', 'shape-type', 'shape-delete'] },
                 { label: 'Diagram', glyph: 'code', priority: 2, items: ['format-text', 'copy-embed', 'export-svg', 'export-png'] },
-                { label: 'View', glyph: 'panel', priority: 1, end: true, items: [{ choice: 'dg-view' }, 'dock', 'fit'] }
+                { label: 'View', glyph: 'panel', priority: 1, end: true, items: [{ choice: 'dg-view' }, 'dock', 'fit', 'toggle-inspector'] }
             ] }];
         }
         /* Diagrams' help is a page of the site, /help/diagrams, which the
@@ -967,7 +1100,7 @@
                 { id: 'edit', label: 'Edit', glyph: 'pencil', items: ['undo', 'redo', '-', 'find'] },
                 { id: 'diagram', label: 'Diagram', glyph: 'code', items: ['format-text', 'redraw', '-', 'copy-embed'] },
                 { id: 'shape', label: 'Shape', glyph: 'square', items: ['shape-add', 'shape-add-inside', 'connect', '-', 'shape-label', 'shape-rename', 'shape-type', '-', 'shape-move-into', 'shape-move-top', '-', 'shape-delete', '-', 'tool-select'].concat(PALETTE.map(function (k) { return 'tool-' + k[0]; })) }
-            ], into: { view: ['view-text', 'view-preview', 'view-split', '-', 'dock', 'fit'], go: ['go-to-line'] } };
+            ], into: { view: ['view-text', 'view-preview', 'view-split', '-', 'dock', 'fit', 'toggle-inspector'], go: ['go-to-line'] } };
         }
         root.addEventListener('pudl:contextmenu', function (e) {
             var t = e.detail.target;

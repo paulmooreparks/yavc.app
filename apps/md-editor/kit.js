@@ -7,6 +7,7 @@
      yavcMdEditor.codeTheme(CM)         the site's colours for a code editor, from PUDL's tokens
      yavcMdEditor.codeSearch(CM, onQuery)   CodeMirror's search with the site's find bar
      yavcMdEditor.findBar(driver, onQuery)  the find bar, for a search of the host's own
+     yavcMdEditor.colourRows(fields), wireColours(body)   a picker beside a colour's text field
      yavcMdEditor.pageView()            the page view (page-view.js), loaded
      yavcMdEditor.mermaid()             Mermaid, loaded
      yavcMdEditor.drawMermaid(place, source, opts)   a Mermaid diagram drawn into place
@@ -1312,6 +1313,7 @@
 
     window.yavcMdEditor = {
         here: HERE, stamp: STAMP, placeholder: PLACEHOLDER,
+        colourRows: pickerRows, wireColours: wirePickers,
         libs: libs, codeTheme: codeTheme, codeSearch: codeSearch, findBar: findBar, pageView: pageView, mermaid: mermaid, drawMermaid: drawDiagram, loadScript: loadScript,
         FORMATS: FORMATS, STYLES: STYLES, INSERTS: INSERTS, SHORTCODES: SHORTCODES, MENU: MENU, STOCK_CLASSES: STOCK_CLASSES,
         tableCommand: tableCommand, wordCount: wordCount, readingMinutes: readingMinutes,

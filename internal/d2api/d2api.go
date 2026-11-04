@@ -241,6 +241,13 @@ type Shape struct {
 	Shape  string  `json:"shape"`
 	Parent string  `json:"parent,omitempty"`
 	Places []Place `json:"places"`
+	// Style is the shape's own style settings, by D2's names (fill,
+	// stroke-dash, bold); Icon, Link and Tooltip are set when it has them.
+	// The inspector shows them.
+	Style   map[string]string `json:"style,omitempty"`
+	Icon    string            `json:"icon,omitempty"`
+	Link    string            `json:"link,omitempty"`
+	Tooltip string            `json:"tooltip,omitempty"`
 }
 
 // Connection is one connection of the diagram in an outline.
@@ -250,6 +257,58 @@ type Connection struct {
 	To     string  `json:"to"`
 	Label  string  `json:"label,omitempty"`
 	Places []Place `json:"places"`
+	// Arrows is the connection's direction as written: ->, <-, <-> or --.
+	Arrows string `json:"arrows"`
+	// Source and Target are its arrowheads' settings, when it has any.
+	Source *Arrowhead        `json:"source,omitempty"`
+	Target *Arrowhead        `json:"target,omitempty"`
+	Style  map[string]string `json:"style,omitempty"`
+}
+
+// Arrowhead is one end of a connection: its shape (triangle, diamond,
+// cf-many and the rest) and the label beside it.
+type Arrowhead struct {
+	Shape string `json:"shape,omitempty"`
+	Label string `json:"label,omitempty"`
+}
+
+// styleOf is a style's settings by D2's own names, leaving out the ones not
+// set; nil when none are.
+func styleOf(st d2graph.Style) map[string]string {
+	out := map[string]string{}
+	for name, v := range map[string]*d2graph.Scalar{
+		"opacity": st.Opacity, "stroke": st.Stroke, "fill": st.Fill, "fill-pattern": st.FillPattern, "stroke-width": st.StrokeWidth,
+		"stroke-dash": st.StrokeDash, "border-radius": st.BorderRadius, "shadow": st.Shadow, "3d": st.ThreeDee, "multiple": st.Multiple,
+		"font": st.Font, "font-size": st.FontSize, "font-color": st.FontColor, "animated": st.Animated, "bold": st.Bold, "italic": st.Italic,
+		"underline": st.Underline, "filled": st.Filled, "double-border": st.DoubleBorder, "text-transform": st.TextTransform,
+	} {
+		if v != nil {
+			out[name] = v.Value
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func arrowheadOf(a *d2graph.Attributes) *Arrowhead {
+	if a == nil || (a.Shape.Value == "" && a.Label.Value == "") {
+		return nil
+	}
+	return &Arrowhead{Shape: a.Shape.Value, Label: a.Label.Value}
+}
+
+func arrowsOf(e *d2graph.Edge) string {
+	switch {
+	case e.SrcArrow && e.DstArrow:
+		return "<->"
+	case e.SrcArrow:
+		return "<-"
+	case e.DstArrow:
+		return "->"
+	}
+	return "--"
 }
 
 // OutlineResponse is the diagram's structure, for the Outline pane, an
@@ -287,7 +346,16 @@ func outline(arg string) (any, error) {
 	n := len(req.Text)
 	out := &OutlineResponse{Shapes: make([]Shape, 0, len(g.Objects)), Connections: make([]Connection, 0, len(g.Edges))}
 	for _, o := range g.Objects {
-		s := Shape{ID: o.AbsID(), Label: o.Label.Value, Shape: o.Shape.Value, Places: []Place{}}
+		s := Shape{ID: o.AbsID(), Label: o.Label.Value, Shape: o.Shape.Value, Places: []Place{}, Style: styleOf(o.Style)}
+		if o.Icon != nil {
+			s.Icon = o.Icon.String()
+		}
+		if o.Link != nil {
+			s.Link = o.Link.Value
+		}
+		if o.Tooltip != nil {
+			s.Tooltip = o.Tooltip.Value
+		}
 		if s.Shape == "" {
 			s.Shape = "rectangle"
 		}
@@ -302,7 +370,8 @@ func outline(arg string) (any, error) {
 		out.Shapes = append(out.Shapes, s)
 	}
 	for _, e := range g.Edges {
-		c := Connection{ID: e.AbsID(), From: e.Src.AbsID(), To: e.Dst.AbsID(), Label: e.Label.Value, Places: []Place{}}
+		c := Connection{ID: e.AbsID(), From: e.Src.AbsID(), To: e.Dst.AbsID(), Label: e.Label.Value, Places: []Place{},
+			Arrows: arrowsOf(e), Source: arrowheadOf(e.SrcArrowhead), Target: arrowheadOf(e.DstArrowhead), Style: styleOf(e.Style)}
 		for _, ref := range e.References {
 			if ref.Edge != nil && ref.Edge.Range.Path == inputPath {
 				c.Places = append(c.Places, placeOf(ref.Edge.Range, n))
@@ -645,6 +714,9 @@ func blockIcons(d *d2target.Diagram) []string {
 //	           or out of a container; Descendants moves what is inside it
 //	           too.
 //	reconnect  Key is a connection, and From and To its new ends.
+//	arrows     Key is a connection, and Value its direction: ->, <-, <->
+//	           or --. Every place the connection is written changes, so
+//	           settings given it elsewhere still reach it.
 type EditRequest struct {
 	Text        string  `json:"text"`
 	Op          string  `json:"op"`
@@ -713,7 +785,24 @@ func edit(arg string) (any, error) {
 			}
 		}
 	case "set":
-		g, err = d2oracle.Set(g, nil, req.Key, nil, req.Value)
+		if req.Value == nil {
+			// No value takes a setting away. D2's delete does that for a
+			// style, an arrowhead, an icon, a link or a tooltip; a shape's
+			// kind goes back to D2's own, the rectangle, written out, since
+			// the delete leaves it; and a shape or a connection itself is
+			// never taken away by a set, which would delete it.
+			switch {
+			case strings.HasSuffix(req.Key, ".shape") && !strings.Contains(req.Key, "-arrowhead"):
+				rect := "rectangle"
+				g, err = d2oracle.Set(g, nil, req.Key, nil, &rect)
+			case settingKey.MatchString(req.Key):
+				g, err = d2oracle.Delete(g, nil, req.Key)
+			default:
+				return &EditResponse{Problems: []Problem{{Message: "Only a setting can be taken away by setting nothing; to remove " + req.Key + " itself, delete it."}}}, nil
+			}
+		} else {
+			g, err = d2oracle.Set(g, nil, req.Key, nil, req.Value)
+		}
 	case "delete":
 		g, err = d2oracle.Delete(g, nil, req.Key)
 	case "rename":
@@ -728,7 +817,36 @@ func edit(arg string) (any, error) {
 		g, err = d2oracle.Move(g, nil, req.Key, *req.To, req.Descendants)
 		key = *req.To
 	case "reconnect":
+		// The connection's key changes with its ends; the one it has
+		// afterwards is found by its new ends and the line it is on.
+		line, src, dst := -1, "", ""
+		for _, e := range g.Edges {
+			if e.AbsID() == req.Key {
+				src, dst = e.Src.AbsID(), e.Dst.AbsID()
+				for _, ref := range e.References {
+					if ref.Edge != nil && line < 0 {
+						line = ref.Edge.Range.Start.Line
+					}
+				}
+			}
+		}
 		g, err = d2oracle.ReconnectEdge(g, nil, req.Key, req.From, req.To)
+		if err == nil {
+			if req.From != nil {
+				src = *req.From
+			}
+			if req.To != nil {
+				dst = *req.To
+			}
+			if k := edgeKeyAt(g, src, dst, "", line); k != "" {
+				key = k
+			}
+		}
+	case "arrows":
+		if req.Value == nil {
+			return &EditResponse{Problems: []Problem{{Message: "A direction is one of ->, <-, <-> or --."}}}, nil
+		}
+		g, key, err = setArrows(g, req.Key, *req.Value)
 	default:
 		return nil, fmt.Errorf("there is no edit called %q", req.Op)
 	}
@@ -767,4 +885,79 @@ func lastObject(g *d2graph.Graph) string {
 		return ""
 	}
 	return g.Objects[len(g.Objects)-1].AbsID()
+}
+
+// settingKey matches a key whose last part is one of a shape's or a
+// connection's settings, which D2's delete takes away on its own.
+var settingKey = regexp.MustCompile(`\.(style\.[a-z0-9-]+|icon|link|tooltip|near|width|height|(source|target)-arrowhead(\.(shape|label))?)$`)
+
+// setArrows changes a connection's direction. D2's oracle has no edit for
+// it, so the arrows are changed on the parsed text, at every reference to
+// the connection, since a connection is known by its arrows and a setting
+// written elsewhere as (a -> b)[0].style.x must still reach it; the text
+// is then written by D2's formatter and compiled again, and the key the
+// connection has afterwards is found by its ends and the line it starts on.
+func setArrows(g *d2graph.Graph, key, arrows string) (*d2graph.Graph, string, error) {
+	src, dst := "", ""
+	switch arrows {
+	case "->":
+		dst = ">"
+	case "<-":
+		src = "<"
+	case "<->":
+		src, dst = "<", ">"
+	case "--":
+	default:
+		return nil, "", fmt.Errorf("a direction is one of ->, <-, <-> or --, not %q", arrows)
+	}
+	var edge *d2graph.Edge
+	for _, e := range g.Edges {
+		if e.AbsID() == key {
+			edge = e
+		}
+	}
+	if edge == nil {
+		return nil, "", fmt.Errorf("there is no connection %s", key)
+	}
+	line := -1
+	for _, ref := range edge.References {
+		if ref.Edge == nil {
+			continue
+		}
+		if line < 0 {
+			line = ref.Edge.Range.Start.Line
+		}
+		ref.Edge.SrcArrow, ref.Edge.DstArrow = src, dst
+	}
+	text := d2format.Format(g.AST)
+	fsys, err := memfs.New(map[string]string{inputPath: text})
+	if err != nil {
+		return nil, "", err
+	}
+	g2, _, err := d2compiler.Compile(inputPath, strings.NewReader(text), &d2compiler.CompileOptions{FS: fsys})
+	if err != nil {
+		return nil, "", err
+	}
+	return g2, edgeKeyAt(g2, edge.Src.AbsID(), edge.Dst.AbsID(), arrows, line), nil
+}
+
+// edgeKeyAt is the key of the connection from src to dst (with the given
+// arrows, or any when empty) written on line, or of the first such
+// connection when none is on that line.
+func edgeKeyAt(g *d2graph.Graph, src, dst, arrows string, line int) string {
+	found := ""
+	for _, e := range g.Edges {
+		if e.Src.AbsID() != src || e.Dst.AbsID() != dst || (arrows != "" && arrowsOf(e) != arrows) {
+			continue
+		}
+		if found == "" {
+			found = e.AbsID()
+		}
+		for _, ref := range e.References {
+			if ref.Edge != nil && ref.Edge.Range.Start.Line == line {
+				return e.AbsID()
+			}
+		}
+	}
+	return found
 }

@@ -56,6 +56,10 @@ The palette above the drawing places shapes by pointing. Choose a kind of shape 
 
 A selected shape has a round handle on its right edge. Drag from the handle to another shape to connect them, or to empty space to connect it to a new shape of the palette's kind. Drag a selected shape onto another shape to move it inside, or onto empty space to move it out to the top of the diagram; its connections follow it. Shape, Move Into does the same from the keyboard, asking for the container's name, and Shape, Move to the Top takes it out again. A connection to a new shape is N and then C from the keyboard. While you drag, the shape it would land on has a dashed edge.
 
+The inspector beside the drawing shows the settings of whatever is selected, and View, Show the Inspector hides it. For a shape it has the label, the kind of shape, the fill, the line's colour, style and width, the text's colour, size, bold, italic and underline, a shadow, 3D, multiple and double border, and the icon, link and tooltip. For a connection it has the label, the direction (forward, backward, both ways or no arrows) with Reverse to swap its ends, the arrowhead and label at each end, including the crow's feet of an entity diagram, the line's colour, style and width, and animation. A change is made when you leave the field or press Enter, and emptying a field takes that setting away.
+
+A selected shape has a handle on each side to drag a connection from. D2 decides where a line meets a shape, so the side you drag from does not fix where it attaches.
+
 Every change on the drawing is a change to the text, made through D2's own editing, so Undo takes it back as it does typing, and the text is always the whole diagram. D2 writes the whole text again in its own layout as it makes a change, which tidies the spacing and keeps every comment; the first time it does this in a file, the status line says so. D2 places the shapes itself, so a new shape goes where the layout puts it rather than where you clicked. While the text has a mistake in it, the drawing cannot be changed until the mistake is put right.
 
 ## Colours
