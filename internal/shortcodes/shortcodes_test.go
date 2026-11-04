@@ -3,10 +3,12 @@
 package shortcodes_test
 
 import (
+	"os"
 	"strings"
 	"testing"
 
 	"yavc.app/internal/preview"
+	"yavc.app/internal/shortcodes"
 )
 
 func render(t *testing.T, md string) string {
@@ -98,5 +100,21 @@ func TestShortcodeKind(t *testing.T) {
 	want := "paragraph shortcode paragraph"
 	if strings.Join(kinds, " ") != want {
 		t.Errorf("kinds %v, want %s", kinds, want)
+	}
+}
+
+// The dialect's specification (docs/markdown-dialect.md) lists every
+// shortcode the engine knows, with its kind, so the stated dialect and the
+// engine cannot drift apart unnoticed.
+func TestDialectCatalogue(t *testing.T) {
+	doc, err := os.ReadFile("../../docs/markdown-dialect.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, d := range shortcodes.Definitions() {
+		row := "| `" + d.Name + "` | " + d.Kind + " |"
+		if !strings.Contains(string(doc), row) {
+			t.Errorf("docs/markdown-dialect.md does not list %s as a %s shortcode", d.Name, d.Kind)
+		}
 	}
 }

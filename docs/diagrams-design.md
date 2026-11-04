@@ -200,6 +200,10 @@ Still to come in D3 are the order of a new shape among its siblings (decision 6)
 
 The second part of D2 is the embedding: the `{{diagram}}` shortcode with its form and Insert entries, live update over a `BroadcastChannel`, icons from the site and the home folder, imports from the diagram's folder, the colouring in the Editor's own text view, and the browser test of Mermaid drawn as an image. Download as PDF and as Word wait for the editing kit's exports (docs/docs-design.md, decision 18).
 
+## A second, freeform editor
+
+On 2026-11-04 Paul asked whether the visual editor was being built the wrong way, since an editor over a language that lays out its own drawings cannot place shapes where they are put, as Figma or draw.io does. He chose two editors: this one, for diagrams written as text and laid out automatically, which serves documents, slides and agents, and a freeform one over JSON Canvas files, designed in `docs/canvas-design.md` (DESIGN.md, decision 27).
+
 ## Open questions
 
 1. **Pinned positions.** Dragging a shape to a place would need its position stored somewhere (a comment block in the file is the likeliest), would fight the layout engine, and is refused by D2 itself. The recommendation is to leave it out. If Paul wants it, the cost is a layout of our own for pinned shapes and a convention that nothing else reads.
