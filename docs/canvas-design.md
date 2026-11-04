@@ -1,0 +1,64 @@
+# Canvas: freeform diagrams in JSON Canvas
+
+Status: designed on 2026-11-04, not yet built. Paul wants a diagram editor where shapes go where he puts them, as in Figma or draw.io. The D2 editor cannot be that editor, because D2 lays out every diagram itself and its free layout engines refuse positions. He chose two editors over one compromise, comparing the split to the Editor's `foo.md` and `foo.docs.md`, and asked that the second not become a language of our own. This design answers that with an existing open format, JSON Canvas, and keeps to what the format defines wherever it can.
+
+In outline, a canvas is a `something.canvas` file in JSON Canvas 1.0. Diagrams opens it beside D2 and Mermaid, draws it with a renderer of the site's own, and edits it on a canvas where every shape and connector stays where it was put. The text of the file is still the whole diagram, shown beside the canvas as the D2 text is, so an agent, git and a reader of the raw file can all follow it.
+
+## What the format provides
+
+JSON Canvas 1.0 (2024-03-11, MIT licence, published by Obsidian) was read from its repository, `obsidianmd/jsoncanvas`, file `spec/1.0.md`. Its site, jsoncanvas.org, is outside this environment's network policy. The specification defines these parts.
+
+- A file holds two arrays, `nodes` and `edges`, both optional. The order of `nodes` is the drawing order: the first is drawn below the rest and the last on top.
+- Every node has an `id`, a `type`, integer `x`, `y`, `width` and `height` in pixels, and an optional `color`.
+- There are four kinds of node. A `text` node holds Markdown. A `file` node holds a path, with an optional `subpath` that starts with `#`. A `link` node holds a `url`. A `group` node is "a visual container for nodes within it", with an optional `label` and an optional background picture.
+- An edge has an `id`, a `fromNode` and a `toNode`, an optional `fromSide` and `toSide` (each `top`, `right`, `bottom` or `left`), an optional `fromEnd` and `toEnd` (each `none` or `arrow`, defaulting to no arrow at the start and an arrow at the end), an optional `color` and an optional `label`.
+- A colour is a hex string or one of six presets, `"1"` to `"6"` (red, orange, yellow, green, cyan and purple). The specification leaves the presets' exact values to each application.
+
+Three things matter for this design. The format has no shapes, since every node is a card. Its line ends are only an arrow or nothing. And the specification says nothing about properties it does not define: it neither allows nor forbids them, and says nothing about whether a reader must keep them. The repository's readme lists extensibility among the format's aims but defines no mechanism for it.
+
+## Decisions
+
+1. **A canvas is a JSON Canvas file** (2026-11-04, Paul chose to explore it). The file is `something.canvas`, the suffix the format names, and it is valid JSON Canvas 1.0. Everything that has a meaning in the specification is written the way the specification writes it: positions and sizes, text, groups, the sides and arrows of a connector, colours and labels. A file Diagrams writes therefore opens in Obsidian and any other JSON Canvas application, which show the same nodes in the same places joined by the same connectors.
+
+2. **What the format lacks is one extension, kept apart and degrading to the format** (2026-11-04, recommended; open question 1). Shapes, connector routing, line styles and the richer line ends are written in a single property on a node or an edge, `"yavc"`, holding an object, for example `"yavc": {"shape": "cylinder"}`. Nothing else is added anywhere. Because the specification is silent about extra properties, the design assumes another application may drop the `"yavc"` objects when it saves, and every file must still be a sensible diagram without them: a cylinder becomes a card in the same place with the same text, and a crow's foot becomes an arrow or nothing. The extension is documented as a specification of its own in `docs/canvas-extension.md`, version 1, before the first file is written, so it is a stated dialect and not one implied by the code.
+
+3. **Diagrams opens canvases, as the Editor opens documents** (2026-11-04). A canvas is a third kind of diagram in the Diagrams application, beside D2 and Mermaid, with the same tabs, files, export and embedding, and with its own toolbar of tools. This follows the comparison Paul drew: the Editor opens `foo.md` and `foo.docs.md` with one set of commands and a richer mode for the second, and Diagrams opens `foo.d2` and `foo.canvas` the same way.
+
+4. **The text is still the model, and a gesture is one change to it** (2026-11-04). The Text view shows the file's JSON in CodeMirror, and Split shows it beside the canvas, as for D2. Every gesture on the canvas (a move, a resize, a new connector) is one replacement of the JSON text, made as one CodeMirror transaction, so Undo, Redo and the text view stay one thing, as decision 5 of `docs/diagrams-design.md` made them for D2. Diagrams writes the JSON in one stable form, two spaces of indent and each object's keys in the order the specification lists them, so a move changes two numbers on two lines and a git diff shows only that. Text typed by hand is kept as it is until the canvas next changes it.
+
+5. **The site draws a canvas itself, as SVG it owns** (2026-11-04). The renderer turns a canvas into an SVG element made from numbers, escaped text and the site's own path for each shape, so every part of the drawing is an element the editor can hit-test, select and restyle exactly. This removes the problem the D2 editor has with lines it did not draw. A drawing for a document or an export is the same SVG, serialised and shown as an image, as a D2 diagram is (decision 10 of the Diagrams design).
+
+6. **A text node's Markdown is drawn by the site's Markdown engine, cleaned** (2026-11-04; open question 2). On the canvas a text node's Markdown is drawn as HTML by the Markdown engine and the site's HTML cleaner, in a `foreignObject`, so headings, lists, emphasis and links look as they do in the Editor. In an exported SVG or PNG, where a `foreignObject` can stop a browser from making a picture, the same text is drawn as SVG text, with paragraphs, bold and italic kept and the rest reduced to plain text.
+
+7. **Connectors are routed by the site, between the sides the file gives** (2026-11-04). A connector leaves its `fromSide` and arrives at its `toSide`. Where a side is not given, the router chooses the nearest pair of sides. The route is computed from the two boxes and the two sides, and nothing about it is stored except the style in the extension (`"route": "straight"`, `"elbow"` or `"curve"`, elbow by default). The same file therefore draws the same way every time, the drawing never disagrees with a stored path, and another application's own routing is not contradicted by data it would ignore.
+
+8. **Placing is free, and snapping is an aid** (2026-11-04). A shape goes where the pointer puts it, in whole pixels, as the format requires. While a shape is dragged, it snaps to an 8-pixel grid and to the edges and centres of the shapes near it, showing a guide line for each match; holding Alt turns snapping off. The arrow keys move the selection by one pixel, and by eight with Shift. Align and Distribute act on a selection of several shapes. Resizing has handles on the corners and the sides, and keeps the proportions with Shift.
+
+9. **Groups are the format's groups, containing by area** (2026-11-04). The specification defines a group as a visual container for the nodes within it and gives no list of members, so membership is by area: a node lies in a group when its box lies inside the group's. Moving a group moves the nodes inside it, and a node dragged out of a group's area leaves it. This is the reading the specification's own words give, and it needs no extension.
+
+10. **Shapes are drawn to fit their box, and the set matches the D2 editor's palette** (2026-11-04). The extension's `shape` is one of rectangle, rounded, oval, diamond, parallelogram, document, cylinder, queue, person, cloud, hexagon, package and text, each drawn by the site to fill the node's box with the text centred inside. These are the shapes of the D2 editor's palette, so the two editors offer the same set and a diagram converts between them without losing kinds.
+
+11. **Converting between the two kinds of diagram is a command, not a link** (2026-11-04). File, Convert to a Canvas lays out a D2 diagram once with D2, takes each shape's box from the compiled diagram (the documented `d2target` positions the D2 editor already reads), and writes a canvas with the same shapes, labels and connectors, which can then be arranged by hand. Convert to D2 does the reverse and leaves the positions behind, since D2 cannot hold them. Each writes a new file and leaves the original as it was, because the two formats do not stay in step.
+
+12. **Embedding is the same as for D2** (2026-11-04). A canvas file embeds in a document or on a slide with the `{{diagram}}` shortcode the Diagrams design describes, and draws through this renderer. There is no fenced form, since JSON is not something to write inside a document.
+
+13. **A canvas is untrusted, as every file is** (2026-11-04). The reader checks the JSON against the specification and the extension's own schema before drawing anything, and refuses a file over 2 MB or over 5,000 nodes and edges. A colour must be a hex colour or a preset. Text goes through the Markdown engine and the cleaner. A file node shows a picture only from the site or the home folder, and never loads one from another host. A link node shows its address as text and opens it only when pressed, in a new tab with no opener. A group's background picture follows the file node's rule.
+
+14. **The PUDL rules hold on the canvas** (2026-11-04). The selection is the focus ring, handles are raised controls, the tools are a toolbar of raised buttons, the inspector is the D2 editor's form of sunken fields, and every gesture has a command with a menu row and a key. The canvas is arrowed through as the D2 canvas is, with Tab moving between shapes in drawing order, and an Outline pane lists every node and edge for a person who cannot use a pointer.
+
+## Work, in order
+
+| Milestone | Work | Size |
+|---|---|---|
+| C1. The format and the drawing | The reader and writer of JSON Canvas with the extension and its schema, the stable writing, the renderer with the shapes and the elbow, straight and curved routes, Markdown text, a read-only canvas view in Diagrams, export to SVG and PNG, and `docs/canvas-extension.md` | About 1,500 lines, 2 sessions |
+| C2. Editing | Select, move, resize, snapping and guides, new shapes from the toolbar, connectors dragged from a side, delete, duplicate, copy and paste, z-order, groups, and the inspector | About 2,000 lines, 3 sessions; the riskiest part |
+| C3. Keyboard and outline | Every gesture from the keyboard, the Outline pane, align and distribute, and the actions for agents | About 1,000 lines, 1 to 2 sessions |
+| C4. Conversion and embedding | Convert to and from D2, the `{{diagram}}` embed for canvases, and a check that a file round-trips through Obsidian's reading of the format | About 800 lines, 1 session |
+
+The remaining work of the D2 editor (the Outline pane, arrow keys along connections, a new shape's place among its siblings) waits behind C2, since the canvas is where Paul wants hand placement, and some of it (the Outline pane) can be shared.
+
+## Open questions
+
+1. **The extension and other applications.** The specification does not say whether an application must keep properties it does not define. If Obsidian drops `"yavc"` when it saves a canvas, a file edited there keeps its layout, text and connectors but loses its shapes and line styles. The recommendation is to accept that, since decision 2 makes the loss graceful, to check Obsidian's actual behaviour in C4 without building on it, and to ask the format's maintainers to state a rule for extension properties, so the answer becomes a documented one. A draft of that request can be written for Paul to file, as the D2 one was.
+2. **Text in exports.** Decision 6 draws Markdown as HTML on the canvas and as SVG text in exports, so an export can differ slightly from the canvas, for example in a code block or a table inside a node. The alternative is SVG text everywhere, which loses most Markdown on the canvas too. The recommendation is the split, with the difference stated in the help page.
+3. **An infinite canvas or a page.** The format's coordinates are unbounded, as an infinite whiteboard's are. Diagrams can show the canvas as an infinite surface with pan and zoom, or fit it to its contents like a D2 drawing. The recommendation is pan and zoom while editing, and the contents' bounds, with a margin, for an export or an embed.
