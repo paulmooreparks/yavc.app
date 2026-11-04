@@ -619,6 +619,7 @@
                 var values = entries.map(function (e) { return String(value(e, k)); }), mixed = values.some(function (v) { return v !== values[0]; }), v = mixed ? null : values[0], id = p + k;
                 var control;
                 if (type === 'segments') { control = segmentField(id, k, label, v, options); }
+                else if (type === 'picker') { control = pickerField(id, k, label, v, options); }
                 else if (type === 'select') { control = selectField(id, k, label, mixed ? '__mixed__' : v, mixed ? [['__mixed__', 'Mixed']].concat(options) : options); }
                 else if (type === 'number') { control = numberField(id, k, label, v || '', k === 'x' || k === 'y' ? null : 1, k === 'lineWidth' ? 8 : null); }
                 else if (type === 'text') { control = field(id, label, '<textarea class="form-input" id="' + id + '" data-set="' + k + '" data-was="' + esc(v || '') + '" rows="3">' + esc(v || '') + '</textarea>'); }
@@ -629,7 +630,7 @@
                         return '<button type="button" class="btn btn-sm" data-set="color" value="' + (i + 1) + '" data-was="' + esc(mixed ? '__mixed__' : v) + '" aria-label="' + name + '" title="' + name + '"><span class="dg-color-dot" style="background:' + esc(c) + '" aria-hidden="true"></span></button>';
                     }).join('') + '<button type="button" class="btn btn-sm" data-set="color" value="" data-was="' + esc(mixed ? '__mixed__' : v) + '">Default</button></div>';
                 } else { control = textField(id, k, label, v); }
-                if (mixed && type !== 'segments') { control = control.replace(/data-was="[^"]*"/g, 'data-mixed="true" data-was=""').replace(/ placeholder="[^"]*"/g, '').replace(/<(input|textarea)\b/g, '<$1 placeholder="Mixed"'); control += '<p class="form-help">Mixed values</p>'; }
+                if (mixed && type !== 'segments' && type !== 'picker') { control = control.replace(/data-was="[^"]*"/g, 'data-mixed="true" data-was=""').replace(/ placeholder="[^"]*"/g, '').replace(/<(input|textarea)\b/g, '<$1 placeholder="Mixed"'); control += '<p class="form-help">Mixed values</p>'; }
                 html += control;
             }
             add('text', 'Text', 'text'); add('label', 'Label');
@@ -638,9 +639,10 @@
             add('textVerticalAlign', 'Vertical Alignment', 'segments', [['', 'Default'], ['top', 'Top'], ['middle', 'Middle'], ['bottom', 'Bottom']]);
             ['x', 'y', 'width', 'height'].forEach(function (k) { add(k, k === 'x' ? 'X' : k === 'y' ? 'Y' : k === 'width' ? 'Width' : 'Height', 'number'); });
             add('color', 'Color', 'color'); add('line', 'Line Style', 'segments', [['solid', 'Solid'], ['dashed', 'Dashed'], ['dotted', 'Dotted']]); add('lineWidth', 'Line Width', 'number');
-            add('route', 'Route', 'segments', [['elbow', 'Elbow'], ['straight', 'Straight'], ['curve', 'Curve']]);
+            add('route', 'Route', 'segments', [['elbow', 'Elbow', 'yavc-route-elbow'], ['straight', 'Straight', 'yavc-route-straight'], ['curve', 'Curve', 'yavc-route-curve']]);
             var heads = [['none', 'None'], ['arrow', 'Arrow'], ['triangle', 'Triangle'], ['diamond', 'Diamond'], ['circle', 'Circle'], ['box', 'Box'], ['cross', 'Cross'], ['cf-one', 'One'], ['cf-one-required', 'Exactly One'], ['cf-many', 'Many'], ['cf-many-required', 'One or More']];
-            add('fromHead', 'Start Head', 'select', heads); add('toHead', 'End Head', 'select', heads);
+            heads = heads.map(function (h) { return h.concat('yavc-head-' + h[0]); });
+            add('fromHead', 'Start Head', 'picker', heads); add('toHead', 'End Head', 'picker', heads);
             var sides = [['', 'Automatic'], ['top', 'Top'], ['right', 'Right'], ['bottom', 'Bottom'], ['left', 'Left']];
             add('fromSide', 'Start Side', 'select', sides); add('toSide', 'End Side', 'select', sides);
             if (selected.length === 1 && selected[0].kind === 'edge') { html += '<fieldset class="form-fieldset"><legend>Endpoints</legend><div class="hstack"><button type="button" class="btn btn-sm" data-command="cv-reconnect-start"></button><button type="button" class="btn btn-sm" data-command="cv-reconnect-end"></button></div></fieldset>'; }
@@ -652,6 +654,7 @@
         async function canvasInspectorChanged(f) {
             if (canvasWhy(true)) { return; }
             var owner = current(), property = f.dataset.set, value = f.value, s = canvasSelection();
+            var picker = f.dataset.picker, restoreFocus = picker && document.activeElement === f;
             if (f.tagName === 'SELECT' && value === '__mixed__') { return; }
             if (!f.hasAttribute('data-mixed') && value === f.dataset.was) { return; }
             var req = { op: 'set', key: s.id, kind: s.kind, property: property, value: property === 'text' ? value : value || null };
@@ -662,6 +665,9 @@
                 var result = await canvasEdit(req, owner.text, true);
                 if (destroyed || owner !== current() || owner.text !== result.text) { return; }
                 f.dataset.was = value; markField(f, null); inspected = null; renderCanvasInspector(owner);
+                if (restoreFocus && (document.activeElement === document.body || document.activeElement === f || document.activeElement.id === picker)) {
+                    var trigger = document.getElementById(picker); if (trigger) { trigger.focus({ preventScroll: true }); }
+                }
             } catch (err) { if (!destroyed && owner === current() && f.isConnected) { markField(f, err.message); } }
         }
         function canvasCommands() {
@@ -891,7 +897,18 @@
         }
         function segmentField(id, key, label, value, options) {
             return '<fieldset class="form-group dg-choice"><legend class="form-label" id="' + id + '-label">' + esc(label) + '</legend><div class="seg sm">' +
-                options.map(function (o, i) { return '<button type="button" id="' + id + '-' + i + '" data-set="' + esc(key) + '" value="' + esc(o[0]) + '" data-was="' + esc(value == null ? '__mixed__' : value) + '" aria-pressed="' + (value != null && o[0] === value) + '">' + esc(o[1]) + '</button>'; }).join('') + '</div>' + (value == null ? '<p class="form-help">Mixed values</p>' : '') + '</fieldset>';
+                options.map(function (o, i) { return '<button type="button" id="' + id + '-' + i + '" data-set="' + esc(key) + '" value="' + esc(o[0]) + '" data-was="' + esc(value == null ? '__mixed__' : value) + '" aria-pressed="' + (value != null && o[0] === value) + '">' + optionGlyph(o) + esc(o[1]) + '</button>'; }).join('') + '</div>' + (value == null ? '<p class="form-help">Mixed values</p>' : '') + '</fieldset>';
+        }
+        function optionGlyph(option) { return option[2] ? '<span class="glyph" style="--glyph:var(--glyph-' + esc(option[2]) + ')" aria-hidden="true"></span>' : ''; }
+        function pickerField(id, key, label, value, options) {
+            var selected = options.find(function (o) { return o[0] === value; }), mixed = value == null;
+            return '<div class="form-group"><span class="form-label" id="' + id + '-label">' + esc(label) + '</span><div class="menu dg-property-menu-wrap">' +
+                '<button type="button" class="btn menu-btn dg-property-picker" id="' + id + '" popovertarget="' + id + '-menu" aria-haspopup="menu" aria-labelledby="' + id + '-label ' + id + '-value">' +
+                (selected ? optionGlyph(selected) : '') + '<span id="' + id + '-value">' + esc(mixed ? 'Mixed' : selected ? selected[1] : value) + '</span></button>' +
+                '<div class="menu-panel dg-property-menu" id="' + id + '-menu" popover role="menu" aria-labelledby="' + id + '-label">' + options.map(function (o) {
+                    return '<button type="button" class="menu-action" role="menuitemradio" aria-checked="' + (value === o[0]) + '" data-set="' + esc(key) + '" data-picker="' + id + '" value="' + esc(o[0]) + '" ' +
+                        (mixed ? 'data-mixed="true" ' : '') + 'data-was="' + esc(value == null ? '' : value) + '"><span class="dg-option-content">' + optionGlyph(o) + '<span>' + esc(o[1]) + '</span></span></button>';
+                }).join('') + '</div></div>' + (mixed ? '<p class="form-help">Mixed values</p>' : '') + '</div>';
         }
         function numberField(id, key, label, value, min, max) {
             return field(id, label, '<span class="number-field"><input class="form-input" type="number" step="1"' + (min == null ? '' : ' min="' + min + '"') + (max == null ? '' : ' max="' + max + '"') + ' id="' + id + '" data-set="' + esc(key) + '" data-was="' + esc(value || '') + '" value="' + esc(value || '') + '"></span>');
@@ -1616,7 +1633,7 @@
                 cmd('new-canvas', 'New Canvas', 'file', function () { newDiagram({ label: 'Canvas', text: CANVAS_STARTER }, 'canvas'); }),
                 cmd('open', 'Open…', 'folder', open, { shortcut: 'Mod+O' }),
                 cmd('save', 'Save', 'yavc-save', save, { shortcut: 'Mod+S', disabled: function () { return !current(); } }),
-                cmd('save-as', 'Save As…', null, saveAs, { disabled: function () { return !current(); } }),
+                cmd('save-as', 'Save As…', 'yavc-save-as', saveAs, { disabled: function () { return !current(); } }),
                 cmd('close-diagram', 'Close Diagram', null, function () { closeTab(active); }, { disabled: function () { return !current(); } }),
                 cmd('undo', 'Undo', 'yavc-undo', function () { if (cm) { CM.undo(cm); } }, { builtIn: 'Mod-z', glyphOnly: true }),
                 cmd('redo', 'Redo', 'yavc-redo', function () { if (cm) { CM.redo(cm); } }, { builtIn: 'Mod-y', glyphOnly: true }),
@@ -1673,7 +1690,7 @@
                 { label: 'Diagrams', glyph: 'document', items: H.identity ? H.identity(root, []) : [] },
                 { id: 'file', label: 'File', glyph: 'file', items: ['new', 'new-mermaid', 'new-canvas', 'open', 'save', 'save-as', '-', 'edit-in-editor', '-', 'export-svg', 'export-png', 'export-source', '-', 'close-diagram'] },
                 { id: 'edit', label: 'Edit', glyph: 'pencil', items: ['undo', 'redo', '-', 'cv-copy', 'cv-paste', 'cv-duplicate', 'cv-delete', 'copy-embed', '-', 'cv-select-all', 'cv-select-items', '-', 'find', '-', 'format-text', 'redraw', 'language-restart'] },
-                { id: 'shape', label: 'Shape', glyph: 'square', items: ['shape-add', 'shape-add-inside', 'connect', 'cv-new', 'cv-group', 'cv-connect', 'cv-reconnect-start', 'cv-reconnect-end', 'cv-resize', '-', 'shape-label', 'shape-rename', 'shape-type', '-', 'shape-move-into', 'shape-move-top', 'cv-left', 'cv-right', 'cv-up', 'cv-down', 'cv-forward', 'cv-back', '-', 'shape-delete'].concat(isD2() || isCanvas() ? ['-', { label: 'Drawing Tool', glyph: 'square', items: ['tool-select'].concat(PALETTE.map(function (k) { return 'tool-' + k[0]; })) }] : []) }
+                { id: 'shape', label: 'Shape', glyph: 'square', items: (isD2() || isCanvas() ? [{ label: 'Drawing Tool', glyph: 'square', items: ['tool-select'].concat(PALETTE.map(function (k) { return 'tool-' + k[0]; })) }, '-'] : []).concat(['shape-add', 'shape-add-inside', 'connect', 'cv-new', 'cv-group', 'cv-connect', 'cv-reconnect-start', 'cv-reconnect-end', 'cv-resize', '-', 'shape-label', 'shape-rename', 'shape-type', '-', 'shape-move-into', 'shape-move-top', 'cv-left', 'cv-right', 'cv-up', 'cv-down', 'cv-forward', 'cv-back', '-', 'shape-delete']) }
             ], into: { view: ['view-text', 'view-preview', 'view-split', '-', 'dock', 'fit', 'toggle-inspector', '-', 'cv-pan', 'cv-pan-left', 'cv-pan-right', 'cv-pan-up', 'cv-pan-down', 'cv-zoom-in', 'cv-zoom-out', 'cv-actual'], go: ['go-to-line', 'cv-next', 'cv-previous'] } };
         }
         root.addEventListener('pudl:contextmenu', function (e) {

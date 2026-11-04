@@ -227,6 +227,12 @@ The independent source review found an initially silent size refusal with no rec
 
 The Editor's existing asynchronous save-completion behavior still needs a separate correction before migration. The Dinah brief records that finding and the inherited shortcode catalog's missing host endpoint. This LSP round does not claim either fix.
 
+## Drawing Tool placement and inspector glyphs
+
+Diagrams 0.17.0 puts Drawing Tool first under Shape for D2 and Canvas. Canvas Route segments now show route previews. Start Head and End Head use the documented PUDL menu wrapper, button and popover panel, with endpoint previews, labels and checked state. The preview belongs to the option content, so it remains visible beside PUDL's selection tick. A project Save As glyph is added because PUDL 0.97.11 defines none for that command.
+
+`scripts/test-diagram-pickers.cjs chromium firefox webkit` covers menu order, glyph presence, keyboard selection and focus return, checked and mixed values, batch arrowhead edits and undo. It retains light and narrow dark screenshots in the temporary `yavc-diagram-pickers` folder. Keyboard testing caught focus being lost when the inspector redrew after a choice. The host now returns focus to the trigger when the activating row still owned it, preserving a user's move into another control while an edit is pending. The PUDL source review required the documented `.menu` wrapper, which is now present.
+
 ## Items for other projects
 
 These problems belong to PUDL or to applets that are maintained elsewhere, so they were reported instead of patched here.
