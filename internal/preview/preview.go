@@ -382,7 +382,7 @@ func (d *drawer) image(w util.BufWriter, src []byte, node ast.Node, entering boo
 			shortcodes.Esc("!["+alt+"]("+string(n.Destination)+")") + `</code>`)
 		return ast.WalkSkipChildren, nil
 	}
-	_, _ = w.WriteString(imageTag(dest, alt, "", ""))
+	_, _ = w.WriteString(imageTag(dest, alt, "", "", ""))
 	return ast.WalkSkipChildren, nil
 }
 
@@ -421,13 +421,16 @@ func (d *drawer) htmlBlock(w util.BufWriter, src []byte, node ast.Node, entering
 // admitted, drawn as a figure draws its picture (shortcodes.ImageTag). A
 // file of the home folder with no description of its own is described by
 // its file's name.
-func imageTag(dest, alt, width, height string) string {
+func imageTag(dest, alt, width, height, align string) string {
 	size := ""
 	if width != "" {
 		size += ` width="` + shortcodes.Esc(width) + `"`
 	}
 	if height != "" {
 		size += ` height="` + shortcodes.Esc(height) + `"`
+	}
+	if align == "right" || align == "left" {
+		size += ` align="` + align + `"`
 	}
 	if alt == "" && shortcodes.IsLocal(dest) {
 		name := strings.ReplaceAll(dest, `\`, "/")
@@ -442,11 +445,11 @@ var (
 )
 
 // localImages draws each <img> in inline HTML whose source is a file of
-// the home folder as such an image, keeping its size; other HTML, and an
+// the home folder as such an image, keeping its size and recognized alignment; other HTML, and an
 // <img> from the site or the web, is left as it is.
 func localImages(s string) string {
 	return imgTagRe.ReplaceAllStringFunc(s, func(tag string) string {
-		var src, alt, width, height string
+		var src, alt, width, height, align string
 		for _, m := range imgAttrRe.FindAllStringSubmatch(tag, -1) {
 			val := m[2] + m[3]
 			switch strings.ToLower(m[1]) {
@@ -458,12 +461,14 @@ func localImages(s string) string {
 				width = val
 			case "height":
 				height = val
+			case "align":
+				align = strings.ToLower(val)
 			}
 		}
 		if !shortcodes.IsLocal(src) {
 			return tag
 		}
-		return imageTag(src, alt, width, height)
+		return imageTag(src, alt, width, height, align)
 	})
 }
 

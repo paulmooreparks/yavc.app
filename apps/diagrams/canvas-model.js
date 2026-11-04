@@ -23,11 +23,11 @@
     function properties(item, kind) {
         var shared = ['color', 'line', 'lineWidth'];
         return shared.concat(kind === 'edge' ? ['label', 'route', 'fromHead', 'toHead', 'fromSide', 'toSide'] :
-            ['x', 'y', 'width', 'height'].concat(item.type === 'text' ? ['text', 'shape', 'textAlign', 'textVerticalAlign'] : item.type === 'group' ? ['label'] : []));
+            ['x', 'y', 'width', 'height', 'fillColor', 'strokeColor'].concat(item.type === 'text' ? ['text', 'shape', 'textAlign', 'textVerticalAlign'] : item.type === 'group' ? ['label'] : []));
     }
     function setProperty(item, kind, property, value) {
         if (properties(item, kind).indexOf(property) < 0 || ['x', 'y', 'width', 'height'].indexOf(property) >= 0) { throw new Error('That property cannot be changed on this item.'); }
-        var target = ['shape', 'route', 'fromHead', 'toHead', 'line', 'lineWidth', 'textAlign', 'textVerticalAlign'].indexOf(property) >= 0 ? (item.yavc || (item.yavc = {})) : item;
+        var target = ['shape', 'route', 'fromHead', 'toHead', 'line', 'lineWidth', 'textAlign', 'textVerticalAlign', 'fillColor', 'strokeColor'].indexOf(property) >= 0 ? (item.yavc || (item.yavc = {})) : item;
         if (value === null || (value === '' && property !== 'text')) { delete target[property]; } else { target[property] = value; }
     }
     function movingIds(doc, selected) {
@@ -131,6 +131,12 @@
         return b;
     }
     function edit(source, req) {
+        if (req.op === 'document') {
+            if (['background', 'grid', 'snap'].indexOf(req.property) < 0 || req.items !== undefined) { throw new Error('Choose a supported diagram setting.'); }
+            var changed = copy(source), settings = changed.yavc || (changed.yavc = { version: 1 });
+            if (req.value === null) { delete settings[req.property]; } else { settings[req.property] = req.value; }
+            return checked(changed);
+        }
         if (req.items !== undefined) { return editSelection(copy(source), req); }
         var doc = copy(source), key = req.key || '', n = node(doc, key), e = doc.edges.find(function (x) { return x.id === key; }), item = req.kind === 'edge' ? e : req.kind === 'node' ? n : n || e;
         var freeId = idMaker(doc);
@@ -215,6 +221,31 @@
         });
         return copy({ nodes: doc.nodes.filter(function (n) { return ids.indexOf(n.id) >= 0; }), edges: doc.edges.filter(function (e) { return ids.indexOf(e.fromNode) >= 0 && ids.indexOf(e.toNode) >= 0; }) });
     }
-    var api = Object.freeze({ edit: edit, snap: snap, resize: resize, members: members, movingIds: movingIds, properties: properties, fragment: fragmentOf, attachment: attachment });
+    function template(name) {
+        var doc = { nodes: [], edges: [], yavc: { version: 1 } };
+        function text(id, x, y, value, shape) { doc.nodes.push({ id: id, type: 'text', x: x, y: y, width: 180, height: 80, text: value, yavc: { shape: shape || 'rectangle', textAlign: 'center', textVerticalAlign: 'middle' } }); }
+        function edge(id, from, to, label) { doc.edges.push({ id: id, fromNode: from, toNode: to, label: label || '' }); }
+        function point(id, x, y) { doc.nodes.push({ id: id, type: 'text', x: x, y: y, width: 0, height: 0, text: '', yavc: { shape: 'text', anchor: true } }); }
+        if (name === 'blank') { return checked(doc); }
+        if (name === 'basic' || name === 'canvas' || name == null) {
+            text('start', 0, 0, '**Start** here', 'rounded'); text('next', 300, 0, 'Then this'); edge('start-next', 'start', 'next', 'leads to');
+        } else if (name === 'flowchart') {
+            text('start', 0, 0, 'Start', 'rounded'); text('process', 0, 160, 'Process'); text('decision', 0, 320, 'Continue?', 'diamond');
+            text('yes', 300, 320, 'Next Step'); text('end', 0, 500, 'End', 'rounded');
+            edge('start-process', 'start', 'process'); edge('process-decision', 'process', 'decision'); edge('decision-yes', 'decision', 'yes', 'Yes'); edge('decision-end', 'decision', 'end', 'No');
+        } else if (name === 'sequence') {
+            ['client', 'service'].forEach(function (id, i) {
+                var x = i * 320;
+                doc.nodes.push({ id: id + '-lane', type: 'group', x: x - 12, y: -24, width: 204, height: 520 });
+                text(id, x, 0, i ? 'Service' : 'Client'); point(id + '-end', x + 90, 460);
+                edge(id + '-lifeline', id, id + '-end'); Object.assign(doc.edges[doc.edges.length - 1], { fromSide: 'bottom', yavc: { route: 'straight', line: 'dashed', toHead: 'none' } });
+            });
+            point('request-from', 90, 180); point('request-to', 410, 180); edge('request', 'request-from', 'request-to', 'Request');
+            point('response-from', 410, 320); point('response-to', 90, 320); edge('response', 'response-from', 'response-to', 'Response');
+            doc.edges.slice(-2).forEach(function (e, i) { e.yavc = { route: 'straight', line: i ? 'dashed' : 'solid' }; });
+        } else { throw new Error('Choose Blank, Basic, Flowchart or Sequence.'); }
+        return checked(doc);
+    }
+    var api = Object.freeze({ edit: edit, template: template, snap: snap, resize: resize, members: members, movingIds: movingIds, properties: properties, fragment: fragmentOf, attachment: attachment });
     if (typeof module === 'object' && module.exports) { module.exports = api; } else { root.yavcCanvasModel = api; }
 })(typeof window !== 'undefined' ? window : this);

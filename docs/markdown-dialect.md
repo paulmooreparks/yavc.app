@@ -8,6 +8,26 @@ The site writes its documents, decks and pages in Markdown with one addition, sh
 
 The base is GitHub Flavored Markdown as the engine's parser, goldmark, implements it: CommonMark with tables, strikethrough, task lists and links found in plain text. A document may begin with front matter, a block of YAML between two lines of three dashes, which is read with a real YAML parser and must be a mapping of names to values with no name repeated (`internal/frontmatter`).
 
+## Images and badges
+
+GitHub badges use standard linked Markdown images, for example `[![CI](https://img.shields.io/github/actions/workflow/status/example/project/ci.yml)](https://github.com/example/project/actions)`. HTTPS badge images load at their supplied size, subject to the page width, and remain links to their targets. Their live values require access to the image provider.
+
+The `right` class aligns an image on its own line:
+
+```markdown
+{{class:right}}
+![A picture](picture.png)
+{{/class}}
+```
+
+GitHub README markup can also float an image beside text. The renderer preserves `align="right"` and `align="left"` on local attachments, and the shared stylesheet supplies the float and spacing. `<br clear="right">`, `<br clear="left">` and `<br clear="both">` end that wrapping before subsequent content. Other alignment values are not added to normalized local images.
+
+```html
+<img src="picture.png" align="right" width="256" alt="What the picture shows">
+
+<br clear="right">
+```
+
 ## Shortcodes
 
 A shortcode is written `{{name}}` or `{{name:arguments}}`. A name is a lowercase letter followed by lowercase letters, digits and hyphens. The arguments run to the first `}}`.
@@ -23,7 +43,7 @@ Every shortcode is one of four kinds.
 
 Text that should read as a shortcode and not act as one is written with a backslash before it, `\{{kbd:Ctrl+C}}`, or inside a code span. Shortcodes are not read inside code spans or code blocks.
 
-A shortcode the engine does not know, or one written wrongly, is drawn as the text it was written as, marked as a problem, with the reason as its title. A mistake therefore shows on the page instead of vanishing, and nothing a document says can make the engine run code or load from another host; what a shortcode may draw is limited by the site's HTML cleaner (`apps/md-engine/safe-html.js`).
+A shortcode the engine does not know, or one written wrongly, is drawn as the text it was written as, marked as a problem, with the reason as its title. A mistake therefore shows on the page instead of vanishing. The site's HTML cleaner (`apps/md-engine/safe-html.js`) removes executable content and limits embedded content. Approved HTTPS images, including badges, can load from their specified hosts.
 
 ## The catalogue
 

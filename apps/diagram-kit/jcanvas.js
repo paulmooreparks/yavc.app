@@ -86,6 +86,9 @@
         if (doc.yavc != null) {
             if (!isObj(doc.yavc)) { return fail('The file\'s yavc property must be an object.'); }
             if (doc.yavc.version != null && !(Number.isInteger(doc.yavc.version) && doc.yavc.version >= 1)) { return fail('The extension\'s version must be a whole number from 1.'); }
+            if (doc.yavc.background != null && !isColour(doc.yavc.background)) { return fail('The canvas background must be a hex color or preset from 1 to 6.'); }
+            if (doc.yavc.grid != null && typeof doc.yavc.grid !== 'boolean') { return fail('The canvas grid setting must be a boolean.'); }
+            if (doc.yavc.snap != null && typeof doc.yavc.snap !== 'boolean') { return fail('The canvas snap setting must be a boolean.'); }
             if (doc.yavc.version > EXT_VERSION) { problems.push({ message: 'This canvas was written by a newer Diagrams (extension version ' + doc.yavc.version + '); what this one does not know is drawn plainly.', at: null, warning: true }); }
         }
         doc.nodes = nodes; doc.edges = edges;
@@ -122,6 +125,8 @@
         }
         if (n.yavc != null) {
             if (!isObj(n.yavc)) { return where + '\'s yavc property must be an object.'; }
+            if (n.yavc.fillColor != null && !isColour(n.yavc.fillColor)) { return where + '\'s fillColor must be a hex color or preset from 1 to 6.'; }
+            if (n.yavc.strokeColor != null && !isColour(n.yavc.strokeColor)) { return where + '\'s strokeColor must be a hex color or preset from 1 to 6.'; }
             if (n.yavc.anchor != null && typeof n.yavc.anchor !== 'boolean') { return where + '\'s anchor must be a boolean.'; }
             if (isAnchor(n) && (n.type !== 'text' || n.text !== '' || n.width !== 0 || n.height !== 0 || n.yavc.shape !== 'text' || !Number.isSafeInteger(n.x) || !Number.isSafeInteger(n.y))) { return where + ' is a point anchor and must be empty text with shape text, zero size and integer coordinates.'; }
             if (n.yavc.shape != null && SHAPES.indexOf(n.yavc.shape) < 0) { return where + '\'s shape "' + n.yavc.shape + '" is not one of ' + SHAPES.join(', ') + '.'; }
@@ -386,14 +391,16 @@
     var FONT = 14;
     function render(doc, opts) {
         opts = opts || {};
-        var pal = opts.palette, pad = opts.pad == null ? 24 : opts.pad;
+        var pal = Object.assign({}, opts.palette), pad = opts.pad == null ? 24 : opts.pad;
+        if (doc.yavc && doc.yavc.background) { pal.bg = colourOf(doc.yavc.background, pal); pal.muted = inkFor(pal.bg, pal.muted); }
         var byId = Object.create(null);
         doc.nodes.forEach(function (n) { byId[n.id] = n; });
         var b = bounds(doc, byId), ox = b.x - pad, oy = b.y - pad, W = Math.ceil(b.w + pad * 2), H = Math.ceil(b.h + pad * 2);
         var out = [], boxes = [];
         function nodeColours(n) {
-            var c = colourOf(n.color, pal);
-            return { stroke: c || pal.line, fill: c ? mixHex(c, pal.surface, 0.14) : pal.surface, text: pal.text };
+            var c = colourOf(n.color, pal), y = n.yavc || {}, fill = colourOf(y.fillColor, pal);
+            var textOnly = n.type === 'text' && y.shape === 'text';
+            return { stroke: colourOf(y.strokeColor, pal) || c || (n.type === 'group' && !fill ? inkFor(pal.bg, pal.line) : pal.line), fill: fill || (c ? mixHex(c, pal.surface, 0.14) : pal.surface), text: fill || textOnly ? inkFor(fill || pal.bg, pal.text) : pal.text };
         }
         doc.nodes.forEach(function (n) {
             if (isAnchor(n)) { return; }
@@ -401,14 +408,16 @@
             var lw = y2.lineWidth || (n.type === 'group' ? 1 : 2), dash = dashOf(y2, lw);
             var line = { fill: cols.fill, stroke: cols.stroke, 'stroke-width': lw };
             if (dash) { line['stroke-dasharray'] = dash; }
-            boxes.push({ id: n.id, type: n.type, x: x, y: y, w: n.width, h: n.height });
+            boxes.push({ id: n.id, type: n.type, x: x, y: y, w: n.width, h: n.height, colors: { fill: n.type === 'text' && y2.shape === 'text' && !y2.fillColor ? pal.bg : cols.fill, stroke: cols.stroke } });
             out.push('<g data-node="' + esc(n.id) + '">');
             if (n.type === 'group') {
-                var gl = Object.assign({}, line, { fill: colourOf(n.color, pal) ? mixHex(colourOf(n.color, pal), pal.bg, 0.08) : 'none', 'stroke-dasharray': dash || '6 4' });
+                var gl = Object.assign({}, line, { fill: colourOf(y2.fillColor, pal) || (colourOf(n.color, pal) ? mixHex(colourOf(n.color, pal), pal.bg, 0.08) : 'none'), 'stroke-dasharray': dash || '6 4' });
+                boxes[boxes.length - 1].colors.fill = gl.fill === 'none' ? pal.bg : gl.fill;
                 out.push(element({ tag: 'rect', a: { x: x, y: y, width: n.width, height: n.height, rx: 8 } }, gl));
                 if (n.label) { out.push('<text x="' + (x + 8).toFixed(1) + '" y="' + (y - 6).toFixed(1) + '" font-size="' + FONT + '" font-weight="600" fill="' + esc(pal.muted) + '">' + esc(n.label) + '</text>'); }
             } else if (n.type === 'text') {
                 var shape = y2.shape || 'rectangle';
+                if (shape === 'text' && y2.fillColor) { out.push(element({ tag: 'rect', a: { x: x, y: y, width: n.width, height: n.height } }, { fill: cols.fill, stroke: 'none' })); }
                 out.push(element(shapePath(shape, x, y, n.width, n.height), line));
                 var inset = shape === 'person' ? { x: x, y: y + n.height * 0.55, w: n.width, h: n.height * 0.45 } : shape === 'diamond' || shape === 'hexagon' || shape === 'oval' || shape === 'cloud' ? { x: x + n.width * 0.15, y: y + n.height * 0.15, w: n.width * 0.7, h: n.height * 0.7 } : { x: x, y: y, w: n.width, h: n.height };
                 /* Where the text goes, which the screen fills with the
@@ -416,6 +425,7 @@
                 var centred = shape !== 'rectangle' && shape !== 'rounded' && shape !== 'text' && shape !== 'document' && shape !== 'package';
                 inset.align = y2.textAlign || (centred ? 'center' : 'left');
                 inset.vertical = y2.textVerticalAlign || (centred ? 'middle' : 'top');
+                inset.color = cols.text;
                 boxes[boxes.length - 1].text = inset;
                 out.push('<g data-text="' + esc(n.id) + '">' + textBlock(n.text, inset.x, inset.y, inset.w, inset.h, cols.text, FONT, inset.align, inset.vertical) + '</g>');
             } else if (n.type === 'file') {
@@ -424,7 +434,7 @@
                 out.push(textBlock(name, x, y, n.width, n.height, cols.text, FONT, 'left', 'top'));
             } else if (n.type === 'link') {
                 out.push(element({ tag: 'rect', a: { x: x, y: y, width: n.width, height: n.height, rx: 4 } }, line));
-                out.push(textBlock(n.url, x, y, n.width, n.height, pal.text, FONT, 'left', 'top'));
+                out.push(textBlock(n.url, x, y, n.width, n.height, cols.text, FONT, 'left', 'top'));
             }
             out.push('</g>');
         });
@@ -432,7 +442,7 @@
         doc.edges.forEach(function (e) {
             var r = route(e, byId);
             r.points = r.points.map(function (p) { return [p[0] - ox, p[1] - oy]; });
-            var y3 = isObj(e.yavc) ? e.yavc : {}, colour = colourOf(e.color, pal) || pal.line, lw = y3.lineWidth || 2, dash = dashOf(y3, lw);
+            var y3 = isObj(e.yavc) ? e.yavc : {}, colour = colourOf(e.color, pal) || inkFor(pal.bg, pal.line), lw = y3.lineWidth || 2, dash = dashOf(y3, lw);
             var fromHead = y3.fromHead || (e.fromEnd === 'arrow' ? 'arrow' : 'none');
             var toHead = y3.toHead || (e.toEnd === 'none' ? 'none' : 'arrow');
             var d = pathD(r);
@@ -447,8 +457,17 @@
             out.push('</g>');
         });
         var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" font-family="' + esc(opts.font || 'Inter, system-ui, sans-serif') + '">' +
-            (opts.title ? '<title>' + esc(opts.title) + '</title>' : '') + '<rect width="' + W + '" height="' + H + '" fill="' + esc(pal.bg) + '"/>' + out.join('') + '</svg>';
-        return { svg: svg, width: W, height: H, boxes: boxes, edges: paths, origin: [ox, oy] };
+            (opts.title ? '<title>' + esc(opts.title) + '</title>' : '') + '<rect data-canvas-background="" width="' + W + '" height="' + H + '" fill="' + esc(pal.bg) + '"/>' + out.join('') + '</svg>';
+        return { svg: svg, width: W, height: H, boxes: boxes, edges: paths, origin: [ox, oy], background: pal.bg };
+    }
+    function inkFor(fill, preferred) {
+        function luminance(hex) {
+            if (hex.length === 4) { hex = '#' + hex[1] + hex[1] + hex[2] + hex[2] + hex[3] + hex[3]; }
+            var c = [1, 3, 5].map(function (i) { var v = parseInt(hex.slice(i, i + 2), 16) / 255; return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); });
+            return c[0] * 0.2126 + c[1] * 0.7152 + c[2] * 0.0722;
+        }
+        var bg = luminance(fill), fg = luminance(preferred), ratio = (Math.max(bg, fg) + 0.05) / (Math.min(bg, fg) + 0.05);
+        return ratio >= 4.5 ? preferred : (bg + 0.05) / 0.05 >= 1.05 / (bg + 0.05) ? '#000000' : '#ffffff';
     }
     function mixHex(a, b, t) {
         function rgb(h) { if (h.length === 4) { h = '#' + h[1] + h[1] + h[2] + h[2] + h[3] + h[3]; } return [1, 3, 5].map(function (i) { return parseInt(h.substr(i, 2), 16); }); }

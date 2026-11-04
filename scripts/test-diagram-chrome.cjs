@@ -123,7 +123,9 @@ async function run(engine) {
         const box = await hit('a').boundingBox(), scale = await hit('a').evaluate(e => e.getScreenCTM().a);
         await page.mouse.move(box.x + 30, box.y + 30); await page.keyboard.down('Alt'); await page.mouse.down();
         await page.mouse.move(box.x + 30 + 32 * scale, box.y + 30 + 24 * scale, { steps: 5 }); await page.mouse.up(); await page.keyboard.up('Alt'); await settled();
-        assert.deepEqual((await doc()).nodes.slice(1).map(n => [n.x, n.y]), [[32,24], [292,24]]);
+        const movedNodes = (await doc()).nodes.slice(1), tolerance = Math.ceil(1 / scale);
+        assert.ok(Math.abs(movedNodes[0].x - 32) <= tolerance && Math.abs(movedNodes[0].y - 24) <= tolerance, 'Pointer rounding exceeds one screen pixel.');
+        assert.deepEqual([movedNodes[1].x - movedNodes[0].x, movedNodes[1].y - movedNodes[0].y], [260, 0]);
         await page.locator('.dg-stage').focus(); await page.keyboard.press('Control+z'); await settled();
         assert.deepEqual((await doc()).nodes.slice(1).map(n => [n.x, n.y]), [[0,0], [260,0]]);
         await page.keyboard.press('ArrowRight'); await settled();

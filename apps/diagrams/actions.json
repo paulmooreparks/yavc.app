@@ -223,6 +223,7 @@
           },
           "style": {
             "type": "string",
+            "description": "For Canvas: blank, basic, flowchart or sequence. D2 and Mermaid retain their existing starter styles.",
             "maxLength": 40
           },
           "text": {
@@ -855,7 +856,8 @@
               "duplicate",
               "paste",
               "order",
-              "reconnect"
+              "reconnect",
+              "document"
             ]
           },
           "key": {
@@ -892,7 +894,7 @@
             ]
           },
           "property": {
-            "description": "textAlign accepts left, center or right; textVerticalAlign accepts top, middle or bottom. Both apply only to text nodes. A null value restores that axis to its shape default.",
+            "description": "textAlign and textVerticalAlign set text-node alignment. fillColor and strokeColor override node channels independently. With op=document, background sets the canvas color and grid/snap accept booleans. A null value restores the corresponding default.",
             "enum": [
               "text",
               "label",
@@ -902,6 +904,11 @@
               "lineWidth",
               "textAlign",
               "textVerticalAlign",
+              "fillColor",
+              "strokeColor",
+              "background",
+              "grid",
+              "snap",
               "route",
               "fromHead",
               "toHead",
@@ -928,6 +935,7 @@
             "type": [
               "string",
               "integer",
+              "boolean",
               "null"
             ],
             "maxLength": 65536

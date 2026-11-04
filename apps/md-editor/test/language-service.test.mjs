@@ -79,3 +79,16 @@ test('cancelled requests and replaced document instances cannot return edits', a
     assert.equal((await s.request('textDocument/hover', params)).error.code, -32801);
     s.notify('textDocument/didClose', { textDocument: { uri } });
 });
+
+test('Canvas assistance includes diagram settings and independent color overrides', async () => {
+    const s = server(), uri = 'yavc-lsp://test/settings.canvas'; await s.request('initialize', {});
+    const text = '{"yavc":{}}';
+    s.notify('textDocument/didOpen', { textDocument: { uri, version: 1, text } });
+    const completion = await s.request('textDocument/completion', { textDocument: { uri }, position: { line: 0, character: 9 } });
+    for (const key of ['background', 'grid', 'snap']) assert.ok(completion.result.items.some(i => i.label.includes(key)), key);
+    const invalid = '{"nodes":[{"id":"a","type":"text","x":0,"y":0,"width":100,"height":60,"text":"x","yavc":{"fillColor":"bad"}}],"yavc":{"grid":"yes"}}';
+    s.notify('textDocument/didChange', { textDocument: { uri, version: 2 }, contentChanges: [{ text: invalid }] });
+    await new Promise(resolve => setTimeout(resolve, 220));
+    assert.ok(s.notifications.filter(n => n.method === 'textDocument/publishDiagnostics').at(-1).params.diagnostics.length >= 2);
+    s.notify('textDocument/didClose', { textDocument: { uri } });
+});

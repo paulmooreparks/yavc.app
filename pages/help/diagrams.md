@@ -4,6 +4,14 @@
 
 ## Canvas language assistance
 
+File, New Canvas offers Blank, Basic, Flowchart and Sequence starting arrangements. Every item remains freely movable and editable; choosing a template does not impose automatic layout.
+
+Double-click a text shape, or select one and press Enter, to edit its Markdown directly on the drawing. Enter adds a line, and Escape or Done finishes editing. Accepted text updates the source immediately and participates in Undo, Save, close prompts and reload recovery. Unsupported nodes and multiple selections do not offer Edit Text.
+
+Color keeps the coordinated shape color. Fill Color and Outline Color override those channels independently, and Default under either restores that channel without changing the other. Clicking empty space clears selection and shows diagram-level background, grid and snapping settings. Background appears in exports; the grid does not. Hold Alt during a drag to bypass snapping temporarily.
+
+The Inspector starts wider and keeps its chosen width when the visual/text divider moves. Drag its own divider to change that width. Its segmented controls reflow with complete labels, then show glyphs alone at narrow widths; the buttons retain their names and tooltips.
+
 The Canvas source pane offers JSON property and value completion, documentation on hover and schema error markers. Ctrl+Space asks for completion. Shift+Alt+F formats whitespace in one undoable change; Tidy the Text still uses the canvas writer's standard property order. The drawing also reports semantic problems, such as a connector referring to a missing shape.
 
 The language service runs in this browser from bundled assets. If it stops, Edit, Restart Language Assistance retries it while keeping your text. D2 retains its existing completion provider; Mermaid does not have language-server assistance.

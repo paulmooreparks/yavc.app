@@ -66,16 +66,20 @@ func TestDiagrams(t *testing.T) {
 // (shortcodes.SafeImage).
 func TestImages(t *testing.T) {
 	for md, want := range map[string]string{
-		"![A cat](cat.png)":                `<img class="dinah-attachment-image" data-attachment="cat.png" alt="A cat">`,
-		"![](./pics/cat.png)":              `data-attachment="pics/cat.png" alt="cat.png"`,
-		"![x](~/Pictures/cat.png)":         `data-attachment="~/Pictures/cat.png"`,
-		"![x](/static/shots/d.jpg)":        `<img src="/static/shots/d.jpg" alt="x">`,
-		"![x](https://example.com/a.png)":  `<img src="https://example.com/a.png" alt="x">`,
-		"![x](data:image/png;base64,AAAA)": `<img src="data:image/png;base64,AAAA" alt="x">`,
-		"![x](javascript:alert(1))":        `sc-problem`,
-		"![x](//evil.example/a.png)":       `sc-problem`,
-		`<img src="cat.png" width="40">`:   `<img class="dinah-attachment-image" data-attachment="cat.png" alt="cat.png" width="40">`,
-		`<img src="/a.png" width="40">`:    `<img src="/a.png" width="40">`,
+		"![A cat](cat.png)":                                            `<img class="dinah-attachment-image" data-attachment="cat.png" alt="A cat">`,
+		"![](./pics/cat.png)":                                          `data-attachment="pics/cat.png" alt="cat.png"`,
+		"![x](~/Pictures/cat.png)":                                     `data-attachment="~/Pictures/cat.png"`,
+		"![x](/static/shots/d.jpg)":                                    `<img src="/static/shots/d.jpg" alt="x">`,
+		"![x](https://example.com/a.png)":                              `<img src="https://example.com/a.png" alt="x">`,
+		"![x](data:image/png;base64,AAAA)":                             `<img src="data:image/png;base64,AAAA" alt="x">`,
+		"![x](javascript:alert(1))":                                    `sc-problem`,
+		"![x](//evil.example/a.png)":                                   `sc-problem`,
+		`<img src="cat.png" width="40">`:                               `<img class="dinah-attachment-image" data-attachment="cat.png" alt="cat.png" width="40">`,
+		`<img src="/a.png" width="40">`:                                `<img src="/a.png" width="40">`,
+		`<img src="icon.png" align="right" width="256" alt="Lantern">`: `data-attachment="icon.png" alt="Lantern" width="256" align="right"`,
+		`<img src="icon.png" align="LEFT">`:                            `data-attachment="icon.png" alt="icon.png" align="left"`,
+		`<img src="icon.png" align="javascript:bad">`:                  `<img class="dinah-attachment-image" data-attachment="icon.png" alt="icon.png">`,
+		`[![CI](https://img.shields.io/github/actions/workflow/status/paulmooreparks/dinah/ci.yml?branch=main&label=CI)](https://github.com/paulmooreparks/dinah/actions/workflows/ci.yml)`: `<a href="https://github.com/paulmooreparks/dinah/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/paulmooreparks/dinah/ci.yml?branch=main&amp;label=CI" alt="CI"></a>`,
 	} {
 		blocks, _ := Render(md)
 		if len(blocks) == 0 || !strings.Contains(blocks[0].HTML, want) {

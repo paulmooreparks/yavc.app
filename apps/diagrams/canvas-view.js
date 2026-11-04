@@ -30,6 +30,12 @@
             picture.setAttribute('viewBox', vb); layer.setAttribute('viewBox', vb);
             picture.setAttribute('preserveAspectRatio', 'none'); layer.setAttribute('preserveAspectRatio', 'none');
             mark();
+            if (host.viewChanged) { host.viewChanged(); }
+            var step = 8 * scale * Math.max(1, Math.ceil(6 / (8 * scale)));
+            place.classList.toggle('dg-cv-grid', !!(doc.yavc && doc.yavc.grid));
+            place.style.backgroundColor = out.background;
+            place.style.backgroundSize = step + 'px ' + step + 'px';
+            place.style.backgroundPosition = ((-camera.x * scale - step / 2) % step) + 'px ' + ((-camera.y * scale - step / 2) % step) + 'px';
         }
         function fit() {
             if (!out) { return; }
@@ -118,6 +124,8 @@
         }
         function show(d, o, pic) {
             cancel(); doc = d; out = o; picture = pic;
+            var background = picture.querySelector('[data-canvas-background]');
+            if (background) { background.setAttribute('fill', 'none'); }
             var used = new Set(doc.nodes.concat(doc.edges).map(function (n) { return n.id; })), i = 0;
             do { previewId = '@pointer-' + (++i); } while (used.has(previewId));
             place.append(layer, grips);
@@ -229,9 +237,9 @@
                    ratio and its opposite anchor again. */
                 var west = /w/.test(drag.handle), north = /n/.test(drag.handle);
                 var tip = { x: west ? box.x : box.x + box.width, y: north ? box.y : box.y + box.height, width: 0, height: 0 };
-                snapped = M.snap(tip, doc.nodes, [drag.node.id], 5 / scale, e.altKey);
+                snapped = M.snap(tip, doc.nodes, [drag.node.id], 5 / scale, e.altKey || !!(doc.yavc && doc.yavc.snap === false));
                 box = M.resize(drag.node, drag.handle, /[ew]/.test(drag.handle) ? snapped.box.x - (west ? drag.node.x : drag.node.x + drag.node.width) : 0, /[ns]/.test(drag.handle) ? snapped.box.y - (north ? drag.node.y : drag.node.y + drag.node.height) : 0, e.shiftKey);
-            } else { snapped = M.snap(box, doc.nodes, M.movingIds(doc, selections), 5 / scale, e.altKey); box = snapped.box; }
+            } else { snapped = M.snap(box, doc.nodes, M.movingIds(doc, selections), 5 / scale, e.altKey || !!(doc.yavc && doc.yavc.snap === false)); box = snapped.box; }
             drag.box = box; preview(box, e.shiftKey && drag.kind === 'resize' ? [] : snapped.guides);
         }
         function up(e) {
@@ -285,17 +293,28 @@
         }
         function keyup(e) { if (e.key === ' ') { space = false; } }
         function blur() { space = false; cancel(); }
+        function activate(e) {
+            var under = document.elementFromPoint(e.clientX, e.clientY), hit = under && place.contains(under) && under.closest('[data-id]');
+            if (hit && hit.dataset.kind === 'node' && host.enabled() && host.activate) { host.activate(hit.dataset.id); }
+        }
         place.addEventListener('pointerdown', down); place.addEventListener('pointermove', move); place.addEventListener('pointerup', up);
+        place.addEventListener('dblclick', activate);
         place.addEventListener('pointercancel', cancel); place.addEventListener('lostpointercapture', cancel); place.addEventListener('wheel', wheel, { passive: false });
         window.addEventListener('keyup', keyup); window.addEventListener('blur', blur);
         var ro = new ResizeObserver(function () { if (!destroyed) { cancel(); if (camera && !autoFit) { view(); } else { fit(); } } }); ro.observe(stage);
         return { show: show, selected: function () { return selection; }, selections: function () { return selections.map(function (s) { return Object.assign({}, s); }); }, select: select, reveal: reveal, cycle: cycle, onKey: onKey, fit: fit, zoom: zoom, actual: function () { zoom(1 / scale); }, pan: pan, cancel: cancel,
+            bounds: function (key) {
+                var n = doc && doc.nodes.find(function (x) { return x.id === key; }), r = place.getBoundingClientRect();
+                return n && camera ? { x: r.left + (n.x - camera.x) * scale, y: r.top + (n.y - camera.y) * scale, width: n.width * scale, height: n.height * scale } : null;
+            },
             centre: function () { return camera ? { x: Math.round(camera.x + camera.w / 2), y: Math.round(camera.y + camera.h / 2) } : { x: 0, y: 0 }; },
             destroy: function () {
                 destroyed = true; cancel(); ro.disconnect(); window.removeEventListener('keyup', keyup); window.removeEventListener('blur', blur);
                 place.removeEventListener('pointerdown', down); place.removeEventListener('pointermove', move); place.removeEventListener('pointerup', up);
+                place.removeEventListener('dblclick', activate);
                 place.removeEventListener('pointercancel', cancel); place.removeEventListener('lostpointercapture', cancel); place.removeEventListener('wheel', wheel);
-                layer.remove(); grips.remove(); place.classList.remove('dg-cv-editor');
+                layer.remove(); grips.remove(); place.classList.remove('dg-cv-editor', 'dg-cv-grid');
+                place.style.removeProperty('background-color'); place.style.removeProperty('background-size'); place.style.removeProperty('background-position');
             } };
     }
     window.yavcCanvasView = Object.freeze({ attach: attach });

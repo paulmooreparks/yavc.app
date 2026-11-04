@@ -1,6 +1,6 @@
 # Editing follow-ups
 
-Paul asked to finish the shared LSP round before discussing these ideas, then authorised starting the follow-ups on 5 November 2026. The LSP candidate is installed locally while a GitHub Actions outage delays its CI. The first follow-up batch covers Drawing Tool placement, Canvas route/arrowhead glyphs and a Diagrams Save As glyph. Larger features remain separate work.
+Paul asked to finish the shared LSP round before discussing these ideas, then authorised starting the follow-ups on 5 November 2026. The LSP and the subsequent Drawing Tool/glyph changes are merged. The installed local release is v0.2.17. The branch `codex/canvas-editing-batch` implements the combined round below, including the later Inspector-width and segment-folding corrections.
 
 ## Commands and Inspector
 
@@ -17,3 +17,16 @@ Paul asked to finish the shared LSP round before discussing these ideas, then au
 - Add direct editing of text inside a shape through the existing source transaction and undo history. Keyboard entry, commit/cancel behavior and Markdown treatment need decisions.
 
 JSON Canvas remains the format. These discussions do not reopen the decision to retain it while implementing LSP support.
+
+## Next combined round
+
+On 5 November 2026 Paul asked for substantive batches rather than a review and full test cycle for each small UI adjustment. The Canvas editing batch includes the following work in one candidate:
+
+- Direct editing of shape text, with keyboard access, source/undo integration and safe tab, save and close behavior.
+- Optional fill and outline color overrides, retaining the coordinated default and independent resets.
+- Diagram-level Inspector settings after clearing selection, starting with background, grid visibility and snapping.
+- Flowchart and basic sequence starter templates, remaining ordinary freeform JSON Canvas documents after creation.
+
+The implementation should settle the file-extension and interaction contracts together, update schema assistance with any new document properties, and test the combined workflows. Focused checks may run during implementation, but the complete repository gate and combined browser/review pass belong to the assembled candidate. A concrete failure or subsequent code change can require another pass; cosmetic increments alone should not create separate candidates.
+
+The shared customizable toolbar is a separate cross-app batch for Diagrams, Slides and Editor/Docs. Its design should consume the existing command tables and host configuration rather than introduce another command registry.

@@ -71,15 +71,8 @@
         { id: 'mm-journey', label: 'User Journey', text: 'journey\n    title Drawing a diagram\n    section Start\n      Open Diagrams: 5: Reader\n      Choose a style: 4: Reader\n    section Finish\n      Save it: 5: Reader\n' },
         { id: 'mm-git', label: 'Git Graph', text: 'gitGraph\n    commit\n    branch feature\n    commit\n    checkout main\n    merge feature\n    commit\n' }
     ];
-    /* A new canvas: two shapes joined by a connector, in JSON Canvas 1.0
-       with the site's extension (docs/canvas-extension.md). */
-    var CANVAS_STARTER = '{\n  "nodes": [\n' +
-        '    { "id": "start", "type": "text", "x": 0, "y": 0, "width": 180, "height": 80, "text": "**Start** here", "yavc": { "shape": "rounded" } },\n' +
-        '    { "id": "next", "type": "text", "x": 300, "y": 0, "width": 180, "height": 80, "text": "Then this", "color": "5" }\n' +
-        '  ],\n  "edges": [\n' +
-        '    { "id": "start-next", "fromNode": "start", "fromSide": "right", "toNode": "next", "toSide": "left", "toEnd": "arrow", "label": "leads to" }\n' +
-        '  ],\n  "yavc": { "version": 1 }\n}\n';
     var EXT = { d2: '.d2', mermaid: '.mmd', canvas: '.canvas' };
+    var CANVAS_STYLES = [['blank', 'Blank'], ['basic', 'Basic'], ['flowchart', 'Flowchart'], ['sequence', 'Sequence']];
     /* The palette (decision 15: a toolbar of raised buttons): Select, and
        the kinds of shape flowcharts and architecture diagrams reach for. A
        kind chosen is placed by the next click on the drawing, inside the
@@ -100,7 +93,7 @@
     var VIEWS = [['text', 'Text'], ['preview', 'Preview'], ['split', 'Split']];
     /* Where the drawing sits beside the text, as Slides docks its canvas. */
     var DOCKS = [['left', 'Left'], ['right', 'Right'], ['top', 'Top'], ['bottom', 'Bottom']];
-    var SETTINGS = { view: 'split', dock: 'left', fit: true, inspector: true, inspectorSplit: null };
+    var SETTINGS = { view: 'split', dock: 'left', fit: true, inspector: true, inspectorSplit: null, inspectorWidth: null };
     /* The inspector's choices (milestone D3): line styles as D2's
        stroke-dash, and the arrowheads D2 draws. */
     var DASHES = [['', 'Solid', 'yavc-line-solid'], ['5', 'Dashed', 'yavc-line-dashed'], ['2', 'Dotted', 'yavc-line-dotted']];
@@ -128,7 +121,7 @@
         var n = ++count, H = window.pudlHost || {};
         var tabs = [], active = -1, untitled = 0, destroyed = false;
         var settings = Object.assign({}, SETTINGS);
-        var CM = null, cm = null, langs = {}, drawTimer = 0, drawSeq = 0, waiters = [], quiet = false, lsp = null, lspComp = null;
+        var CM = null, cm = null, langs = {}, drawTimer = 0, drawSeq = 0, waiters = [], quiet = false, lsp = null, lspComp = null, inlineText = null, inlineNumber = 0;
         var start = new URLSearchParams(String(opts.state || '').replace(/^\?/, ''));
         if (opts.host !== 'window') {
             var own = new URLSearchParams(location.search);
@@ -144,7 +137,7 @@
                 '<div class="dg-stagebox split-pane" data-role="stagebox">' +
                   '<div class="dg-body split" data-role="body" data-split-pane="first">' +
                     '<div class="dg-stage split-pane" data-role="stage" tabindex="0" role="region" aria-label="The Drawing" aria-describedby="dg-keys-' + n + '"><div class="dg-canvas" data-role="canvas"></div></div>' +
-                    '<div class="split-handle dg-inspector-split" aria-label="Resize the Inspector" data-split-min="120"></div>' +
+                    '<div class="split-handle dg-inspector-split" aria-label="Resize the Inspector" data-split-min="176"></div>' +
                     '<aside class="dg-inspector split-pane" data-role="inspector" aria-label="Inspector" hidden></aside>' +
                   '</div>' +
                   '<p class="dg-keys visually-hidden" id="dg-keys-' + n + '">In a D2 diagram, the arrow keys select a shape or a connection, Enter edits its label, F2 renames it, N adds a shape of the palette\'s kind, C connects the selected shape to another, Delete deletes it, and Escape goes back to the palette\'s Select. The Shape menu moves a shape into another.</p>' +
@@ -168,12 +161,40 @@
             var single = el.body.hasAttribute('data-split-pane');
             if (show) { el.body.removeAttribute('data-split-pane'); } else { el.body.setAttribute('data-split-pane', 'first'); }
             if (single === show && window.pudlSplit) { window.pudlSplit.refresh(); }
+            if (single && show) { fitInspector(); }
         }
         el.body.addEventListener('pudl:split', function (e) {
             if (!e.target.classList.contains('dg-inspector-split')) { return; }
-            settings.inspectorSplit = el.body.style.getPropertyValue('--split-a') && el.body.clientWidth > 0 ? el.stage.getBoundingClientRect().width / el.body.clientWidth * 100 : null;
-            keepSetting('inspectorSplit', settings.inspectorSplit);
+            if (el.inspector.hidden || el.body.clientWidth <= 0) { return; }
+            settings.inspectorWidth = el.body.style.getPropertyValue('--split-a') ? el.inspector.getBoundingClientRect().width : null;
+            keepSetting('inspectorWidth', settings.inspectorWidth);
         });
+        function fitInspector() {
+            if (destroyed || el.inspector.hidden || el.body.clientWidth <= 0) { return; }
+            var handle = q('.dg-inspector-split').getBoundingClientRect().width, available = el.body.clientWidth - handle;
+            var preferred = settings.inspectorWidth;
+            if (!(Number.isFinite(preferred) && preferred > 0)) {
+                preferred = parseFloat(getComputedStyle(document.documentElement).fontSize) * 22;
+                if (Number.isFinite(settings.inspectorSplit) && settings.inspectorSplit > 0 && settings.inspectorSplit < 100) {
+                    preferred = el.body.clientWidth * (1 - settings.inspectorSplit / 100) - handle;
+                    settings.inspectorWidth = preferred; settings.inspectorSplit = null;
+                }
+            }
+            var width = Math.max(0, Math.min(preferred, available - Math.min(176, available / 2)));
+            el.body.style.setProperty('--split-a', 'calc(100% - ' + width + 'px - ' + handle + 'px)');
+            positionInlineText();
+        }
+        var inspectorWhole = 0, inspectorLastWidth = 0;
+        var inspectorSize = new ResizeObserver(function () {
+            if (destroyed || el.inspector.hidden || el.body.clientWidth <= 0) { return; }
+            if (el.body.clientWidth !== inspectorWhole) {
+                inspectorWhole = el.body.clientWidth; fitInspector(); inspectorLastWidth = el.inspector.getBoundingClientRect().width;
+            } else {
+                var width = el.inspector.getBoundingClientRect().width;
+                if (Math.abs(width - inspectorLastWidth) > 0.5) { settings.inspectorWidth = width; inspectorLastWidth = width; }
+                positionInlineText();
+            }
+        }); inspectorSize.observe(el.body); inspectorSize.observe(el.inspector);
         /* A confirmation goes in the status line, as in Slides; a fault the
            person must deal with is the site's notice beside what failed,
            which stays until it is dismissed or put right (decision 15). */
@@ -200,8 +221,12 @@
         /* Each tab keeps its own editor state, so its undo history and its
            cursor survive a switch to another tab and back. */
         function stateFor(t, text) {
-            var visualChange = CM.StateField.define({ create: function () { return false; }, update: function (v, tr) { return tr.docChanged ? tr.isUserEvent('input.canvas') : v; } });
-            var history = t.kind === 'canvas' ? CM.history({ joinToEvent: function (tr, adjacent) { return adjacent && !tr.isUserEvent('input.canvas') && !tr.startState.field(visualChange); } }) : CM.history();
+            var visualChange = CM.StateField.define({ create: function () { return ''; }, update: function (v, tr) { return tr.docChanged ? tr.annotation(CM.Transaction.userEvent) || '' : v; } });
+            var history = t.kind === 'canvas' ? CM.history({ joinToEvent: function (tr, adjacent) {
+                var previous = tr.startState.field(visualChange), event = tr.annotation(CM.Transaction.userEvent) || '';
+                if (tr.isUserEvent('input.type.canvas')) { return adjacent && previous === event; }
+                return adjacent && !tr.isUserEvent('input.canvas') && !/^input\.(canvas|type\.canvas)/.test(previous);
+            } }) : CM.history();
             var ext = [visualChange, CM.lineNumbers(), CM.highlightActiveLineGutter(), history, CM.drawSelection(), CM.highlightActiveLine(), CM.highlightSelectionMatches(), CM.bracketMatching(), CM.closeBrackets(),
                 lspComp.of(lsp && t.kind === 'canvas' ? lsp.extension('canvas', false) : []),
                 CM.keymap.of([].concat(CM.closeBracketsKeymap, CM.completionKeymap, CM.lintKeymap, CM.defaultKeymap, CM.searchKeymap, CM.historyKeymap, [CM.indentWithTab])),
@@ -234,6 +259,7 @@
         function textChanged(text) {
             var t = current();
             if (!t) { return; }
+            if (inlineText && !inlineText.writing) { finishInlineText(false); }
             t.text = text;
             if (t.cv) { t.cv.cancel(); t.place.classList.add('sc-diagram-stale'); }
             if (!t.modified) { t.modified = true; commandsChanged(); }
@@ -393,10 +419,10 @@
                 svg = document.importNode(svg, true);
                 svg.setAttribute('role', 'img');
                 svg.setAttribute('aria-label', altOf(t));
-                svg.style.backgroundColor = palette.bg;
+                svg.style.backgroundColor = 'transparent';
                 place.classList.remove('sc-diagram-stale');
                 place.replaceChildren(svg);
-                t.cvDoc = got.doc; t.cvText = text; t.cvRanges = canvasRanges(text);
+                t.cvDoc = got.doc; t.cvColors = out.boxes; t.cvText = text; t.cvRanges = canvasRanges(text);
                 if (!t.cv) {
                     t.cv = V.attach(place, el.stage, {
                         selected: function (s, how) { canvasSelectionChanged(t, s, how); },
@@ -404,6 +430,8 @@
                         text: function () { return t.text; },
                         tool: function () { return tool; }, panTool: function () { return canvasPan; },
                         create: function (x, y) { canvasCreate(x, y); },
+                        activate: function (key) { if (t === current()) { startInlineText(key); } },
+                        viewChanged: positionInlineText,
                         edit: function (req, expected) { canvasEdit(req, expected); }
                     });
                 }
@@ -416,6 +444,62 @@
             return { svg: out.svg, width: out.width, height: out.height, problems: [] };
         }
         /* === Editing JSON Canvas ========================================= */
+        function finishInlineText(focus) {
+            if (!inlineText) { return; }
+            var entry = inlineText; inlineText = null; entry.el.remove();
+            if (focus && !destroyed) { el.stage.focus({ preventScroll: true }); }
+        }
+        function positionInlineText() {
+            var entry = inlineText;
+            if (!entry || entry.owner !== current() || !entry.owner.cv) { return; }
+            var box = entry.owner.cv.bounds(entry.key), stage = el.stage.getBoundingClientRect();
+            if (!box) { finishInlineText(false); return; }
+            entry.el.style.width = Math.min(Math.max(box.width, 180), el.stage.clientWidth) + 'px';
+            entry.field.style.height = Math.min(240, Math.max(64, box.height)) + 'px';
+            entry.el.style.left = (Math.max(0, Math.min(box.x - stage.left, el.stage.clientWidth - entry.el.offsetWidth)) + el.stage.scrollLeft) + 'px';
+            entry.el.style.top = (Math.max(0, Math.min(box.y - stage.top, el.stage.clientHeight - entry.el.offsetHeight)) + el.stage.scrollTop) + 'px';
+        }
+        function startInlineText(key) {
+            var t = current(), selected = canvasSelection();
+            key = key || (selected && selected.id);
+            if (canvasWhy('shape')) { return; }
+            var node = t.cvDoc.nodes.find(function (n) { return n.id === key; });
+            if (!node || node.type !== 'text' || window.yavcCanvas.isAnchor(node)) { return; }
+            if (inlineText && inlineText.owner === t && inlineText.key === key) { inlineText.field.focus(); return; }
+            finishInlineText(false);
+            var editor = document.createElement('section'), field = document.createElement('textarea'), label = document.createElement('label'), controls = document.createElement('div'), help = document.createElement('span'), done = document.createElement('button');
+            editor.className = 'dg-inline-editor form-group'; editor.setAttribute('role', 'group'); editor.setAttribute('aria-label', 'Edit Shape Text');
+            field.id = 'dg-inline-' + n + '-' + (++inlineNumber); field.className = 'form-input'; field.value = node.text; field.spellcheck = true;
+            label.className = 'form-label'; label.htmlFor = field.id; label.textContent = 'Text (Markdown)';
+            help.id = field.id + '-help'; help.className = 'form-help'; help.textContent = 'Enter adds a line. Escape finishes. Undo reverts typing.'; field.setAttribute('aria-describedby', help.id);
+            controls.className = 'hstack'; done.type = 'button'; done.className = 'btn btn-sm'; done.textContent = 'Done'; controls.append(help, done);
+            editor.append(label, field, controls); el.stage.appendChild(editor);
+            var entry = { owner: t, key: key, el: editor, field: field, value: node.text, session: inlineNumber, inputVersion: 0, writing: false }; inlineText = entry;
+            done.addEventListener('click', function () { finishInlineText(true); });
+            editor.addEventListener('focusout', function (e) { if (e.relatedTarget && !editor.contains(e.relatedTarget) && inlineText === entry) { finishInlineText(false); } });
+            field.addEventListener('input', function () {
+                if (inlineText !== entry || entry.owner !== current()) { return; }
+                var value = field.value, before = entry.value, version = ++entry.inputVersion;
+                entry.value = value; entry.writing = true;
+                var pending = canvasEdit({ op: 'set', kind: 'node', key: key, property: 'text', value: value }, t.text, true, 'input.type.canvas.' + entry.session);
+                entry.writing = false;
+                pending.then(function () { if (inlineText === entry && entry.inputVersion === version) { markField(field, null); } }, function (err) {
+                    if (inlineText === entry && entry.inputVersion === version && field.value === value) { entry.value = before; field.value = before; markField(field, err.message); }
+                });
+            });
+            field.addEventListener('keydown', function (e) {
+                if (e.isComposing) { return; }
+                if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); finishInlineText(true); }
+                else if ((e.ctrlKey || e.metaKey) && /^[zy]$/i.test(e.key)) {
+                    e.preventDefault(); e.stopPropagation(); entry.writing = true;
+                    if (e.key.toLowerCase() === 'y' || e.shiftKey) { CM.redo(cm); } else { CM.undo(cm); }
+                    entry.writing = false;
+                    var got = window.yavcCanvas.read(t.text), updated = got.doc && got.doc.nodes.find(function (n) { return n.id === key && n.type === 'text'; });
+                    if (updated) { entry.value = updated.text; field.value = updated.text; } else { finishInlineText(true); }
+                }
+            });
+            positionInlineText(); field.focus(); field.select();
+        }
         function canvasSelection() { var t = current(); return t && t.cv ? t.cv.selected() : null; }
         function canvasSelections() { var t = current(); return t && t.cv ? t.cv.selections() : []; }
         function canvasItems(t) {
@@ -481,10 +565,11 @@
             if (needs && !s) { return 'Select a node or connector first.'; }
             if (needs === 'nodes' && !canvasSelections().some(function (s) { return s.kind === 'node'; })) { return 'Select one or more nodes first.'; }
             if (needs === 'shape' && (canvasSelections().length !== 1 || !s || s.kind !== 'node')) { return 'Select one node first.'; }
+            if (needs === 'text' && (canvasSelections().length !== 1 || !s || s.kind !== 'node' || !t.cvDoc.nodes.some(function (n) { return n.id === s.id && n.type === 'text' && !window.yavcCanvas.isAnchor(n); }))) { return 'Select one text shape first.'; }
             if (needs === 'edge' && (canvasSelections().length !== 1 || !s || s.kind !== 'edge')) { return 'Select one connector first.'; }
             return null;
         }
-        async function canvasEdit(req, expected, strict) {
+        async function canvasEdit(req, expected, strict, userEvent) {
             var t = current();
             try {
                 if (!t || t.kind !== 'canvas' || (expected != null && expected !== t.text)) { throw new Error('The canvas changed before the edit finished. Try again on the current drawing.'); }
@@ -494,7 +579,7 @@
                 if (out.text === t.text) { return out; }
                 var isEdge = out.doc.edges.some(function (x) { return x.id === out.key; }) && (req.op === 'connect' || req.op === 'reconnect' || req.kind === 'edge');
                 t.cvPending = { text: out.text, selection: out.selection || (out.key ? { kind: isEdge ? 'edge' : 'node', id: out.key } : null) };
-                replaceText(out.text, 'input.canvas');
+                replaceText(out.text, userEvent || 'input.canvas');
                 await drawNow();
                 if (t === current()) { say('Changed the canvas. Undo puts it back.'); }
                 return out;
@@ -600,7 +685,7 @@
             var blocked = !!canvasWhy(false), state = 'canvas|' + JSON.stringify(selected) + '|' + blocked;
             if (inspected === state && el.inspector.contains(document.activeElement)) { return; }
             inspected = state;
-            if (!selected.length) { el.inspector.innerHTML = '<p class="dg-inspector-empty">Select nodes or connectors to change their shared settings.</p>'; return; }
+            if (!selected.length) { renderDocumentInspector(t, blocked); return; }
             var entries = selected.map(function (s) { return { kind: s.kind, item: (s.kind === 'node' ? t.cvDoc.nodes : t.cvDoc.edges).find(function (x) { return x.id === s.id; }) }; });
             if (entries.some(function (e) { return !e.item; })) { return; }
             var properties = entries.map(function (e) { return window.yavcCanvasModel.properties(e.item, e.kind); }).reduce(function (a, b) { return a.filter(function (k) { return b.indexOf(k) >= 0; }); });
@@ -611,7 +696,7 @@
                 var ext = e.item.yavc || {};
                 if (k === 'fromHead') { return ext.fromHead || e.item.fromEnd || 'none'; }
                 if (k === 'toHead') { return ext.toHead || e.item.toEnd || 'arrow'; }
-                var v = ['shape', 'line', 'lineWidth', 'route', 'textAlign', 'textVerticalAlign'].indexOf(k) >= 0 ? ext[k] : e.item[k];
+                var v = ['shape', 'line', 'lineWidth', 'route', 'textAlign', 'textVerticalAlign', 'fillColor', 'strokeColor'].indexOf(k) >= 0 ? ext[k] : e.item[k];
                 return v == null ? (k === 'lineWidth' && e.item.type === 'group' ? 1 : defaults[k] == null ? '' : defaults[k]) : v;
             }
             function add(k, label, type, options) {
@@ -625,10 +710,12 @@
                 else if (type === 'text') { control = field(id, label, '<textarea class="form-input" id="' + id + '" data-set="' + k + '" data-was="' + esc(v || '') + '" rows="3">' + esc(v || '') + '</textarea>'); }
                 else if (type === 'color') {
                     var pal = canvasPalette(t.place, window.yavcCanvas), resolved = /^[1-6]$/.test(v || '') ? pal.presets[Number(v) - 1] : /^#[a-f0-9]{3}$/i.test(v || '') ? v.replace(/([a-f0-9])/ig, '$1$1').replace('##', '#') : v;
-                    control = colourField(id, k, label, v || '', resolved || pal.line) + '<div class="hstack dg-color-presets" role="group" aria-label="Color Presets">' + pal.presets.map(function (c, i) {
+                    var box = (t.cvColors || []).find(function (b) { return b.id === selected[0].id; });
+                    var fallback = box && box.colors && (k === 'fillColor' ? box.colors.fill : k === 'strokeColor' ? box.colors.stroke : null);
+                    control = colourField(id, k, label, v || '', resolved || fallback || (k === 'fillColor' ? pal.surface : pal.line)) + '<div class="hstack dg-color-presets" role="group" aria-label="' + esc(label) + ' Presets">' + pal.presets.map(function (c, i) {
                         var name = ['Red', 'Orange', 'Yellow', 'Green', 'Cyan', 'Purple'][i];
-                        return '<button type="button" class="btn btn-sm" data-set="color" value="' + (i + 1) + '" data-was="' + esc(mixed ? '__mixed__' : v) + '" aria-label="' + name + '" title="' + name + '"><span class="dg-color-dot" style="background:' + esc(c) + '" aria-hidden="true"></span></button>';
-                    }).join('') + '<button type="button" class="btn btn-sm" data-set="color" value="" data-was="' + esc(mixed ? '__mixed__' : v) + '">Default</button></div>';
+                        return '<button type="button" class="btn btn-sm" data-set="' + esc(k) + '" value="' + (i + 1) + '" data-was="' + esc(mixed ? '__mixed__' : v) + '" aria-label="' + name + '" title="' + name + '"><span class="dg-color-dot" style="background:' + esc(c) + '" aria-hidden="true"></span></button>';
+                    }).join('') + '<button type="button" class="btn btn-sm" data-set="' + esc(k) + '" value="" title="' + (k === 'color' ? 'Theme Default' : 'Use the Coordinated Color') + '" data-was="' + esc(mixed ? '__mixed__' : v) + '">Default</button></div>';
                 } else { control = textField(id, k, label, v); }
                 if (mixed && type !== 'segments' && type !== 'picker') { control = control.replace(/data-was="[^"]*"/g, 'data-mixed="true" data-was=""').replace(/ placeholder="[^"]*"/g, '').replace(/<(input|textarea)\b/g, '<$1 placeholder="Mixed"'); control += '<p class="form-help">Mixed values</p>'; }
                 html += control;
@@ -639,6 +726,7 @@
             add('textVerticalAlign', 'Vertical Alignment', 'segments', [['', 'Default', 'yavc-align-default'], ['top', 'Top', 'yavc-align-top'], ['middle', 'Middle', 'yavc-align-middle'], ['bottom', 'Bottom', 'yavc-align-bottom']]);
             ['x', 'y', 'width', 'height'].forEach(function (k) { add(k, k === 'x' ? 'X' : k === 'y' ? 'Y' : k === 'width' ? 'Width' : 'Height', 'number'); });
             add('color', 'Color', 'color'); add('line', 'Line Style', 'segments', [['solid', 'Solid', 'yavc-line-solid'], ['dashed', 'Dashed', 'yavc-line-dashed'], ['dotted', 'Dotted', 'yavc-line-dotted']]); add('lineWidth', 'Line Width', 'number');
+            add('fillColor', 'Fill Color', 'color'); add('strokeColor', 'Outline Color', 'color');
             add('route', 'Route', 'segments', [['elbow', 'Elbow', 'yavc-route-elbow'], ['straight', 'Straight', 'yavc-route-straight'], ['curve', 'Curve', 'yavc-route-curve']]);
             var heads = [['none', 'None'], ['arrow', 'Arrow'], ['triangle', 'Triangle'], ['diamond', 'Diamond'], ['circle', 'Circle'], ['box', 'Box'], ['cross', 'Cross'], ['cf-one', 'One'], ['cf-one-required', 'Exactly One'], ['cf-many', 'Many'], ['cf-many-required', 'One or More']];
             heads = heads.map(function (h) { return h.concat('yavc-head-' + h[0]); });
@@ -651,7 +739,31 @@
             if (window.pudlFields) { window.pudlFields.enhance(el.inspector); }
             if (had) { var back = document.getElementById(had); if (back && !back.disabled) { back.focus({ preventScroll: true }); } }
         }
+        function renderDocumentInspector(t, blocked) {
+            var id = 'dg-doc-' + n + '-', settings = t.cvDoc.yavc || {}, palette = canvasPalette(t.place, window.yavcCanvas);
+            var had = el.inspector.contains(document.activeElement) ? document.activeElement.id : null;
+            var value = settings.background || '', resolved = /^[1-6]$/.test(value) ? palette.presets[Number(value) - 1] : /^#[a-f0-9]{3}$/i.test(value) ? value.replace(/([a-f0-9])/ig, '$1$1') : value;
+            var color = colourField(id + 'background', 'background', 'Background', value, resolved || palette.bg).replace(/ data-set=/g, ' data-document data-set=');
+            var html = '<h3 class="dg-inspector-title">Diagram</h3><p class="form-help">Canvas settings are saved in this diagram.</p>' + color +
+                '<button type="button" class="btn btn-sm" id="' + id + 'reset" data-document data-set="background" value="">Theme Default</button>';
+            [['grid', 'Show Grid', !!settings.grid], ['snap', 'Snap to Grid and Shapes', settings.snap !== false]].forEach(function (setting) {
+                html += '<div class="form-group"><label class="check"><input type="checkbox" id="' + id + setting[0] + '" data-document data-set="' + setting[0] + '"' + (setting[2] ? ' checked' : '') + '> ' + setting[1] + '</label></div>';
+            });
+            html += '<p class="form-help">Grid spacing is 8 pixels. Hold Alt while dragging to bypass snapping. The grid is not exported.</p>';
+            el.inspector.innerHTML = '<fieldset class="dg-inspector-fields"' + (blocked ? ' disabled' : '') + '>' + html + '</fieldset>';
+            if (had) { var back = document.getElementById(had); if (back && !back.disabled) { back.focus({ preventScroll: true }); } }
+        }
         async function canvasInspectorChanged(f) {
+            if (!canvasSelections().length && f.hasAttribute('data-document')) {
+                if (canvasWhy(false)) { return; }
+                var documentOwner = current(), documentValue = f.type === 'checkbox' ? f.checked : f.value || null;
+                try {
+                    var changed = await canvasEdit({ op: 'document', property: f.dataset.set, value: documentValue }, documentOwner.text, true);
+                    if (current() === documentOwner && documentOwner.text === changed.text) { inspected = null; renderCanvasInspector(documentOwner); }
+                }
+                catch (err) { if (current() === documentOwner && f.isConnected) { markField(f, err.message); } }
+                return;
+            }
             if (canvasWhy(true)) { return; }
             var owner = current(), property = f.dataset.set, value = f.value, s = canvasSelection();
             var picker = f.dataset.picker, restoreFocus = picker && document.activeElement === f;
@@ -673,6 +785,7 @@
         function canvasCommands() {
             function c(id, label, run, key, needs, glyph) { return cmd('cv-' + id, label, glyph, run, { hidden: function () { return !isCanvas(); }, builtIn: key, disabled: function () { return !!canvasWhy(needs); }, reason: function () { return canvasWhy(needs); } }); }
             var commands = [
+                c('edit-text', 'Edit Text', startInlineText, 'Enter', 'text', 'pencil'),
                 c('select-all', 'Select All Items', canvasSelectAll, 'Mod-a', false),
                 c('select-items', 'Select Items…', canvasSelectItems, null, false),
                 c('new', 'Add Shape', function () { canvasCreate(); }, 'n', false, 'plus'),
@@ -707,6 +820,7 @@
             if (e.key === 'Escape') { setTool(null); t.cv.cancel(); t.cv.select(null); e.preventDefault(); return; }
             if (e.key === 'Tab' || e.key === ' ') { if (t.cv.onKey(e)) { e.preventDefault(); } return; }
             if (canvasWhy(false)) { return; }
+            if (e.key === 'Enter' && !canvasWhy('text')) { e.preventDefault(); startInlineText(); return; }
             if (mod && key === 'a') { e.preventDefault(); canvasSelectAll(); return; }
             if (/^Arrow/.test(e.key) && !mod) {
                 e.preventDefault();
@@ -797,7 +911,7 @@
                     div.className = 'dg-cv-text' + (nd.yavc && nd.yavc.textAlign ? '' : ' is-auto-align');
                     div.style.textAlign = box.align;
                     div.style.justifyContent = box.vertical === 'middle' ? 'center' : box.vertical === 'bottom' ? 'flex-end' : 'flex-start';
-                    div.style.color = palette.text;
+                    div.style.color = box.color || palette.text;
                     div.appendChild(frag);
                     fo.appendChild(div);
                     g.replaceChildren(fo);
@@ -897,7 +1011,7 @@
         }
         function segmentField(id, key, label, value, options) {
             return '<fieldset class="form-group dg-choice"><legend class="form-label" id="' + id + '-label">' + esc(label) + '</legend><div class="seg sm">' +
-                options.map(function (o, i) { return '<button type="button" id="' + id + '-' + i + '" data-set="' + esc(key) + '" value="' + esc(o[0]) + '" data-was="' + esc(value == null ? '__mixed__' : value) + '" aria-pressed="' + (value != null && o[0] === value) + '">' + optionGlyph(o) + '<span>' + esc(o[1]) + '</span></button>'; }).join('') + '</div>' + (value == null ? '<p class="form-help">Mixed values</p>' : '') + '</fieldset>';
+                options.map(function (o, i) { return '<button type="button" id="' + id + '-' + i + '" data-set="' + esc(key) + '" value="' + esc(o[0]) + '" data-was="' + esc(value == null ? '__mixed__' : value) + '" aria-label="' + esc(o[1]) + '" title="' + esc(o[1]) + '" aria-pressed="' + (value != null && o[0] === value) + '">' + optionGlyph(o) + '<span>' + esc(o[1]) + '</span></button>'; }).join('') + '</div>' + (value == null ? '<p class="form-help">Mixed values</p>' : '') + '</fieldset>';
         }
         function optionGlyph(option) { return option[2] ? '<span class="glyph" style="--glyph:var(--glyph-' + esc(option[2]) + ')" aria-hidden="true"></span>' : ''; }
         function pickerField(id, key, label, value, options) {
@@ -914,6 +1028,7 @@
             return field(id, label, '<span class="number-field"><input class="form-input" type="number" step="1"' + (min == null ? '' : ' min="' + min + '"') + (max == null ? '' : ' max="' + max + '"') + ' id="' + id + '" data-set="' + esc(key) + '" data-was="' + esc(value || '') + '" value="' + esc(value || '') + '"></span>');
         }
         function colourField(id, key, label, value, fallback) {
+            if (/^#[a-f0-9]{3}$/i.test(fallback || '')) { fallback = fallback.replace(/([a-f0-9])/ig, '$1$1'); }
             return window.yavcMdEditor.colourRows([{ id: id, key: key, label: label, value: value || '', fallback: fallback || '#808080', placeholder: 'Theme default' }])
                 .replace(/data-key="/, 'data-was="' + esc(value || '') + '" data-set="');
         }
@@ -1362,6 +1477,7 @@
         function stash() { var t = current(); if (t && cm) { t.state = cm.state; } }
         function activateTab(i) {
             if (!tabs[i]) { return; }
+            finishInlineText(false);
             if (current() && current().cv) { current().cv.cancel(); }
             setTool(null);
             stash();
@@ -1439,38 +1555,73 @@
             say('Opened ' + res.name + '.');
             commandsChanged();
         }
+        function queueSave(t, run) {
+            var ticket = t.saveTicket = (t.saveTicket || 0) + 1;
+            var pending = (t.saveQueue || Promise.resolve()).then(function () {
+                if (destroyed || tabs.indexOf(t) < 0) { throw new Error('The diagram was closed before its queued save could run.'); }
+                return run(ticket);
+            });
+            t.saveQueue = pending.catch(function () { });
+            function settled(value) {
+                if (!destroyed && tabs.indexOf(t) >= 0) {
+                    if (ticket === t.saveTicket && !t.saveFailed && t.savedPath === t.path && t.savedText !== undefined) { t.modified = t.text !== t.savedText; }
+                    commandsChanged(); keep();
+                }
+                return value;
+            }
+            return pending.then(settled, function (err) { t.saveFailed = true; t.modified = true; settled(null); throw err; });
+        }
+        function saved(t, path, text, ticket, rename) {
+            if (destroyed || tabs.indexOf(t) < 0) { return false; }
+            if (rename) { t.path = path; }
+            t.savedPath = path; t.savedText = text; t.saveFailed = false;
+            t.modified = t.path !== path || t.text !== text || ticket !== t.saveTicket;
+            return true;
+        }
         async function save() {
             var t = current();
             if (!t) { return; }
             if (!t.path) { return saveAs(); }
-            var err = await H.fs.writeText(t.path, t.text);
-            if (err) { say('Could not save: ' + err, true); return; }
-            t.modified = false;
-            say('Saved ' + t.path + '.');
-            commandsChanged();
-            keep();
+            var submitted = t.text;
+            return queueSave(t, async function (ticket) {
+                var path = t.path, err = await H.fs.writeText(path, submitted);
+                if (err) { t.saveFailed = true; t.modified = true; say('Could not save: ' + err, true); return; }
+                if (saved(t, path, submitted, ticket, false) && t === current()) { say('Saved ' + path + (t.modified ? '; newer edits are still unsaved.' : '.')); }
+            });
         }
         async function saveAs() {
             var t = current();
             if (!t || !H.fs || !H.fs.save) { return; }
-            var blob = new Blob([t.text], { type: 'text/plain' });
-            var res = await H.fs.save({ title: 'Save the Diagram As', name: tabTitle(t), host: root, start: t.path ? t.path.replace(/\/[^\/]*$/, '') : '~/Documents', blob: blob }).catch(function (e) { say(e.message, true); return null; });
-            if (!res) { return; }
-            if (res.path) {
-                t.path = res.path;
-                t.modified = false;
-                /* A new suffix may make it the other language. */
-                var kind = kindOf(res.path, t.text);
-                if (kind !== t.kind) { t.kind = kind; stash(); t.state = stateFor(t, t.text); showTab(t); el.kind.textContent = KIND_NAME[kind]; root.setAttribute('data-kind', kind); drawNow(); }
-                el.where.textContent = t.path;
-                say('Saved ' + t.path + '.');
-                announce();
-            } else if (res.download) { window.yavcUtil.download(res.download, blob); say('Downloaded ' + res.download + '.'); }
-            commandsChanged();
+            var submitted = t.text, blob = new Blob([submitted], { type: 'text/plain' });
+            return queueSave(t, async function (ticket) {
+                var res = await H.fs.save({ title: 'Save the Diagram As', name: tabTitle(t), host: root, start: t.path ? t.path.replace(/\/[^\/]*$/, '') : '~/Documents', blob: blob }).catch(function (e) { t.saveFailed = true; t.modified = true; say(e.message, true); return null; });
+                if (!res || destroyed || tabs.indexOf(t) < 0) { return; }
+                if (res.path) {
+                    saved(t, res.path, submitted, ticket, true);
+                    /* A new suffix may make it the other language. */
+                    var kind = kindOf(res.path, t.text);
+                    if (kind !== t.kind) {
+                        t.kind = kind;
+                        if (t === current()) { finishInlineText(false); stash(); }
+                        if (t.canvas) { t.canvas.destroy(); t.canvas = null; }
+                        if (t.cv) { t.cv.destroy(); t.cv = null; }
+                        t.svg = null; t.size = null; t.cvPending = null;
+                        t.state = stateFor(t, t.text);
+                        if (t === current()) { showTab(t); el.kind.textContent = KIND_NAME[kind]; root.setAttribute('data-kind', kind); drawNow(); }
+                    }
+                    if (t === current()) { el.where.textContent = t.path; say('Saved ' + t.path + (t.modified ? '; newer edits are still unsaved.' : '.')); announce(); }
+                } else if (res.download) { window.yavcUtil.download(res.download, blob); say('Downloaded ' + res.download + '.'); }
+                commandsChanged();
+                keep();
+            });
         }
         function newDiagram(style, kind) {
             openInTab(style.text, null, kind, null);
             say('This is a new ' + style.label.toLowerCase() + '. Save it to keep it.');
+        }
+        async function newCanvas(style) {
+            await canvasEditor();
+            if (!destroyed) { newDiagram({ label: 'Canvas', text: window.yavcCanvasModel.template(style).text }, 'canvas'); }
         }
         function editInEditor() {
             var t = current();
@@ -1630,7 +1781,7 @@
             var table = [
                 cmd('new', 'New Diagram', 'file', null, { items: D2_STYLES.map(function (s) { return { id: 'new-' + s.id, label: s.label, run: function () { newDiagram(s, 'd2'); } }; }) }),
                 cmd('new-mermaid', 'New Mermaid Diagram', 'file', null, { items: MERMAID_STYLES.map(function (s) { return { id: 'new-' + s.id, label: s.label, run: function () { newDiagram(s, 'mermaid'); } }; }) }),
-                cmd('new-canvas', 'New Canvas', 'file', function () { newDiagram({ label: 'Canvas', text: CANVAS_STARTER }, 'canvas'); }),
+                cmd('new-canvas', 'New Canvas', 'file', null, { items: CANVAS_STYLES.map(function (s) { return { id: 'new-canvas-' + s[0], label: s[1], run: function () { return newCanvas(s[0]); } }; }) }),
                 cmd('open', 'Open…', 'folder', open, { shortcut: 'Mod+O' }),
                 cmd('save', 'Save', 'yavc-save', save, { shortcut: 'Mod+S', disabled: function () { return !current(); } }),
                 cmd('save-as', 'Save As…', 'yavc-save-as', saveAs, { disabled: function () { return !current(); } }),
@@ -1690,14 +1841,14 @@
                 { label: 'Diagrams', glyph: 'document', items: H.identity ? H.identity(root, []) : [] },
                 { id: 'file', label: 'File', glyph: 'file', items: ['new', 'new-mermaid', 'new-canvas', 'open', 'save', 'save-as', '-', 'edit-in-editor', '-', 'export-svg', 'export-png', 'export-source', '-', 'close-diagram'] },
                 { id: 'edit', label: 'Edit', glyph: 'pencil', items: ['undo', 'redo', '-', 'cv-copy', 'cv-paste', 'cv-duplicate', 'cv-delete', 'copy-embed', '-', 'cv-select-all', 'cv-select-items', '-', 'find', '-', 'format-text', 'redraw', 'language-restart'] },
-                { id: 'shape', label: 'Shape', glyph: 'square', items: (isD2() || isCanvas() ? [{ label: 'Drawing Tool', glyph: 'square', items: ['tool-select'].concat(PALETTE.map(function (k) { return 'tool-' + k[0]; })) }, '-'] : []).concat(['shape-add', 'shape-add-inside', 'connect', 'cv-new', 'cv-group', 'cv-connect', 'cv-reconnect-start', 'cv-reconnect-end', 'cv-resize', '-', 'shape-label', 'shape-rename', 'shape-type', '-', 'shape-move-into', 'shape-move-top', 'cv-left', 'cv-right', 'cv-up', 'cv-down', 'cv-forward', 'cv-back', '-', 'shape-delete']) }
+                { id: 'shape', label: 'Shape', glyph: 'square', items: (isD2() || isCanvas() ? [{ label: 'Drawing Tool', glyph: 'square', items: ['tool-select'].concat(PALETTE.map(function (k) { return 'tool-' + k[0]; })) }, '-'] : []).concat(['shape-add', 'shape-add-inside', 'connect', 'cv-new', 'cv-group', 'cv-connect', 'cv-reconnect-start', 'cv-reconnect-end', 'cv-resize', 'cv-edit-text', '-', 'shape-label', 'shape-rename', 'shape-type', '-', 'shape-move-into', 'shape-move-top', 'cv-left', 'cv-right', 'cv-up', 'cv-down', 'cv-forward', 'cv-back', '-', 'shape-delete']) }
             ], into: { view: ['view-text', 'view-preview', 'view-split', '-', 'dock', 'fit', 'toggle-inspector', '-', 'cv-pan', 'cv-pan-left', 'cv-pan-right', 'cv-pan-up', 'cv-pan-down', 'cv-zoom-in', 'cv-zoom-out', 'cv-actual'], go: ['go-to-line', 'cv-next', 'cv-previous'] } };
         }
         root.addEventListener('pudl:contextmenu', function (e) {
             var t = e.detail.target;
             var own = function (ids) { return window.pudlCommands ? window.pudlCommands.menuRows(ids, root) : ids; };
             if (t.closest && t.closest('.dg-stagebox')) {
-                var rows = isCanvas() ? ['cv-new', 'cv-group', 'cv-connect', 'cv-reconnect-start', 'cv-reconnect-end', 'cv-resize', '-', 'cv-copy', 'cv-paste', 'cv-duplicate', 'cv-forward', 'cv-back', 'cv-delete', '-'] : isD2() && selection() ? ['shape-label', 'shape-rename', 'shape-type', 'connect', 'shape-add-inside', '-', 'shape-delete', '-'] : isD2() ? ['shape-add', '-'] : [];
+                var rows = isCanvas() ? ['cv-edit-text', 'cv-new', 'cv-group', 'cv-connect', 'cv-reconnect-start', 'cv-reconnect-end', 'cv-resize', '-', 'cv-copy', 'cv-paste', 'cv-duplicate', 'cv-forward', 'cv-back', 'cv-delete', '-'] : isD2() && selection() ? ['shape-label', 'shape-rename', 'shape-type', 'connect', 'shape-add-inside', '-', 'shape-delete', '-'] : isD2() ? ['shape-add', '-'] : [];
                 e.detail.add(own(rows.concat(['copy-embed', 'export-svg', 'export-png', '-', 'fit', 'redraw'])));
             }
             else if (t.closest && t.closest('.dg-text')) { e.detail.add(own(['undo', 'redo', '-', 'find', '-', 'format-text', 'copy-embed', '-', 'view-text', 'view-preview', 'view-split'])); }
@@ -1726,7 +1877,7 @@
             if (destroyed) { return; }
             if (H.config && H.config.load) { try { Object.assign(settings, (await H.config.load('diagrams', SETTINGS)) || {}); } catch (err) { } }
             if (destroyed) { return; }
-            if (Number.isFinite(settings.inspectorSplit) && settings.inspectorSplit > 0 && settings.inspectorSplit < 100) { el.body.style.setProperty('--split-a', settings.inspectorSplit + '%'); }
+            fitInspector();
             applyFit();
             /* The tabs kept across a reload come back first, unsaved text and
                all; then the address's file comes to the front. */
@@ -1772,9 +1923,13 @@
             'new@1': async function (input) {
                 await booted;
                 var kind = input.kind === 'mermaid' || input.kind === 'canvas' ? input.kind : 'd2';
-                var list = kind === 'd2' ? D2_STYLES : kind === 'mermaid' ? MERMAID_STYLES : [{ id: 'canvas', label: 'Canvas', text: CANVAS_STARTER }];
-                var style = list.find(function (s) { return s.id === input.style || s.id === 'mm-' + input.style; }) || list[0];
-                var t = openInTab(input.text != null ? String(input.text) : style.text, null, kind, null);
+                var text;
+                if (kind === 'canvas') { await canvasEditor(); text = window.yavcCanvasModel.template(input.style || 'basic').text; }
+                else {
+                    var list = kind === 'd2' ? D2_STYLES : MERMAID_STYLES;
+                    var style = list.find(function (s) { return s.id === input.style || s.id === 'mm-' + input.style; }) || list[0]; text = style.text;
+                }
+                var t = openInTab(input.text != null ? String(input.text) : text, null, kind, null);
                 if (input.text != null) { t.modified = true; commandsChanged(); }
                 return { output: Object.assign(summary(t, active), await drawnNow()) };
             },
@@ -1793,26 +1948,30 @@
             'save@1': async function (input) {
                 await booted;
                 var t = await front(input.index);
-                if (input.path) {
-                    /* An agent's diagram never takes the name of a file that
-                       exists, or saving would overwrite it unasked. */
-                    var to = String(input.path);
-                    if (to !== t.path && H.fs && H.fs.readText) {
-                        var there = await H.fs.readText(to).catch(function () { return null; });
-                        if (there != null) { throw new Error('there is already a file at ' + to + '; open it, or give the diagram another name'); }
+                var submitted = t.text;
+                return queueSave(t, async function (ticket) {
+                    var destination = input.path ? String(input.path) : t.path;
+                    if (input.path) {
+                        /* An agent's diagram never takes the name of a file that
+                           exists, or saving would overwrite it unasked. */
+                        var to = String(input.path);
+                        if (to !== t.path && H.fs && H.fs.readText) {
+                            var there = await H.fs.readText(to).catch(function () { return null; });
+                            if (there != null) { throw new Error('there is already a file at ' + to + '; open it, or give the diagram another name'); }
+                        }
                     }
-                    t.path = to;
-                }
-                if (!t.path) { throw new Error('the diagram has no file yet; give a path such as ~/diagrams/plan.d2'); }
-                if (!H.fs || !H.fs.writeText) { throw new Error('there is no file service here'); }
-                var err = await H.fs.writeText(t.path, t.text);
-                if (err) { throw new Error('could not save: ' + err); }
-                t.modified = false;
-                el.where.textContent = t.path;
-                say('Saved ' + t.path + '.');
-                commandsChanged();
-                announce();
-                return { output: summary(t, active) };
+                    if (!destination) { throw new Error('the diagram has no file yet; give a path such as ~/diagrams/plan.d2'); }
+                    if (!H.fs || !H.fs.writeText) { throw new Error('there is no file service here'); }
+                    if (destroyed || tabs.indexOf(t) < 0) { throw new Error('The diagram was closed before it could be saved.'); }
+                    var err = await H.fs.writeText(destination, submitted);
+                    if (err) { throw new Error('could not save: ' + err); }
+                    if (destroyed || tabs.indexOf(t) < 0) { throw new Error('The file was saved after its diagram was closed.'); }
+                    saved(t, destination, submitted, ticket, true);
+                    if (t === current()) { el.where.textContent = t.path; say('Saved ' + t.path + (t.modified ? '; newer edits are still unsaved.' : '.')); announce(); }
+                    commandsChanged();
+                    keep();
+                    return { output: summary(t, tabs.indexOf(t)) };
+                });
             },
             'close@1': async function (input) {
                 await booted;
@@ -1922,6 +2081,7 @@
             commandTable: commandTable, toolbars: toolbars, menus: menus,
             destroy: function () {
                 destroyed = true;
+                finishInlineText(false); inspectorSize.disconnect();
                 modeWatch.disconnect();
                 if (darkQuery) { darkQuery.removeEventListener('change', modeChanged); }
                 tabs.forEach(function (t) { if (t.canvas) { t.canvas.destroy(); } if (t.cv) { t.cv.destroy(); } });

@@ -237,6 +237,20 @@ Diagrams 0.17.0 puts Drawing Tool first under Shape for D2 and Canvas. Canvas Ro
 
 Diagrams 0.18.0 gives every inspector segment a glyph and label, including horizontal/vertical alignment, Default, Canvas and D2 Line Style, and Route. The inline padding grows from space-1 to space-2. A container query stacks symbols above their labels in narrow inspector fields and leaves them beside the labels when wider. The focused picker browser suite checks glyph coverage, padding and overflow for the alignment and style groups, while retaining its existing route, arrowhead and keyboard coverage.
 
+## Combined Canvas editing batch
+
+Diagrams 0.19.0 combines inline Markdown text editing, independent node fill/outline overrides, diagram background/grid/snapping settings and four ordinary Canvas starter templates. Editor 45.17.0 and Slides 0.21.2 carry the updated shared schema assets. The format additions remain version 1 and retain the standard coordinated color when another reader drops the extension. The wider Inspector preserves its pixel width across main-divider changes and folds segments without splitting labels, including glyph-only buttons with names and tooltips at its narrowest width.
+
+The focused regression is `scripts/test-canvas-batch.cjs chromium firefox webkit`. It covers the combined workflow, inline typing/undo/focus/reload/close prompts, independent color resets, diagram settings, template structure, immediate outer resizing after an Inspector keyboard resize, control folding, queued saves, inactive Save As and snapshot recovery. Model/renderer tests cover validation, reset preservation, explicit fill ink, exports and freely movable sequence lanes. Screenshots are retained under the temporary `yavc-canvas-batch` folder.
+
+The existing canvas fixture now leaves room for actual-size corner grips beside the wider Inspector and uses the current arrowhead menu pickers. Group drag checks allow one screen pixel of pointer quantisation at fractional zoom, while relative group geometry and keyboard-entered coordinates remain exact.
+
+Debugger inspection found that pointer capture retargeted double-click to the canvas place rather than its hit shape. The activation handler now resolves the element at the event position through the standard DOM hit test. Source review caught an opaque SVG background hiding the live grid/background, text ink resolved against an unpainted text-only fill, link ink ignoring its fill, a missing inactive-tab snapshot notification, skin radii overridden by a reflow rule and save acknowledgements lacking resource/order protection. The fixes retain transparent live SVG backgrounds, paint explicit text-only fills, resolve link ink, notify snapshots, preserve skin radii and serialize saves through a shared per-document queue. Browser regressions cover the save A/Save As B/buffer A case and ordered same-path writes. WebKit's native mouse-checkbox focus behavior required changing the focus test to exercise keyboard activation explicitly.
+
+## README badges and image alignment
+
+The shared Markdown pipeline accepts ordinary linked badge images and preserves recognized left/right alignment while normalizing local image attachments. Shared page CSS supplies float, margins and clearing for GitHub-style markup. The reader's Markdown remains unchanged. Go tests cover linked badge output, local alignment and rejected alignment values; `scripts/test-readme-images.cjs chromium firefox webkit` uses a fixture matching the six badge forms in the Dinah README, with mocked remote SVG responses and supplied attachment bytes. It checks intrinsic badge dimensions, links, right floats, clearing, class-based right alignment and source preservation across Preview/Visual/Text. It does not check live Shields service availability or Dinah's desktop resource adapter.
+
 ## Items for other projects
 
 These problems belong to PUDL or to applets that are maintained elsewhere, so they were reported instead of patched here.

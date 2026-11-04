@@ -181,6 +181,12 @@
 /* A picture never widens the page: it scales to the column, as a figure's
    does; code and tables scroll within themselves (DESIGN.md, decision 15). */
 .doc-page img { max-width: 100%; height: auto; }
+/* GitHub README image alignment, also retained on local attachments. */
+.doc-page img[align="right" i] { float: right; margin: 0 0 1em 1em; }
+.doc-page img[align="left" i] { float: left; margin: 0 1em 1em 0; }
+.doc-page br[clear="right" i] { clear: right; }
+.doc-page br[clear="left" i] { clear: left; }
+.doc-page br[clear="both" i], .doc-page br[clear="all" i] { clear: both; }
 
 /* The editing kit's picture dialog (apps/md-editor/kit.js). */
 .md-figure { max-width: 34rem; }
