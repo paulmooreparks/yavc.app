@@ -103,7 +103,7 @@
     var SETTINGS = { view: 'split', dock: 'left', fit: true, inspector: true, inspectorSplit: null };
     /* The inspector's choices (milestone D3): line styles as D2's
        stroke-dash, and the arrowheads D2 draws. */
-    var DASHES = [['', 'Solid'], ['5', 'Dashed'], ['2', 'Dotted']];
+    var DASHES = [['', 'Solid', 'yavc-line-solid'], ['5', 'Dashed', 'yavc-line-dashed'], ['2', 'Dotted', 'yavc-line-dotted']];
     var HEADS = [['', 'D2\'s Own'], ['triangle', 'Triangle'], ['arrow', 'Arrow'], ['diamond', 'Diamond'], ['circle', 'Circle'], ['box', 'Box'],
         ['cf-one', 'One'], ['cf-one-required', 'Exactly One'], ['cf-many', 'Many'], ['cf-many-required', 'One or More'], ['cross', 'Cross']];
     var ARROWS = [['->', 'Forward'], ['<-', 'Backward'], ['<->', 'Both Ways'], ['--', 'No Arrows']];
@@ -635,10 +635,10 @@
             }
             add('text', 'Text', 'text'); add('label', 'Label');
             add('shape', 'Shape', 'select', [['rectangle', 'Rectangle'], ['rounded', 'Rounded Rectangle']].concat(PALETTE.filter(function (x) { return x[0] !== 'rectangle' && x[0] !== 'rounded'; })));
-            add('textAlign', 'Horizontal Alignment', 'segments', [['', 'Default'], ['left', 'Left'], ['center', 'Center'], ['right', 'Right']]);
-            add('textVerticalAlign', 'Vertical Alignment', 'segments', [['', 'Default'], ['top', 'Top'], ['middle', 'Middle'], ['bottom', 'Bottom']]);
+            add('textAlign', 'Horizontal Alignment', 'segments', [['', 'Default', 'yavc-align-default'], ['left', 'Left', 'yavc-align-left'], ['center', 'Center', 'yavc-align-center'], ['right', 'Right', 'yavc-align-right']]);
+            add('textVerticalAlign', 'Vertical Alignment', 'segments', [['', 'Default', 'yavc-align-default'], ['top', 'Top', 'yavc-align-top'], ['middle', 'Middle', 'yavc-align-middle'], ['bottom', 'Bottom', 'yavc-align-bottom']]);
             ['x', 'y', 'width', 'height'].forEach(function (k) { add(k, k === 'x' ? 'X' : k === 'y' ? 'Y' : k === 'width' ? 'Width' : 'Height', 'number'); });
-            add('color', 'Color', 'color'); add('line', 'Line Style', 'segments', [['solid', 'Solid'], ['dashed', 'Dashed'], ['dotted', 'Dotted']]); add('lineWidth', 'Line Width', 'number');
+            add('color', 'Color', 'color'); add('line', 'Line Style', 'segments', [['solid', 'Solid', 'yavc-line-solid'], ['dashed', 'Dashed', 'yavc-line-dashed'], ['dotted', 'Dotted', 'yavc-line-dotted']]); add('lineWidth', 'Line Width', 'number');
             add('route', 'Route', 'segments', [['elbow', 'Elbow', 'yavc-route-elbow'], ['straight', 'Straight', 'yavc-route-straight'], ['curve', 'Curve', 'yavc-route-curve']]);
             var heads = [['none', 'None'], ['arrow', 'Arrow'], ['triangle', 'Triangle'], ['diamond', 'Diamond'], ['circle', 'Circle'], ['box', 'Box'], ['cross', 'Cross'], ['cf-one', 'One'], ['cf-one-required', 'Exactly One'], ['cf-many', 'Many'], ['cf-many-required', 'One or More']];
             heads = heads.map(function (h) { return h.concat('yavc-head-' + h[0]); });
@@ -897,7 +897,7 @@
         }
         function segmentField(id, key, label, value, options) {
             return '<fieldset class="form-group dg-choice"><legend class="form-label" id="' + id + '-label">' + esc(label) + '</legend><div class="seg sm">' +
-                options.map(function (o, i) { return '<button type="button" id="' + id + '-' + i + '" data-set="' + esc(key) + '" value="' + esc(o[0]) + '" data-was="' + esc(value == null ? '__mixed__' : value) + '" aria-pressed="' + (value != null && o[0] === value) + '">' + optionGlyph(o) + esc(o[1]) + '</button>'; }).join('') + '</div>' + (value == null ? '<p class="form-help">Mixed values</p>' : '') + '</fieldset>';
+                options.map(function (o, i) { return '<button type="button" id="' + id + '-' + i + '" data-set="' + esc(key) + '" value="' + esc(o[0]) + '" data-was="' + esc(value == null ? '__mixed__' : value) + '" aria-pressed="' + (value != null && o[0] === value) + '">' + optionGlyph(o) + '<span>' + esc(o[1]) + '</span></button>'; }).join('') + '</div>' + (value == null ? '<p class="form-help">Mixed values</p>' : '') + '</fieldset>';
         }
         function optionGlyph(option) { return option[2] ? '<span class="glyph" style="--glyph:var(--glyph-' + esc(option[2]) + ')" aria-hidden="true"></span>' : ''; }
         function pickerField(id, key, label, value, options) {

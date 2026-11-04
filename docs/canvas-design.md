@@ -68,6 +68,8 @@ Three things matter for this design. The format has no shapes, since every node 
 
 25. **Frequent tools lead the menu and visual choices carry glyphs** (2026-11-05, Paul). Drawing Tool is the first item under Shape in both Canvas and D2. Canvas Route keeps three segments with route glyphs. Start Head and End Head use PUDL menu pickers so every option can show its endpoint symbol alongside its label and checked state, without depending on native select rendering. Mixed selections have no checked option until a value is chosen. Save As uses a project glyph in Diagrams because the pinned PUDL release has no standard glyph for that command. This changes no file format or drawing behavior.
 
+26. **Inspector segments keep labels beside visual symbols** (2026-11-05, Paul). Horizontal and vertical alignment, including Shape Default, and Line Style gain project glyphs alongside the existing Route glyphs. D2 Line Style uses the same previews. Every segment keeps its words and gains equal extra padding on both sides. In a narrow inspector the glyph sits above the label so four alignment choices fit without cutting off their names; a wider inspector shows them side by side.
+
 ## Work, in order
 
 | Milestone | Work | Size |

@@ -233,6 +233,10 @@ Diagrams 0.17.0 puts Drawing Tool first under Shape for D2 and Canvas. Canvas Ro
 
 `scripts/test-diagram-pickers.cjs chromium firefox webkit` covers menu order, glyph presence, keyboard selection and focus return, checked and mixed values, batch arrowhead edits and undo. It retains light and narrow dark screenshots in the temporary `yavc-diagram-pickers` folder. Keyboard testing caught focus being lost when the inspector redrew after a choice. The host now returns focus to the trigger when the activating row still owned it, preserving a user's move into another control while an edit is pending. The PUDL source review required the documented `.menu` wrapper, which is now present.
 
+## Inspector segment spacing and glyphs
+
+Diagrams 0.18.0 gives every inspector segment a glyph and label, including horizontal/vertical alignment, Default, Canvas and D2 Line Style, and Route. The inline padding grows from space-1 to space-2. A container query stacks symbols above their labels in narrow inspector fields and leaves them beside the labels when wider. The focused picker browser suite checks glyph coverage, padding and overflow for the alignment and style groups, while retaining its existing route, arrowhead and keyboard coverage.
+
 ## Items for other projects
 
 These problems belong to PUDL or to applets that are maintained elsewhere, so they were reported instead of patched here.
