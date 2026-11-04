@@ -21,11 +21,21 @@ async function run(engine) {
     try {
         await page.goto(`http://diagrams.localhost:${port}/`); await page.locator('.cm-editor').waitFor();
         await action('diagram'); await toolFirst();
+        await page.locator('.dg-hit-shape').first().click();
+        assert.equal(await page.getByRole('group', { name: 'Line Style', exact: true }).locator('button > .glyph').count(), 3);
         await action('new', { kind: 'canvas', text: JSON.stringify({ nodes: [
             { id: 'a', type: 'text', x: 0, y: 0, width: 160, height: 80, text: 'A' },
             { id: 'b', type: 'text', x: 300, y: 0, width: 160, height: 80, text: 'B' }
         ], edges: [{ id: 'e1', fromNode: 'a', toNode: 'b' }, { id: 'e2', fromNode: 'b', toNode: 'a', yavc: { fromHead: 'diamond' } }] }) });
         await toolFirst();
+        await action('canvas-view', { op: 'select', key: 'a', kind: 'node' });
+        for (const label of ['Horizontal Alignment', 'Vertical Alignment', 'Line Style']) {
+            const group = page.getByRole('group', { name: label, exact: true });
+            const buttons = group.getByRole('button');
+            assert.equal(await group.locator('button > .glyph').count(), await buttons.count());
+            assert.ok(await buttons.evaluateAll(all => all.every(b => parseFloat(getComputedStyle(b).paddingLeft) >= 8 && b.scrollWidth <= b.clientWidth + 1)));
+        }
+        await page.locator('.dg-inspector').screenshot({ path: path.join(evidence, engine + '-alignment.png') });
         await action('canvas-view', { op: 'select', key: 'e1', kind: 'edge' });
         const route = page.getByRole('group', { name: 'Route', exact: true });
         assert.equal(await route.locator('button > .glyph').count(), 3);
