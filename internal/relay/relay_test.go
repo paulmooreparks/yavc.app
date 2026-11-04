@@ -162,13 +162,23 @@ func TestRerouting(t *testing.T) {
 func TestErrBusyAt32(t *testing.T) {
 	h, _ := testHub()
 	events, _ := subscribe(t, h, "s", "p")
+	// The page reads everything sent to it, and says when it has read the
+	// invocations, since the page's queue holds no more than MaxLive and
+	// the test must not depend on the reader having been scheduled already
+	// (it failed every time with -cpu 1 before this wait; docs/review.md).
+	read := make(chan struct{})
 	go func() {
+		n := 0
 		for range events {
+			if n++; n == MaxLive {
+				close(read)
+			}
 		}
 	}()
 	for i := 0; i < MaxLive; i++ {
 		invoke(t, h, "s", "r"+strings.Repeat("x", i+1))
 	}
+	<-read
 	if _, err := h.Invoke("s", Invocation{ID: "one-more", Action: "x/y@1"}); !errors.Is(err, ErrTooMany) {
 		t.Fatalf("want ErrTooMany, got %v", err)
 	}

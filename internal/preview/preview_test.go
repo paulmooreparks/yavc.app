@@ -2,8 +2,10 @@ package preview
 
 import (
 	"runtime"
+	"sort"
 	"strings"
 	"testing"
+	"time"
 )
 
 func kinds(blocks []Block) []string {
@@ -122,36 +124,41 @@ func BenchmarkRender1600(b *testing.B) {
 
 // Drawing a document takes time in proportion to its length: four times
 // the sections take well under five times as long, as BenchmarkRender400
-// and BenchmarkRender1600 measure at length. Each size is timed by Go's
-// benchmark runner, averaged over as many renders as fit in its second,
-// and the faster of two such averages kept. Five single renders were not
-// enough: in CI the other packages' tests run on the same cores at the same
-// time, and a burst of their work landing on the large render made a
-// linear renderer look 5.2 times slower at four times the size (see
-// docs/review.md).
+// and BenchmarkRender1600 measure at length. In CI the other packages'
+// tests run on the same cores at the same time, and their load comes and
+// goes, so the sizes are timed in pairs a moment apart, each pair doing
+// the same amount of work for both (eight renders of 400 sections, two of
+// 1600), which puts both under the same load; the order alternates, and
+// the median of the pairs' ratios decides. Timing each size apart, even
+// averaged over a second each, failed twice in CI at ratios of 5.2 and 5.4
+// while the D2 engine's tests ran beside it (see docs/review.md).
 func TestRenderIsLinear(t *testing.T) {
 	if testing.Short() {
 		t.Skip("measures time")
 	}
-	fastest := func(n int) float64 {
-		text := sections(n)
-		best := 0.0
-		for range 2 {
-			runtime.GC()
-			r := testing.Benchmark(func(b *testing.B) {
-				for b.Loop() {
-					Render(text)
-				}
-			})
-			if ns := float64(r.NsPerOp()); best == 0 || ns < best {
-				best = ns
-			}
+	small, large := sections(400), sections(1600)
+	per := func(text string, times int) float64 {
+		runtime.GC()
+		start := time.Now()
+		for range times {
+			Render(text)
 		}
-		return best
+		return float64(time.Since(start)) / float64(times)
 	}
-	small, large := fastest(400), fastest(1600)
-	t.Logf("400 sections %.1f ms, 1600 sections %.1f ms, ratio %.2f", small/1e6, large/1e6, large/small)
-	if large >= 5*small {
-		t.Fatalf("1600 sections took %.2f times as long as 400", large/small)
+	var ratios []float64
+	for i := range 9 {
+		var s, l float64
+		if i%2 == 0 {
+			s, l = per(small, 8), per(large, 2)
+		} else {
+			l, s = per(large, 2), per(small, 8)
+		}
+		ratios = append(ratios, l/s)
+	}
+	sort.Float64s(ratios)
+	median := ratios[len(ratios)/2]
+	t.Logf("ratios of 1600 sections to 400, sorted: %.2f; median %.2f", ratios, median)
+	if median >= 5 {
+		t.Fatalf("1600 sections took %.2f times as long as 400", median)
 	}
 }

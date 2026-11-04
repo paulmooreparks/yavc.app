@@ -654,6 +654,11 @@ type EditRequest struct {
 	From        *string `json:"from,omitempty"`
 	To          *string `json:"to,omitempty"`
 	Descendants bool    `json:"descendants,omitempty"`
+	// Shape, with create, is the new shape's kind, such as cylinder, set in
+	// the same change so that one Undo takes the whole placing back. With a
+	// connection's key it is the kind of the shape at its far end, when the
+	// connection makes that shape.
+	Shape string `json:"shape,omitempty"`
 }
 
 // EditResponse is the text after the change, and the key the change made
@@ -688,7 +693,25 @@ func edit(arg string) (any, error) {
 	key := req.Key
 	switch req.Op {
 	case "create":
+		had := map[string]bool{}
+		for _, o := range g.Objects {
+			had[o.AbsID()] = true
+		}
 		g, key, err = d2oracle.Create(g, nil, req.Key)
+		if err == nil && req.Shape != "" && req.Shape != "rectangle" {
+			target := key
+			if mk, perr := d2parser.ParseMapKey(req.Key); perr == nil && len(mk.Edges) == 1 {
+				// The far end, when the connection made it.
+				target = ""
+				if dst := lastObject(g); dst != "" && !had[dst] {
+					target = dst
+				}
+			}
+			if target != "" {
+				shape := req.Shape
+				g, err = d2oracle.Set(g, nil, target+".shape", nil, &shape)
+			}
+		}
 	case "set":
 		g, err = d2oracle.Set(g, nil, req.Key, nil, req.Value)
 	case "delete":
@@ -734,4 +757,14 @@ func oracleMessage(err error) string {
 		return "The change could not be made."
 	}
 	return strings.ToUpper(msg[:1]) + msg[1:] + "."
+}
+
+// lastObject is the full name of the object a compile lists last, which
+// after a connection is created is the shape that connection made, if it
+// made one.
+func lastObject(g *d2graph.Graph) string {
+	if len(g.Objects) == 0 {
+		return ""
+	}
+	return g.Objects[len(g.Objects)-1].AbsID()
 }
