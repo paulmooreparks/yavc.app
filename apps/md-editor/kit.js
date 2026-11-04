@@ -95,8 +95,13 @@
     var cmReady = null, pvReady = null, mmReady = null;
     function libs() {
         if (window.CM && window.CM.EditorView) { return Promise.resolve(window.CM); }
-        if (!cmReady) { cmReady = loadScript(HERE + 'vendor/codemirror-6.43/codemirror.js?v=4').then(function () { return window.CM; }).catch(function (e) { cmReady = null; throw e; }); }
+        if (!cmReady) { cmReady = loadScript(HERE + 'vendor/codemirror-6.43/codemirror.js?v=5').then(function () { return window.CM; }).catch(function (e) { cmReady = null; throw e; }); }
         return cmReady;
+    }
+    var languageReady = null;
+    function languageServices() {
+        if (!languageReady) { languageReady = Promise.all([libs(), safeHTML(), loadScript(HERE + 'language-service/bridge.js' + STAMP)]).then(function () { return window.yavcLanguageServices; }).catch(function (err) { languageReady = null; throw err; }); }
+        return languageReady;
     }
     function pageView() {
         if (window.yavcPageView) { return Promise.resolve(window.yavcPageView); }
@@ -1314,7 +1319,7 @@
     window.yavcMdEditor = {
         here: HERE, stamp: STAMP, placeholder: PLACEHOLDER,
         colourRows: pickerRows, wireColours: wirePickers,
-        libs: libs, codeTheme: codeTheme, codeSearch: codeSearch, findBar: findBar, pageView: pageView, mermaid: mermaid, drawMermaid: drawDiagram, loadScript: loadScript,
+        libs: libs, languageServices: languageServices, codeTheme: codeTheme, codeSearch: codeSearch, findBar: findBar, pageView: pageView, mermaid: mermaid, drawMermaid: drawDiagram, loadScript: loadScript,
         FORMATS: FORMATS, STYLES: STYLES, INSERTS: INSERTS, SHORTCODES: SHORTCODES, MENU: MENU, STOCK_CLASSES: STOCK_CLASSES,
         tableCommand: tableCommand, wordCount: wordCount, readingMinutes: readingMinutes,
         commands: commands, apply: apply, classesOf: classesOf, insertItem: insertItem, inserts: inserts, textFormat: textFormat, textInsert: textInsert,

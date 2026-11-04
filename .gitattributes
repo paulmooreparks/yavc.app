@@ -5,3 +5,5 @@
 *.png binary
 *.woff2 binary
 *.ico binary
+# The generated worker contains literal whitespace in JavaScript template strings.
+apps/md-editor/language-service/worker.js whitespace=-blank-at-eol

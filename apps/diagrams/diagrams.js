@@ -128,7 +128,7 @@
         var n = ++count, H = window.pudlHost || {};
         var tabs = [], active = -1, untitled = 0, destroyed = false;
         var settings = Object.assign({}, SETTINGS);
-        var CM = null, cm = null, langs = {}, drawTimer = 0, drawSeq = 0, waiters = [], quiet = false;
+        var CM = null, cm = null, langs = {}, drawTimer = 0, drawSeq = 0, waiters = [], quiet = false, lsp = null, lspComp = null;
         var start = new URLSearchParams(String(opts.state || '').replace(/^\?/, ''));
         if (opts.host !== 'window') {
             var own = new URLSearchParams(location.search);
@@ -203,6 +203,7 @@
             var visualChange = CM.StateField.define({ create: function () { return false; }, update: function (v, tr) { return tr.docChanged ? tr.isUserEvent('input.canvas') : v; } });
             var history = t.kind === 'canvas' ? CM.history({ joinToEvent: function (tr, adjacent) { return adjacent && !tr.isUserEvent('input.canvas') && !tr.startState.field(visualChange); } }) : CM.history();
             var ext = [visualChange, CM.lineNumbers(), CM.highlightActiveLineGutter(), history, CM.drawSelection(), CM.highlightActiveLine(), CM.highlightSelectionMatches(), CM.bracketMatching(), CM.closeBrackets(),
+                lspComp.of(lsp && t.kind === 'canvas' ? lsp.extension('canvas', false) : []),
                 CM.keymap.of([].concat(CM.closeBracketsKeymap, CM.completionKeymap, CM.lintKeymap, CM.defaultKeymap, CM.searchKeymap, CM.historyKeymap, [CM.indentWithTab])),
                 window.yavcMdEditor.codeSearch(CM),
                 CM.indentUnit.of('  '),
@@ -217,9 +218,12 @@
             return CM.EditorState.create({ doc: text, extensions: ext });
         }
         function showTab(t) {
-            if (!cm) { cm = new CM.EditorView({ state: t.state, parent: el.text }); return; }
-            quiet = true;
-            try { cm.setState(t.state); } finally { quiet = false; }
+            if (!cm) { cm = new CM.EditorView({ state: t.state, parent: el.text }); }
+            else {
+                quiet = true;
+                try { cm.setState(t.state); } finally { quiet = false; }
+            }
+            cm.dispatch({ effects: lspComp.reconfigure(lsp && t.kind === 'canvas' ? lsp.extension('canvas', false) : []) });
         }
         /* The text a command replaces, as one change, so Undo takes it back. */
         function replaceText(text, userEvent) {
@@ -1617,6 +1621,7 @@
                 cmd('undo', 'Undo', 'yavc-undo', function () { if (cm) { CM.undo(cm); } }, { builtIn: 'Mod-z', glyphOnly: true }),
                 cmd('redo', 'Redo', 'yavc-redo', function () { if (cm) { CM.redo(cm); } }, { builtIn: 'Mod-y', glyphOnly: true }),
                 cmd('find', 'Find and Replace…', 'search', openFind, { builtIn: 'Mod-f' }),
+                cmd('language-restart', 'Restart Language Assistance', 'reload', function () { if (lsp && cm) { lsp.restart(); cm.dispatch({ effects: lspComp.reconfigure(lsp.extension('canvas', false)) }); } }, { hidden: function () { return !isCanvas(); }, disabled: function () { return !lsp || !cm; } }),
                 cmd('go-to-line', 'Go to Line…', null, goToLine, { builtIn: 'Mod-Alt-g' }),
                 cmd('edit-in-editor', 'Open in the Editor', 'pencil', editInEditor, { disabled: function () { var c = current(); return !(c && c.path); } }),
                 cmd('export-svg', 'Download as SVG', 'download', downloadSVG, { disabled: function () { return !drawable(); } }),
@@ -1667,7 +1672,7 @@
             return { titles: [
                 { label: 'Diagrams', glyph: 'document', items: H.identity ? H.identity(root, []) : [] },
                 { id: 'file', label: 'File', glyph: 'file', items: ['new', 'new-mermaid', 'new-canvas', 'open', 'save', 'save-as', '-', 'edit-in-editor', '-', 'export-svg', 'export-png', 'export-source', '-', 'close-diagram'] },
-                { id: 'edit', label: 'Edit', glyph: 'pencil', items: ['undo', 'redo', '-', 'cv-copy', 'cv-paste', 'cv-duplicate', 'cv-delete', 'copy-embed', '-', 'cv-select-all', 'cv-select-items', '-', 'find', '-', 'format-text', 'redraw'] },
+                { id: 'edit', label: 'Edit', glyph: 'pencil', items: ['undo', 'redo', '-', 'cv-copy', 'cv-paste', 'cv-duplicate', 'cv-delete', 'copy-embed', '-', 'cv-select-all', 'cv-select-items', '-', 'find', '-', 'format-text', 'redraw', 'language-restart'] },
                 { id: 'shape', label: 'Shape', glyph: 'square', items: ['shape-add', 'shape-add-inside', 'connect', 'cv-new', 'cv-group', 'cv-connect', 'cv-reconnect-start', 'cv-reconnect-end', 'cv-resize', '-', 'shape-label', 'shape-rename', 'shape-type', '-', 'shape-move-into', 'shape-move-top', 'cv-left', 'cv-right', 'cv-up', 'cv-down', 'cv-forward', 'cv-back', '-', 'shape-delete'].concat(isD2() || isCanvas() ? ['-', { label: 'Drawing Tool', glyph: 'square', items: ['tool-select'].concat(PALETTE.map(function (k) { return 'tool-' + k[0]; })) }] : []) }
             ], into: { view: ['view-text', 'view-preview', 'view-split', '-', 'dock', 'fit', 'toggle-inspector', '-', 'cv-pan', 'cv-pan-left', 'cv-pan-right', 'cv-pan-up', 'cv-pan-down', 'cv-zoom-in', 'cv-zoom-out', 'cv-actual'], go: ['go-to-line', 'cv-next', 'cv-previous'] } };
         }
@@ -1695,8 +1700,15 @@
         var booted = (async function () {
             var got = await Promise.all([kit(), modes()]);
             CM = await got[0].libs();
+            lspComp = new CM.Compartment();
+            try {
+                var languageServices = await got[0].languageServices();
+                if (destroyed) { return; }
+                lsp = languageServices.create(CM, function (message) { say(message, 'warn'); });
+            } catch (err) { if (!destroyed) { say('Language assistance could not load. Text editing remains available.', 'warn'); } }
             if (destroyed) { return; }
             if (H.config && H.config.load) { try { Object.assign(settings, (await H.config.load('diagrams', SETTINGS)) || {}); } catch (err) { } }
+            if (destroyed) { return; }
             if (Number.isFinite(settings.inspectorSplit) && settings.inspectorSplit > 0 && settings.inspectorSplit < 100) { el.body.style.setProperty('--split-a', settings.inspectorSplit + '%'); }
             applyFit();
             /* The tabs kept across a reload come back first, unsaved text and
@@ -1900,6 +1912,7 @@
                 settle(null, []);
                 if (detachLive) { detachLive(); }
                 if (cm) { cm.destroy(); }
+                if (lsp) { lsp.dispose(); }
                 if (snap) { snap.leave(); }
                 unguard();
             }

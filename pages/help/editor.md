@@ -14,6 +14,12 @@ A file of the site opens read-only, and Save As keeps an editable copy under `~`
 
 File, Properties edits a Markdown file's front matter, which is the block between two lines of three dashes at its top. It offers the title, author, subject, keywords, language and date, and any property of your own. Only the lines of the properties you change are rewritten, and front matter that is not valid YAML is reported and left as it is.
 
+## JSON language assistance
+
+JSON files have completion, hover information, error markers and formatting in the text editor. Files ending in `.canvas` also offer JSON Canvas properties and the site's shape, alignment and connector settings. Ctrl+Space asks for completion, and Shift+Alt+F or Edit, Format JSON formats the document in one undoable change. Read-only files cannot be changed by assistance.
+
+Language assistance runs in this browser using bundled assets. File contents and schema addresses do not trigger requests to an outside language service. If assistance stops, ordinary editing remains available; Edit, Restart Language Assistance retries it. Assistance pauses for very large documents and resumes when they become smaller.
+
 ## Views
 
 The site's View menu offers four views of a Markdown file.
