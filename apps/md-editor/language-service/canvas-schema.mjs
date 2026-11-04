@@ -16,7 +16,12 @@ export const canvasSchema = {
     properties: {
         nodes: { type: 'array', description: 'Positioned nodes in back-to-front drawing order.', items: { $ref: '#/definitions/node' } },
         edges: { type: 'array', description: 'Connectors between node IDs.', items: { $ref: '#/definitions/edge' } },
-        yavc: { type: 'object', properties: { version: { type: 'integer', minimum: 1, description: 'Version of the optional yavc extension.' } } }
+        yavc: { type: 'object', properties: {
+            version: { type: 'integer', minimum: 1, description: 'Version of the optional yavc extension.' },
+            background: { ...color, description: 'Canvas background, including exports. Omit for the theme default.' },
+            grid: { type: 'boolean', description: 'Show the editing grid. Defaults to false; never exported.' },
+            snap: { type: 'boolean', description: 'Snap to the eight-pixel grid and nearby shapes. Defaults to true.' }
+        } }
     },
     definitions: {
         node: {
@@ -31,6 +36,8 @@ export const canvasSchema = {
                 background: text('Local background image path for a group.'), backgroundStyle: choice(['cover', 'ratio', 'repeat'], 'Group background image placement.'),
                 yavc: { type: 'object', properties: {
                     shape: choice(shapes, 'Outline shape for a text node.'), line, lineWidth,
+                    fillColor: { ...color, description: 'Independent fill override. Omit for the coordinated color.' },
+                    strokeColor: { ...color, description: 'Independent outline override. Omit for the coordinated color.' },
                     textAlign: choice(['left', 'center', 'right'], 'Horizontal text alignment. Omit for the shape default.'),
                     textVerticalAlign: choice(['top', 'middle', 'bottom'], 'Vertical text alignment. Omit for the shape default.'),
                     anchor: { type: 'boolean', description: 'True identifies an editor-owned free connector point. It must be empty text, zero size and shape text.' }

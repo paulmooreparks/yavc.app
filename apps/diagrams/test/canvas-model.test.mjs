@@ -8,6 +8,39 @@ const J = require('../../diagram-kit/jcanvas.js');
 const n = (id, x = 0, y = 0, width = 100, height = 60) => ({ id, type: 'text', x, y, width, height, text: id });
 const base = () => ({ nodes: [n('a'), n('b', 300)], edges: [{ id: 'ab', fromNode: 'a', toNode: 'b' }], custom: { keep: true } });
 
+test('independent node colors and document settings validate and reset without losing other data', () => {
+    const original = base(); original.nodes[0].color = '5'; original.nodes[0].yavc = { custom: 'kept' };
+    let doc = M.edit(original, { op: 'set', key: 'a', property: 'fillColor', value: '#123456' }).doc;
+    doc = M.edit(doc, { op: 'set', key: 'a', property: 'strokeColor', value: '2' }).doc;
+    doc = M.edit(doc, { op: 'set', key: 'a', property: 'fillColor', value: null }).doc;
+    assert.deepEqual(doc.nodes[0].yavc, { custom: 'kept', strokeColor: '2' }); assert.equal(doc.nodes[0].color, '5');
+    assert.throws(() => M.edit(doc, { op: 'set', items: [{ id: 'a', kind: 'node' }, { id: 'ab', kind: 'edge' }], property: 'fillColor', value: '#fff' }), /cannot be changed/);
+    assert.throws(() => M.edit(doc, { op: 'set', key: 'a', property: 'fillColor', value: 'url(https://invalid)' }), /fillColor/);
+    doc.yavc = { version: 1, custom: 'root' };
+    for (const [property, value] of [['background', '#ffcc99'], ['grid', true], ['snap', false]]) doc = M.edit(doc, { op: 'document', property, value }).doc;
+    assert.deepEqual(doc.yavc, { version: 1, custom: 'root', background: '#ffcc99', grid: true, snap: false });
+    const reset = M.edit(doc, { op: 'document', property: 'background', value: null }).doc;
+    assert.equal(reset.yavc.background, undefined); assert.equal(reset.yavc.grid, true); assert.deepEqual(reset.custom, { keep: true });
+    assert.throws(() => M.edit(doc, { op: 'document', property: 'grid', value: 'yes' }), /boolean/);
+    assert.equal(original.nodes[0].yavc.fillColor, undefined);
+});
+
+test('starter templates are valid ordinary canvases with independently movable sequence lanes', () => {
+    for (const name of ['blank', 'basic', 'flowchart', 'sequence']) {
+        const result = M.template(name); assert.ok(J.read(result.text).doc, name);
+        assert.equal(new Set(result.doc.nodes.map(n => n.id)).size, result.doc.nodes.length);
+        assert.deepEqual(M.template(name).doc, result.doc);
+        assert.ok(!result.doc.yavc.template, 'No hidden layout ownership');
+    }
+    assert.equal(M.template('blank').doc.nodes.length, 0);
+    const sequence = M.template('sequence').doc, ids = M.members(sequence, 'client-lane');
+    const moved = M.edit(sequence, { op: 'move', key: 'client-lane', dx: 40, dy: 0 }).doc;
+    assert.ok(ids.includes('request-from')); assert.ok(ids.includes('response-to'));
+    for (const id of ids) assert.equal(moved.nodes.find(n => n.id === id).x, sequence.nodes.find(n => n.id === id).x + 40);
+    assert.equal(moved.nodes.find(n => n.id === 'request-to').x, 410);
+    assert.throws(() => M.template('unknown'), /Choose/);
+});
+
 test('a typed selection edits atomically and group movement never doubles a child', () => {
     const doc = base(); doc.nodes.unshift({ id: 'g', type: 'group', x: -10, y: -10, width: 500, height: 150 });
     const items = [{ id: 'g', kind: 'node' }, { id: 'a', kind: 'node' }, { id: 'ab', kind: 'edge' }];

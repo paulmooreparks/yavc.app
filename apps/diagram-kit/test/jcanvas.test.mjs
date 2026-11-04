@@ -14,6 +14,27 @@ const PALETTE = { text: '#111111', muted: '#555555', line: '#333333', surface: '
 const node = (id, x, y, extra) => Object.assign({ id, type: 'text', x, y, width: 100, height: 60, text: id }, extra);
 const file = (o) => JSON.stringify(o);
 
+test('explicit fill, outline and background render safely with readable text and survive round-trip', () => {
+  const original = { nodes: [node('a', 0, 0, { color: '5', yavc: { fillColor: '#000000', strokeColor: '#ff0000' } })], edges: [], yavc: { version: 1, background: '#aabbcc', grid: true, snap: false } };
+  const doc = jc.read(jc.write(original)).doc, out = jc.render(doc, { palette: PALETTE });
+  assert.match(out.svg, /fill="#000000" stroke="#ff0000"/);
+  assert.match(out.svg, /data-canvas-background=""[^>]*fill="#aabbcc"/);
+  assert.equal(out.boxes[0].text.color, '#ffffff'); assert.equal(out.background, '#aabbcc');
+  assert.doesNotMatch(out.svg, /radial-gradient|dg-cv-grid/);
+  assert.deepEqual(doc.yavc, original.yavc);
+  delete doc.nodes[0].yavc.fillColor;
+  assert.equal(jc.render(doc, { palette: PALETTE }).boxes[0].text.color, PALETTE.text);
+  for (const [key, value] of [['background', 'red'], ['grid', 'true'], ['snap', 1]]) {
+    assert.equal(jc.read(file({ ...original, yavc: { [key]: value } })).doc, null);
+  }
+  assert.deepEqual(PALETTE.bg, '#fafafa');
+  for (const item of [node('plain', 0, 0, { yavc: { shape: 'text', fillColor: '#000' } }),
+    { id: 'link', type: 'link', url: 'https://example.invalid', x: 0, y: 0, width: 100, height: 60, yavc: { fillColor: '#000' } }]) {
+    const result = jc.render({ nodes: [item], edges: [] }, { palette: PALETTE });
+    assert.match(result.svg, /fill="#000"/); assert.match(result.svg, /<text[^>]*fill="#ffffff"/);
+  }
+});
+
 test('text alignment resolves both axes independently and survives round-trip', () => {
   for (const shape of ['rectangle', 'diamond']) {
     const doc = { nodes: [node('a', 0, 0, { text: 'One\nTwo', yavc: { shape } })], edges: [] };

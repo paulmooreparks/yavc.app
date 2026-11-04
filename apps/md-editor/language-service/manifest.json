@@ -4,7 +4,7 @@
     "build.mjs": "948511634ae75c3a00679bf1eec1f11681a23254212ed7ba06720063ecc45562",
     "package.json": "ce1514fae5e5e65f4ec672737c40685c3d1258eaec4f70893cb05f96c778d1f0",
     "../vendor/codemirror-6.43/entry.js": "ae7cd4e17e26146ad449d8e12501fd7475b379d085056f5c15e660ee129274e4",
-    "canvas-schema.mjs": "cd1e2290317a123860b00f9d17df3e22c1f2e5c8d57096cf749c2172a3826b9d",
+    "canvas-schema.mjs": "ddf5e9e24e838082fa4be9d5118ca04d128a9c1c312d6c6314d404cc5befe834",
     "json-server.mjs": "3bbd966407faf706914582d3be2fbae44caca06cd258b0465f07b39e54297864",
     "worker-entry.mjs": "5916691ae2f3b403d41613a54a78e6a1c3fbb6a3adb1476f827384773150dc94",
     "bridge.js": "d48c6e853ff057859483cb2d3afc67189d1c604fef91e9491cbadc479c1f4771",
@@ -14,7 +14,7 @@
   "outputs": {
     "../vendor/codemirror-6.43/codemirror.js": "75c5b0a1dd98f64c67ac14206fdc47c5c05ac0c270407961012aed5fa74f2a91",
     "../vendor/codemirror-6.43/LICENSE.txt": "7e4b4c8b2cdd3c3f7aaf5fd1b397464d5b603d342f0192d986c49b091bcafb00",
-    "worker.js": "96ca5a2ffa3ceceaa95ce04854c5212534950126756113ae2f708658e67727d8",
+    "worker.js": "f9fe00cff8ffba6ac86c44f9999adbf2b00b90591a915bf166d5b8125c7ab65e",
     "WORKER-LICENSES.txt": "bd760ad7008c3fa7dd9a128b39beaf117d4f0627f75fe4bd3b249553747e63a5"
   },
   "packages": {

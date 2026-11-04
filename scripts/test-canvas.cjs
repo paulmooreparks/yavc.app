@@ -43,6 +43,9 @@ async function run(engine) {
     try {
         await page.goto(url);
         await page.waitForFunction(() => !!window.pudlActions && !!document.querySelector('.dg .cm-editor'));
+        // The fixture must fit at actual size with the wider Inspector, so
+        // corner grips stay inside the viewport during exact-coordinate drags.
+        await page.getByRole('separator', { name: 'Resize the Text', exact: true }).press('End');
         await action('new', { kind: 'canvas', text: JSON.stringify(fixture()) });
         await page.locator('.dg-cv-hit').first().waitFor(); await idle(); await command('fit'); await command('cv-actual');
 
@@ -53,10 +56,11 @@ async function run(engine) {
         const alignment = await page.evaluate(() => {
             const root = document.querySelector('.dg-cv-editor'), pic = root.querySelector(':scope > svg'), hit = root.querySelector('.dg-cv-layer');
             const a = pic.getBoundingClientRect(), b = hit.getBoundingClientRect();
-            return { pic: [a.x, a.y, a.width, a.height], hit: [b.x, b.y, b.width, b.height], pv: pic.getAttribute('viewBox'), hv: hit.getAttribute('viewBox'), background: getComputedStyle(pic).backgroundColor, fill: getComputedStyle(pic.querySelector('rect')).fill };
+            return { pic: [a.x, a.y, a.width, a.height], hit: [b.x, b.y, b.width, b.height], pv: pic.getAttribute('viewBox'), hv: hit.getAttribute('viewBox'), background: getComputedStyle(pic).backgroundColor, fill: getComputedStyle(pic.querySelector('rect')).fill, canvasBackground: getComputedStyle(root).backgroundColor };
         });
         assert.deepEqual(alignment.pic, alignment.hit); assert.equal(alignment.pv, alignment.hv);
-        assert.equal(alignment.background, alignment.fill);
+        assert.equal(alignment.background, 'rgba(0, 0, 0, 0)'); assert.equal(alignment.fill, 'none');
+        assert.notEqual(alignment.canvasBackground, 'rgba(0, 0, 0, 0)');
         const initial = await text();
         await page.keyboard.press('ArrowRight'); await idle();
         assert.equal((await doc()).nodes[0].x, -159);
@@ -111,9 +115,11 @@ async function run(engine) {
         d = await doc(); assert.equal(d.edges.length, 2); assert.equal(d.edges[1].fromSide, 'right'); assert.equal(d.edges[1].toSide, 'left');
         await page.getByRole('group', { name: 'Route', exact: true }).getByRole('button', { name: 'Curve', exact: true }).click(); await idle();
         assert.equal((await doc()).edges[1].yavc.route, 'curve');
-        await page.locator('[data-set="toHead"]').selectOption('cf-many'); await idle();
+        await page.locator('.dg-property-picker[popovertarget$="-toHead-menu"]').click();
+        await page.getByRole('menu', { name: 'End Head', exact: true }).getByRole('menuitemradio', { name: 'Many', exact: true }).click(); await idle();
         assert.equal((await doc()).edges[1].toEnd, 'arrow');
-        await page.locator('[data-set="toHead"]').selectOption('none'); await idle();
+        await page.locator('.dg-property-picker[popovertarget$="-toHead-menu"]').click();
+        await page.getByRole('menu', { name: 'End Head', exact: true }).getByRole('menuitemradio', { name: 'None', exact: true }).click(); await idle();
         assert.equal((await doc()).edges[1].toEnd, 'none');
 
         await set(fixture()); await command('tool-rounded');

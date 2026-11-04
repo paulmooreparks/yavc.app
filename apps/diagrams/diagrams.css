@@ -115,15 +115,21 @@
 /* Beside the drawing, a column of PUDL's sunken fields for what is
    selected; it scrolls on its own, and narrows the drawing rather than
    covering it. */
-.dg-body { flex: 1 1 auto; min-height: 0; display: flex; --split-a: calc(100% - 17rem - 6px); }
-.dg-body > .dg-stage { flex: none; width: var(--split-a, calc(100% - 17rem - 6px)); min-width: 0; }
+.dg-body { flex: 1 1 auto; min-height: 0; display: flex; --dg-inspector-width: 22rem; --split-a: calc(100% - var(--dg-inspector-width) - 6px); }
+.dg-body > .dg-stage { flex: none; width: var(--split-a); min-width: 0; }
 .dg-inspector { overflow: auto; padding: var(--space-3); background: var(--surface-alt); font-size: var(--text-sm); }
 .dg-choice { border: 0; padding: 0; min-width: 0; container-type: inline-size; }
 .dg-choice .seg { display: flex; width: 100%; }
-.dg-choice .seg button { flex: 1 1 0; min-width: 0; padding-inline: var(--space-2); gap: var(--space-1); white-space: normal; overflow-wrap: anywhere; }
+.dg-choice .seg button { flex: 1 1 0; min-width: 0; padding-inline: var(--space-2); gap: var(--space-1); white-space: nowrap; }
 .dg-choice .seg button > .glyph { flex: none; --glyph-size: 14px; }
 @container (max-width: 20rem) {
-  .dg-choice .seg button { flex-direction: column; }
+  .dg-choice .seg { flex-wrap: wrap; }
+  .dg-choice .seg button { flex-basis: 45%; }
+}
+@container (max-width: 12rem) {
+  .dg-choice .seg { flex-wrap: nowrap; }
+  .dg-choice .seg button { flex-basis: 0; padding-inline: var(--space-1); }
+  .dg-choice .seg button > span:not(.glyph) { display: none; }
 }
 .dg-color-presets { margin-block: var(--space-2) var(--space-3); }
 .dg-color-dot { display: inline-block; width: 1em; height: 1em; border: 1px solid var(--border); border-radius: 50%; }
@@ -197,6 +203,7 @@
 .dg-place.dg-cv-editor { display: block; position: relative; width: 100%; height: 100%; overflow: hidden; touch-action: none; user-select: none; }
 .dg[data-kind="canvas"] .dg-canvas .dg-cv-editor > svg { width: 100%; height: 100%; max-width: none; max-height: none; }
 .dg-cv-editor > svg:first-child { pointer-events: none; }
+.dg-cv-editor.dg-cv-grid { background-image: radial-gradient(circle, var(--border) 1px, transparent 1px); }
 .dg-cv-layer, .dg-cv-grips { position: absolute; inset: 0; pointer-events: none; }
 .dg-cv-hit { fill: transparent; pointer-events: all; cursor: grab; }
 .dg-cv-hit:hover { stroke: var(--accent); stroke-width: 1; stroke-dasharray: 3 3; vector-effect: non-scaling-stroke; }
@@ -213,6 +220,9 @@
 .dg-cv-route-muted { opacity: 0.2; }
 .dg-cv-grips .dg-cv-connect::after { content: ''; width: 8px; height: 8px; background: currentColor; mask: var(--glyph-plus) center / contain no-repeat; }
 .dg-cv-editor.dg-cv-dragging, .dg-cv-editor.dg-cv-dragging .dg-cv-hit { cursor: grabbing; }
+.dg-inline-editor { position: absolute; z-index: 2; display: flex; flex-direction: column; min-width: 0; max-height: 100%; overflow: auto; padding: var(--space-1); background: var(--surface); border: 2px solid var(--focus-ring); box-sizing: border-box; }
+.dg-inline-editor .form-input { flex: 1 1 auto; min-height: 64px; resize: none; width: 100%; box-sizing: border-box; font-family: var(--mono); }
+.dg-inline-editor .form-help { margin: var(--space-1) 0 0; font-size: var(--text-xs); }
 .dg-place.sc-diagram-stale :is(.dg-cv-layer, .dg-cv-grips) { visibility: hidden; }
 .dg[data-kind="canvas"].dg-placing .dg-cv-editor { cursor: crosshair; }
 .dg[data-kind="canvas"].dg-placing .dg-cv-hit { cursor: crosshair; }
