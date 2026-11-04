@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "apiVersion": 1,
   "title": "Diagrams",
-  "description": "Diagrams as D2 or Mermaid text files: read, write and draw the diagrams open in Diagrams, read a D2 diagram's structure, and export the drawing.",
+  "description": "Diagrams as D2 or Mermaid text files: read, write and draw the diagrams open in Diagrams, read a D2 diagram's structure and change it shape by shape, and export the drawing.",
   "actions": [
     {
       "ref": "yavc.diagrams/open@1",
@@ -736,6 +736,85 @@
           },
           "changed": {
             "type": "boolean"
+          }
+        }
+      },
+      "capabilities": [],
+      "replay": "once"
+    },
+    {
+      "ref": "yavc.diagrams/edit@1",
+      "title": "Change a Diagram's Shapes",
+      "description": "One change to a D2 diagram, made as the visual editor makes it, through D2's own editing: create a shape (key a, or a.b for b inside a) or a connection (key \"a -> b\"); set a label (key a), a shape (key a.shape) or a style (key a.style.fill), with value, or no value to take it away; delete a shape or a connection (key (a -> b)[0]); rename a shape (name); move a shape into or out of a container (to, the new full name); or reconnect a connection (from, to). D2 writes the whole text again in its own layout. Returns the key the change made and whether the diagram still draws.",
+      "live": true,
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "op",
+          "key"
+        ],
+        "properties": {
+          "index": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "A diagram's number among the open ones; the current one when left out."
+          },
+          "op": {
+            "enum": [
+              "create",
+              "set",
+              "delete",
+              "rename",
+              "move",
+              "reconnect"
+            ]
+          },
+          "key": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024
+          },
+          "value": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 4096
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 256
+          },
+          "from": {
+            "type": "string",
+            "maxLength": 1024
+          },
+          "to": {
+            "type": "string",
+            "maxLength": 1024
+          },
+          "descendants": {
+            "type": "boolean"
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": [
+          "key",
+          "drawn",
+          "problems"
+        ],
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "drawn": {
+            "type": "boolean"
+          },
+          "problems": {
+            "type": "array"
           }
         }
       },

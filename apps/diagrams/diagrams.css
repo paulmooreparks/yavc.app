@@ -33,3 +33,34 @@
 .dg-text .cm-editor { height: 100%; }
 .dg-status { flex: none; display: flex; gap: var(--space-3); align-items: center; padding: 2px var(--space-3); font-size: var(--text-xs); color: var(--text-muted); border-top: 1px solid var(--border); min-height: 1.6em; font-family: var(--mono); }
 .dg-message { margin-inline-start: auto; font-family: var(--font); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* === The visual editor (canvas.js, milestone D3) ========================== */
+/* The layer over a D2 drawing: invisible until something is pointed at or
+   selected, and the selection is PUDL's focus ring. Its lines keep their
+   width however far the drawing is scaled. */
+.dg-place.dg-editable { position: relative; }
+.dg-layer { position: absolute; overflow: visible; pointer-events: none; }
+.dg-place.sc-diagram-stale .dg-layer { display: none !important; }
+.dg-hit { pointer-events: auto; cursor: pointer; }
+.dg-hit-shape { fill: transparent; stroke: transparent; stroke-width: 3; vector-effect: non-scaling-stroke; }
+.dg-hit-wide { fill: none; stroke: transparent; stroke-width: 14; vector-effect: non-scaling-stroke; pointer-events: stroke; }
+.dg-hit-thin { fill: none; stroke: transparent; stroke-width: 3; vector-effect: non-scaling-stroke; pointer-events: none; }
+/* Hover is the faintest mark; the selection is stronger, an accent edge
+   as Slides marks its selected slide, and while the drawing has the
+   keyboard it becomes the focus ring, the one ring on the pane. A selected
+   connection is a wide halo, since its own line is the accent already. */
+.dg-hit-shape:hover { stroke: color-mix(in srgb, var(--accent) 22%, transparent); stroke-dasharray: 4 3; }
+.dg-hit-line:hover .dg-hit-wide { stroke: color-mix(in srgb, var(--accent) 14%, transparent); }
+.dg-hit-shape.is-selected { stroke: var(--accent); stroke-width: 2; stroke-dasharray: none; }
+.dg-hit-line.is-selected .dg-hit-wide { stroke: color-mix(in srgb, var(--accent) 30%, transparent); stroke-width: 10; }
+.dg-stage:focus .dg-hit-shape.is-selected { stroke: var(--focus-ring); stroke-width: 6; }
+.dg-stage:focus .dg-hit-line.is-selected .dg-hit-wide { stroke: var(--focus-ring); stroke-width: 12; }
+.dg-stage:focus-visible:has(.is-selected) { box-shadow: none; }
+@media (forced-colors: active) {
+  .dg-layer { forced-color-adjust: none; }
+  .dg-hit-shape:hover { stroke: CanvasText; }
+  .dg-hit-shape.is-selected, .dg-stage:focus .dg-hit-shape.is-selected { stroke: Highlight; stroke-width: 3; }
+  .dg-hit-line.is-selected .dg-hit-wide, .dg-stage:focus .dg-hit-line.is-selected .dg-hit-wide { stroke: Highlight; stroke-width: 6; }
+}
+/* While a connection is being made, the pointer says a shape is to be chosen. */
+.dg-connecting .dg-hit-shape { cursor: crosshair; }

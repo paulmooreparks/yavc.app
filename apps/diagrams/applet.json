@@ -1,7 +1,7 @@
 {
   "name": "diagrams",
   "title": "Diagrams",
-  "version": "0.2.0",
+  "version": "0.4.0",
   "description": "Draw diagrams from D2 and Mermaid text, with the drawing beside the text, and export them as pictures.",
   "license": "Apache-2.0",
   "src": "diagrams.js",

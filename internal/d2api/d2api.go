@@ -9,6 +9,7 @@
 //
 //	compile(req)      -> {svg, width, height, problems, icons}
 //	completions(req)  -> {items}
+//	edit(req)         -> {text, key} or {problems}
 //	format(req)       -> {text} or {problems}
 //	outline(req)      -> {shapes, connections, boards, problems}
 //	version()         -> {d2}
@@ -40,6 +41,7 @@ import (
 	"oss.terrastruct.com/d2/d2layouts/d2elklayout"
 	"oss.terrastruct.com/d2/d2lib"
 	"oss.terrastruct.com/d2/d2lsp"
+	"oss.terrastruct.com/d2/d2oracle"
 	"oss.terrastruct.com/d2/d2parser"
 	"oss.terrastruct.com/d2/d2renderers/d2svg"
 	"oss.terrastruct.com/d2/d2target"
@@ -114,11 +116,39 @@ type CompileResponse struct {
 	// Icons are the addresses of icons the diagram asked for and the engine
 	// did not draw, because the page has not allowed them.
 	Icons []string `json:"icons,omitempty"`
+	// Shapes and Connections are where the drawing put each shape and
+	// connection of the diagram's top board, in the drawing's own pixels
+	// from its top-left corner, so the visual editor can tell what a click
+	// lands on (docs/diagrams-design.md, decision 4: positions come from
+	// D2's compiled diagram, never from the SVG). Each ID is the key the
+	// edit function takes.
+	Shapes      []ShapeBox       `json:"shapes,omitempty"`
+	Connections []ConnectionPath `json:"connections,omitempty"`
+}
+
+// ShapeBox is a drawn shape: its full name, its kind and its box.
+type ShapeBox struct {
+	ID   string `json:"id"`
+	Type string `json:"type"`
+	X    int    `json:"x"`
+	Y    int    `json:"y"`
+	W    int    `json:"w"`
+	H    int    `json:"h"`
+}
+
+// ConnectionPath is a drawn connection: its key, its ends and the points
+// its line passes through.
+type ConnectionPath struct {
+	ID     string       `json:"id"`
+	From   string       `json:"from"`
+	To     string       `json:"to"`
+	Points [][2]float64 `json:"points"`
 }
 
 var functions = map[string]func(string) (any, error){
 	"compile":     compile,
 	"completions": completions,
+	"edit":        edit,
 	"format":      format,
 	"outline":     outline,
 	"version":     func(string) (any, error) { return map[string]string{"d2": D2Version()}, nil },
@@ -459,7 +489,21 @@ func compile(arg string) (any, error) {
 		pad = int(*ropts.Pad)
 	}
 	tl, br := diagram.BoundingBox()
-	return &CompileResponse{SVG: string(svg), Width: br.X - tl.X + 2*pad, Height: br.Y - tl.Y + 2*pad, Icons: icons}, nil
+	res := &CompileResponse{SVG: string(svg), Width: br.X - tl.X + 2*pad, Height: br.Y - tl.Y + 2*pad, Icons: icons}
+	// The drawing's top-left corner is the bounding box's, less the
+	// padding, as D2's renderer sets out its view box.
+	ox, oy := tl.X-pad, tl.Y-pad
+	for _, sh := range diagram.Shapes {
+		res.Shapes = append(res.Shapes, ShapeBox{ID: sh.ID, Type: sh.Type, X: sh.Pos.X - ox, Y: sh.Pos.Y - oy, W: sh.Width, H: sh.Height})
+	}
+	for _, c := range diagram.Connections {
+		cp := ConnectionPath{ID: c.ID, From: c.Src, To: c.Dst, Points: make([][2]float64, 0, len(c.Route))}
+		for _, pt := range c.Route {
+			cp.Points = append(cp.Points, [2]float64{pt.X - float64(ox), pt.Y - float64(oy)})
+		}
+		res.Connections = append(res.Connections, cp)
+	}
+	return res, nil
 }
 
 func problem(message string, line, column, from, to int) *CompileResponse {
@@ -581,4 +625,113 @@ func blockIcons(d *d2target.Diagram) []string {
 	}
 	walk(d)
 	return found
+}
+
+// EditRequest is one change to a diagram, as the visual editor makes it
+// (docs/diagrams-design.md, decision 5): D2's own oracle (d2oracle) edits
+// the text, keeping its comments and updating every reference, and the
+// text comes back as D2's formatter writes it. Op is one of:
+//
+//	create     Key is the new shape (a.b for b inside a); a name already
+//	           taken gets a number, and Key in the answer is the one used.
+//	           A key with an arrow, such as "a -> b", is a connection.
+//	set        Key is what to set, such as a, a.shape or a.style.fill, and
+//	           Value its value; no Value takes the value away.
+//	delete     Key is a shape or a connection, such as (a -> b)[0]; a
+//	           shape's connections go with it.
+//	rename     Key is a shape, Name its new name, and every reference to it
+//	           follows.
+//	move       Key is a shape and To its new full name, which moves it into
+//	           or out of a container; Descendants moves what is inside it
+//	           too.
+//	reconnect  Key is a connection, and From and To its new ends.
+type EditRequest struct {
+	Text        string  `json:"text"`
+	Op          string  `json:"op"`
+	Key         string  `json:"key"`
+	Value       *string `json:"value,omitempty"`
+	Name        string  `json:"name,omitempty"`
+	From        *string `json:"from,omitempty"`
+	To          *string `json:"to,omitempty"`
+	Descendants bool    `json:"descendants,omitempty"`
+}
+
+// EditResponse is the text after the change, and the key the change made
+// or changed, or the problems that stopped it, in which case the text is
+// unchanged and empty here.
+type EditResponse struct {
+	Text     string    `json:"text,omitempty"`
+	Key      string    `json:"key,omitempty"`
+	Problems []Problem `json:"problems,omitempty"`
+}
+
+func edit(arg string) (any, error) {
+	var req EditRequest
+	if err := json.Unmarshal([]byte(arg), &req); err != nil {
+		return nil, errors.New("the request is not valid JSON")
+	}
+	if len(req.Text) > MaxSource {
+		return nil, fmt.Errorf("the diagram is over %d KB", MaxSource>>10)
+	}
+	if strings.TrimSpace(req.Key) == "" {
+		return &EditResponse{Problems: []Problem{{Message: "The change does not say which shape or connection it is for."}}}, nil
+	}
+	fsys, err := memfs.New(map[string]string{inputPath: req.Text})
+	if err != nil {
+		return nil, errors.New("the diagram is not usable")
+	}
+	g, _, err := d2compiler.Compile(inputPath, strings.NewReader(req.Text), &d2compiler.CompileOptions{FS: fsys})
+	if err != nil {
+		// A visual edit needs a diagram that compiles (decision 5).
+		return &EditResponse{Problems: problemsOf(err, req.Text)}, nil
+	}
+	key := req.Key
+	switch req.Op {
+	case "create":
+		g, key, err = d2oracle.Create(g, nil, req.Key)
+	case "set":
+		g, err = d2oracle.Set(g, nil, req.Key, nil, req.Value)
+	case "delete":
+		g, err = d2oracle.Delete(g, nil, req.Key)
+	case "rename":
+		if strings.TrimSpace(req.Name) == "" {
+			return &EditResponse{Problems: []Problem{{Message: "A shape needs a name."}}}, nil
+		}
+		g, key, err = d2oracle.Rename(g, nil, req.Key, req.Name)
+	case "move":
+		if req.To == nil || strings.TrimSpace(*req.To) == "" {
+			return &EditResponse{Problems: []Problem{{Message: "A move needs the shape's new name."}}}, nil
+		}
+		g, err = d2oracle.Move(g, nil, req.Key, *req.To, req.Descendants)
+		key = *req.To
+	case "reconnect":
+		g, err = d2oracle.ReconnectEdge(g, nil, req.Key, req.From, req.To)
+	default:
+		return nil, fmt.Errorf("there is no edit called %q", req.Op)
+	}
+	if err != nil {
+		return &EditResponse{Problems: []Problem{{Message: oracleMessage(err)}}}, nil
+	}
+	text := d2format.Format(g.AST)
+	if len(text) > MaxSource {
+		return &EditResponse{Problems: []Problem{{Message: fmt.Sprintf("The change would make the diagram over %d KB.", MaxSource>>10)}}}, nil
+	}
+	if len(g.Objects) > MaxObjects {
+		return &EditResponse{Problems: []Problem{{Message: fmt.Sprintf("The change would give the diagram more than %d shapes.", MaxObjects)}}}, nil
+	}
+	return &EditResponse{Text: text, Key: key}, nil
+}
+
+// oracleMessage is the oracle's error as a person reads it: its own words
+// after the "failed to ..." wrappers it adds, which repeat the request.
+func oracleMessage(err error) string {
+	msg := err.Error()
+	if i := strings.LastIndex(msg, ": "); i >= 0 && strings.HasPrefix(msg, "failed to ") {
+		msg = msg[i+2:]
+	}
+	msg = strings.TrimSpace(msg)
+	if msg == "" {
+		return "The change could not be made."
+	}
+	return strings.ToUpper(msg[:1]) + msg[1:] + "."
 }
