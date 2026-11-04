@@ -55,7 +55,7 @@ async function run(engine) {
         const rich = page.locator('g[data-text="a-b"] .dg-cv-text');
         await rich.waitFor();
         const editAlignment = async (property, value) => {
-            await page.locator(`[data-set="${property}"]`).selectOption(value);
+            await page.locator(`button[data-set="${property}"]`).filter({ hasNotText: 'Mixed' }).evaluateAll((buttons, value) => buttons.find(b => b.value === value).click(), value);
             await page.waitForFunction(({ property, value }) => {
                 const cm = window.CM.EditorView.findFromDOM(document.querySelector('.cm-editor'));
                 return (JSON.parse(cm.state.doc.toString()).nodes[0].yavc || {})[property] === (value || undefined);
@@ -96,6 +96,94 @@ async function run(engine) {
         await page.keyboard.press('Escape');
         await page.setViewportSize({ width: 720, height: 900 });
         await page.screenshot({ path: path.join(evidence, engine + '-shape-picker.png') });
+        await page.setViewportSize({ width: 1600, height: 1000 });
+        const multi = { nodes: [
+            { id: 'g', type: 'group', x: -20, y: -20, width: 500, height: 180, label: 'Group' },
+            { id: 'a', type: 'text', x: 0, y: 0, width: 160, height: 80, text: 'First' },
+            { id: 'b', type: 'text', x: 260, y: 0, width: 160, height: 80, text: 'Second' }
+        ], edges: [{ id: 'a', fromNode: 'a', toNode: 'b' }] };
+        await action('new', { kind: 'canvas', text: JSON.stringify(multi) });
+        const hit = id => page.locator(`.dg-cv-hit[data-id="${id}"]`);
+        const doc = async () => JSON.parse((await action('diagram')).text);
+        const settled = () => page.waitForFunction(() => !document.querySelector('.sc-diagram-stale'));
+        await hit('a').click(); await hit('b').click({ modifiers: ['Shift'] });
+        assert.equal(await page.locator('.dg-inspector-title').innerText(), '2 Items');
+        assert.equal(await page.locator('.dg-cv-ring').count(), 2);
+        assert.equal(await page.locator('textarea[data-set="text"]').getAttribute('placeholder'), 'Mixed');
+        await page.locator('textarea[data-set="text"]').fill('__mixed__'); await page.locator('textarea[data-set="text"]').dispatchEvent('change'); await settled();
+        assert.deepEqual((await doc()).nodes.slice(1).map(n => n.text), ['__mixed__', '__mixed__']);
+        await page.getByRole('group', { name: 'Line Style', exact: true }).getByRole('button', { name: 'Dashed', exact: true }).click(); await settled();
+        assert.deepEqual((await doc()).nodes.slice(1).map(n => n.yavc.line), ['dashed', 'dashed']);
+        await page.getByLabel('Color Picker', { exact: true }).evaluate(e => { e.value = '#123456'; e.dispatchEvent(new Event('change', { bubbles: true })); }); await settled();
+        assert.deepEqual((await doc()).nodes.slice(1).map(n => n.color), ['#123456', '#123456']);
+        await page.getByRole('group', { name: 'Color Presets', exact: true }).getByRole('button', { name: 'Red', exact: true }).click(); await settled();
+        assert.deepEqual((await doc()).nodes.slice(1).map(n => n.color), ['1', '1']);
+        await page.getByRole('group', { name: 'Color Presets', exact: true }).getByRole('button', { name: 'Default', exact: true }).click(); await settled();
+        assert.deepEqual((await doc()).nodes.slice(1).map(n => n.color), [undefined, undefined]);
+        const box = await hit('a').boundingBox(), scale = await hit('a').evaluate(e => e.getScreenCTM().a);
+        await page.mouse.move(box.x + 30, box.y + 30); await page.keyboard.down('Alt'); await page.mouse.down();
+        await page.mouse.move(box.x + 30 + 32 * scale, box.y + 30 + 24 * scale, { steps: 5 }); await page.mouse.up(); await page.keyboard.up('Alt'); await settled();
+        assert.deepEqual((await doc()).nodes.slice(1).map(n => [n.x, n.y]), [[32,24], [292,24]]);
+        await page.locator('.dg-stage').focus(); await page.keyboard.press('Control+z'); await settled();
+        assert.deepEqual((await doc()).nodes.slice(1).map(n => [n.x, n.y]), [[0,0], [260,0]]);
+        await page.keyboard.press('ArrowRight'); await settled();
+        assert.deepEqual((await doc()).nodes.slice(1).map(n => n.x), [1,261]);
+        await action('canvas-view', { op: 'select', items: [{ id: 'g', kind: 'node' }, { id: 'a', kind: 'node' }] });
+        await page.locator('.dg-stage').focus(); await page.keyboard.press('ArrowRight'); await settled();
+        assert.deepEqual((await doc()).nodes.map(n => n.x), [-19,2,262]);
+        await action('canvas-view', { op: 'select', items: [{ id: 'a', kind: 'node' }, { id: 'a', kind: 'edge' }] });
+        assert.equal(await page.locator('[data-set="shape"]').count(), 0);
+        assert.equal(await page.locator('[data-set="x"]').count(), 0);
+        assert.equal(await page.locator('[data-set="textAlign"]').count(), 0);
+        await page.getByRole('group', { name: 'Line Style', exact: true }).getByRole('button', { name: 'Dotted', exact: true }).click(); await settled();
+        assert.equal((await doc()).nodes[1].yavc.line, 'dotted'); assert.equal((await doc()).edges[0].yavc.line, 'dotted');
+        const divider = page.getByRole('separator', { name: 'Resize the Inspector', exact: true });
+        const before = await page.locator('.dg-inspector').boundingBox(); await divider.focus(); await page.keyboard.press('ArrowLeft');
+        await page.waitForFunction(width => document.querySelector('.dg-inspector').getBoundingClientRect().width > width, before.width);
+        await page.screenshot({ path: path.join(evidence, engine + '-multiple-inspector.png') });
+        await page.keyboard.press('Enter');
+        const dividerBox = await divider.boundingBox(), originalWidth = (await page.locator('.dg-inspector').boundingBox()).width;
+        await page.mouse.move(dividerBox.x + dividerBox.width / 2, dividerBox.y + 100); await page.mouse.down();
+        await page.mouse.move(dividerBox.x - 30, dividerBox.y + 100, { steps: 5 }); await page.mouse.up();
+        assert.ok((await page.locator('.dg-inspector').boundingBox()).width > originalWidth + 20);
+        await page.locator('.dg-stage').focus(); await page.keyboard.press('Control+a');
+        assert.equal(await page.locator('.dg-inspector-title').innerText(), '4 Items');
+        await page.keyboard.press('Escape'); assert.equal(await page.locator('.dg-cv-ring').count(), 0);
+        assert.equal(await page.getByRole('tab', { name: 'Diagram', exact: true }).count(), 0);
+        await page.getByRole('tab', { name: 'Edit', exact: true }).click();
+        await page.locator('.menubar-ribbon').getByRole('button', { name: 'Select Items…', exact: true }).focus(); await page.keyboard.press('Enter');
+        await page.getByRole('checkbox', { name: 'Node a', exact: true }).focus(); await page.keyboard.press('Space');
+        await page.getByRole('checkbox', { name: 'Node b', exact: true }).focus(); await page.keyboard.press('Space');
+        await page.locator('dialog').getByRole('button', { name: 'Select', exact: true }).focus(); await page.keyboard.press('Enter');
+        assert.equal(await page.locator('.dg-inspector-title').innerText(), '2 Items');
+        await divider.focus(); await page.keyboard.press('End');
+        const overflows = await page.locator('.dg-choice .seg button').evaluateAll(buttons => buttons.filter(b => b.scrollWidth > b.clientWidth + 1).map(b => b.textContent));
+        assert.deepEqual(overflows, []);
+        await divider.focus(); await page.keyboard.press('Enter');
+        await page.locator('.dg-stage').focus(); await page.keyboard.press('Escape');
+        await action('canvas-view', { op: 'fit' });
+        await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+        const points = await hit('a').evaluate(e => {
+            const toScreen = (x, y) => { const p = new DOMPoint(x - 2 + Number(e.getAttribute('x')), y + Number(e.getAttribute('y'))).matrixTransform(e.getScreenCTM()); return { x: p.x, y: p.y }; };
+            return [toScreen(-30, -30), toScreen(440, 100)];
+        });
+        const beforeMarquee = (await action('diagram')).text;
+        const marqueeEvidence = await page.evaluate(points => points.map(p => {
+            const el = document.elementFromPoint(p.x, p.y); return { point: p, target: el && el.tagName + '.' + el.getAttribute('class') };
+        }), points);
+        await page.mouse.move(points[0].x, points[0].y); await page.mouse.down(); await page.mouse.move(points[1].x, points[1].y, { steps: 5 }); await page.mouse.up();
+        assert.equal(await page.locator('.dg-inspector-title').textContent({ timeout: 2000 }).catch(() => ''), '2 Items', JSON.stringify(marqueeEvidence));
+        assert.equal((await action('diagram')).text, beforeMarquee);
+        const cancelBox = await hit('a').boundingBox();
+        await page.mouse.move(cancelBox.x + 20, cancelBox.y + 20); await page.mouse.down(); await page.mouse.move(cancelBox.x + 50, cancelBox.y + 35);
+        await page.keyboard.press('Escape'); await page.mouse.up();
+        assert.equal((await action('diagram')).text, beforeMarquee);
+        await action('new', { kind: 'd2', text: 'a -> b' });
+        await page.locator('.dg-hit-shape').first().click();
+        await page.getByRole('group', { name: 'Line Style', exact: true }).getByRole('button', { name: 'Dotted', exact: true }).click();
+        await page.waitForFunction(() => /stroke-dash:\s*2/.test(window.CM.EditorView.findFromDOM(document.querySelector('.cm-editor')).state.doc.toString()));
+        await page.waitForFunction(() => Array.from(document.querySelectorAll('.dg-inspector .seg button')).some(b => b.textContent === 'Dotted' && b.getAttribute('aria-pressed') === 'true'));
+        await page.getByLabel('Line Color Picker', { exact: true }).waitFor();
         await action('new', { kind: 'mermaid', text: 'graph TD\n a --> b' });
         await page.waitForFunction(() => !Array.from(document.querySelectorAll('.menubar-ribbon button')).some(e => e.textContent.trim() === 'Drawing Tool'));
         assert.deepEqual(errors, []);
@@ -143,7 +231,7 @@ async function run(engine) {
             assert.deepEqual(errors, []);
             await p.close();
         }
-        console.log(engine + ': source linking, text alignment, shape picker and standalone Help/About windows passed');
+        console.log(engine + ': source linking, multi-selection, inspector controls, menus and standalone Help/About passed');
     } catch (err) {
         if (activePage && !activePage.isClosed()) { await activePage.screenshot({ path: path.join(evidence, engine + '-failure-' + Date.now() + '.png') }).catch(() => {}); }
         throw err;

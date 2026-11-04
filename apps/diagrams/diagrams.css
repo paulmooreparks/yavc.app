@@ -115,9 +115,14 @@
 /* Beside the drawing, a column of PUDL's sunken fields for what is
    selected; it scrolls on its own, and narrows the drawing rather than
    covering it. */
-.dg-body { flex: 1 1 auto; min-height: 0; display: flex; }
-.dg-body > .dg-stage { flex: 1 1 auto; min-width: 0; }
-.dg-inspector { flex: none; width: 17rem; max-width: 45%; overflow: auto; padding: var(--space-3); border-inline-start: 1px solid var(--border); background: var(--surface-alt); font-size: var(--text-sm); }
+.dg-body { flex: 1 1 auto; min-height: 0; display: flex; --split-a: calc(100% - 17rem - 6px); }
+.dg-body > .dg-stage { flex: none; width: var(--split-a, calc(100% - 17rem - 6px)); min-width: 0; }
+.dg-inspector { overflow: auto; padding: var(--space-3); background: var(--surface-alt); font-size: var(--text-sm); }
+.dg-choice { border: 0; padding: 0; min-width: 0; }
+.dg-choice .seg { display: flex; width: 100%; }
+.dg-choice .seg button { flex: 1 1 0; min-width: 0; padding-inline: var(--space-1); white-space: normal; overflow-wrap: anywhere; }
+.dg-color-presets { margin-block: var(--space-2) var(--space-3); }
+.dg-color-dot { display: inline-block; width: 1em; height: 1em; border: 1px solid var(--border); border-radius: 50%; }
 .dg-inspector[hidden] { display: none; }
 .dg-inspector .form-group { margin-bottom: var(--space-3); }
 .dg-inspector .form-input, .dg-inspector .form-select { width: 100%; box-sizing: border-box; }

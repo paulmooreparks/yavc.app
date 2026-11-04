@@ -20,6 +20,54 @@
         var g = node(doc, id);
         return g && g.type === 'group' ? doc.nodes.filter(function (n) { return inside(n, g); }).map(function (n) { return n.id; }) : [];
     }
+    function properties(item, kind) {
+        var shared = ['color', 'line', 'lineWidth'];
+        return shared.concat(kind === 'edge' ? ['label', 'route', 'fromHead', 'toHead', 'fromSide', 'toSide'] :
+            ['x', 'y', 'width', 'height'].concat(item.type === 'text' ? ['text', 'shape', 'textAlign', 'textVerticalAlign'] : item.type === 'group' ? ['label'] : []));
+    }
+    function setProperty(item, kind, property, value) {
+        if (properties(item, kind).indexOf(property) < 0 || ['x', 'y', 'width', 'height'].indexOf(property) >= 0) { throw new Error('That property cannot be changed on this item.'); }
+        var target = ['shape', 'route', 'fromHead', 'toHead', 'line', 'lineWidth', 'textAlign', 'textVerticalAlign'].indexOf(property) >= 0 ? (item.yavc || (item.yavc = {})) : item;
+        if (value === null || (value === '' && property !== 'text')) { delete target[property]; } else { target[property] = value; }
+    }
+    function movingIds(doc, selected) {
+        var ids = new Set();
+        selected.filter(function (s) { return s.kind === 'node'; }).forEach(function (s) { ids.add(s.id); members(doc, s.id).forEach(function (id) { ids.add(id); }); });
+        return Array.from(ids);
+    }
+    function editSelection(doc, req) {
+        if (!Array.isArray(req.items) || !req.items.length || req.items.length > 5000) { throw new Error('Choose one or more canvas items.'); }
+        var selected = [], seen = new Set();
+        req.items.forEach(function (s) {
+            if (!s || ['node', 'edge'].indexOf(s.kind) < 0 || typeof s.id !== 'string') { throw new Error('Each selected item needs a kind and ID.'); }
+            var item = (s.kind === 'node' ? doc.nodes : doc.edges).find(function (n) { return n.id === s.id; });
+            if (!item || (s.kind === 'node' && J.isAnchor(item))) { throw new Error('That selected item is no longer available.'); }
+            var key = JSON.stringify([s.kind, s.id]);
+            if (!seen.has(key)) { seen.add(key); selected.push({ id: s.id, kind: s.kind }); }
+        });
+        if (req.op === 'move') {
+            var ids = new Set(movingIds(doc, selected)), dx = integer(req.dx), dy = integer(req.dy);
+            if (!ids.size) { throw new Error('Select a node to move.'); }
+            doc.nodes.forEach(function (n) { if (ids.has(n.id)) { n.x = integer(n.x + dx); n.y = integer(n.y + dy); } });
+        } else if (req.op === 'set' || req.op === 'resize') {
+            selected.forEach(function (s) {
+                var item = (s.kind === 'node' ? doc.nodes : doc.edges).find(function (n) { return n.id === s.id; });
+                if (req.op === 'set') { setProperty(item, s.kind, req.property, req.value); }
+                else {
+                    if (s.kind !== 'node') { throw new Error('Only nodes have geometry.'); }
+                    ['x', 'y', 'width', 'height'].forEach(function (k) { if (req[k] != null) { item[k] = integer(req[k]); } });
+                    if (item.width < 1 || item.height < 1) { throw new Error('A resized node must be at least one pixel wide and high.'); }
+                }
+            });
+        } else if (req.op === 'delete') {
+            var nodes = new Set(selected.filter(function (s) { return s.kind === 'node'; }).map(function (s) { return s.id; }));
+            var edges = new Set(selected.filter(function (s) { return s.kind === 'edge'; }).map(function (s) { return s.id; }));
+            doc.nodes = doc.nodes.filter(function (n) { return !nodes.has(n.id); });
+            doc.edges = doc.edges.filter(function (e) { return !edges.has(e.id) && !nodes.has(e.fromNode) && !nodes.has(e.toNode); });
+            pruneAnchors(doc); selected = [];
+        } else { throw new Error('This operation requires a single item.'); }
+        var result = checked(doc); result.selection = selected; return result;
+    }
     function pruneAnchors(doc) {
         var used = new Set();
         doc.edges.forEach(function (e) { used.add(e.fromNode); used.add(e.toNode); });
@@ -83,6 +131,7 @@
         return b;
     }
     function edit(source, req) {
+        if (req.items !== undefined) { return editSelection(copy(source), req); }
         var doc = copy(source), key = req.key || '', n = node(doc, key), e = doc.edges.find(function (x) { return x.id === key; }), item = req.kind === 'edge' ? e : req.kind === 'node' ? n : n || e;
         var freeId = idMaker(doc);
         function needNode() { if (!n || req.kind === 'edge') { throw new Error('Select a node first.'); } }
@@ -127,10 +176,7 @@
             pruneAnchors(doc);
         } else if (req.op === 'set') {
             needItem();
-            var property = req.property, allowed = item === n ? ['text', 'label', 'color', 'shape', 'line', 'lineWidth', 'textAlign', 'textVerticalAlign'] : ['label', 'color', 'route', 'fromHead', 'toHead', 'fromSide', 'toSide', 'line', 'lineWidth'];
-            if (allowed.indexOf(property) < 0 || (['text', 'shape', 'textAlign', 'textVerticalAlign'].indexOf(property) >= 0 && n.type !== 'text')) { throw new Error('That property cannot be changed on this item.'); }
-            var target = ['shape', 'route', 'fromHead', 'toHead', 'line', 'lineWidth', 'textAlign', 'textVerticalAlign'].indexOf(property) >= 0 ? (item.yavc || (item.yavc = {})) : item;
-            if (req.value === null || (req.value === '' && property !== 'text')) { delete target[property]; } else { target[property] = req.value; }
+            setProperty(item, item === n ? 'node' : 'edge', req.property, req.value);
         } else if (req.op === 'delete') {
             needItem();
             if (item === n) {
@@ -169,6 +215,6 @@
         });
         return copy({ nodes: doc.nodes.filter(function (n) { return ids.indexOf(n.id) >= 0; }), edges: doc.edges.filter(function (e) { return ids.indexOf(e.fromNode) >= 0 && ids.indexOf(e.toNode) >= 0; }) });
     }
-    var api = Object.freeze({ edit: edit, snap: snap, resize: resize, members: members, fragment: fragmentOf, attachment: attachment });
+    var api = Object.freeze({ edit: edit, snap: snap, resize: resize, members: members, movingIds: movingIds, properties: properties, fragment: fragmentOf, attachment: attachment });
     if (typeof module === 'object' && module.exports) { module.exports = api; } else { root.yavcCanvasModel = api; }
 })(typeof window !== 'undefined' ? window : this);

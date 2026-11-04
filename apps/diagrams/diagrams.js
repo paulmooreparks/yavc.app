@@ -100,7 +100,7 @@
     var VIEWS = [['text', 'Text'], ['preview', 'Preview'], ['split', 'Split']];
     /* Where the drawing sits beside the text, as Slides docks its canvas. */
     var DOCKS = [['left', 'Left'], ['right', 'Right'], ['top', 'Top'], ['bottom', 'Bottom']];
-    var SETTINGS = { view: 'split', dock: 'left', fit: true, inspector: true };
+    var SETTINGS = { view: 'split', dock: 'left', fit: true, inspector: true, inspectorSplit: null };
     /* The inspector's choices (milestone D3): line styles as D2's
        stroke-dash, and the arrowheads D2 draws. */
     var DASHES = [['', 'Solid'], ['5', 'Dashed'], ['2', 'Dotted']];
@@ -142,9 +142,10 @@
             '<div class="dg-main" data-role="main">' +
               '<div class="dg-work split" data-role="work">' +
                 '<div class="dg-stagebox split-pane" data-role="stagebox">' +
-                  '<div class="dg-body" data-role="body">' +
-                    '<div class="dg-stage" data-role="stage" tabindex="0" role="region" aria-label="The Drawing" aria-describedby="dg-keys-' + n + '"><div class="dg-canvas" data-role="canvas"></div></div>' +
-                    '<aside class="dg-inspector" data-role="inspector" aria-label="Inspector" hidden></aside>' +
+                  '<div class="dg-body split" data-role="body" data-split-pane="first">' +
+                    '<div class="dg-stage split-pane" data-role="stage" tabindex="0" role="region" aria-label="The Drawing" aria-describedby="dg-keys-' + n + '"><div class="dg-canvas" data-role="canvas"></div></div>' +
+                    '<div class="split-handle dg-inspector-split" aria-label="Resize the Inspector" data-split-min="120"></div>' +
+                    '<aside class="dg-inspector split-pane" data-role="inspector" aria-label="Inspector" hidden></aside>' +
                   '</div>' +
                   '<p class="dg-keys visually-hidden" id="dg-keys-' + n + '">In a D2 diagram, the arrow keys select a shape or a connection, Enter edits its label, F2 renames it, N adds a shape of the palette\'s kind, C connects the selected shape to another, Delete deletes it, and Escape goes back to the palette\'s Select. The Shape menu moves a shape into another.</p>' +
                 '</div>' +
@@ -162,6 +163,17 @@
             var change = {}; change[key] = value;
             H.config.set('diagrams', change).catch(function () { });
         }
+        function inspectorPresentation(show) {
+            el.inspector.hidden = !show;
+            var single = el.body.hasAttribute('data-split-pane');
+            if (show) { el.body.removeAttribute('data-split-pane'); } else { el.body.setAttribute('data-split-pane', 'first'); }
+            if (single === show && window.pudlSplit) { window.pudlSplit.refresh(); }
+        }
+        el.body.addEventListener('pudl:split', function (e) {
+            if (!e.target.classList.contains('dg-inspector-split')) { return; }
+            settings.inspectorSplit = el.body.style.getPropertyValue('--split-a') && el.body.clientWidth > 0 ? el.stage.getBoundingClientRect().width / el.body.clientWidth * 100 : null;
+            keepSetting('inspectorSplit', settings.inspectorSplit);
+        });
         /* A confirmation goes in the status line, as in Slides; a fault the
            person must deal with is the site's notice beside what failed,
            which stays until it is dismissed or put right (decision 15). */
@@ -392,7 +404,8 @@
                     });
                 }
                 t.cv.show(got.doc, out, svg);
-                if (t.cvPending) { t.cv.select(t.cvPending, 'edit'); t.cvPending = null; }
+                var pending = t.cvPending; t.cvPending = null;
+                if (pending && pending.text === text) { t.cv.select(pending.selection, 'edit'); }
                 else if (cm && cm.hasFocus) { followCanvasCursor(t, cm.state.selection.main.head); }
                 richText(t, got.doc, out, svg, palette, isCurrent);
             }
@@ -400,6 +413,23 @@
         }
         /* === Editing JSON Canvas ========================================= */
         function canvasSelection() { var t = current(); return t && t.cv ? t.cv.selected() : null; }
+        function canvasSelections() { var t = current(); return t && t.cv ? t.cv.selections() : []; }
+        function canvasItems(t) {
+            return t.cvDoc.nodes.filter(function (x) { return !window.yavcCanvas.isAnchor(x); }).map(function (x) { return { id: x.id, kind: 'node' }; }).concat(t.cvDoc.edges.map(function (x) { return { id: x.id, kind: 'edge' }; }));
+        }
+        function canvasSelectAll() { var t = current(); if (!canvasWhy(false)) { t.cv.select(canvasItems(t)); } }
+        function canvasSelectItems() {
+            if (canvasWhy(false)) { return; }
+            var t = current(), text = t.text, items = canvasItems(t), selected = canvasSelections();
+            return window.yavcDialog.open({ title: 'Select Canvas Items', body: '<fieldset class="form-fieldset"><legend>Items</legend>' + items.map(function (s, i) {
+                var checked = selected.some(function (x) { return x.id === s.id && x.kind === s.kind; });
+                return '<label class="check"><input type="checkbox" data-select-index="' + i + '"' + (checked ? ' checked' : '') + '> ' + esc((s.kind === 'node' ? 'Node ' : 'Connector ') + s.id) + '</label>';
+            }).join('') + '</fieldset>', buttons: [{ id: 'cancel', label: 'Cancel' }, { id: 'apply', label: 'Select', primary: true }] }).then(function (r) {
+                if (r.value !== 'apply' || destroyed || t !== current()) { return; }
+                if (t.text !== text) { say('The canvas changed while the selection dialog was open. Open it again to choose current items.', 'warn'); return; }
+                t.cv.select(Array.from(r.body.querySelectorAll('[data-select-index]:checked')).map(function (e) { return items[Number(e.dataset.selectIndex)]; }));
+            });
+        }
         /* CodeMirror's JSON parser supplies offsets. Only objects directly
            in nodes/edges are indexed, so nested IDs and escaped keys cannot
            select the wrong item. JSON.parse has already validated the file. */
@@ -422,7 +452,7 @@
             if (t !== current()) { return; }
             if (how === 'pointer') { el.stage.focus({ preventScroll: true }); }
             if (how !== 'cursor') {
-                say(s ? 'Selected ' + s.kind + ' "' + s.id + '".' : '');
+                say(canvasSelections().length > 1 ? 'Selected ' + canvasSelections().length + ' items.' : s ? 'Selected ' + s.kind + ' "' + s.id + '".' : '');
                 var range = s && (t.cvRanges || []).find(function (r) { return r.id === s.id && r.kind === s.kind; });
                 if (range && cm && t.cvText === t.text) {
                     quiet = true;
@@ -436,7 +466,7 @@
             var range = (t.cvRanges || []).find(function (r) { return pos >= r.from && pos < r.to; });
             if (range && range.kind === 'node' && window.yavcCanvas.isAnchor(t.cvDoc.nodes.find(function (n) { return n.id === range.id; }))) { range = null; }
             var s = t.cv.selected();
-            if ((!range && !s) || (range && s && range.id === s.id && range.kind === s.kind)) { return; }
+            if ((!range && !s) || (range && s && range.id === s.id && range.kind === s.kind && canvasSelections().length === 1)) { return; }
             t.cv.select(range ? { id: range.id, kind: range.kind } : null, 'cursor');
             if (range) { t.cv.reveal(); }
         }
@@ -445,8 +475,9 @@
             if (!t || t.kind !== 'canvas') { return 'Open a canvas first.'; }
             if (!t.cv || t.cvText !== t.text || (t.problems && t.problems.length)) { return 'Wait for a valid drawing before editing the canvas.'; }
             if (needs && !s) { return 'Select a node or connector first.'; }
-            if (needs === 'shape' && (!s || s.kind !== 'node')) { return 'Select a node first.'; }
-            if (needs === 'edge' && (!s || s.kind !== 'edge')) { return 'Select a connector first.'; }
+            if (needs === 'nodes' && !canvasSelections().some(function (s) { return s.kind === 'node'; })) { return 'Select one or more nodes first.'; }
+            if (needs === 'shape' && (canvasSelections().length !== 1 || !s || s.kind !== 'node')) { return 'Select one node first.'; }
+            if (needs === 'edge' && (canvasSelections().length !== 1 || !s || s.kind !== 'edge')) { return 'Select one connector first.'; }
             return null;
         }
         async function canvasEdit(req, expected, strict) {
@@ -458,7 +489,7 @@
                 var out = M.edit(got.doc, req);
                 if (out.text === t.text) { return out; }
                 var isEdge = out.doc.edges.some(function (x) { return x.id === out.key; }) && (req.op === 'connect' || req.op === 'reconnect' || req.kind === 'edge');
-                t.cvPending = out.key ? { kind: isEdge ? 'edge' : 'node', id: out.key } : null;
+                t.cvPending = { text: out.text, selection: out.selection || (out.key ? { kind: isEdge ? 'edge' : 'node', id: out.key } : null) };
                 replaceText(out.text, 'input.canvas');
                 await drawNow();
                 if (t === current()) { say('Changed the canvas. Undo puts it back.'); }
@@ -471,6 +502,7 @@
         }
         function canvasRequest(req) {
             var s = canvasSelection();
+            if (canvasSelections().length > 1 && ['move', 'delete'].indexOf(req.op) >= 0) { return canvasEdit(Object.assign({ items: canvasSelections() }, req)); }
             return canvasEdit(Object.assign({ key: s ? s.id : '', kind: s ? s.kind : 'node' }, req));
         }
         function canvasCreate(x, y, type) {
@@ -558,37 +590,56 @@
             } catch (err) { say('The selection could not be pasted. ' + err.message, 'problem'); }
         }
         function renderCanvasInspector(t) {
-            var s = canvasSelection(), show = !!(settings.inspector && t.cv);
-            el.inspector.hidden = !show;
+            var selected = canvasSelections(), show = !!(settings.inspector && t.cv);
+            inspectorPresentation(show);
             if (!show) { inspected = null; return; }
-            var blocked = !!canvasWhy(false), state = 'canvas|' + (s ? s.kind + s.id : '') + '|' + blocked;
+            var blocked = !!canvasWhy(false), state = 'canvas|' + JSON.stringify(selected) + '|' + blocked;
             if (inspected === state && el.inspector.contains(document.activeElement)) { return; }
             inspected = state;
-            if (!s) { el.inspector.innerHTML = '<p class="dg-inspector-empty">Select a node or connector to change its settings.</p>'; return; }
-            var item = (s.kind === 'node' ? t.cvDoc.nodes : t.cvDoc.edges).find(function (x) { return x.id === s.id; });
-            if (!item) { return; }
-            var ext = item.yavc || {}, p = 'dg-cv-in-' + n + '-', had = el.inspector.contains(document.activeElement) ? document.activeElement.id : null;
-            var html = '<h3 class="dg-inspector-title">' + (s.kind === 'node' ? 'Node' : 'Connector') + '</h3><p class="dg-inspector-id">' + esc(item.id) + '</p>';
-            if (item.type === 'text') {
-                html += field(p + 'text', 'Text', '<textarea class="form-input" id="' + p + 'text" data-set="text" data-was="' + esc(item.text) + '" rows="4">' + esc(item.text) + '</textarea>') +
-                    selectField(p + 'shape', 'shape', 'Shape', ext.shape || 'rectangle', [['rectangle', 'Rectangle'], ['rounded', 'Rounded Rectangle']].concat(PALETTE.filter(function (x) { return x[0] !== 'rectangle' && x[0] !== 'rounded'; }))) +
-                    selectField(p + 'text-align', 'textAlign', 'Horizontal Alignment', ext.textAlign || '', [['', 'Shape Default'], ['left', 'Left'], ['center', 'Centre'], ['right', 'Right']]) +
-                    selectField(p + 'text-vertical-align', 'textVerticalAlign', 'Vertical Alignment', ext.textVerticalAlign || '', [['', 'Shape Default'], ['top', 'Top'], ['middle', 'Middle'], ['bottom', 'Bottom']]);
-            } else if (s.kind === 'edge' || item.type === 'group') { html += textField(p + 'label', 'label', 'Label', item.label); }
-            if (s.kind === 'node') {
-                ['x', 'y', 'width', 'height'].forEach(function (k) { var size = k === 'width' || k === 'height'; html += numberField(p + k, k, k === 'x' ? 'X' : k === 'y' ? 'Y' : k === 'width' ? 'Width' : 'Height', String(item[k]), size ? 1 : null, size ? Number.MAX_SAFE_INTEGER : null); });
+            if (!selected.length) { el.inspector.innerHTML = '<p class="dg-inspector-empty">Select nodes or connectors to change their shared settings.</p>'; return; }
+            var entries = selected.map(function (s) { return { kind: s.kind, item: (s.kind === 'node' ? t.cvDoc.nodes : t.cvDoc.edges).find(function (x) { return x.id === s.id; }) }; });
+            if (entries.some(function (e) { return !e.item; })) { return; }
+            var properties = entries.map(function (e) { return window.yavcCanvasModel.properties(e.item, e.kind); }).reduce(function (a, b) { return a.filter(function (k) { return b.indexOf(k) >= 0; }); });
+            var p = 'dg-cv-in-' + n + '-', had = el.inspector.contains(document.activeElement) ? document.activeElement.id : null;
+            var html = '<h3 class="dg-inspector-title">' + (selected.length > 1 ? selected.length + ' Items' : selected[0].kind === 'node' ? 'Node' : 'Connector') + '</h3><p class="dg-inspector-id">' + esc(selected.map(function (s) { return s.id; }).join(', ')) + '</p>';
+            var defaults = { shape: 'rectangle', line: 'solid', lineWidth: 2, route: 'elbow' };
+            function value(e, k) {
+                var ext = e.item.yavc || {};
+                if (k === 'fromHead') { return ext.fromHead || e.item.fromEnd || 'none'; }
+                if (k === 'toHead') { return ext.toHead || e.item.toEnd || 'arrow'; }
+                var v = ['shape', 'line', 'lineWidth', 'route', 'textAlign', 'textVerticalAlign'].indexOf(k) >= 0 ? ext[k] : e.item[k];
+                return v == null ? (k === 'lineWidth' && e.item.type === 'group' ? 1 : defaults[k] == null ? '' : defaults[k]) : v;
             }
-            html += textField(p + 'colour', 'color', 'Colour', item.color, 'Use #rrggbb, #rgb, or a preset from 1 to 6 (red, orange, yellow, green, cyan, purple). Leave it blank for the theme.') +
-                selectField(p + 'line', 'line', 'Line Style', ext.line || 'solid', [['solid', 'Solid'], ['dashed', 'Dashed'], ['dotted', 'Dotted']]) +
-                numberField(p + 'line-width', 'lineWidth', 'Line Width', String(ext.lineWidth || 2), 1, 8);
-            if (s.kind === 'edge') {
-                html += '<fieldset class="form-fieldset"><legend>Endpoints</legend><div class="hstack"><button type="button" class="btn btn-sm" data-command="cv-reconnect-start"></button><button type="button" class="btn btn-sm" data-command="cv-reconnect-end"></button></div></fieldset>';
-                html += selectField(p + 'route', 'route', 'Route', ext.route || 'elbow', [['elbow', 'Elbow'], ['straight', 'Straight'], ['curve', 'Curve']]);
-                var heads = [['none', 'None'], ['arrow', 'Arrow'], ['triangle', 'Triangle'], ['diamond', 'Diamond'], ['circle', 'Circle'], ['box', 'Box'], ['cross', 'Cross'], ['cf-one', 'One'], ['cf-one-required', 'Exactly One'], ['cf-many', 'Many'], ['cf-many-required', 'One or More']];
-                html += selectField(p + 'from-head', 'fromHead', 'Start Head', ext.fromHead || item.fromEnd || 'none', heads) + selectField(p + 'to-head', 'toHead', 'End Head', ext.toHead || item.toEnd || 'arrow', heads);
-                var sides = [['', 'Automatic'], ['top', 'Top'], ['right', 'Right'], ['bottom', 'Bottom'], ['left', 'Left']];
-                html += selectField(p + 'from-side', 'fromSide', 'Start Side', item.fromSide, sides) + selectField(p + 'to-side', 'toSide', 'End Side', item.toSide, sides);
+            function add(k, label, type, options) {
+                if (properties.indexOf(k) < 0) { return; }
+                var values = entries.map(function (e) { return String(value(e, k)); }), mixed = values.some(function (v) { return v !== values[0]; }), v = mixed ? null : values[0], id = p + k;
+                var control;
+                if (type === 'segments') { control = segmentField(id, k, label, v, options); }
+                else if (type === 'select') { control = selectField(id, k, label, mixed ? '__mixed__' : v, mixed ? [['__mixed__', 'Mixed']].concat(options) : options); }
+                else if (type === 'number') { control = numberField(id, k, label, v || '', k === 'x' || k === 'y' ? null : 1, k === 'lineWidth' ? 8 : null); }
+                else if (type === 'text') { control = field(id, label, '<textarea class="form-input" id="' + id + '" data-set="' + k + '" data-was="' + esc(v || '') + '" rows="3">' + esc(v || '') + '</textarea>'); }
+                else if (type === 'color') {
+                    var pal = canvasPalette(t.place, window.yavcCanvas), resolved = /^[1-6]$/.test(v || '') ? pal.presets[Number(v) - 1] : /^#[a-f0-9]{3}$/i.test(v || '') ? v.replace(/([a-f0-9])/ig, '$1$1').replace('##', '#') : v;
+                    control = colourField(id, k, label, v || '', resolved || pal.line) + '<div class="hstack dg-color-presets" role="group" aria-label="Color Presets">' + pal.presets.map(function (c, i) {
+                        var name = ['Red', 'Orange', 'Yellow', 'Green', 'Cyan', 'Purple'][i];
+                        return '<button type="button" class="btn btn-sm" data-set="color" value="' + (i + 1) + '" data-was="' + esc(mixed ? '__mixed__' : v) + '" aria-label="' + name + '" title="' + name + '"><span class="dg-color-dot" style="background:' + esc(c) + '" aria-hidden="true"></span></button>';
+                    }).join('') + '<button type="button" class="btn btn-sm" data-set="color" value="" data-was="' + esc(mixed ? '__mixed__' : v) + '">Default</button></div>';
+                } else { control = textField(id, k, label, v); }
+                if (mixed && type !== 'segments') { control = control.replace(/data-was="[^"]*"/g, 'data-mixed="true" data-was=""').replace(/ placeholder="[^"]*"/g, '').replace(/<(input|textarea)\b/g, '<$1 placeholder="Mixed"'); control += '<p class="form-help">Mixed values</p>'; }
+                html += control;
             }
+            add('text', 'Text', 'text'); add('label', 'Label');
+            add('shape', 'Shape', 'select', [['rectangle', 'Rectangle'], ['rounded', 'Rounded Rectangle']].concat(PALETTE.filter(function (x) { return x[0] !== 'rectangle' && x[0] !== 'rounded'; })));
+            add('textAlign', 'Horizontal Alignment', 'segments', [['', 'Default'], ['left', 'Left'], ['center', 'Center'], ['right', 'Right']]);
+            add('textVerticalAlign', 'Vertical Alignment', 'segments', [['', 'Default'], ['top', 'Top'], ['middle', 'Middle'], ['bottom', 'Bottom']]);
+            ['x', 'y', 'width', 'height'].forEach(function (k) { add(k, k === 'x' ? 'X' : k === 'y' ? 'Y' : k === 'width' ? 'Width' : 'Height', 'number'); });
+            add('color', 'Color', 'color'); add('line', 'Line Style', 'segments', [['solid', 'Solid'], ['dashed', 'Dashed'], ['dotted', 'Dotted']]); add('lineWidth', 'Line Width', 'number');
+            add('route', 'Route', 'segments', [['elbow', 'Elbow'], ['straight', 'Straight'], ['curve', 'Curve']]);
+            var heads = [['none', 'None'], ['arrow', 'Arrow'], ['triangle', 'Triangle'], ['diamond', 'Diamond'], ['circle', 'Circle'], ['box', 'Box'], ['cross', 'Cross'], ['cf-one', 'One'], ['cf-one-required', 'Exactly One'], ['cf-many', 'Many'], ['cf-many-required', 'One or More']];
+            add('fromHead', 'Start Head', 'select', heads); add('toHead', 'End Head', 'select', heads);
+            var sides = [['', 'Automatic'], ['top', 'Top'], ['right', 'Right'], ['bottom', 'Bottom'], ['left', 'Left']];
+            add('fromSide', 'Start Side', 'select', sides); add('toSide', 'End Side', 'select', sides);
+            if (selected.length === 1 && selected[0].kind === 'edge') { html += '<fieldset class="form-fieldset"><legend>Endpoints</legend><div class="hstack"><button type="button" class="btn btn-sm" data-command="cv-reconnect-start"></button><button type="button" class="btn btn-sm" data-command="cv-reconnect-end"></button></div></fieldset>'; }
             el.inspector.innerHTML = '<fieldset class="dg-inspector-fields"' + (blocked ? ' disabled' : '') + '>' + html + '</fieldset>';
             if (blocked) { el.inspector.insertAdjacentHTML('afterbegin', '<p class="form-help">Put the canvas text right before changing these settings.</p>'); }
             if (window.pudlFields) { window.pudlFields.enhance(el.inspector); }
@@ -596,17 +647,24 @@
         }
         async function canvasInspectorChanged(f) {
             if (canvasWhy(true)) { return; }
-            var property = f.dataset.set, value = f.value, s = canvasSelection();
-            if (value === f.dataset.was) { return; }
+            var owner = current(), property = f.dataset.set, value = f.value, s = canvasSelection();
+            if (f.tagName === 'SELECT' && value === '__mixed__') { return; }
+            if (!f.hasAttribute('data-mixed') && value === f.dataset.was) { return; }
             var req = { op: 'set', key: s.id, kind: s.kind, property: property, value: property === 'text' ? value : value || null };
-            if (['x', 'y', 'width', 'height'].indexOf(property) >= 0) { req = { op: 'resize', key: s.id }; req[property] = Number(value); }
-            if (property === 'lineWidth') { req.value = Number(value); }
-            try { await canvasEdit(req, current().text, true); f.dataset.was = value; markField(f, null); }
-            catch (err) { markField(f, err.message); }
+            if (['x', 'y', 'width', 'height'].indexOf(property) >= 0) { req = { op: 'resize', key: s.id }; req[property] = value.trim() ? Number(value) : NaN; }
+            if (property === 'lineWidth') { req.value = value.trim() ? Number(value) : NaN; }
+            if (canvasSelections().length > 1) { req.items = canvasSelections(); }
+            try {
+                var result = await canvasEdit(req, owner.text, true);
+                if (destroyed || owner !== current() || owner.text !== result.text) { return; }
+                f.dataset.was = value; markField(f, null); inspected = null; renderCanvasInspector(owner);
+            } catch (err) { if (!destroyed && owner === current() && f.isConnected) { markField(f, err.message); } }
         }
         function canvasCommands() {
             function c(id, label, run, key, needs, glyph) { return cmd('cv-' + id, label, glyph, run, { hidden: function () { return !isCanvas(); }, builtIn: key, disabled: function () { return !!canvasWhy(needs); }, reason: function () { return canvasWhy(needs); } }); }
             var commands = [
+                c('select-all', 'Select All Items', canvasSelectAll, 'Mod-a', false),
+                c('select-items', 'Select Items…', canvasSelectItems, null, false),
                 c('new', 'Add Shape', function () { canvasCreate(); }, 'n', false, 'plus'),
                 c('group', 'Add Group', function () { canvasCreate(null, null, 'group'); }, 'g', false, 'folder'),
                 c('connect', 'Connect to a Node…', canvasConnect, 'c', 'shape', 'yavc-connect'),
@@ -627,7 +685,7 @@
                 Object.assign(c('pan', 'Pan', function () { setCanvasPan(!canvasPan); }, 'h', false, 'move'), { checked: function () { return canvasPan; } })
             ];
             [['left', 'Left', -1, 0], ['right', 'Right', 1, 0], ['up', 'Up', 0, -1], ['down', 'Down', 0, 1]].forEach(function (d) {
-                commands.push(c(d[0], 'Move ' + d[1], function () { canvasRequest({ op: 'move', dx: d[2], dy: d[3] }); }, 'Arrow' + d[1], 'shape'));
+                commands.push(c(d[0], 'Move ' + d[1], function () { canvasRequest({ op: 'move', dx: d[2], dy: d[3] }); }, 'Arrow' + d[1], 'nodes'));
                 commands.push(c('pan-' + d[0], 'Pan ' + d[1], function () { current().cv.pan(d[2] * 80, d[3] * 80); }, 'Alt-Arrow' + d[1], false));
             });
             return commands;
@@ -639,11 +697,12 @@
             if (e.key === 'Escape') { setTool(null); t.cv.cancel(); t.cv.select(null); e.preventDefault(); return; }
             if (e.key === 'Tab' || e.key === ' ') { if (t.cv.onKey(e)) { e.preventDefault(); } return; }
             if (canvasWhy(false)) { return; }
+            if (mod && key === 'a') { e.preventDefault(); canvasSelectAll(); return; }
             if (/^Arrow/.test(e.key) && !mod) {
                 e.preventDefault();
                 var dx = e.key === 'ArrowLeft' ? -1 : e.key === 'ArrowRight' ? 1 : 0, dy = e.key === 'ArrowUp' ? -1 : e.key === 'ArrowDown' ? 1 : 0;
                 if (e.altKey) { t.cv.pan(dx * 80, dy * 80); }
-                else if (!canvasWhy('shape')) { canvasRequest({ op: 'move', dx: dx * (e.shiftKey ? 8 : 1), dy: dy * (e.shiftKey ? 8 : 1) }); }
+                else if (!canvasWhy('nodes')) { canvasRequest({ op: 'move', dx: dx * (e.shiftKey ? 8 : 1), dy: dy * (e.shiftKey ? 8 : 1) }); }
                 return;
             }
             if (mod && key === 'c') { e.preventDefault(); canvasCopy(); }
@@ -826,11 +885,15 @@
             return field(id, label, '<span class="form-select-wrap"><select class="form-select" id="' + id + '" data-set="' + esc(key) + '" data-was="' + esc(value || '') + '">' +
                 options.map(function (o) { return '<option value="' + esc(o[0]) + '"' + (o[0] === (value || '') ? ' selected' : '') + '>' + esc(o[1]) + '</option>'; }).join('') + '</select></span>');
         }
+        function segmentField(id, key, label, value, options) {
+            return '<fieldset class="form-group dg-choice"><legend class="form-label" id="' + id + '-label">' + esc(label) + '</legend><div class="seg sm">' +
+                options.map(function (o, i) { return '<button type="button" id="' + id + '-' + i + '" data-set="' + esc(key) + '" value="' + esc(o[0]) + '" data-was="' + esc(value == null ? '__mixed__' : value) + '" aria-pressed="' + (value != null && o[0] === value) + '">' + esc(o[1]) + '</button>'; }).join('') + '</div>' + (value == null ? '<p class="form-help">Mixed values</p>' : '') + '</fieldset>';
+        }
         function numberField(id, key, label, value, min, max) {
             return field(id, label, '<span class="number-field"><input class="form-input" type="number" step="1"' + (min == null ? '' : ' min="' + min + '"') + (max == null ? '' : ' max="' + max + '"') + ' id="' + id + '" data-set="' + esc(key) + '" data-was="' + esc(value || '') + '" value="' + esc(value || '') + '"></span>');
         }
-        function colourField(id, key, label, value) {
-            return window.yavcMdEditor.colourRows([{ id: id, key: key, label: label, value: value || '', fallback: '#808080', placeholder: 'The theme\'s own' }])
+        function colourField(id, key, label, value, fallback) {
+            return window.yavcMdEditor.colourRows([{ id: id, key: key, label: label, value: value || '', fallback: fallback || '#808080', placeholder: 'Theme default' }])
                 .replace(/data-key="/, 'data-was="' + esc(value || '') + '" data-set="');
         }
         function checks(legend, items) {
@@ -843,7 +906,7 @@
             var t = current(), key = selection();
             if (t && t.kind === 'canvas') { renderCanvasInspector(t); return; }
             var show = !!(settings.inspector && t && t.kind === 'd2' && t.canvas);
-            el.inspector.hidden = !show;
+            inspectorPresentation(show);
             if (!show) { inspected = null; return; }
             var blocked = !!(t.problems && t.problems.length), state = key + '|' + blocked;
             if (el.inspector.contains(document.activeElement) && inspected === state) { return; }
@@ -868,8 +931,8 @@
                     textField(p + 'srcl', key + '.source-arrowhead', 'Start Label', src.label) +
                     selectField(p + 'dst', key + '.target-arrowhead.shape', 'End Arrowhead', dst.shape, HEADS) +
                     textField(p + 'dstl', key + '.target-arrowhead', 'End Label', dst.label) +
-                    colourField(p + 'stroke', key + '.style.stroke', 'Line Colour', st.stroke) +
-                    selectField(p + 'dash', key + '.style.stroke-dash', 'Line Style', dashOf(st), DASHES) +
+                    colourField(p + 'stroke', key + '.style.stroke', 'Line Color', st.stroke) +
+                    segmentField(p + 'dash', key + '.style.stroke-dash', 'Line Style', dashOf(st), DASHES) +
                     numberField(p + 'width', key + '.style.stroke-width', 'Line Width', st['stroke-width'], 1, 15) +
                     checks('Effects', [[key + '.style.animated', 'Animated', st.animated === 'true']]);
             } else {
@@ -878,10 +941,10 @@
                     textField(p + 'label', key, 'Label', s.label) +
                     selectField(p + 'kind', key + '.shape', 'Kind', s.shape || 'rectangle', SHAPES) +
                     colourField(p + 'fill', key + '.style.fill', 'Fill', ss.fill) +
-                    colourField(p + 'stroke', key + '.style.stroke', 'Line Colour', ss.stroke) +
-                    selectField(p + 'dash', key + '.style.stroke-dash', 'Line Style', dashOf(ss), DASHES) +
+                    colourField(p + 'stroke', key + '.style.stroke', 'Line Color', ss.stroke) +
+                    segmentField(p + 'dash', key + '.style.stroke-dash', 'Line Style', dashOf(ss), DASHES) +
                     numberField(p + 'width', key + '.style.stroke-width', 'Line Width', ss['stroke-width'], 1, 15) +
-                    colourField(p + 'font', key + '.style.font-color', 'Text Colour', ss['font-color']) +
+                    colourField(p + 'font', key + '.style.font-color', 'Text Color', ss['font-color']) +
                     numberField(p + 'size', key + '.style.font-size', 'Text Size', ss['font-size'], 8, 100) +
                     checks('Text', [[key + '.style.bold', 'Bold', ss.bold === 'true'], [key + '.style.italic', 'Italic', ss.italic === 'true'], [key + '.style.underline', 'Underline', ss.underline === 'true']]) +
                     checks('Effects', [[key + '.style.shadow', 'Shadow', ss.shadow === 'true'], [key + '.style.3d', '3D', ss['3d'] === 'true'], [key + '.style.multiple', 'Multiple', ss.multiple === 'true'], [key + '.style.double-border', 'Double Border', ss['double-border'] === 'true']]) +
@@ -932,6 +995,8 @@
                 if (!out) { return; }
                 if (out.problems && out.problems.length) { markField(f, 'D2 would not take that: ' + out.problems[0].message); return; }
                 f.setAttribute('data-was', now);
+                var segment = f.closest('.seg');
+                if (segment) { segment.querySelectorAll('button').forEach(function (b) { b.dataset.was = now; b.setAttribute('aria-pressed', String(b.value === now)); }); }
                 markField(f, null);
                 /* A colour taken away shows the neutral swatch again. */
                 var pick = f.id && el.inspector.querySelector('.md-colour-pick[data-for="' + f.id + '"]');
@@ -966,6 +1031,8 @@
             if (e.key === 'Enter' && e.target.matches('input.form-input[data-set]')) { e.preventDefault(); inspectorChanged(e.target); }
         });
         el.inspector.addEventListener('click', function (e) {
+            var setting = e.target.closest('button[data-set]');
+            if (setting) { inspectorChanged(setting); return; }
             if (!e.target.closest('[data-reverse]')) { return; }
             var t = current(), key = selection(), c = t && connectionOf(t, key);
             if (!c || !canEdit()) { return; }
@@ -1588,10 +1655,9 @@
         }
         function toolbars() {
             return [{ label: 'Diagrams', ribbon: 'hide', groups: [
-                { label: 'File', glyph: 'file', priority: 3, items: ['new', 'open', 'save'] },
-                { label: 'Edit', glyph: 'pencil', priority: 4, items: ['undo', 'redo', 'find'] },
+                { label: 'File', glyph: 'file', priority: 3, items: ['new', 'open', 'save', 'export-svg', 'export-png'] },
+                { label: 'Edit', glyph: 'pencil', priority: 4, items: ['undo', 'redo', 'find', 'format-text', 'copy-embed'] },
                 { label: 'Shape', glyph: 'square', priority: 5, items: ['shape-add', 'connect', 'shape-label', 'shape-type', 'shape-delete', 'cv-new', 'cv-connect', 'cv-delete', 'cv-pan', 'cv-zoom-in', 'cv-zoom-out'] },
-                { label: 'Diagram', glyph: 'code', priority: 2, items: ['format-text', 'copy-embed', 'export-svg', 'export-png'] },
                 { label: 'View', glyph: 'panel', priority: 1, end: true, items: [{ choice: 'dg-view' }, 'dock', 'fit', 'toggle-inspector'] }
             ] }];
         }
@@ -1601,8 +1667,7 @@
             return { titles: [
                 { label: 'Diagrams', glyph: 'document', items: H.identity ? H.identity(root, []) : [] },
                 { id: 'file', label: 'File', glyph: 'file', items: ['new', 'new-mermaid', 'new-canvas', 'open', 'save', 'save-as', '-', 'edit-in-editor', '-', 'export-svg', 'export-png', 'export-source', '-', 'close-diagram'] },
-                { id: 'edit', label: 'Edit', glyph: 'pencil', items: ['undo', 'redo', '-', 'cv-copy', 'cv-paste', 'cv-duplicate', 'cv-delete', '-', 'find'] },
-                { id: 'diagram', label: 'Diagram', glyph: 'code', items: ['format-text', 'redraw', '-', 'copy-embed'] },
+                { id: 'edit', label: 'Edit', glyph: 'pencil', items: ['undo', 'redo', '-', 'cv-copy', 'cv-paste', 'cv-duplicate', 'cv-delete', 'copy-embed', '-', 'cv-select-all', 'cv-select-items', '-', 'find', '-', 'format-text', 'redraw'] },
                 { id: 'shape', label: 'Shape', glyph: 'square', items: ['shape-add', 'shape-add-inside', 'connect', 'cv-new', 'cv-group', 'cv-connect', 'cv-reconnect-start', 'cv-reconnect-end', 'cv-resize', '-', 'shape-label', 'shape-rename', 'shape-type', '-', 'shape-move-into', 'shape-move-top', 'cv-left', 'cv-right', 'cv-up', 'cv-down', 'cv-forward', 'cv-back', '-', 'shape-delete'].concat(isD2() || isCanvas() ? ['-', { label: 'Drawing Tool', glyph: 'square', items: ['tool-select'].concat(PALETTE.map(function (k) { return 'tool-' + k[0]; })) }] : []) }
             ], into: { view: ['view-text', 'view-preview', 'view-split', '-', 'dock', 'fit', 'toggle-inspector', '-', 'cv-pan', 'cv-pan-left', 'cv-pan-right', 'cv-pan-up', 'cv-pan-down', 'cv-zoom-in', 'cv-zoom-out', 'cv-actual'], go: ['go-to-line', 'cv-next', 'cv-previous'] } };
         }
@@ -1632,6 +1697,7 @@
             CM = await got[0].libs();
             if (destroyed) { return; }
             if (H.config && H.config.load) { try { Object.assign(settings, (await H.config.load('diagrams', SETTINGS)) || {}); } catch (err) { } }
+            if (Number.isFinite(settings.inspectorSplit) && settings.inspectorSplit > 0 && settings.inspectorSplit < 100) { el.body.style.setProperty('--split-a', settings.inspectorSplit + '%'); }
             applyFit();
             /* The tabs kept across a reload come back first, unsaved text and
                all; then the address's file comes to the front. */
@@ -1776,8 +1842,11 @@
                 if (destroyed || t !== current() || canvasWhy(false)) { throw new Error('The current canvas is not ready.'); }
                 if (input.op === 'select') {
                     var key = input.key || null, kind = input.kind || 'node';
-                    if (key && !(kind === 'edge' ? t.cvDoc.edges : t.cvDoc.nodes.filter(function (n) { return !window.yavcCanvas.isAnchor(n); })).some(function (x) { return x.id === key; })) { throw new Error('There is no selectable ' + kind + ' with that ID.'); }
-                    t.cv.select(key ? { id: key, kind: kind } : null);
+                    var items = input.items || (key ? [{ id: key, kind: kind }] : []);
+                    items.forEach(function (s) {
+                        if (['node', 'edge'].indexOf(s.kind) < 0 || !(s.kind === 'edge' ? t.cvDoc.edges : t.cvDoc.nodes.filter(function (n) { return !window.yavcCanvas.isAnchor(n); })).some(function (x) { return x.id === s.id; })) { throw new Error('There is no selectable ' + s.kind + ' with that ID.'); }
+                    });
+                    t.cv.select(items);
                 } else if (input.op === 'pan') { t.cv.pan(input.dx || 0, input.dy || 0); }
                 else if (input.op === 'zoom') { t.cv.zoom(input.factor || 1); }
                 else if (input.op === 'fit') { t.cv.fit(); }

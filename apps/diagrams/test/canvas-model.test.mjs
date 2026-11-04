@@ -8,6 +8,24 @@ const J = require('../../diagram-kit/jcanvas.js');
 const n = (id, x = 0, y = 0, width = 100, height = 60) => ({ id, type: 'text', x, y, width, height, text: id });
 const base = () => ({ nodes: [n('a'), n('b', 300)], edges: [{ id: 'ab', fromNode: 'a', toNode: 'b' }], custom: { keep: true } });
 
+test('a typed selection edits atomically and group movement never doubles a child', () => {
+    const doc = base(); doc.nodes.unshift({ id: 'g', type: 'group', x: -10, y: -10, width: 500, height: 150 });
+    const items = [{ id: 'g', kind: 'node' }, { id: 'a', kind: 'node' }, { id: 'ab', kind: 'edge' }];
+    const moved = M.edit(doc, { op: 'move', items, dx: 17, dy: -4 });
+    assert.equal(moved.doc.nodes.find(n => n.id === 'a').x, 17);
+    assert.equal(moved.doc.nodes.find(n => n.id === 'b').x, 317);
+    assert.equal(doc.nodes[1].x, 0); assert.deepEqual(moved.selection, items);
+    const colored = M.edit(doc, { op: 'set', items, property: 'color', value: '#123456' }).doc;
+    assert.equal(colored.nodes[0].color, '#123456'); assert.equal(colored.edges[0].color, '#123456');
+    assert.throws(() => M.edit(doc, { op: 'set', items, property: 'shape', value: 'oval' }), /cannot be changed/);
+    assert.equal(doc.nodes[0].yavc, undefined);
+    assert.throws(() => M.edit(doc, { op: 'move', items: [{ id: 'gone', kind: 'node' }], dx: 1, dy: 1 }), /no longer/);
+    const deleted = M.edit(doc, { op: 'delete', items: [{ id: 'a', kind: 'node' }, { id: 'ab', kind: 'edge' }] });
+    assert.equal(deleted.doc.edges.length, 0); assert.deepEqual(deleted.selection, []);
+    const common = M.properties(doc.nodes[1], 'node').filter(k => M.properties(doc.edges[0], 'edge').includes(k));
+    assert.deepEqual(common, ['color', 'line', 'lineWidth']);
+});
+
 test('alignment edits validate, preserve other data and reset independently', () => {
     const original = base(); original.nodes[0].yavc = { shape: 'diamond', custom: 'kept' };
     let doc = M.edit(original, { op: 'set', key: 'a', property: 'textAlign', value: 'right' }).doc;

@@ -109,7 +109,7 @@ async function run(engine) {
         await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2); await page.mouse.down();
         await page.mouse.move(to.x + 2, to.y + to.height / 2, { steps: 8 }); await page.mouse.up(); await idle();
         d = await doc(); assert.equal(d.edges.length, 2); assert.equal(d.edges[1].fromSide, 'right'); assert.equal(d.edges[1].toSide, 'left');
-        await page.locator('[data-set="route"]').selectOption('curve'); await idle();
+        await page.getByRole('group', { name: 'Route', exact: true }).getByRole('button', { name: 'Curve', exact: true }).click(); await idle();
         assert.equal((await doc()).edges[1].yavc.route, 'curve');
         await page.locator('[data-set="toHead"]').selectOption('cf-many'); await idle();
         assert.equal((await doc()).edges[1].toEnd, 'arrow');
@@ -315,7 +315,10 @@ async function endpoints(engine) {
         const pinned = await text();
         await dragEnd('to', await filePoint(80, 200));
         d = await doc(); let anchor = d.nodes.find(n => n.yavc?.anchor);
-        assert.ok(anchor); assert.equal(anchor.x, 80); assert.equal(anchor.y, 200);
+        // Pointer coordinates are quantized by the browser at fractional
+        // viewport offsets. Keyboard-entered coordinates are checked exactly below.
+        const pointerUnit = 1 / await hit('a').evaluate(e => e.getScreenCTM().a);
+        assert.ok(anchor); assert.ok(Math.abs(anchor.x - 80) <= pointerUnit); assert.ok(Math.abs(anchor.y - 200) <= pointerUnit);
         assert.equal(d.edges[0].toNode, anchor.id); assert.equal(d.edges[0].toSide, undefined);
         assert.equal(await page.locator(`.dg-cv-hit[data-id="${anchor.id}"]`).count(), 0);
         const free = await text();

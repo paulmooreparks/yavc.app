@@ -6,7 +6,7 @@
     'use strict';
     var NS = 'http://www.w3.org/2000/svg';
     function attach(place, stage, host) {
-        var M = window.yavcCanvasModel, J = window.yavcCanvas, doc, out, picture, selection = null;
+        var M = window.yavcCanvasModel, J = window.yavcCanvas, doc, out, picture, selection = null, selections = [];
         var camera = null, scale = 1, autoFit = true, drag = null, space = false, destroyed = false, previewId;
         var layer = document.createElementNS(NS, 'svg'), grips = document.createElement('div');
         layer.setAttribute('class', 'dg-cv-layer'); layer.setAttribute('aria-hidden', 'true');
@@ -19,8 +19,8 @@
         }
         function selectedNode() { return selection && selection.kind === 'node' && doc.nodes.find(function (n) { return n.id === selection.id; }); }
         function point(e) {
-            var r = place.getBoundingClientRect();
-            return { x: camera.x + (e.clientX - r.left) / scale, y: camera.y + (e.clientY - r.top) / scale };
+            var p = new DOMPoint(e.clientX, e.clientY).matrixTransform(layer.getScreenCTM().inverse());
+            return { x: p.x + out.origin[0], y: p.y + out.origin[1] };
         }
         function view() {
             if (!out || !camera || !picture) { return; }
@@ -51,8 +51,13 @@
         }
         function pan(dx, dy) { if (camera) { autoFit = false; camera.x += dx / scale; camera.y += dy / scale; view(); } }
         function select(s, how) {
-            selection = s;
-            mark(); host.selected(s, how || 'key');
+            var seen = new Set();
+            selections = (Array.isArray(s) ? s : s ? [s] : []).filter(function (x) {
+                var key = JSON.stringify([x.kind, x.id]);
+                if (seen.has(key)) { return false; } seen.add(key); return true;
+            }).map(function (x) { return { id: x.id, kind: x.kind }; });
+            selection = selections[selections.length - 1] || null;
+            mark(); host.selected(selection, how || 'key');
         }
         function reveal() {
             if (!selection || !camera || camera.w <= 0 || camera.h <= 0) { return; }
@@ -76,6 +81,15 @@
             layer.querySelectorAll('.dg-cv-ring').forEach(function (e) { e.remove(); });
             grips.replaceChildren();
             if (!selection || !out) { return; }
+            if (selections.length > 1) {
+                selections.forEach(function (s) {
+                    var box = s.kind === 'node' && out.boxes.find(function (b) { return b.id === s.id; });
+                    var edge = s.kind === 'edge' && out.edges.find(function (e) { return e.id === s.id; });
+                    if (box) { layer.appendChild(svg('rect', { x: box.x, y: box.y, width: box.w, height: box.h, 'class': 'dg-cv-ring' })); }
+                    else if (edge) { layer.appendChild(svg('path', { d: edge.d, 'class': 'dg-cv-ring dg-cv-line-ring' })); }
+                });
+                return;
+            }
             var n = selectedNode(), b = n && out.boxes.find(function (x) { return x.id === n.id; });
             if (!b) {
                 var edge = out.edges.find(function (e) { return e.id === selection.id; });
@@ -118,12 +132,13 @@
                 var hit = svg('path', { d: e.d, 'class': 'dg-cv-edge-hit' });
                 hit.dataset.id = e.id; hit.dataset.kind = 'edge'; layer.appendChild(hit);
             });
-            if (selection && !(selection.kind === 'node' ? doc.nodes : doc.edges).some(function (x) { return x.id === selection.id; })) { selection = null; host.selected(null, 'redraw'); }
+            var kept = selections.filter(function (s) { return (s.kind === 'node' ? doc.nodes : doc.edges).some(function (x) { return x.id === s.id; }); });
+            if (kept.length !== selections.length) { select(kept, 'redraw'); }
             if (!camera) { fit(); } else { view(); }
         }
         function preview(box, guides) {
             layer.querySelectorAll('.dg-cv-preview, .dg-cv-guide').forEach(function (e) { e.remove(); });
-            var n = selectedNode(), moving = drag.kind === 'move' ? M.members(doc, n.id) : [];
+            var n = drag.node, moving = drag.kind === 'move' ? M.movingIds(doc, selections) : [];
             var changed = new Set([n.id].concat(moving));
             [Object.assign({}, n, box)].concat(doc.nodes.filter(function (x) { return x.id !== n.id && changed.has(x.id) && !J.isAnchor(x); }).map(function (x) { return Object.assign({}, x, { x: x.x + box.x - n.x, y: x.y + box.y - n.y }); })).forEach(function (x) {
                 layer.appendChild(svg('rect', { x: x.x - out.origin[0], y: x.y - out.origin[1], width: x.width, height: x.height, 'class': 'dg-cv-preview' }));
@@ -175,9 +190,14 @@
             else if (grip && selectedNode()) { drag = { kind: grip.dataset.kind, handle: grip.dataset.grip, node: Object.assign({}, selectedNode()), point: p }; }
             else if (host.tool()) { host.create(Math.round(p.x), Math.round(p.y)); e.preventDefault(); return; }
             else if (hit) {
-                select({ kind: hit.dataset.kind, id: hit.dataset.id }, 'pointer');
+                var s = { kind: hit.dataset.kind, id: hit.dataset.id }, contains = selections.some(function (x) { return x.kind === s.kind && x.id === s.id; });
+                if (e.shiftKey || e.ctrlKey || e.metaKey) {
+                    select(contains ? selections.filter(function (x) { return x.kind !== s.kind || x.id !== s.id; }) : selections.concat([s]), 'pointer');
+                    e.preventDefault(); return;
+                }
+                select(contains ? selections.filter(function (x) { return x.kind !== s.kind || x.id !== s.id; }).concat([s]) : s, 'pointer');
                 if (selection.kind === 'node') { drag = { kind: 'move', node: Object.assign({}, selectedNode()), point: p }; }
-            } else { select(null, 'pointer'); }
+            } else { drag = { kind: 'marquee', point: p, base: e.shiftKey || e.ctrlKey || e.metaKey ? selections.slice() : [] }; }
             if (drag) {
                 autoFit = false;
                 e.preventDefault(); drag.pointer = e.pointerId; drag.text = host.text(); drag.px = e.clientX; drag.py = e.clientY;
@@ -192,6 +212,12 @@
             if (host.text() !== drag.text || !host.enabled()) { cancel(); return; }
             var p = point(e), dx = Math.round(p.x - drag.point.x), dy = Math.round(p.y - drag.point.y);
             drag.moved = drag.moved || Math.hypot(e.clientX - drag.px, e.clientY - drag.py) >= 3;
+            if (drag.kind === 'marquee') {
+                layer.querySelectorAll('.dg-cv-preview').forEach(function (x) { x.remove(); });
+                drag.box = { x: Math.min(p.x, drag.point.x), y: Math.min(p.y, drag.point.y), width: Math.abs(p.x - drag.point.x), height: Math.abs(p.y - drag.point.y) };
+                layer.appendChild(svg('rect', { x: drag.box.x - out.origin[0], y: drag.box.y - out.origin[1], width: drag.box.width, height: drag.box.height, 'class': 'dg-cv-preview' }));
+                return;
+            }
             if (drag.kind === 'connect' || drag.kind === 'reconnect') {
                 previewConnection(drag, p);
                 return;
@@ -205,7 +231,7 @@
                 var tip = { x: west ? box.x : box.x + box.width, y: north ? box.y : box.y + box.height, width: 0, height: 0 };
                 snapped = M.snap(tip, doc.nodes, [drag.node.id], 5 / scale, e.altKey);
                 box = M.resize(drag.node, drag.handle, /[ew]/.test(drag.handle) ? snapped.box.x - (west ? drag.node.x : drag.node.x + drag.node.width) : 0, /[ns]/.test(drag.handle) ? snapped.box.y - (north ? drag.node.y : drag.node.y + drag.node.height) : 0, e.shiftKey);
-            } else { snapped = M.snap(box, doc.nodes, [drag.node.id].concat(M.members(doc, drag.node.id)), 5 / scale, e.altKey); box = snapped.box; }
+            } else { snapped = M.snap(box, doc.nodes, M.movingIds(doc, selections), 5 / scale, e.altKey); box = snapped.box; }
             drag.box = box; preview(box, e.shiftKey && drag.kind === 'resize' ? [] : snapped.guides);
         }
         function up(e) {
@@ -214,11 +240,17 @@
             if (!drag) { return; }
             var d = drag, p = point(e);
             cancel();
+            if (d.kind === 'marquee' && host.text() === d.text && host.enabled()) {
+                var b = d.box, picked = !d.moved || !b ? [] : doc.nodes.filter(function (n) {
+                    return !J.isAnchor(n) && n.x >= b.x && n.y >= b.y && n.x + n.width <= b.x + b.width && n.y + n.height <= b.y + b.height;
+                }).map(function (n) { return { kind: 'node', id: n.id }; });
+                select(d.base.concat(picked), 'pointer'); return;
+            }
             if (host.text() !== d.text || !d.moved || !host.enabled()) { return; }
             if (d.kind === 'connect' || d.kind === 'reconnect') {
                 host.edit(connectionRequest(d, p), d.text);
             } else if (d.box) {
-                host.edit(d.kind === 'move' ? { op: 'move', key: d.node.id, dx: d.box.x - d.node.x, dy: d.box.y - d.node.y } : { op: 'resize', key: d.node.id, x: d.box.x, y: d.box.y, width: d.box.width, height: d.box.height }, d.text);
+                host.edit(d.kind === 'move' ? { op: 'move', items: selections.slice(), dx: d.box.x - d.node.x, dy: d.box.y - d.node.y } : { op: 'resize', key: d.node.id, x: d.box.x, y: d.box.y, width: d.box.width, height: d.box.height }, d.text);
             }
         }
         function cancel() {
@@ -257,7 +289,7 @@
         place.addEventListener('pointercancel', cancel); place.addEventListener('lostpointercapture', cancel); place.addEventListener('wheel', wheel, { passive: false });
         window.addEventListener('keyup', keyup); window.addEventListener('blur', blur);
         var ro = new ResizeObserver(function () { if (!destroyed) { cancel(); if (camera && !autoFit) { view(); } else { fit(); } } }); ro.observe(stage);
-        return { show: show, selected: function () { return selection; }, select: select, reveal: reveal, cycle: cycle, onKey: onKey, fit: fit, zoom: zoom, actual: function () { zoom(1 / scale); }, pan: pan, cancel: cancel,
+        return { show: show, selected: function () { return selection; }, selections: function () { return selections.map(function (s) { return Object.assign({}, s); }); }, select: select, reveal: reveal, cycle: cycle, onKey: onKey, fit: fit, zoom: zoom, actual: function () { zoom(1 / scale); }, pan: pan, cancel: cancel,
             centre: function () { return camera ? { x: Math.round(camera.x + camera.w / 2), y: Math.round(camera.y + camera.h / 2) } : { x: 0, y: 0 }; },
             destroy: function () {
                 destroyed = true; cancel(); ro.disconnect(); window.removeEventListener('keyup', keyup); window.removeEventListener('blur', blur);

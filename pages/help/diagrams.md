@@ -31,7 +31,7 @@ File, New Diagram starts a D2 diagram in one of eight styles: a flowchart, an ar
 
 The text pane colours the language as you type, numbers its lines and keeps its own undo history for each open diagram. Edit has Undo, Redo and Find and Replace, and Go, Go to Line moves to a line by its number. In a D2 diagram, typing a dot or a colon after a shape offers what can follow there, such as the shapes after `shape:` and the style names after `style.`, and Ctrl+Space offers them anywhere.
 
-When the text has a mistake in it, the last drawing that worked stays in place, dimmed, and a notice above it says what is wrong and on which line. The line is underlined in the text, and the mark in the margin gives the message too. Diagram, Tidy the Text writes a D2 diagram's text as D2's own formatter does, with even spacing and indents, and Undo puts it back.
+When the text has a mistake in it, the last drawing that worked stays in place, dimmed, and a notice above it says what is wrong and on which line. The line is underlined in the text, and the mark in the margin gives the message too. Edit, Tidy the Text writes a D2 diagram's text as D2's own formatter does, with even spacing and indents, and Undo puts it back.
 
 The View menu shows the text, the drawing or both, and Drawing chooses which side of the text the drawing sits on. Fit the Drawing to the Pane shrinks a large drawing to fit, and with it off the drawing shows at its own size and scrolls.
 
@@ -66,7 +66,11 @@ Every change on the drawing is a change to the text, made through D2's own editi
 
 Selecting a canvas node or connector highlights its JSON object in the source. Moving the caret within that object highlights the item in the drawing and brings it into view. These selections leave the text unchanged.
 
-The inspector's Horizontal Alignment and Vertical Alignment fields position a text node's content within the shape's usable interior. Choose Left, Centre or Right, and Top, Middle or Bottom. Shape Default removes that override. With both axes at Shape Default, rectangle, rounded rectangle, text-only, document and package shapes place text at the top-left inset; the other shapes centre it. Shape, Drawing Tool offers the drawing tools through a submenu, which becomes a menu button in ribbon mode.
+The inspector's Horizontal Alignment and Vertical Alignment segments position a text node's content within the shape's usable interior. Choose Left, Center or Right, and Top, Middle or Bottom. Default removes that override. With both axes at Default, rectangle, rounded rectangle, text-only, document and package shapes place text at the top-left inset; the other shapes center it. Shape, Drawing Tool offers the drawing tools through a submenu, which becomes a menu button in ribbon mode.
+
+Shift-click or Ctrl/Command-click adds or removes an item from the selection. Drag an empty area around nodes to select those fully inside the rectangle. Edit, Select All Items selects everything, and Edit, Select Items opens a checkbox list for choosing any subset from the keyboard. Dragging a selected node or pressing an arrow key moves the selected nodes together. A group carries its contents once, including when a contained node is also selected. Undo reverses the complete move or shared property edit in one step.
+
+The inspector shows only properties supported by every selected item. Differing values are marked Mixed; choosing a value applies it to the whole selection. Color has a custom-color picker, six preset swatches and a Default reset. Line Style and connector Route use segmented controls. Drag the divider beside the inspector to change its width, or focus the divider and use the arrow keys. Enter resets its width. Single-item operations such as reconnecting an endpoint require one item selected.
 
 A canvas is a diagram where every shape stays where it was put, as on a whiteboard. Its file is JSON Canvas 1.0, the format Obsidian and other applications read, so a canvas made here opens there with the same cards in the same places joined by the same connectors. File, New Canvas starts one. Each node has a place and a size in pixels, and a text node holds Markdown, which the drawing shows with its headings, lists, emphasis and links.
 
@@ -84,7 +88,7 @@ A canvas is a diagram where every shape stays where it was put, as on a whiteboa
 
 JSON Canvas draws every node as a card and every connector end as an arrow or nothing. The `yavc` property adds what it lacks: thirteen shapes, connectors drawn as elbows, straight lines or curves, dashed and dotted lines, and more kinds of end, including the crow's feet of an entity relationship diagram. [The canvas extension](https://github.com/paulmooreparks/yavc.app/blob/main/docs/canvas-extension.md) lists them all. An application that does not know the property still draws the file sensibly, as cards with arrows, because Diagrams keeps the format's own properties in agreement with it. A connector's route is worked out each time from the two nodes and the sides it joins, so it is never stored.
 
-Diagram, Tidy the Text writes a canvas in one steady layout, with two spaces of indent and each object's properties in the order the format lists them, so that a change shows in a comparison as only the lines it changed. Editing the drawing uses this layout too. Each gesture is one change in the text's Undo history. A downloaded picture of a canvas draws the text of each node as plain words, keeping paragraphs and dropping the rest of the Markdown, so it can differ a little from the screen. A canvas cannot be embedded in a document yet.
+Edit, Tidy the Text writes a canvas in one steady layout, with two spaces of indent and each object's properties in the order the format lists them, so that a change shows in a comparison as only the lines it changed. Editing the drawing uses this layout too. Each gesture is one change in the text's Undo history. A downloaded picture of a canvas draws the text of each node as plain words, keeping paragraphs and dropping the rest of the Markdown, so it can differ a little from the screen. A canvas cannot be embedded in a document yet.
 
 Click a node or connector to select it. Tab moves through them in drawing order, and Shift+Tab moves back. Tab after the last item, or Shift+Tab before the first, leaves the drawing. Drag a node to move it. The square handles resize it, with Shift keeping its proportions. Movement snaps to an eight-pixel grid and nearby edges and centres; dashed lines show matches, and Alt disables snapping. Arrow keys move a node by one pixel, or eight with Shift. Shape, Resize (R) and the inspector's numeric fields provide keyboard resizing. Escape cancels a drag.
 
@@ -104,7 +108,7 @@ A D2 diagram takes the site's colours, so it follows light and dark mode and the
 
 ## In documents and slides
 
-Diagram, Copy as Embed puts the diagram on the clipboard as a fenced block, which the Editor and Slides draw wherever it is pasted. The block contains the diagram's text, so it is drawn the same in any document. File, Open in the Editor opens the diagram's file as text in the Editor.
+Edit, Copy as Embed puts the diagram on the clipboard as a fenced block, which the Editor and Slides draw wherever it is pasted. The block contains the diagram's text, so it is drawn the same in any document. File, Open in the Editor opens the diagram's file as text in the Editor.
 
 ## Downloading
 

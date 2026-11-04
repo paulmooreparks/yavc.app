@@ -909,6 +909,21 @@
               "toSide"
             ]
           },
+          "items": {
+            "description": "An explicit typed selection for one atomic move, resize, set or delete. Group movement carries contained nodes once. key and kind are ignored when items is provided.",
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 5000,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["id", "kind"],
+              "properties": {
+                "id": { "type": "string", "maxLength": 1024 },
+                "kind": { "enum": ["node", "edge"] }
+              }
+            }
+          },
           "value": {
             "type": [
               "string",
@@ -1083,6 +1098,20 @@
             "type": "number",
             "minimum": 0.1,
             "maximum": 10
+          },
+          "items": {
+            "description": "For select, replaces the selection with these typed items. An empty array clears selection. Takes precedence over key and kind.",
+            "type": "array",
+            "maxItems": 5000,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["id", "kind"],
+              "properties": {
+                "id": { "type": "string", "maxLength": 1024 },
+                "kind": { "enum": ["node", "edge"] }
+              }
+            }
           }
         }
       },
