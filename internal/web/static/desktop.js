@@ -75,21 +75,27 @@
     document.addEventListener('click', function (e) {
         var link = e.target.closest && e.target.closest('a[data-dialog]');
         if (link) {
+            if (e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) { return; }
             var dialog = document.getElementById(link.getAttribute('data-dialog'));
             if (!dialog || !dialog.showModal) { return; }
+            var url = new URL(link.href);
+            if (url.origin !== location.origin) { return; }
+            url.search = location.search;
             e.preventDefault();
-            history.pushState(history.state, '', link.getAttribute('href'));
+            history.pushState(history.state, '', url);
             openDialog(dialog, true);
             return;
         }
     });
     document.addEventListener('close', function (e) {
-        if (reopening || !(e.target instanceof HTMLDialogElement) || !e.target.classList.contains('about-dialog')) { return; }
+        if (reopening || !(e.target instanceof HTMLDialogElement) || !e.target.classList.contains('about-dialog') || e.target.open) { return; }
         if (dialogPushed) { dialogPushed = false; history.back(); }
         else if (/\/about(\/pudl)?$/.test(location.pathname)) { history.replaceState(history.state, '', '/' + location.search); }
     }, true);
     window.addEventListener('popstate', function () {
-        document.querySelectorAll('dialog.about-dialog[open]').forEach(function (d) { dialogPushed = false; d.close(); });
+        var id = location.pathname === '/about' ? 'about-site' : location.pathname === '/about/pudl' ? 'about-pudl' : null;
+        document.querySelectorAll('dialog.about-dialog[open]').forEach(function (d) { if (d.id !== id) { dialogPushed = false; d.close(); } });
+        if (id) { openDialog(document.getElementById(id), true); }
     });
     function startDialogs() {
         document.querySelectorAll('dialog.about-dialog[open]').forEach(function (d) { openDialog(d, false); });

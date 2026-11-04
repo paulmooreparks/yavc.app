@@ -45,7 +45,7 @@ func TestHelpPages(t *testing.T) {
 }
 
 // Each page's Help menu links to every help page and to the contents; on
-// the desktop the links open windows.
+// both the desktop and standalone applications the links open windows.
 func TestHelpMenu(t *testing.T) {
 	s := helpSite(t)
 	desktop := req(t, s, "GET", site("/"), "").Body.String()
@@ -55,9 +55,31 @@ func TestHelpMenu(t *testing.T) {
 		}
 	}
 	standalone := req(t, s, "GET", "http://dice."+testDomain+"/", "").Body.String()
-	for _, want := range []string{`href="http://` + testDomain + `/help/dice">Dice Help</a>`, `href="http://` + testDomain + `/help">Help Contents</a>`} {
+	for _, want := range []string{`href="/?open=help-dice&amp;top=help-dice" data-win-open="help-dice">Dice Help</a>`, `href="/?open=help&amp;top=help" data-win-open="help">Help Contents</a>`} {
 		if !strings.Contains(standalone, want) {
 			t.Errorf("the standalone page's Help menu has no %s", want)
+		}
+	}
+}
+
+func TestStandaloneInformationWindowsAndAbout(t *testing.T) {
+	s := helpSite(t)
+	for _, slug := range []string{"author", "agents", "privacy", "terms"} {
+		write(t, s.Pages, slug+".md", "# "+slug+"\n\nInformation.\n")
+		page := req(t, s, "GET", "http://dice."+testDomain+"/?file=kept&open="+slug+"&top="+slug, "").Body.String()
+		for _, want := range []string{`data-applet="dice"`, `data-win="` + slug + `"`, `data-win-src="/win/{key}"`, `data-menubar-windows`, `/pudl/pudl-windows.js?v=`, `/pudl/pudl-windows.css?v=`, `href="/about?file=kept&amp;open=`, `data-win-open="privacy"`} {
+			if !strings.Contains(page, want) {
+				t.Errorf("standalone %s missing %s", slug, want)
+			}
+		}
+	}
+	if page := req(t, s, "GET", "http://dice."+testDomain+"/?open=dice&top=dice", "").Body.String(); !strings.Contains(page, `data-win="dice"`) {
+		t.Error("standalone reload lost the applet window opened through Help content")
+	}
+	page := req(t, s, "GET", "http://dice."+testDomain+"/about/pudl?file=kept&open=author&top=author", "").Body.String()
+	for _, want := range []string{`data-applet="dice"`, `data-win="author"`, `id="about-pudl" aria-labelledby="about-pudl-title" open`} {
+		if !strings.Contains(page, want) {
+			t.Errorf("standalone About page missing %s", want)
 		}
 	}
 }

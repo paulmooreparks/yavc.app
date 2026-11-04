@@ -111,11 +111,6 @@
   .dg-handle:hover, .dg-handle-grip:hover + .dg-handle { fill: Highlight; }
   .dg-handle-grip { fill: transparent; stroke: none; }
 }
-/* The palette sits over the drawing of a D2 diagram, and not a Mermaid one
-   or a canvas, which is drawn and not yet edited (docs/canvas-design.md, C1). */
-.dg-palette { flex: none; min-width: 0; padding: var(--space-1) var(--space-2); border-bottom: 1px solid var(--border); background: var(--surface-alt); }
-.dg[data-kind="mermaid"] .dg-palette { display: none; }
-
 /* === The inspector (milestone D3) ========================================= */
 /* Beside the drawing, a column of PUDL's sunken fields for what is
    selected; it scrolls on its own, and narrows the drawing rather than

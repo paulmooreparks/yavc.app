@@ -54,6 +54,24 @@
             selection = s;
             mark(); host.selected(s, how || 'key');
         }
+        function reveal() {
+            if (!selection || !camera || camera.w <= 0 || camera.h <= 0) { return; }
+            var n = selectedNode(), edge = !n && out.edges.find(function (e) { return e.id === selection.id; });
+            var b = n ? { x: n.x, y: n.y, w: n.width, h: n.height } : edge ? {
+                x: Math.min(edge.fromPoint[0], edge.toPoint[0]) + out.origin[0], y: Math.min(edge.fromPoint[1], edge.toPoint[1]) + out.origin[1],
+                w: Math.abs(edge.fromPoint[0] - edge.toPoint[0]), h: Math.abs(edge.fromPoint[1] - edge.toPoint[1])
+            } : null;
+            if (!b) { return; }
+            var pad = 16 / scale, moved = false;
+            [['x', 'w'], ['y', 'h']].forEach(function (a) {
+                var p = a[0], size = a[1], next = camera[p];
+                if (b[size] > camera[size] - pad * 2) { next = b[p] + b[size] / 2 - camera[size] / 2; }
+                else if (b[p] < camera[p] + pad) { next = b[p] - pad; }
+                else if (b[p] + b[size] > camera[p] + camera[size] - pad) { next = b[p] + b[size] - camera[size] + pad; }
+                if (next !== camera[p]) { moved = true; camera[p] = next; }
+            });
+            if (moved) { autoFit = false; view(); }
+        }
         function mark() {
             layer.querySelectorAll('.dg-cv-ring').forEach(function (e) { e.remove(); });
             grips.replaceChildren();
@@ -239,7 +257,7 @@
         place.addEventListener('pointercancel', cancel); place.addEventListener('lostpointercapture', cancel); place.addEventListener('wheel', wheel, { passive: false });
         window.addEventListener('keyup', keyup); window.addEventListener('blur', blur);
         var ro = new ResizeObserver(function () { if (!destroyed) { cancel(); if (camera && !autoFit) { view(); } else { fit(); } } }); ro.observe(stage);
-        return { show: show, selected: function () { return selection; }, select: select, cycle: cycle, onKey: onKey, fit: fit, zoom: zoom, actual: function () { zoom(1 / scale); }, pan: pan, cancel: cancel,
+        return { show: show, selected: function () { return selection; }, select: select, reveal: reveal, cycle: cycle, onKey: onKey, fit: fit, zoom: zoom, actual: function () { zoom(1 / scale); }, pan: pan, cancel: cancel,
             centre: function () { return camera ? { x: Math.round(camera.x + camera.w / 2), y: Math.round(camera.y + camera.h / 2) } : { x: 0, y: 0 }; },
             destroy: function () {
                 destroyed = true; cancel(); ro.disconnect(); window.removeEventListener('keyup', keyup); window.removeEventListener('blur', blur);

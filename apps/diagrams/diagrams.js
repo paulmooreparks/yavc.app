@@ -142,12 +142,6 @@
             '<div class="dg-main" data-role="main">' +
               '<div class="dg-work split" data-role="work">' +
                 '<div class="dg-stagebox split-pane" data-role="stagebox">' +
-                  /* The palette, a toolbar of its own over the drawing, so
-                     the main toolbar keeps its groups; PUDL draws its
-                     latched buttons from the command table's dg-tool choice. */
-                  '<div class="toolbar dg-palette" role="toolbar" aria-label="Palette" data-toolbar-fold><div class="toolbar-group" role="group" data-toolbar-group="Palette" data-toolbar-glyph="yavc-select">' +
-                    ['select'].concat(PALETTE.map(function (k) { return k[0]; })).map(function (k) { return '<button type="button" data-command="tool-' + k + '"></button>'; }).join('') +
-                  '</div></div>' +
                   '<div class="dg-body" data-role="body">' +
                     '<div class="dg-stage" data-role="stage" tabindex="0" role="region" aria-label="The Drawing" aria-describedby="dg-keys-' + n + '"><div class="dg-canvas" data-role="canvas"></div></div>' +
                     '<aside class="dg-inspector" data-role="inspector" aria-label="Inspector" hidden></aside>' +
@@ -386,15 +380,10 @@
                 svg.style.backgroundColor = palette.bg;
                 place.classList.remove('sc-diagram-stale');
                 place.replaceChildren(svg);
-                t.cvDoc = got.doc; t.cvText = text;
+                t.cvDoc = got.doc; t.cvText = text; t.cvRanges = canvasRanges(text);
                 if (!t.cv) {
                     t.cv = V.attach(place, el.stage, {
-                        selected: function (s, how) {
-                            if (t !== current()) { return; }
-                            if (how === 'pointer') { el.stage.focus({ preventScroll: true }); }
-                            say(s ? 'Selected ' + s.kind + ' "' + s.id + '".' : '');
-                            commandsChanged(); renderInspector();
-                        },
+                        selected: function (s, how) { canvasSelectionChanged(t, s, how); },
                         enabled: function () { return t === current() && t.text === t.cvText && !t.place.classList.contains('sc-diagram-stale'); },
                         text: function () { return t.text; },
                         tool: function () { return tool; }, panTool: function () { return canvasPan; },
@@ -404,12 +393,53 @@
                 }
                 t.cv.show(got.doc, out, svg);
                 if (t.cvPending) { t.cv.select(t.cvPending, 'edit'); t.cvPending = null; }
+                else if (cm && cm.hasFocus) { followCanvasCursor(t, cm.state.selection.main.head); }
                 richText(t, got.doc, out, svg, palette, isCurrent);
             }
             return { svg: out.svg, width: out.width, height: out.height, problems: [] };
         }
         /* === Editing JSON Canvas ========================================= */
         function canvasSelection() { var t = current(); return t && t.cv ? t.cv.selected() : null; }
+        /* CodeMirror's JSON parser supplies offsets. Only objects directly
+           in nodes/edges are indexed, so nested IDs and escaped keys cannot
+           select the wrong item. JSON.parse has already validated the file. */
+        function canvasRanges(text) {
+            var object = language('canvas').language.parser.parse(text).topNode.getChild('Object'), ranges = [];
+            function property(obj, key) {
+                return obj.getChildren('Property').filter(function (p) { var name = p.getChild('PropertyName'); return name && JSON.parse(text.slice(name.from, name.to)) === key; }).pop();
+            }
+            ['nodes', 'edges'].forEach(function (key) {
+                var prop = object && property(object, key), list = prop && prop.getChild('Array');
+                if (!list) { return; }
+                list.getChildren('Object').forEach(function (obj) {
+                    var id = property(obj, 'id'), value = id && id.getChild('String');
+                    if (value) { ranges.push({ id: JSON.parse(text.slice(value.from, value.to)), kind: key === 'nodes' ? 'node' : 'edge', from: obj.from, to: obj.to }); }
+                });
+            });
+            return ranges;
+        }
+        function canvasSelectionChanged(t, s, how) {
+            if (t !== current()) { return; }
+            if (how === 'pointer') { el.stage.focus({ preventScroll: true }); }
+            if (how !== 'cursor') {
+                say(s ? 'Selected ' + s.kind + ' "' + s.id + '".' : '');
+                var range = s && (t.cvRanges || []).find(function (r) { return r.id === s.id && r.kind === s.kind; });
+                if (range && cm && t.cvText === t.text) {
+                    quiet = true;
+                    try { cm.dispatch({ selection: { anchor: range.from, head: range.to }, effects: CM.EditorView.scrollIntoView(range.from, { y: 'center' }) }); } finally { quiet = false; }
+                }
+            }
+            commandsChanged(); renderInspector();
+        }
+        function followCanvasCursor(t, pos) {
+            if (!t.cv || t.cvText !== t.text) { return; }
+            var range = (t.cvRanges || []).find(function (r) { return pos >= r.from && pos < r.to; });
+            if (range && range.kind === 'node' && window.yavcCanvas.isAnchor(t.cvDoc.nodes.find(function (n) { return n.id === range.id; }))) { range = null; }
+            var s = t.cv.selected();
+            if ((!range && !s) || (range && s && range.id === s.id && range.kind === s.kind)) { return; }
+            t.cv.select(range ? { id: range.id, kind: range.kind } : null, 'cursor');
+            if (range) { t.cv.reveal(); }
+        }
         function canvasWhy(needs) {
             var t = current(), s = canvasSelection();
             if (!t || t.kind !== 'canvas') { return 'Open a canvas first.'; }
@@ -592,7 +622,7 @@
                 c('zoom-in', 'Zoom In', function () { current().cv.zoom(1.25); }, '+', false, 'plus'),
                 c('zoom-out', 'Zoom Out', function () { current().cv.zoom(0.8); }, '-', false, 'minus'),
                 c('actual', 'Actual Size', function () { current().cv.actual(); }, '1', false),
-                Object.assign(c('pan', 'Pan', function () { setCanvasPan(!canvasPan); }, 'h', false, 'move'), { choice: 'dg-tool', choiceLabel: 'Palette', value: 'pan', checked: function () { return canvasPan; } })
+                Object.assign(c('pan', 'Pan', function () { setCanvasPan(!canvasPan); }, 'h', false, 'move'), { choice: 'dg-tool', choiceLabel: 'Drawing Tool', value: 'pan', checked: function () { return canvasPan; } })
             ];
             [['left', 'Left', -1, 0], ['right', 'Right', 1, 0], ['up', 'Up', 0, -1], ['down', 'Down', 0, 1]].forEach(function (d) {
                 commands.push(c(d[0], 'Move ' + d[1], function () { canvasRequest({ op: 'move', dx: d[2], dy: d[3] }); }, 'Arrow' + d[1], 'shape'));
@@ -953,6 +983,7 @@
            where it stands, the innermost when they nest. */
         function followCursor(pos) {
             var t = current();
+            if (t && t.kind === 'canvas') { followCanvasCursor(t, pos); return; }
             if (!t || !t.canvas || !t.outline) { return; }
             var best = null, size = Infinity;
             [].concat(t.outline.shapes || [], t.outline.connections || []).forEach(function (it) {
@@ -1530,11 +1561,11 @@
                 { id: 'shape-type', label: 'Shape', glyph: 'square', hidden: function () { return !isD2(); }, disabled: function () { return !!whyNot('shape'); }, reason: function () { return whyNot('shape'); },
                     current: function () { var t = current(), s = t && shapeOf(t, selection()); var f = s && SHAPES.find(function (x) { return x[0] === s.shape; }); return f ? f[1] : null; },
                     items: SHAPES.map(function (sh) { return { id: 'shape-type-' + sh[0], label: sh[1], choice: 'dg-shape', value: sh[0], checked: function () { var t = current(), s = t && shapeOf(t, selection()); return !!s && s.shape === sh[0]; }, run: function () { setShape(sh[0]); } }; }) },
-                { id: 'tool-select', label: 'Select', glyph: 'yavc-select', choice: 'dg-tool', choiceLabel: 'Palette', value: 'select', hidden: function () { return !isD2() && !isCanvas(); },
+                { id: 'tool-select', label: 'Select', glyph: 'yavc-select', choice: 'dg-tool', choiceLabel: 'Drawing Tool', value: 'select', hidden: function () { return !isD2() && !isCanvas(); },
                     checked: function () { return !tool && !canvasPan; }, run: function () { setTool(null); } }
             ].concat(PALETTE.map(function (k) {
                 return { id: 'tool-' + k[0], label: k[1], glyph: 'yavc-shape-' + k[0], // check-ignore(glyph-defined): one glyph for each PALETTE kind, each defined on :root in diagrams.css as --glyph-yavc-shape-<kind>
-                     choice: 'dg-tool', choiceLabel: 'Palette', value: k[0],
+                     choice: 'dg-tool', choiceLabel: 'Drawing Tool', value: k[0],
                     hidden: function () { return (!isD2() && !isCanvas()) || (k[0] === 'rounded' && !isCanvas()); }, disabled: function () { return !!whyNot(false); }, reason: function () { return whyNot(false); },
                     checked: function () { return tool === k[0]; }, run: function () { setTool(tool === k[0] ? null : k[0]); } };
             })).concat([

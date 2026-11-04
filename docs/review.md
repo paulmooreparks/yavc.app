@@ -187,6 +187,20 @@ Browser inspection also caught a one-pixel error in positive coordinates entered
 
 The complete 183-file `dist` set came from the published `pudl-0.97.10.zip` archive, whose SHA-256 is `c87f04a61d496e0ba01e8be6231a0fd3009c2c2cac7a1f743aab45de0bfdc8d8`. The downloaded checksum matches, and each copied file matches the archive. The release includes the 0.97.9 skin-notification fix and the 0.97.10 window-selector changes. The canvas and D2 theme observers no longer carry the workaround for unchanged skin notifications. The focused browser regression runs against this complete asset set. This adoption makes no claim about the upstream streaming-performance measurements in yavc.app.
 
+## Canvas source selection and standalone Help
+
+Diagrams 0.13.0 links canvas selection with JSON object ranges from the existing JSON parser. It handles escaped keys and IDs, nested unknown properties and IDs shared by a node and an edge. Canvas selection scrolls the source without taking focus; source navigation reveals the drawing item without changing text. The duplicate palette was removed, leaving the existing Shape commands and ribbon. Text alignment remains shape-dependent and is documented in Help.
+
+Standalone Help pages now use the existing PUDL window layer, dock and Window menu. About links stay on the application's origin and retain its query parameters, with Back and Forward opening and closing the dialog. Modified clicks retain normal browser behavior. Server tests guard local links, restored page and applet windows, and About addresses. The focused browser command is `node scripts/test-diagram-chrome.cjs chromium firefox webkit` against a disposable server on port 8412. It checks selection in both directions, unchanged text and focus, Help windows over the same applet instance, About history and reload in Diagrams, Editor and Slides. Evidence is saved in the temporary `yavc-diagram-chrome` folder.
+
+The PUDL source review caught the missing Window menu, applet windows lost on reload and intercepted modified About clicks. Each was corrected, and the focused source re-review found no remaining issues. The new browser suite passed in Chromium, Firefox and WebKit, including source-driven camera reveal without focus loss. The existing canvas suite's resize test also exposed a measurement error: a hovered hit shape's bounding box includes its stroke in Firefox. Its scale now comes from the SVG screen transform, as the endpoint suite already does. The existing canvas suite passes in all three engines, and the full repository checks pass. PUDL's agent owns issue #32 for missing ribbon-choice glyphs; this change does not patch PUDL.
+
+## PUDL 0.97.11 adoption
+
+The candidate includes the complete 187-file `dist` set from the published `pudl-0.97.11.zip`. Its SHA-256 is `7f22d176d23104ce7bb3b6a8bc0f6694f830724f6b65995a1eeda5aadc9bd75e`, matching the published checksum. Every installed file matches the archive, with no extra files. No vendor files were patched locally.
+
+The release fixes command-choice glyphs through `fillChoice`, but the Shape ribbon uses the separate `ribbonSeg` path, which still writes labels alone. Opening a canvas, enabling the ribbon and selecting Shape reproduces the missing glyphs in Chromium, Firefox and WebKit. Screenshots are retained as `yavc-ribbon-{engine}.png` in the temporary folder. The source and Help browser suite passes with the new assets in all three engines. The remaining ribbon defect belongs upstream.
+
 ## Items for other projects
 
 These problems belong to PUDL or to applets that are maintained elsewhere, so they were reported instead of patched here.

@@ -67,11 +67,11 @@ async function run(engine) {
         await undo(); assert.equal(await text(), initial);
 
         await hit('a').click();
-        let b = await hit('a').boundingBox(), scale = b.width / 160;
+        let b = await hit('a').boundingBox(), scale = await hit('a').evaluate(e => e.getScreenCTM().a);
         await drag(hit('a'), 34 * scale, 18 * scale);
         assert.deepEqual((await doc()).nodes[0], { ...fixture().nodes[0], x: -128, y: -24 });
         await undo(); assert.equal(await text(), initial);
-        await hit('a').click(); b = await hit('a').boundingBox(); scale = b.width / 160;
+        await hit('a').click(); b = await hit('a').boundingBox(); scale = await hit('a').evaluate(e => e.getScreenCTM().a);
         await drag(hit('a'), 13 * scale, 7 * scale, ['Alt']);
         // Browser input can quantize subpixel screen coordinates before
         // the camera converts them to whole file pixels.
@@ -89,11 +89,11 @@ async function run(engine) {
         await action('set-text', { text: JSON.stringify(updated) }); await page.mouse.up(); await idle();
         assert.equal((await doc()).nodes[0].text, 'Changed during a drag'); assert.equal((await doc()).nodes[0].x, -160);
 
-        await set(fixture()); await hit('a').click(); b = await hit('a').boundingBox(); scale = b.width / 160;
+        await set(fixture()); await hit('a').click(); b = await hit('a').boundingBox(); scale = await hit('a').evaluate(e => e.getScreenCTM().a);
         await drag(page.locator('[data-grip="se"][data-kind="resize"]'), 40 * scale, 20 * scale, ['Alt', 'Shift']);
         let d = await doc(); assert.equal(d.nodes[0].width, 200); assert.equal(d.nodes[0].height, 100); assert.equal(d.nodes[0].x, -160);
         await undo();
-        await hit('a').click(); b = await hit('a').boundingBox(); scale = b.width / 160;
+        await hit('a').click(); b = await hit('a').boundingBox(); scale = await hit('a').evaluate(e => e.getScreenCTM().a);
         await drag(page.locator('[data-grip="nw"][data-kind="resize"]'), 16 * scale, 8 * scale, ['Alt']);
         d = await doc(); assert.equal(d.nodes[0].x, -144); assert.equal(d.nodes[0].y, -32); assert.equal(d.nodes[0].width, 144); assert.equal(d.nodes[0].height, 72);
         await undo();
@@ -201,7 +201,7 @@ async function run(engine) {
         await page.locator('.dg-hit-shape').first().waitFor();
         assert.equal(await page.locator('[data-command="tool-rounded"]').isVisible(), false);
         await action('new', { kind: 'mermaid', text: 'graph TD\n a --> b' });
-        assert.equal(await page.locator('.dg-palette').isVisible(), false);
+        assert.equal(await page.locator('.dg-palette').count(), 0);
         assert.deepEqual(errors, []);
         console.log(engine + ' ' + browser.version() + ': canvas pointer, keyboard, undo, inspector, groups, source, exports and renderer smoke passed');
     } catch (err) {

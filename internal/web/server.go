@@ -584,7 +584,12 @@ func (s *Server) pageData(r *http.Request, title string) map[string]any {
 	if sess != nil {
 		state, config = sess.State, sess.Config
 	}
+	suffix := ""
+	if r.URL.RawQuery != "" {
+		suffix = "?" + r.URL.RawQuery
+	}
 	return map[string]any{
+		"AboutSite": "/about" + suffix, "AboutPUDL": "/about/pudl" + suffix,
 		"Site": s.Title, "Title": title, "SiteURL": s.siteURL(r),
 		"Appearance": s.appearanceOf(sess), "Skins": s.skinList, "Palettes": s.paletteList,
 		"State": state, "Config": config,
@@ -624,6 +629,22 @@ func (s *Server) rootWith(w http.ResponseWriter, r *http.Request, dialog string)
 		data["Standalone"] = true
 		data["AppletHelp"] = s.helpFor(name)
 		data["Dialog"] = dialog
+		// Standalone applications keep site information in floating windows
+		// over their own page, with the open set represented in its URL.
+		d := parseDesktop(r.URL.Query())
+		links := map[string]string{}
+		for _, k := range []string{"help", "author", "agents", "privacy", "terms"} {
+			links[k] = d.openWindow(k)
+		}
+		for _, h := range s.helpEntries() {
+			links["help-"+h["Name"]] = d.openWindow("help-" + h["Name"])
+		}
+		data["WindowLinks"] = links
+		var wins strings.Builder
+		for _, k := range d.open {
+			wins.WriteString(s.windowMarkup(r, data, d, k))
+		}
+		data["Windows"] = template.HTML(wins.String())
 		s.render(w, http.StatusOK, "standalone", data)
 	case "desktop":
 		data := s.pageData(r, s.Title)

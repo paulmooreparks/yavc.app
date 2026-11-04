@@ -88,6 +88,16 @@ func (d desktopState) copy() desktopState {
 	return c
 }
 
+func (d desktopState) openWindow(key string) string {
+	c := d.copy()
+	if !slices.Contains(c.open, key) {
+		c.open = append(c.open, key)
+	}
+	c.min = slices.DeleteFunc(c.min, func(k string) bool { return k == key })
+	c.top = key
+	return c.String()
+}
+
 // front chooses the window in front after key left the shown ones.
 func (d *desktopState) front(key string) {
 	if d.top != key {
