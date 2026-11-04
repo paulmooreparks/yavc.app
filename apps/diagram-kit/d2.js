@@ -296,7 +296,12 @@
     }
     /* The site's mode, colour theme and skin choose the colours, so a
        change of any of them draws every diagram on the page again. */
-    new MutationObserver(redrawAll).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'data-palette', 'data-skin'] });
+    /* Only a value that changed counts: PUDL's skins write data-skin again,
+       unchanged, after any change to the page, which a drawing would
+       otherwise answer by drawing again, and again (pudl#33). */
+    new MutationObserver(function (records) {
+        if (records.some(function (r) { return r.oldValue !== document.documentElement.getAttribute(r.attributeName); })) { redrawAll(); }
+    }).observe(document.documentElement, { attributes: true, attributeOldValue: true, attributeFilter: ['data-theme', 'data-palette', 'data-skin'] });
     if (window.matchMedia) { window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', redrawAll); }
 
     window.yavcD2Engine = Object.freeze({ compile: compile, draw: draw, call: call, version: function () { return request('version', '').then(function (o) { return o && o.d2; }); } });

@@ -3,12 +3,12 @@
   "version": "1.0.0",
   "apiVersion": 1,
   "title": "Diagrams",
-  "description": "Diagrams as D2 or Mermaid text files: read, write and draw the diagrams open in Diagrams, read a D2 diagram's structure and change it shape by shape, and export the drawing.",
+  "description": "Diagrams as D2, Mermaid or JSON Canvas text files: read, write and draw the diagrams open in Diagrams, read a D2 diagram's structure and change it shape by shape, and export the drawing.",
   "actions": [
     {
       "ref": "yavc.diagrams/open@1",
       "title": "Open in Diagrams",
-      "description": "Open a diagram file (.d2, .mmd or .mermaid) in Diagrams for the person at the page, in a new tab of its window.",
+      "description": "Open a diagram file (.d2, .mmd, .mermaid or .canvas) in Diagrams for the person at the page, in a new tab of its window.",
       "handles": "diagram",
       "inputSchema": {
         "type": "object",
@@ -57,7 +57,7 @@
     {
       "ref": "yavc.diagrams/diagrams@1",
       "title": "List the Open Diagrams",
-      "description": "The diagrams open in Diagrams, each with its number, name, file, language (d2 or mermaid), whether it has unsaved changes, and its view.",
+      "description": "The diagrams open in Diagrams, each with its number, name, file, language (d2, mermaid or canvas), whether it has unsaved changes, and its view.",
       "live": true,
       "inputSchema": {
         "type": "object",
@@ -102,7 +102,8 @@
                 "kind": {
                   "enum": [
                     "d2",
-                    "mermaid"
+                    "mermaid",
+                    "canvas"
                   ]
                 },
                 "modified": {
@@ -165,7 +166,8 @@
           "kind": {
             "enum": [
               "d2",
-              "mermaid"
+              "mermaid",
+              "canvas"
             ]
           },
           "modified": {
@@ -205,7 +207,7 @@
     {
       "ref": "yavc.diagrams/new@1",
       "title": "Start a Diagram",
-      "description": "A new, unsaved diagram in a tab of its own: the starter of a style, or the text given. D2 styles are flowchart, architecture, sequence, entity, class, state, org and grid; Mermaid ones are flowchart, sequence, class, state, entity, gantt, pie, mindmap, timeline, journey and git. Returns whether it drew and, if not, its mistakes.",
+      "description": "A new, unsaved diagram in a tab of its own: the starter of a style, or the text given. D2 styles are flowchart, architecture, sequence, entity, class, state, org and grid; Mermaid ones are flowchart, sequence, class, state, entity, gantt, pie, mindmap, timeline, journey and git. A canvas (JSON Canvas 1.0 with the extension in docs/canvas-extension.md) has one starter. Returns whether it drew and, if not, its mistakes.",
       "live": true,
       "inputSchema": {
         "type": "object",
@@ -214,7 +216,8 @@
           "kind": {
             "enum": [
               "d2",
-              "mermaid"
+              "mermaid",
+              "canvas"
             ],
             "default": "d2"
           },
@@ -256,7 +259,8 @@
           "kind": {
             "enum": [
               "d2",
-              "mermaid"
+              "mermaid",
+              "canvas"
             ]
           },
           "modified": {
@@ -343,7 +347,8 @@
           "kind": {
             "enum": [
               "d2",
-              "mermaid"
+              "mermaid",
+              "canvas"
             ]
           },
           "modified": {
@@ -410,7 +415,8 @@
           "kind": {
             "enum": [
               "d2",
-              "mermaid"
+              "mermaid",
+              "canvas"
             ]
           },
           "modified": {
@@ -492,7 +498,8 @@
           "kind": {
             "enum": [
               "d2",
-              "mermaid"
+              "mermaid",
+              "canvas"
             ]
           },
           "modified": {
@@ -711,7 +718,7 @@
     {
       "ref": "yavc.diagrams/format@1",
       "title": "Tidy a Diagram's Text",
-      "description": "Write a D2 diagram's text as D2's own formatter does, as one change the person can undo. A text with a mistake is left as it is.",
+      "description": "Write a D2 diagram's text as D2's own formatter does, or a canvas's in its stable form, as one change the person can undo. A text with a mistake is left as it is.",
       "live": true,
       "inputSchema": {
         "type": "object",

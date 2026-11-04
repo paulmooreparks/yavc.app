@@ -55,6 +55,10 @@ Three things matter for this design. The format has no shapes, since every node 
 | C3. Keyboard and outline | Every gesture from the keyboard, the Outline pane, align and distribute, and the actions for agents | About 1,000 lines, 1 to 2 sessions |
 | C4. Conversion and embedding | Convert to and from D2, the `{{diagram}}` embed for canvases, and a check that a file round-trips through Obsidian's reading of the format | About 800 lines, 1 session |
 
+### Progress
+
+C1 was built on 2026-11-04. `docs/canvas-extension.md` states the extension, version 1. `apps/diagram-kit/jcanvas.js` reads a canvas against the specification and the extension, writes it in the stable form, routes its connectors and draws it as SVG; it needs no DOM, and `apps/diagram-kit/test/jcanvas.test.mjs` tests it under Node from `scripts/check.sh`. Diagrams opens `.canvas` files as a third kind, with JSON colouring and the reader's problems marked in the text, File, New Canvas, Tidy the Text in the stable form, export to SVG and PNG, and the agent actions. On the screen each text node's Markdown is drawn by the Markdown engine and the cleaner in a `foreignObject`, with any applet in it left unstarted; the export keeps the SVG text. The six presets are a fixed set for a light background and another for a dark one, since PUDL's category colours are not the red to purple the specification gives them. Files opens a `.canvas` in Diagrams. The view is read-only, and the drawing is fitted to its contents with a margin; pan and zoom (open question 3) come with C2.
+
 The remaining work of the D2 editor (the Outline pane, arrow keys along connections, a new shape's place among its siblings) waits behind C2, since the canvas is where Paul wants hand placement, and some of it (the Outline pane) can be shared.
 
 ## Open questions

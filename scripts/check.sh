@@ -44,6 +44,11 @@ go build -o /dev/null ./cmd/yavc
 GOOS=js GOARCH=wasm go build -o /dev/null ./cmd/yavc-md
 GOOS=js GOARCH=wasm go build -o /dev/null ./cmd/yavc-d2
 
+step "Browser module tests"
+# Modules that need no DOM, tested under Node: the JSON Canvas reader,
+# writer and renderer (docs/canvas-extension.md).
+node --test 'apps/*/test/*.test.mjs'
+
 step "The project's own rules"
 node scripts/check.mjs "${since[@]}"
 

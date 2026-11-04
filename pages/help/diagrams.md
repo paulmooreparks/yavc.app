@@ -1,6 +1,6 @@
 # Diagrams Help
 
-[Diagrams](/diagrams) draws a diagram from a text file and shows the drawing beside the text, redrawing it as you type. It reads two languages: [D2](https://d2lang.com), in files named `something.d2`, and [Mermaid](https://mermaid.js.org), in files named `something.mmd` or `something.mermaid`. The file is the whole diagram, so anything that can open a text file can read it. Diagrams runs in a window on the desktop and on its own at `diagrams.yavc.app`.
+[Diagrams](/diagrams) draws a diagram from a text file and shows the drawing beside the text, redrawing it as you type. It reads two languages: [D2](https://d2lang.com), in files named `something.d2`, and [Mermaid](https://mermaid.js.org), in files named `something.mmd` or `something.mermaid`. It also draws canvases, freeform diagrams in the open [JSON Canvas](https://github.com/obsidianmd/jsoncanvas) format, in files named `something.canvas`. The file is the whole diagram, so anything that can open a text file can read it. Diagrams runs in a window on the desktop and on its own at `diagrams.yavc.app`.
 
 ## The file
 
@@ -62,9 +62,31 @@ D2 decides where a line meets a shape, so the side you drag a connection from do
 
 Every change on the drawing is a change to the text, made through D2's own editing, so Undo takes it back as it does typing, and the text is always the whole diagram. D2 writes the whole text again in its own layout as it makes a change, which tidies the spacing and keeps every comment; the first time it does this in a file, the status line says so. D2 places the shapes itself, so a new shape goes where the layout puts it rather than where you clicked. While the text has a mistake in it, the drawing cannot be changed until the mistake is put right.
 
+## Canvases
+
+A canvas is a diagram where every shape stays where it was put, as on a whiteboard. Its file is JSON Canvas 1.0, the format Obsidian and other applications read, so a canvas made here opens there with the same cards in the same places joined by the same connectors. File, New Canvas starts one. Each node has a place and a size in pixels, and a text node holds Markdown, which the drawing shows with its headings, lists, emphasis and links.
+
+```
+{
+  "nodes": [
+    { "id": "start", "type": "text", "x": 0, "y": 0, "width": 180, "height": 80, "text": "**Start** here", "yavc": { "shape": "rounded" } },
+    { "id": "next", "type": "text", "x": 300, "y": 0, "width": 180, "height": 80, "text": "Then this", "color": "5" }
+  ],
+  "edges": [
+    { "id": "start-next", "fromNode": "start", "fromSide": "right", "toNode": "next", "toSide": "left", "toEnd": "arrow" }
+  ]
+}
+```
+
+JSON Canvas draws every node as a card and every connector end as an arrow or nothing. The `yavc` property adds what it lacks: thirteen shapes, connectors drawn as elbows, straight lines or curves, dashed and dotted lines, and more kinds of end, including the crow's feet of an entity relationship diagram. [The canvas extension](https://github.com/paulmooreparks/yavc.app/blob/main/docs/canvas-extension.md) lists them all. An application that does not know the property still draws the file sensibly, as cards with arrows, because Diagrams keeps the format's own properties in agreement with it. A connector's route is worked out each time from the two nodes and the sides it joins, so it is never stored.
+
+Diagram, Tidy the Text writes a canvas in one steady layout, with two spaces of indent and each object's properties in the order the format lists them, so that a change shows in a comparison as only the lines it changed. A canvas is read-only on its drawing for now; you change it in its text, and editing on the drawing comes next. A downloaded picture of a canvas draws the text of each node as plain words, keeping paragraphs and dropping the rest of the Markdown, so it can differ a little from the screen. A canvas cannot be embedded in a document yet.
+
+Diagrams refuses a canvas over 2 MB or with more than 5,000 nodes and connectors, and one that has two nodes with the same id or a connector to a node that is not there; the notice says what is wrong, and the place is marked in the text. A link node shows its address as text and is not followed, and a file node shows the file's name. A link written in a text node's Markdown is shown as its words, without the link, since the drawing is a picture.
+
 ## Colours
 
-A D2 diagram takes the site's colours, so it follows light and dark mode and the colour theme you chose in View. A diagram that sets its own `theme-id` or `theme-overrides` in a `vars: {d2-config: {...}}` block keeps them. Mermaid diagrams use Mermaid's own light and dark themes.
+A D2 diagram takes the site's colours, so it follows light and dark mode and the colour theme you chose in View. A diagram that sets its own `theme-id` or `theme-overrides` in a `vars: {d2-config: {...}}` block keeps them. Mermaid diagrams use Mermaid's own light and dark themes. A canvas takes the site's colours too, and its six preset colours (red, orange, yellow, green, cyan and purple, written `"1"` to `"6"`) have a lighter set in dark mode.
 
 ## In documents and slides
 

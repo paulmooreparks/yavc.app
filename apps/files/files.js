@@ -197,8 +197,8 @@
         function openInEditor(node) {
             /* A deck (a file named .slides.md) opens in Slides, where the site has it. */
             if (/\.slides\.md$/i.test(node.name) && window.pudlApplets.can && window.pudlApplets.can('present') && request('present', { path: F.displayPath(F.realOf(node)) })) { return; }
-            /* A diagram (.d2, .mmd or .mermaid) opens in Diagrams, where the site has it (docs/diagrams-design.md, decision 1). */
-            if (/\.(d2|mmd|mermaid)$/i.test(node.name) && window.pudlApplets.can && window.pudlApplets.can('diagram') && request('diagram', { path: F.displayPath(F.realOf(node)) })) { return; }
+            /* A diagram (.d2, .mmd, .mermaid or .canvas) opens in Diagrams, where the site has it (docs/diagrams-design.md, decision 1). */
+            if (/\.(d2|mmd|mermaid|canvas)$/i.test(node.name) && window.pudlApplets.can && window.pudlApplets.can('diagram') && request('diagram', { path: F.displayPath(F.realOf(node)) })) { return; }
             if (!request('open', { path: F.displayPath(F.realOf(node)), kind: F.kindOf(node) })) { say('Nothing on this site opens ' + node.name + '.', true); }
         }
 

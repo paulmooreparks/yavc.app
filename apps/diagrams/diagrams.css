@@ -111,9 +111,10 @@
   .dg-handle:hover, .dg-handle-grip:hover + .dg-handle { fill: Highlight; }
   .dg-handle-grip { fill: transparent; stroke: none; }
 }
-/* The palette sits over the drawing of a D2 diagram, and not a Mermaid one. */
+/* The palette sits over the drawing of a D2 diagram, and not a Mermaid one
+   or a canvas, which is drawn and not yet edited (docs/canvas-design.md, C1). */
 .dg-palette { flex: none; min-width: 0; padding: var(--space-1) var(--space-2); border-bottom: 1px solid var(--border); background: var(--surface-alt); }
-.dg[data-kind="mermaid"] .dg-palette { display: none; }
+.dg[data-kind="mermaid"] .dg-palette, .dg[data-kind="canvas"] .dg-palette { display: none; }
 
 /* === The inspector (milestone D3) ========================================= */
 /* Beside the drawing, a column of PUDL's sunken fields for what is
@@ -132,4 +133,21 @@
 .dg-row > .form-select-wrap { flex: 1 1 auto; min-width: 0; }
 .dg-inspector-fields { border: 0; padding: 0; margin: 0; min-width: 0; }
 .dg-inspector-blocked { margin: 0 0 var(--space-3); }
-.dg[data-kind="mermaid"] .dg-inspector { display: none; }
+.dg[data-kind="mermaid"] .dg-inspector, .dg[data-kind="canvas"] .dg-inspector { display: none; }
+
+/* === A canvas (docs/canvas-design.md) ===================================== */
+/* A text node's Markdown, drawn as HTML over its shape (decision 6), at the
+   size and colour the picture's SVG text uses, cut off at the node's edge
+   as the format's own applications do. */
+.dg-cv-text { box-sizing: border-box; width: 100%; height: 100%; overflow: hidden; padding: 6px 8px; font-size: 14px; line-height: 1.3; overflow-wrap: anywhere; }
+.dg-cv-text.is-centred { display: flex; flex-direction: column; justify-content: center; text-align: center; }
+.dg-cv-text > :first-child { margin-top: 0; }
+.dg-cv-text > :last-child { margin-bottom: 0; }
+.dg-cv-text :is(p, ul, ol, pre, blockquote, table) { margin: 0 0 0.5em; }
+.dg-cv-text :is(h1, h2, h3, h4, h5, h6) { margin: 0 0 0.35em; line-height: 1.2; }
+.dg-cv-text h1 { font-size: 1.4em; }
+.dg-cv-text h2 { font-size: 1.25em; }
+.dg-cv-text :is(h3, h4, h5, h6) { font-size: 1.1em; }
+.dg-cv-text :is(ul, ol) { padding-inline-start: 1.2em; }
+.dg-cv-text.is-centred :is(ul, ol) { text-align: start; }
+.dg-cv-text img { max-width: 100%; height: auto; }
