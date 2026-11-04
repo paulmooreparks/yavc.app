@@ -62,6 +62,8 @@ Each decision is dated and numbered so that later documents and cards can refer 
 
 31. **Standalone applications retain their page when opening site information** (2026-11-04, Paul). Help, the author, agent guidance, privacy and terms open in PUDL floating windows over the running application. Their open, minimised and active state uses the existing window query parameters, so reload restores the windows. About dialogs use addresses on the application's own origin and retain its query parameters. Back and Forward follow the dialog address without restarting the application.
 
+32. **Canvas text position can be set on either axis** (2026-11-04, Paul). The inspector and existing canvas edit action expose horizontal and vertical alignment independently, with optional properties in the documented extension and shared resolution for live text and SVG exports. Shape Default preserves existing files' placement. Drawing tools move into a submenu so the ribbon offers a compact picker instead of a large segmented control. `docs/canvas-design.md`, decisions 21 and 22, states both contracts.
+
 ## Addresses
 
 `yavc.app` serves the desktop, which is windowed only (decision 26). A window's content comes from `/win/{key}`. `yavc.app/{slug}` opens the desktop with that application's window, or draws a site page as a page of its own. `{slug}.yavc.app` serves the same application standalone, and it is the application's page form. The engine answers both from one deployment: a wildcard DNS record points every subdomain at it, and the engine reads the host header to choose the standalone layout for the application whose slug matches. A subdomain whose slug matches no application redirects to the desktop.

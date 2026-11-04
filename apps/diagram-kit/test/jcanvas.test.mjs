@@ -14,6 +14,33 @@ const PALETTE = { text: '#111111', muted: '#555555', line: '#333333', surface: '
 const node = (id, x, y, extra) => Object.assign({ id, type: 'text', x, y, width: 100, height: 60, text: id }, extra);
 const file = (o) => JSON.stringify(o);
 
+test('text alignment resolves both axes independently and survives round-trip', () => {
+  for (const shape of ['rectangle', 'diamond']) {
+    const doc = { nodes: [node('a', 0, 0, { text: 'One\nTwo', yavc: { shape } })], edges: [] };
+    const original = jc.render(doc, { palette: PALETTE }).boxes[0].text;
+    assert.equal(original.align, shape === 'rectangle' ? 'left' : 'center');
+    assert.equal(original.vertical, shape === 'rectangle' ? 'top' : 'middle');
+    for (const align of ['left', 'center', 'right']) {
+      const positions = [];
+      for (const vertical of ['top', 'middle', 'bottom']) {
+        doc.nodes[0].yavc = { shape, textAlign: align, textVerticalAlign: vertical };
+        const round = jc.read(jc.write(doc)); assert.deepEqual(round.problems, []);
+        assert.deepEqual(round.doc.nodes[0].yavc, doc.nodes[0].yavc);
+        const out = jc.render(round.doc, { palette: PALETTE }), box = out.boxes[0].text;
+        assert.equal(box.align, align); assert.equal(box.vertical, vertical);
+        const text = out.svg.match(/<g data-text="a"><text x="([\d.-]+)" y="([\d.-]+)"[^>]*text-anchor="([^"]+)"/);
+        assert.ok(text); assert.equal(text[3], { left: 'start', center: 'middle', right: 'end' }[align]);
+        assert.equal(Number(text[1]), Number((align === 'left' ? box.x + 8 : align === 'right' ? box.x + box.w - 8 : box.x + box.w / 2).toFixed(1)));
+        positions.push(Number(text[2]));
+      }
+      assert.ok(positions[0] < positions[1] && positions[1] < positions[2]);
+    }
+  }
+  for (const yavc of [{ textAlign: 'justify' }, { textVerticalAlign: 'center' }, { textAlign: 1 }]) {
+    assert.ok(jc.read(file({ nodes: [node('a', 0, 0, { yavc })], edges: [] })).problems.length);
+  }
+});
+
 test('an empty file is an empty canvas', () => {
   const r = jc.read('');
   assert.deepEqual(r.problems, []);

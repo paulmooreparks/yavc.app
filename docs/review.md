@@ -201,6 +201,12 @@ The candidate includes the complete 187-file `dist` set from the published `pudl
 
 The release fixes command-choice glyphs through `fillChoice`, but the Shape ribbon uses the separate `ribbonSeg` path, which still writes labels alone. Opening a canvas, enabling the ribbon and selecting Shape reproduces the missing glyphs in Chromium, Firefox and WebKit. Screenshots are retained as `yavc-ribbon-{engine}.png` in the temporary folder. The source and Help browser suite passes with the new assets in all three engines. The remaining ribbon defect belongs upstream.
 
+## Drawing-tool picker and canvas text alignment
+
+Diagrams 0.14.0 moves drawing tools into the Shape menu's Drawing Tool submenu, so PUDL creates a ribbon menu button rather than a fourteen-position segmented control. Following Paul's clarification, the commands retain glyphs and individual checked state without radio-choice metadata. Clicking an active shape tool again returns to selection mode. The browser suite checks both directions of that toggle and the absence of radio items. PUDL currently converts consecutive radio rows into segments without considering the number of choices; the host menu hierarchy and command choice metadata determine which rendering path is used.
+
+Text nodes now expose independent horizontal and vertical alignment settings in the inspector and `canvas-edit@1`. The additive extension properties are validated and retained in JSON, with Shape Default removing the chosen override. Existing shape-dependent defaults remain. Live Markdown and SVG export use the resolved alignment within the same text inset. Module tests cover all nine combinations, export anchors and positions, round-tripping, validation, independent resets and preservation of unrelated properties. The focused browser suite passed in Chromium, Firefox and WebKit, covering inspector edits, undo, default restoration and the ribbon picker with glyphs and checked state. Chromium also passed the existing canvas editor suite. The PUDL review caught an unsupported empty picker for Mermaid; conditional menu construction and a browser absence check fixed it, and the re-review found no remaining issues.
+
 ## Items for other projects
 
 These problems belong to PUDL or to applets that are maintained elsewhere, so they were reported instead of patched here.

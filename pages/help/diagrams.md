@@ -52,7 +52,7 @@ A D2 diagram can also be changed on its drawing, in the Visual and Split views. 
 
 The Shape menu has the same commands, and Shape chooses the kind of shape, such as an oval, a diamond, a cylinder or a person. A double click on a shape edits its label too.
 
-Choose a drawing tool from the Shape menu or its ribbon, then click the drawing. A click on empty space puts the new shape at the top of the diagram, and a click on a shape puts it inside that shape, which makes that shape a container. The tool goes back to Select after each shape, and Escape goes back to it at any time. N places the chosen kind too.
+Choose a drawing tool from Shape, Drawing Tool, then click the drawing. The ribbon offers the same picker as a menu button. Each shape tool is a toggle; choosing the active tool again returns to Select. A click on empty space puts the new shape at the top of the diagram, and a click on a shape puts it inside that shape, which makes that shape a container. The tool goes back to Select after each shape, and Escape goes back to it at any time. N places the chosen kind too.
 
 A selected shape has a round handle on each side. Drag from the handle to another shape to connect them, or to empty space to connect it to a new shape of the palette's kind. Drag a selected shape onto another shape to move it inside, or onto empty space to move it out to the top of the diagram; its connections follow it. Shape, Move Into does the same from the keyboard, asking for the container's name, and Shape, Move to the Top takes it out again. A connection to a new shape is N and then C from the keyboard. While you drag, the shape it would land on has a dashed edge.
 
@@ -66,7 +66,7 @@ Every change on the drawing is a change to the text, made through D2's own editi
 
 Selecting a canvas node or connector highlights its JSON object in the source. Moving the caret within that object highlights the item in the drawing and brings it into view. These selections leave the text unchanged.
 
-Text placement currently follows the shape. Rectangle, rounded rectangle, text-only, document and package shapes place text at the top-left inset. The other shapes centre it within their usable interior. There is no alignment setting yet. Shape tools are available through the Shape menu or its ribbon.
+The inspector's Horizontal Alignment and Vertical Alignment fields position a text node's content within the shape's usable interior. Choose Left, Centre or Right, and Top, Middle or Bottom. Shape Default removes that override. With both axes at Shape Default, rectangle, rounded rectangle, text-only, document and package shapes place text at the top-left inset; the other shapes centre it. Shape, Drawing Tool offers the drawing tools through a submenu, which becomes a menu button in ribbon mode.
 
 A canvas is a diagram where every shape stays where it was put, as on a whiteboard. Its file is JSON Canvas 1.0, the format Obsidian and other applications read, so a canvas made here opens there with the same cards in the same places joined by the same connectors. File, New Canvas starts one. Each node has a place and a size in pixels, and a text node holds Markdown, which the drawing shows with its headings, lists, emphasis and links.
 

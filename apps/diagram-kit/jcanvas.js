@@ -125,6 +125,8 @@
             if (n.yavc.anchor != null && typeof n.yavc.anchor !== 'boolean') { return where + '\'s anchor must be a boolean.'; }
             if (isAnchor(n) && (n.type !== 'text' || n.text !== '' || n.width !== 0 || n.height !== 0 || n.yavc.shape !== 'text' || !Number.isSafeInteger(n.x) || !Number.isSafeInteger(n.y))) { return where + ' is a point anchor and must be empty text with shape text, zero size and integer coordinates.'; }
             if (n.yavc.shape != null && SHAPES.indexOf(n.yavc.shape) < 0) { return where + '\'s shape "' + n.yavc.shape + '" is not one of ' + SHAPES.join(', ') + '.'; }
+            if (n.yavc.textAlign != null && (n.type !== 'text' || ['left', 'center', 'right'].indexOf(n.yavc.textAlign) < 0)) { return where + '\'s textAlign must be left, center or right on a text node.'; }
+            if (n.yavc.textVerticalAlign != null && (n.type !== 'text' || ['top', 'middle', 'bottom'].indexOf(n.yavc.textVerticalAlign) < 0)) { return where + '\'s textVerticalAlign must be top, middle or bottom on a text node.'; }
             var lp = lineProblem(n.yavc);
             if (lp) { return where + lp; }
         }
@@ -357,14 +359,15 @@
         });
         return out;
     }
-    function textBlock(md, x, y, w, h, colour, size, centred) {
+    function textBlock(md, x, y, w, h, colour, size, align, vertical) {
         var lines = [];
         plainLines(md).forEach(function (p, i) { if (i) { lines.push(''); } lines = lines.concat(wrap(p, w - 16, size)); });
         var lh = size * 1.3, maxLines = Math.max(1, Math.floor((h - 8) / lh));
         if (lines.length > maxLines) { lines = lines.slice(0, maxLines); lines[maxLines - 1] += '…'; }
-        var top = centred ? y + h / 2 - (lines.length * lh) / 2 + size : y + 8 + size;
-        return '<text x="' + (centred ? x + w / 2 : x + 8).toFixed(1) + '" y="' + top.toFixed(1) + '" font-size="' + size + '" fill="' + esc(colour) + '"' + (centred ? ' text-anchor="middle"' : '') + '>' +
-            lines.map(function (l, i) { return '<tspan x="' + (centred ? x + w / 2 : x + 8).toFixed(1) + '"' + (i ? ' dy="' + lh.toFixed(1) + '"' : '') + '>' + esc(l || ' ') + '</tspan>'; }).join('') + '</text>';
+        var top = vertical === 'middle' ? y + h / 2 - (lines.length * lh) / 2 + size : vertical === 'bottom' ? y + h - 8 - lines.length * lh + size : y + 8 + size;
+        var tx = align === 'center' ? x + w / 2 : align === 'right' ? x + w - 8 : x + 8, anchor = align === 'center' ? 'middle' : align === 'right' ? 'end' : 'start';
+        return '<text x="' + tx.toFixed(1) + '" y="' + top.toFixed(1) + '" font-size="' + size + '" fill="' + esc(colour) + '" text-anchor="' + anchor + '">' +
+            lines.map(function (l, i) { return '<tspan x="' + tx.toFixed(1) + '"' + (i ? ' dy="' + lh.toFixed(1) + '"' : '') + '>' + esc(l || ' ') + '</tspan>'; }).join('') + '</text>';
     }
     function bounds(doc, byId) {
         var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -410,16 +413,18 @@
                 var inset = shape === 'person' ? { x: x, y: y + n.height * 0.55, w: n.width, h: n.height * 0.45 } : shape === 'diamond' || shape === 'hexagon' || shape === 'oval' || shape === 'cloud' ? { x: x + n.width * 0.15, y: y + n.height * 0.15, w: n.width * 0.7, h: n.height * 0.7 } : { x: x, y: y, w: n.width, h: n.height };
                 /* Where the text goes, which the screen fills with the
                    Markdown drawn as HTML (decision 6). */
-                inset.centred = shape !== 'rectangle' && shape !== 'rounded' && shape !== 'text' && shape !== 'document' && shape !== 'package';
+                var centred = shape !== 'rectangle' && shape !== 'rounded' && shape !== 'text' && shape !== 'document' && shape !== 'package';
+                inset.align = y2.textAlign || (centred ? 'center' : 'left');
+                inset.vertical = y2.textVerticalAlign || (centred ? 'middle' : 'top');
                 boxes[boxes.length - 1].text = inset;
-                out.push('<g data-text="' + esc(n.id) + '">' + textBlock(n.text, inset.x, inset.y, inset.w, inset.h, cols.text, FONT, inset.centred) + '</g>');
+                out.push('<g data-text="' + esc(n.id) + '">' + textBlock(n.text, inset.x, inset.y, inset.w, inset.h, cols.text, FONT, inset.align, inset.vertical) + '</g>');
             } else if (n.type === 'file') {
                 out.push(element({ tag: 'rect', a: { x: x, y: y, width: n.width, height: n.height, rx: 4 } }, line));
                 var name = String(n.file).replace(/^.*\//, '') + (n.subpath || '');
-                out.push(textBlock(name, x, y, n.width, n.height, cols.text, FONT, false));
+                out.push(textBlock(name, x, y, n.width, n.height, cols.text, FONT, 'left', 'top'));
             } else if (n.type === 'link') {
                 out.push(element({ tag: 'rect', a: { x: x, y: y, width: n.width, height: n.height, rx: 4 } }, line));
-                out.push(textBlock(n.url, x, y, n.width, n.height, pal.text, FONT, false));
+                out.push(textBlock(n.url, x, y, n.width, n.height, pal.text, FONT, 'left', 'top'));
             }
             out.push('</g>');
         });

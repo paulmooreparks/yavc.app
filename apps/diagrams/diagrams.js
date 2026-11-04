@@ -571,7 +571,9 @@
             var html = '<h3 class="dg-inspector-title">' + (s.kind === 'node' ? 'Node' : 'Connector') + '</h3><p class="dg-inspector-id">' + esc(item.id) + '</p>';
             if (item.type === 'text') {
                 html += field(p + 'text', 'Text', '<textarea class="form-input" id="' + p + 'text" data-set="text" data-was="' + esc(item.text) + '" rows="4">' + esc(item.text) + '</textarea>') +
-                    selectField(p + 'shape', 'shape', 'Shape', ext.shape || 'rectangle', [['rectangle', 'Rectangle'], ['rounded', 'Rounded Rectangle']].concat(PALETTE.filter(function (x) { return x[0] !== 'rectangle' && x[0] !== 'rounded'; })));
+                    selectField(p + 'shape', 'shape', 'Shape', ext.shape || 'rectangle', [['rectangle', 'Rectangle'], ['rounded', 'Rounded Rectangle']].concat(PALETTE.filter(function (x) { return x[0] !== 'rectangle' && x[0] !== 'rounded'; }))) +
+                    selectField(p + 'text-align', 'textAlign', 'Horizontal Alignment', ext.textAlign || '', [['', 'Shape Default'], ['left', 'Left'], ['center', 'Centre'], ['right', 'Right']]) +
+                    selectField(p + 'text-vertical-align', 'textVerticalAlign', 'Vertical Alignment', ext.textVerticalAlign || '', [['', 'Shape Default'], ['top', 'Top'], ['middle', 'Middle'], ['bottom', 'Bottom']]);
             } else if (s.kind === 'edge' || item.type === 'group') { html += textField(p + 'label', 'label', 'Label', item.label); }
             if (s.kind === 'node') {
                 ['x', 'y', 'width', 'height'].forEach(function (k) { var size = k === 'width' || k === 'height'; html += numberField(p + k, k, k === 'x' ? 'X' : k === 'y' ? 'Y' : k === 'width' ? 'Width' : 'Height', String(item[k]), size ? 1 : null, size ? Number.MAX_SAFE_INTEGER : null); });
@@ -622,7 +624,7 @@
                 c('zoom-in', 'Zoom In', function () { current().cv.zoom(1.25); }, '+', false, 'plus'),
                 c('zoom-out', 'Zoom Out', function () { current().cv.zoom(0.8); }, '-', false, 'minus'),
                 c('actual', 'Actual Size', function () { current().cv.actual(); }, '1', false),
-                Object.assign(c('pan', 'Pan', function () { setCanvasPan(!canvasPan); }, 'h', false, 'move'), { choice: 'dg-tool', choiceLabel: 'Drawing Tool', value: 'pan', checked: function () { return canvasPan; } })
+                Object.assign(c('pan', 'Pan', function () { setCanvasPan(!canvasPan); }, 'h', false, 'move'), { checked: function () { return canvasPan; } })
             ];
             [['left', 'Left', -1, 0], ['right', 'Right', 1, 0], ['up', 'Up', 0, -1], ['down', 'Down', 0, 1]].forEach(function (d) {
                 commands.push(c(d[0], 'Move ' + d[1], function () { canvasRequest({ op: 'move', dx: d[2], dy: d[3] }); }, 'Arrow' + d[1], 'shape'));
@@ -723,7 +725,9 @@
                     var fo = document.createElementNS('http://www.w3.org/2000/svg', 'foreignObject');
                     fo.setAttribute('x', box.x); fo.setAttribute('y', box.y); fo.setAttribute('width', box.w); fo.setAttribute('height', box.h);
                     var div = document.createElement('div');
-                    div.className = 'dg-cv-text' + (box.centred ? ' is-centred' : '');
+                    div.className = 'dg-cv-text' + (nd.yavc && nd.yavc.textAlign ? '' : ' is-auto-align');
+                    div.style.textAlign = box.align;
+                    div.style.justifyContent = box.vertical === 'middle' ? 'center' : box.vertical === 'bottom' ? 'flex-end' : 'flex-start';
                     div.style.color = palette.text;
                     div.appendChild(frag);
                     fo.appendChild(div);
@@ -1561,11 +1565,10 @@
                 { id: 'shape-type', label: 'Shape', glyph: 'square', hidden: function () { return !isD2(); }, disabled: function () { return !!whyNot('shape'); }, reason: function () { return whyNot('shape'); },
                     current: function () { var t = current(), s = t && shapeOf(t, selection()); var f = s && SHAPES.find(function (x) { return x[0] === s.shape; }); return f ? f[1] : null; },
                     items: SHAPES.map(function (sh) { return { id: 'shape-type-' + sh[0], label: sh[1], choice: 'dg-shape', value: sh[0], checked: function () { var t = current(), s = t && shapeOf(t, selection()); return !!s && s.shape === sh[0]; }, run: function () { setShape(sh[0]); } }; }) },
-                { id: 'tool-select', label: 'Select', glyph: 'yavc-select', choice: 'dg-tool', choiceLabel: 'Drawing Tool', value: 'select', hidden: function () { return !isD2() && !isCanvas(); },
+                { id: 'tool-select', label: 'Select', glyph: 'yavc-select', hidden: function () { return !isD2() && !isCanvas(); },
                     checked: function () { return !tool && !canvasPan; }, run: function () { setTool(null); } }
             ].concat(PALETTE.map(function (k) {
                 return { id: 'tool-' + k[0], label: k[1], glyph: 'yavc-shape-' + k[0], // check-ignore(glyph-defined): one glyph for each PALETTE kind, each defined on :root in diagrams.css as --glyph-yavc-shape-<kind>
-                     choice: 'dg-tool', choiceLabel: 'Drawing Tool', value: k[0],
                     hidden: function () { return (!isD2() && !isCanvas()) || (k[0] === 'rounded' && !isCanvas()); }, disabled: function () { return !!whyNot(false); }, reason: function () { return whyNot(false); },
                     checked: function () { return tool === k[0]; }, run: function () { setTool(tool === k[0] ? null : k[0]); } };
             })).concat([
@@ -1600,7 +1603,7 @@
                 { id: 'file', label: 'File', glyph: 'file', items: ['new', 'new-mermaid', 'new-canvas', 'open', 'save', 'save-as', '-', 'edit-in-editor', '-', 'export-svg', 'export-png', 'export-source', '-', 'close-diagram'] },
                 { id: 'edit', label: 'Edit', glyph: 'pencil', items: ['undo', 'redo', '-', 'cv-copy', 'cv-paste', 'cv-duplicate', 'cv-delete', '-', 'find'] },
                 { id: 'diagram', label: 'Diagram', glyph: 'code', items: ['format-text', 'redraw', '-', 'copy-embed'] },
-                { id: 'shape', label: 'Shape', glyph: 'square', items: ['shape-add', 'shape-add-inside', 'connect', 'cv-new', 'cv-group', 'cv-connect', 'cv-reconnect-start', 'cv-reconnect-end', 'cv-resize', '-', 'shape-label', 'shape-rename', 'shape-type', '-', 'shape-move-into', 'shape-move-top', 'cv-left', 'cv-right', 'cv-up', 'cv-down', 'cv-forward', 'cv-back', '-', 'shape-delete', '-', 'tool-select'].concat(PALETTE.map(function (k) { return 'tool-' + k[0]; })) }
+                { id: 'shape', label: 'Shape', glyph: 'square', items: ['shape-add', 'shape-add-inside', 'connect', 'cv-new', 'cv-group', 'cv-connect', 'cv-reconnect-start', 'cv-reconnect-end', 'cv-resize', '-', 'shape-label', 'shape-rename', 'shape-type', '-', 'shape-move-into', 'shape-move-top', 'cv-left', 'cv-right', 'cv-up', 'cv-down', 'cv-forward', 'cv-back', '-', 'shape-delete'].concat(isD2() || isCanvas() ? ['-', { label: 'Drawing Tool', glyph: 'square', items: ['tool-select'].concat(PALETTE.map(function (k) { return 'tool-' + k[0]; })) }] : []) }
             ], into: { view: ['view-text', 'view-preview', 'view-split', '-', 'dock', 'fit', 'toggle-inspector', '-', 'cv-pan', 'cv-pan-left', 'cv-pan-right', 'cv-pan-up', 'cv-pan-down', 'cv-zoom-in', 'cv-zoom-out', 'cv-actual'], go: ['go-to-line', 'cv-next', 'cv-previous'] } };
         }
         root.addEventListener('pudl:contextmenu', function (e) {

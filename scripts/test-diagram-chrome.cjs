@@ -52,6 +52,52 @@ async function run(engine) {
         await page.locator('.dg-cv-hit[data-id="a-b"]').click();
         assert.equal(await page.locator('.cm-editor').evaluate(e => JSON.parse(window.CM.EditorView.findFromDOM(e).state.sliceDoc(window.CM.EditorView.findFromDOM(e).state.selection.main.from, window.CM.EditorView.findFromDOM(e).state.selection.main.to)).id), 'a-b');
         await page.screenshot({ path: path.join(evidence, engine + '-source-link.png') });
+        const rich = page.locator('g[data-text="a-b"] .dg-cv-text');
+        await rich.waitFor();
+        const editAlignment = async (property, value) => {
+            await page.locator(`[data-set="${property}"]`).selectOption(value);
+            await page.waitForFunction(({ property, value }) => {
+                const cm = window.CM.EditorView.findFromDOM(document.querySelector('.cm-editor'));
+                return (JSON.parse(cm.state.doc.toString()).nodes[0].yavc || {})[property] === (value || undefined);
+            }, { property, value });
+            await page.waitForFunction(() => !document.querySelector('.sc-diagram-stale'));
+            await rich.waitFor();
+        };
+        await editAlignment('textAlign', 'right'); await editAlignment('textVerticalAlign', 'bottom');
+        assert.deepEqual(await rich.evaluate(e => [e.style.textAlign, e.style.justifyContent]), ['right', 'flex-end']);
+        await page.screenshot({ path: path.join(evidence, engine + '-text-alignment.png') });
+        const exported = await action('render', { format: 'svg' });
+        assert.ok(exported.width > 0 && exported.height > 0);
+        await page.locator('.dg-stage').focus(); await page.keyboard.press('Control+z');
+        await page.waitForFunction(() => {
+            const e = document.querySelector('g[data-text="a-b"] .dg-cv-text'); return e && e.style.justifyContent === 'flex-start';
+        });
+        assert.equal(await rich.evaluate(e => e.style.textAlign), 'right');
+        await editAlignment('textVerticalAlign', 'middle');
+        await editAlignment('textAlign', 'center');
+        assert.deepEqual(await rich.evaluate(e => [e.style.textAlign, e.style.justifyContent]), ['center', 'center']);
+        await editAlignment('textAlign', ''); await editAlignment('textVerticalAlign', '');
+        assert.deepEqual(await rich.evaluate(e => [e.style.textAlign, e.style.justifyContent]), ['left', 'flex-start']);
+        await page.getByRole('button', { name: 'Show as ribbon', exact: true }).click();
+        await page.getByRole('tab', { name: 'Shape', exact: true }).click();
+        assert.equal(await page.locator('.menubar-ribbon .seg').count(), 0);
+        const picker = page.locator('.menubar-ribbon').getByRole('button', { name: 'Drawing Tool', exact: true });
+        await picker.click();
+        assert.equal(await page.getByRole('menuitemradio').count(), 0);
+        const oval = page.getByRole('menuitemcheckbox', { name: 'Oval', exact: true });
+        await oval.locator('.glyph').waitFor();
+        assert.equal(await oval.locator('.glyph').count(), 1, await oval.evaluate(e => e.outerHTML));
+        await oval.click();
+        await picker.click();
+        assert.equal(await oval.getAttribute('aria-checked'), 'true');
+        await oval.click();
+        await picker.click();
+        assert.equal(await oval.getAttribute('aria-checked'), 'false');
+        await page.keyboard.press('Escape');
+        await page.setViewportSize({ width: 720, height: 900 });
+        await page.screenshot({ path: path.join(evidence, engine + '-shape-picker.png') });
+        await action('new', { kind: 'mermaid', text: 'graph TD\n a --> b' });
+        await page.waitForFunction(() => !Array.from(document.querySelectorAll('.menubar-ribbon button')).some(e => e.textContent.trim() === 'Drawing Tool'));
         assert.deepEqual(errors, []);
         await page.close();
 
@@ -97,7 +143,7 @@ async function run(engine) {
             assert.deepEqual(errors, []);
             await p.close();
         }
-        console.log(engine + ': source linking and standalone Help/About windows passed for Diagrams, Editor and Slides');
+        console.log(engine + ': source linking, text alignment, shape picker and standalone Help/About windows passed');
     } catch (err) {
         if (activePage && !activePage.isClosed()) { await activePage.screenshot({ path: path.join(evidence, engine + '-failure-' + Date.now() + '.png') }).catch(() => {}); }
         throw err;
