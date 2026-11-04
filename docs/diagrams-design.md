@@ -79,7 +79,7 @@ Each gesture is one operation on the text. The operations are D2 oracle function
 | Drag a shape into or out of a container | Move, which also updates every reference to it |
 | Drag the end of a connection to another shape | Reconnect |
 | Choose Delete | Delete, which also removes its connections |
-| Change the Name field in the inspector | Rename |
+| Choose Rename (F2) | Rename |
 | Change fill, stroke, font, icon, link or tooltip in the inspector | Set on the matching key |
 | Group the selected shapes | Create a container and Move each shape into it |
 | Move a shape or message up or down among its siblings | Reorder, which the oracle does not provide and which is written over the ranges the compile reports |

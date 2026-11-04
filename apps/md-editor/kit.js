@@ -464,7 +464,7 @@
     }
     function pickerRows(fields) {
         return fields.map(function (f, k) {
-            var id = 'md-col-' + dlgCount + '-' + k, v = f.value || '';
+            var id = f.id || ('md-col-' + dlgCount + '-' + k), v = f.value || '';
             return '<div class="form-group md-colour-row"><label class="form-label" for="' + id + '">' + esc(f.label) + '</label>' +
                 '<div class="md-colour-pair"><input type="color" class="md-colour-pick" aria-label="' + esc(f.label) + ' Picker" data-for="' + id + '" value="' + esc(/^#[0-9a-f]{6}$/i.test(v) ? v : (f.fallback || '#000000')) + '">' +
                 '<input class="form-input" id="' + id + '" data-key="' + esc(f.key) + '" value="' + esc(v) + '" placeholder="' + esc(f.placeholder || '') + '" autocomplete="off" spellcheck="false"' + (f.help ? ' aria-describedby="' + id + '-help"' : '') + '></div>' +
