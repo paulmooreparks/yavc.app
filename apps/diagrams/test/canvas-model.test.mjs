@@ -182,6 +182,7 @@ test('drawing order includes groups in the file order', () => {
     assert.ok(first.indexOf('data-node="g"') > first.indexOf('data-node="b"'));
     const changed = M.edit(doc, { op: 'order', key: 'g', direction: 'back' });
     assert.deepEqual(changed.doc.nodes.map(n => n.id), ['a', 'g', 'b']);
+    assert.throws(() => M.edit(doc, { op: 'order', key: 'g', direction: 'left' }), /forward or back/);
     assert.deepEqual(J.render(changed.doc, { palette: pal }).boxes.map(n => n.id), ['a', 'g', 'b']);
 });
 

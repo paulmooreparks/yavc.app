@@ -261,6 +261,8 @@ The first fixture attempts retained failure screenshots. One assertion looked fo
 
 The assembled candidate passed the full repository gate, including Go race tests, vet, vulnerability checks, engine/WebAssembly builds, 42 browser-module tests and repository rules. The new productivity fixture, existing combined Canvas fixture and C2 gesture/export fixture passed Chromium, Firefox and WebKit. The shared Editor/Diagrams LSP lifecycle fixture passed Chromium. Independent PUDL source review is clean after the recorded corrections. These checks use disposable local data and browser processes; they establish no desktop-webview acceptance or production deployment.
 
+The shared action's expanded direction enum also requires operation-specific validation. Drawing order now rejects alignment/distribution directions rather than treating an unknown direction as forward; its model regression covers that refusal.
+
 ## Items for other projects
 
 These problems belong to PUDL or to applets that are maintained elsewhere, so they were reported instead of patched here.

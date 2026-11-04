@@ -229,6 +229,7 @@
             key = '';
         } else if (req.op === 'order') {
             needNode();
+            if (req.direction !== undefined && ['forward', 'back'].indexOf(req.direction) < 0) { throw new Error('Choose forward or back for drawing order.'); }
             var at = doc.nodes.indexOf(n), to = Math.max(0, Math.min(doc.nodes.length - 1, at + (req.direction === 'back' ? -1 : 1)));
             doc.nodes.splice(at, 1); doc.nodes.splice(to, 0, n);
         } else if (req.op === 'duplicate' || req.op === 'paste') {
