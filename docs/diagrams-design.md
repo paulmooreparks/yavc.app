@@ -1,6 +1,6 @@
 # Diagrams: an application for D2 and Mermaid diagrams
 
-Status: designed on 2026-11-03; milestone D1 built on 2026-11-03, and the first part of D2 on 2026-11-04. Paul asked for a Diagrams application at `diagrams.yavc.app` that sits on D2, Mermaid or both, as the Editor and Slides sit on Markdown. It has to create diagrams in a visual editor (placing and connecting elements for a given style of diagram), in a text editor, or in both side by side, and the diagrams have to embed in the Editor and in Slides. He left the choice of language to the designer. The decisions below were taken under that authority, each is marked, and he can overturn any of them.
+Status: designed on 2026-11-03; milestone D1 built on 2026-11-03, and the first parts of D2 and D3 on 2026-11-04. Paul asked for a Diagrams application at `diagrams.yavc.app` that sits on D2, Mermaid or both, as the Editor and Slides sit on Markdown. It has to create diagrams in a visual editor (placing and connecting elements for a given style of diagram), in a text editor, or in both side by side, and the diagrams have to embed in the Editor and in Slides. He left the choice of language to the designer. The decisions below were taken under that authority, each is marked, and he can overturn any of them.
 
 In outline, a diagram is a text file, `something.d2` or `something.mmd`. Diagrams edits D2 visually and as text, and edits Mermaid as text with a live preview. Both draw through engines that run in the browser, so a diagram's text never leaves it. A document embeds a diagram with `{{diagram:path}}`, or with a fenced block when the source should travel inside the document, and either form draws the same way in the Editor, in Slides and in their exports.
 
@@ -174,7 +174,18 @@ Milestone D2 is being built in two parts. The first part (2026-11-04) is the app
 
 Two faults turned up while it was checked in Chromium, and both are fixed. Two requests to draw one place could reach the engine out of order, because a part already loaded was handed to a later caller as a new promise, which ran first; the older request then replaced the newer one and the status stayed at "Drawing…". Every caller now shares one promise per part. And all tabs drew into one element, so a D2 drawing that finished after a switch painted over the Mermaid tab in front; each tab now draws into an element of its own.
 
-The second part is the embedding: the `{{diagram}}` shortcode with its form and Insert entries, live update over a `BroadcastChannel`, icons from the site and the home folder, imports from the diagram's folder, the colouring in the Editor's own text view, and the browser test of Mermaid drawn as an image. Download as PDF and as Word wait for the editing kit's exports (docs/docs-design.md, decision 18).
+Milestone D3 began on 2026-11-04, ahead of the second part of D2, because Paul wanted to draw diagrams on the canvas first; the embedding does not depend on it. Its first part added these.
+
+- The engine's `edit`, which runs D2's oracle on the current text (create, set, delete, rename, move and reconnect) and returns the text as D2's formatter writes it, with golden tests for each operation that pin what D2 0.7.2 writes
+- Each shape's box and each connection's route in the compile's answer, in the drawing's own pixels, taken from the compiled diagram and D2's bounding box and never from the SVG (decision 4), with a test that the boxes lie inside the drawing and that a connection's key is one `edit` accepts
+- The canvas (`apps/diagrams/canvas.js`), a layer of the site's own SVG over the drawing that takes clicks and keys and draws the selection as PUDL's focus ring; it goes back over the picture when the D2 client redraws it for a change of mode
+- Selection both ways between the drawing and the text, through the outline's places
+- The Shape menu and toolbar group: Add Shape (N), Add Shape Inside (Shift+N), Connect To (C, then a click or Enter on the other shape), Edit Label (Enter or a double click), Rename (F2), Shape, and Delete, the keys working only while the drawing has the focus so typing in the text never changes the drawing; the view is called Visual for a D2 diagram
+- The note in the status line the first time a change rewrites an untidy file (decision 5), and the action `edit@1`, so an agent can draw a diagram shape by shape
+
+A new shape is called `item`, because `shape` is one of D2's keywords and D2 renames a shape given that name. Still to come in D3 are the palette, by which a shape is placed by pointing, dragging a connection from a handle, dragging a shape into or out of a container, the inspector for colours and other settings, the Outline pane, and the arrow keys moving along connections rather than in drawing order.
+
+The second part of D2 is the embedding: the `{{diagram}}` shortcode with its form and Insert entries, live update over a `BroadcastChannel`, icons from the site and the home folder, imports from the diagram's folder, the colouring in the Editor's own text view, and the browser test of Mermaid drawn as an image. Download as PDF and as Word wait for the editing kit's exports (docs/docs-design.md, decision 18).
 
 ## Open questions
 

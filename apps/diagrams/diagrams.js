@@ -35,6 +35,7 @@
     function kit() { return once('kit', '/applets/md-editor/kit.js', 'yavcMdEditor'); }
     function modes() { return once('modes', '/applets/diagram-kit/modes.js', 'yavcDiagramModes'); }
     function d2() { return once('d2', '/applets/diagram-kit/d2.js', 'yavcD2Engine'); }
+    function canvasLib() { return once('canvas', '/applets/diagrams/canvas.js', 'yavcDiagramCanvas'); }
 
     /* The styles New offers (decision 7). A style is a starter text; the
        style itself is read from the text, never recorded in the file. */
@@ -62,6 +63,11 @@
         { id: 'mm-git', label: 'Git Graph', text: 'gitGraph\n    commit\n    branch feature\n    commit\n    checkout main\n    merge feature\n    commit\n' }
     ];
     var EXT = { d2: '.d2', mermaid: '.mmd' };
+    /* The shapes the visual editor offers, D2's own names in the order a
+       flowchart and an architecture diagram reach for them (milestone D3). */
+    var SHAPES = [['rectangle', 'Rectangle'], ['square', 'Square'], ['oval', 'Oval'], ['circle', 'Circle'], ['diamond', 'Diamond'], ['hexagon', 'Hexagon'],
+        ['parallelogram', 'Parallelogram'], ['step', 'Step'], ['cylinder', 'Cylinder'], ['queue', 'Queue'], ['stored_data', 'Stored Data'], ['package', 'Package'],
+        ['page', 'Page'], ['document', 'Document'], ['person', 'Person'], ['cloud', 'Cloud'], ['callout', 'Callout'], ['text', 'Text Only']];
     var KIND_NAME = { d2: 'D2', mermaid: 'Mermaid' };
     var VIEWS = [['text', 'Text'], ['preview', 'Preview'], ['split', 'Split']];
     /* Where the drawing sits beside the text, as Slides docks its canvas. */
@@ -148,7 +154,10 @@
                 window.yavcMdEditor.codeTheme(CM), language(t.kind),
                 CM.EditorView.contentAttributes.of({ 'aria-label': 'The Diagram\'s Text' }),
                 CM.linter(lintSource, { delay: DRAW_DELAY }), CM.lintGutter(),
-                CM.EditorView.updateListener.of(function (u) { if (u.docChanged && !quiet) { textChanged(u.state.doc.toString()); } })];
+                CM.EditorView.updateListener.of(function (u) {
+                    if (u.docChanged && !quiet) { textChanged(u.state.doc.toString()); }
+                    else if (u.selectionSet && !quiet && u.view.hasFocus) { followCursor(u.state.selection.main.head); }
+                })];
             if (t.kind === 'd2') { ext.push(CM.autocompletion({ override: [complete], activateOnTyping: true })); }
             return CM.EditorState.create({ doc: text, extensions: ext });
         }
@@ -247,6 +256,7 @@
                 if (seq === drawSeq && t === current()) {
                     t.problems = problems;
                     if (!problems.length) { t.svg = out.svg; t.size = out.width ? { w: out.width, h: out.height } : sizeOfSvg(out.svg); }
+                    if (!problems.length && t.kind === 'd2') { showCanvas(t, out, text); }
                     showOutcome(t);
                 }
                 settle(text, problems);
@@ -285,7 +295,193 @@
             var m = /viewBox="\s*[-\d.]+[\s,]+[-\d.]+[\s,]+([\d.]+)[\s,]+([\d.]+)/.exec(svg || '');
             return m ? { w: Math.ceil(+m[1]), h: Math.ceil(+m[2]) } : null;
         }
-        function applyFit() { el.canvas.classList.toggle('dg-fit', !!settings.fit); }
+        function applyFit() {
+            el.canvas.classList.toggle('dg-fit', !!settings.fit);
+            var t = current();
+            if (t && t.canvas) { t.canvas.fit(); }
+        }
+
+        /* === The visual editor (milestone D3) =============================
+           The drawing of a D2 diagram is a canvas: a layer over it
+           (canvas.js) knows where each shape and connection is, so a click
+           or a key selects one, its text is selected beside it, and every
+           change is one of D2's own edits to the text (decision 5), which
+           Undo takes back like any typing. */
+        function showCanvas(t, out, text) {
+            canvasLib().then(function (C) {
+                if (destroyed) { return; }
+                if (!t.canvas) {
+                    t.canvas = C.attach(t.place, {
+                        selected: function (key, how) { canvasSelected(t, key, how); },
+                        activate: function (key) { if (t === current()) { editLabel(key); } },
+                        pick: function (key) { return t === current() && pickEnd(key); }
+                    });
+                }
+                t.canvas.show(out);
+                if (t.pending != null) { var k = t.pending; t.pending = null; selectKey(t, k, 'edit'); }
+            }).catch(function (err) { say('The drawing cannot be edited here: ' + ((err && err.message) || err), true); });
+            /* Where each shape and connection is written, for the selection
+               in the text, and the labels the commands start from. */
+            d2().then(function (E) { return E.call('outline', { text: text }, 'outline-' + n); }).then(function (o) {
+                if (o && t.text === text) { t.outline = o; commandsChanged(); }
+            }).catch(function () { });
+        }
+        function isConnection(key) { return /^\(/.test(key || ''); }
+        function shapeOf(t, key) { return ((t.outline && t.outline.shapes) || []).find(function (s) { return s.id === key; }) || null; }
+        function connectionOf(t, key) { return ((t.outline && t.outline.connections) || []).find(function (c) { return c.id === key; }) || null; }
+        function describe(t, key) {
+            if (isConnection(key)) {
+                var c = connectionOf(t, key);
+                return c ? 'the connection from ' + c.from + ' to ' + c.to + (c.label ? ', "' + c.label + '"' : '') : 'a connection';
+            }
+            var s = shapeOf(t, key);
+            return s ? '"' + (s.label || s.id) + '" (' + s.id + ', ' + s.shape.replace(/_/g, ' ') + ')' : key;
+        }
+        function selection() { var t = current(); return t && t.canvas ? t.canvas.selected() : null; }
+        function canEdit() { var t = current(); return !!(t && t.kind === 'd2' && t.canvas && !(t.problems && t.problems.length)); }
+        /* A selection on the canvas selects the shape's text beside it,
+           without taking the keyboard from the drawing. */
+        function canvasSelected(t, key, how) {
+            if (t !== current()) { return; }
+            if (how === 'pointer') { el.stage.focus({ preventScroll: true }); }
+            if (key) {
+                say('Selected ' + describe(t, key) + '.');
+                var item = isConnection(key) ? connectionOf(t, key) : shapeOf(t, key), at = item && item.places && item.places[0];
+                if (at && cm && how !== 'cursor') {
+                    quiet = true;
+                    try { cm.dispatch({ selection: { anchor: at.from, head: at.to }, effects: CM.EditorView.scrollIntoView(at.from, { y: 'center' }) }); } finally { quiet = false; }
+                }
+            } else if (how !== 'redraw') { say(''); }
+            commandsChanged();
+        }
+        function selectKey(t, key, how) {
+            if (!t.canvas) { return; }
+            t.canvas.select(key);
+            canvasSelected(t, t.canvas.selected(), how);
+        }
+        /* The cursor in the text selects the shape or connection written
+           where it stands, the innermost when they nest. */
+        function followCursor(pos) {
+            var t = current();
+            if (!t || !t.canvas || !t.outline) { return; }
+            var best = null, size = Infinity;
+            [].concat(t.outline.shapes || [], t.outline.connections || []).forEach(function (it) {
+                (it.places || []).forEach(function (p) {
+                    if (pos >= p.from && pos <= p.to && p.to - p.from < size) { best = it.id; size = p.to - p.from; }
+                });
+            });
+            if (best && best !== t.canvas.selected()) { t.canvas.select(best); canvasSelected(t, best, 'cursor'); }
+        }
+
+        /* One of D2's edits to the front diagram's text (internal/d2api
+           edit). The first one in a file whose text is not as D2 writes it
+           says so once, since D2 writes the whole text again. */
+        async function applyEdit(req) {
+            var t = current();
+            if (!t || t.kind !== 'd2') { return null; }
+            if (t.problems && t.problems.length) { say('The text has a mistake in it, so the drawing cannot be changed. Put the mistake right first.', 'warn'); return null; }
+            var E = await d2();
+            if (!t.tidyKnown) {
+                var f = await E.call('format', { text: t.text }).catch(function () { return null; });
+                t.tidyKnown = true;
+                t.untidy = !!(f && f.text && f.text !== t.text);
+            }
+            var out = await E.call('edit', Object.assign({ text: t.text }, req));
+            if (!out) { return null; }
+            if (out.problems && out.problems.length) { say('That change could not be made. ' + out.problems[0].message, 'warn'); return out; }
+            if (t !== current()) { return null; }
+            t.pending = out.key || null;
+            replaceText(out.text);
+            await drawNow();
+            if (t.untidy) {
+                t.untidy = false;
+                say('Diagrams wrote the whole text in D2\'s own layout as it made the change, as every change on the drawing does. Undo puts it back as it was.');
+            }
+            return out;
+        }
+        function lastName(key) { var m = /([^.]+)$/.exec(key || ''); return m ? m[1] : key; }
+        function addShape(inside) {
+            var sel = selection(), parent = inside && sel && !isConnection(sel) ? sel + '.' : '';
+            /* A new shape is called item, which D2 numbers when it is taken;
+               shape would be D2's own keyword, which it renames. */
+            return applyEdit({ op: 'create', key: parent + 'item' }).then(function (out) {
+                if (out && out.key && !(out.problems && out.problems.length)) { say('Added ' + out.key + '. Press Enter on the drawing to give it a label, or F2 to rename it.'); }
+            });
+        }
+        function editLabel(key) {
+            var t = current();
+            key = key || selection();
+            if (!t || !key || !canEdit()) { return; }
+            var item = isConnection(key) ? connectionOf(t, key) : shapeOf(t, key);
+            var now = item ? (item.label || '') : '';
+            window.yavcDialog.askText(isConnection(key) ? 'The Connection\'s Label' : 'The Shape\'s Label', 'The words shown on it; empty for none', now).then(function (v) {
+                if (v == null || v === now) { return; }
+                applyEdit({ op: 'set', key: key, value: v.trim() === '' ? (isConnection(key) ? null : lastName(key)) : v });
+            });
+        }
+        function renameShape() {
+            var key = selection();
+            if (!key || isConnection(key) || !canEdit()) { return; }
+            window.yavcDialog.askText('Rename the Shape', 'Its name, which the text and every connection to it use', lastName(key)).then(function (v) {
+                if (v == null || !v.trim() || v.trim() === lastName(key)) { return; }
+                applyEdit({ op: 'rename', key: key, name: v.trim() });
+            });
+        }
+        function setShape(type) {
+            var key = selection();
+            if (!key || isConnection(key)) { return; }
+            applyEdit({ op: 'set', key: key + '.shape', value: type === 'rectangle' ? null : type });
+        }
+        function deleteSelected() {
+            var key = selection();
+            if (!key || !canEdit()) { return; }
+            var what = describe(current(), key);
+            applyEdit({ op: 'delete', key: key }).then(function (out) {
+                if (out && !(out.problems && out.problems.length)) { say('Deleted ' + what + '. Undo brings it back.'); }
+            });
+        }
+        /* Connect: the selected shape is one end, and the next shape chosen
+           on the drawing, by a click or by Enter, is the other. */
+        var connecting = null;
+        function startConnect() {
+            var key = selection();
+            if (!key || isConnection(key) || !canEdit()) { say('Select the shape to connect from first.'); return; }
+            connecting = key;
+            root.classList.add('dg-connecting');
+            say('Connecting from ' + describe(current(), key) + '. Choose the shape to connect to; Escape stops.');
+            commandsChanged();
+        }
+        function stopConnect(msg) {
+            connecting = null;
+            root.classList.remove('dg-connecting');
+            if (msg != null) { say(msg); }
+            commandsChanged();
+        }
+        function pickEnd(key) {
+            if (!connecting) { return false; }
+            if (isConnection(key)) { say('Choose a shape, not a connection; Escape stops.'); return true; }
+            var from = connecting;
+            stopConnect(null);
+            applyEdit({ op: 'create', key: from + ' -> ' + key }).then(function (out) {
+                if (out && !(out.problems && out.problems.length)) { say('Connected ' + from + ' to ' + key + '. Press Enter on the drawing to label the connection.'); }
+            });
+            return true;
+        }
+        /* Keys on the drawing's pane. The arrows, Home, End, Enter and
+           Escape are the canvas's; the rest are the editor's commands, kept
+           to this pane so that typing in the text never deletes a shape. */
+        el.stage.addEventListener('keydown', function (e) {
+            var t = current();
+            if (!t || !t.canvas || e.target !== el.stage) { return; }
+            if (connecting && e.key === 'Escape') { e.preventDefault(); stopConnect('Stopped connecting.'); return; }
+            if (connecting && e.key === 'Enter' && selection() && selection() !== connecting) { e.preventDefault(); pickEnd(selection()); return; }
+            if (t.canvas.onKey(e)) { e.preventDefault(); return; }
+            if (e.ctrlKey || e.metaKey || e.altKey) { return; }
+            if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); deleteSelected(); }
+            else if (e.key === 'F2') { e.preventDefault(); renameShape(); }
+            else if (e.key === 'c' || e.key === 'C') { e.preventDefault(); startConnect(); }
+            else if (e.key === 'n' || e.key === 'N') { e.preventDefault(); addShape(e.shiftKey); }
+        });
 
         /* === Views ======================================================== */
 
@@ -581,13 +777,22 @@
                 cmd('export-source', 'Download the Text', 'download', downloadSource, { disabled: function () { return !current(); } }),
                 cmd('copy-embed', 'Copy as Embed', 'copy', copyEmbed, { disabled: function () { return !current(); } }),
                 cmd('format-text', 'Tidy the Text', 'code', formatText, { hidden: function () { return !isD2(); } }),
+                cmd('shape-add', 'Add Shape', 'plus', function () { addShape(false); }, { builtIn: 'n', hidden: function () { return !isD2(); }, disabled: function () { return !canEdit(); } }),
+                cmd('shape-add-inside', 'Add Shape Inside', null, function () { addShape(true); }, { builtIn: 'Shift-n', hidden: function () { return !isD2(); }, disabled: function () { var k = selection(); return !canEdit() || !k || isConnection(k); } }),
+                cmd('connect', 'Connect To…', 'link', startConnect, { builtIn: 'c', hidden: function () { return !isD2(); }, checked: function () { return !!connecting; }, disabled: function () { var k = selection(); return !canEdit() || !k || isConnection(k); } }),
+                cmd('shape-label', 'Edit Label…', 'pencil', function () { editLabel(); }, { builtIn: 'Enter', hidden: function () { return !isD2(); }, disabled: function () { return !canEdit() || !selection(); } }),
+                cmd('shape-rename', 'Rename…', null, renameShape, { builtIn: 'F2', hidden: function () { return !isD2(); }, disabled: function () { var k = selection(); return !canEdit() || !k || isConnection(k); } }),
+                { id: 'shape-type', label: 'Shape', glyph: 'square', hidden: function () { return !isD2(); }, disabled: function () { var k = selection(); return !canEdit() || !k || isConnection(k); },
+                    current: function () { var t = current(), s = t && shapeOf(t, selection()); var f = s && SHAPES.find(function (x) { return x[0] === s.shape; }); return f ? f[1] : null; },
+                    items: SHAPES.map(function (sh) { return { id: 'shape-type-' + sh[0], label: sh[1], choice: 'dg-shape', value: sh[0], checked: function () { var t = current(), s = t && shapeOf(t, selection()); return !!s && s.shape === sh[0]; }, run: function () { setShape(sh[0]); } }; }) },
+                cmd('shape-delete', 'Delete', 'close', deleteSelected, { builtIn: 'Delete', danger: true, hidden: function () { return !isD2(); }, disabled: function () { return !canEdit() || !selection(); } }),
                 cmd('redraw', 'Draw Again', 'reload', function () { drawNow(); }),
                 cmd('fit', 'Fit the Drawing to the Pane', 'maximize', function () { settings.fit = !settings.fit; applyFit(); keepSetting('fit', settings.fit); commandsChanged(); }, { checked: function () { return !!settings.fit; } }),
                 { id: 'dock', label: 'Drawing', glyph: 'dock', current: function () { var d = DOCKS.find(function (x) { return x[0] === settings.dock; }); return d ? d[1] : null; },
                     items: DOCKS.map(function (d) { return { id: 'dock-' + d[0], label: d[1], choice: 'dg-dock', value: d[0], checked: function () { return settings.dock === d[0]; }, run: function () { setDock(d[0]); } }; }) }
             ];
             VIEWS.forEach(function (v) {
-                table.push({ id: 'view-' + v[0], label: v[1], choice: 'dg-view', choiceLabel: 'View', value: v[0], checked: function () { return viewOf(current()) === v[0]; }, run: function () { setView(v[0]); } });
+                table.push({ id: 'view-' + v[0], label: v[0] === 'preview' ? function () { return isD2() ? 'Visual' : 'Preview'; } : v[1], choice: 'dg-view', choiceLabel: 'View', value: v[0], checked: function () { return viewOf(current()) === v[0]; }, run: function () { setView(v[0]); } });
             });
             return table;
         }
@@ -595,6 +800,7 @@
             return [{ label: 'Diagrams', ribbon: 'hide', groups: [
                 { label: 'File', glyph: 'file', priority: 3, items: ['new', 'open', 'save'] },
                 { label: 'Edit', glyph: 'pencil', priority: 4, items: ['undo', 'redo', 'find'] },
+                { label: 'Shape', glyph: 'square', priority: 5, items: ['shape-add', 'connect', 'shape-label', 'shape-type', 'shape-delete'] },
                 { label: 'Diagram', glyph: 'code', priority: 2, items: ['format-text', 'copy-embed', 'export-svg', 'export-png'] },
                 { label: 'View', glyph: 'panel', priority: 1, end: true, items: [{ choice: 'dg-view' }, 'dock', 'fit'] }
             ] }];
@@ -606,13 +812,17 @@
                 { label: 'Diagrams', glyph: 'document', items: H.identity ? H.identity(root, []) : [] },
                 { id: 'file', label: 'File', glyph: 'file', items: ['new', 'new-mermaid', 'open', 'save', 'save-as', '-', 'edit-in-editor', '-', 'export-svg', 'export-png', 'export-source', '-', 'close-diagram'] },
                 { id: 'edit', label: 'Edit', glyph: 'pencil', items: ['undo', 'redo', '-', 'find'] },
-                { id: 'diagram', label: 'Diagram', glyph: 'code', items: ['format-text', 'redraw', '-', 'copy-embed'] }
+                { id: 'diagram', label: 'Diagram', glyph: 'code', items: ['format-text', 'redraw', '-', 'copy-embed'] },
+                { id: 'shape', label: 'Shape', glyph: 'square', items: ['shape-add', 'shape-add-inside', 'connect', '-', 'shape-label', 'shape-rename', 'shape-type', '-', 'shape-delete'] }
             ], into: { view: ['view-text', 'view-preview', 'view-split', '-', 'dock', 'fit'], go: ['go-to-line'] } };
         }
         root.addEventListener('pudl:contextmenu', function (e) {
             var t = e.detail.target;
             var own = function (ids) { return window.pudlCommands ? window.pudlCommands.menuRows(ids, root) : ids; };
-            if (t.closest && t.closest('.dg-stagebox')) { e.detail.add(own(['copy-embed', 'export-svg', 'export-png', '-', 'fit', 'redraw'])); }
+            if (t.closest && t.closest('.dg-stagebox')) {
+                var rows = isD2() && selection() ? ['shape-label', 'shape-rename', 'shape-type', 'connect', 'shape-add-inside', '-', 'shape-delete', '-'] : isD2() ? ['shape-add', '-'] : [];
+                e.detail.add(own(rows.concat(['copy-embed', 'export-svg', 'export-png', '-', 'fit', 'redraw'])));
+            }
             else if (t.closest && t.closest('.dg-text')) { e.detail.add(own(['undo', 'redo', '-', 'find', '-', 'format-text', 'copy-embed', '-', 'view-text', 'view-preview', 'view-split'])); }
         });
 
@@ -738,6 +948,20 @@
                 replaceText(out.text);
                 return { output: { index: active + 1, changed: changed } };
             },
+            'edit@1': async function (input) {
+                await booted;
+                var t = await front(input.index);
+                if (t.kind !== 'd2') { throw new Error('only D2 diagrams are edited shape by shape; this one is Mermaid'); }
+                if (!t.canvas) { await drawNow(); }
+                var req = { op: String(input.op), key: String(input.key) };
+                ['value', 'name', 'from', 'to'].forEach(function (k) { if (input[k] != null) { req[k] = String(input[k]); } });
+                if (input.op === 'set' && input.value === null) { req.value = null; }
+                if (input.descendants) { req.descendants = true; }
+                var out = await applyEdit(req);
+                if (!out) { throw new Error('the change could not be made; the diagram may have a mistake in it'); }
+                if (out.problems && out.problems.length) { throw new Error(out.problems[0].message); }
+                return { output: Object.assign({ key: out.key || '' }, await drawnNow()) };
+            },
             'render@1': async function (input) {
                 await booted;
                 var t = await front(input.index);
@@ -768,6 +992,7 @@
             commandTable: commandTable, toolbars: toolbars, menus: menus,
             destroy: function () {
                 destroyed = true;
+                tabs.forEach(function (t) { if (t.canvas) { t.canvas.destroy(); } });
                 clearTimeout(drawTimer);
                 settle(null, []);
                 if (detachLive) { detachLive(); }

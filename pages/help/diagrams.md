@@ -37,6 +37,23 @@ The View menu shows the text, the drawing or both, and Drawing chooses which sid
 
 File, Close Diagram closes the diagram in front, and asks first when it has changes that are not saved.
 
+## Editing on the drawing
+
+A D2 diagram can also be changed on its drawing, in the Visual and Split views. Click a shape or a connection to select it, and its text is selected beside it; putting the cursor in the text selects the shape written there. With the drawing in focus, the arrow keys move from one shape or connection to the next, and these keys act on the one selected.
+
+| Key | What it does |
+|---|---|
+| Enter | Edits the label, the words shown on it |
+| F2 | Renames the shape, and every connection to it follows |
+| N | Adds a new shape; Shift+N adds it inside the selected shape |
+| C | Starts a connection from the selected shape; click the shape to connect to, or move to it and press Enter |
+| Delete | Deletes it, with its connections |
+| Escape | Clears the selection, or stops a connection |
+
+The Shape menu has the same commands, and Shape chooses the kind of shape, such as an oval, a diamond, a cylinder or a person. A double click on a shape edits its label too.
+
+Every change on the drawing is a change to the text, made through D2's own editing, so Undo takes it back as it does typing, and the text is always the whole diagram. D2 writes the whole text again in its own layout as it makes a change, which tidies the spacing and keeps every comment; the first time it does this in a file, the status line says so. D2 places the shapes itself, so a new shape goes where the layout puts it rather than where you clicked. While the text has a mistake in it, the drawing cannot be changed until the mistake is put right.
+
 ## Colours
 
 A D2 diagram takes the site's colours, so it follows light and dark mode and the colour theme you chose in View. A diagram that sets its own `theme-id` or `theme-overrides` in a `vars: {d2-config: {...}}` block keeps them. Mermaid diagrams use Mermaid's own light and dark themes.
