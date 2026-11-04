@@ -67,7 +67,7 @@ func TestEditGolden(t *testing.T) {
 			head + "web: Web {\n  app: App\n  db: Database {shape: cylinder}\n}\n\nweb.app -> web.db: reads\n"},
 		{"move out of a container", EditRequest{Op: "move", Key: "web.app", To: ptr("app")}, "app",
 			head + "web: Web\ndb: Database {shape: cylinder}\n\napp -> db: reads\napp: App\n"},
-		{"reconnect a connection's end", EditRequest{Op: "reconnect", Key: "(web.app -> db)[0]", To: ptr("web")}, "(web.app -> db)[0]",
+		{"reconnect a connection's end", EditRequest{Op: "reconnect", Key: "(web.app -> db)[0]", To: ptr("web")}, "(web.app -> web)[0]",
 			head + "web: Web {\n  app: App\n}\ndb: Database {shape: cylinder}\n\nweb.app -> web: reads\n"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
@@ -161,5 +161,68 @@ func TestEditCreateWithShape(t *testing.T) {
 	res = editCall(t, EditRequest{Op: "create", Key: "plain", Shape: "rectangle"})
 	if strings.Contains(res.Text, "plain:") {
 		t.Errorf("a rectangle wrote its kind:\n%s", res.Text)
+	}
+}
+
+// A connection's direction changes at every place it is written, so a
+// setting written elsewhere still reaches it, and the key it has after is
+// returned.
+func TestEditArrows(t *testing.T) {
+	src := "a\nb\na -> b: x\n(a -> b)[0].style.stroke-dash: 5\n"
+	for _, c := range []struct{ arrows, key, line string }{
+		{"<->", "(a <-> b)[0]", "a <-> b: x"},
+		{"--", "(a -- b)[0]", "a -- b: x"},
+		{"<-", "(a <- b)[0]", "a <- b: x"},
+	} {
+		res := editCall(t, EditRequest{Text: src, Op: "arrows", Key: "(a -> b)[0]", Value: ptr(c.arrows)})
+		if len(res.Problems) != 0 || res.Key != c.key || !strings.Contains(res.Text, c.line) || !strings.Contains(res.Text, c.key+".style.stroke-dash: 5") {
+			t.Errorf("%s: key %q problems %+v\n%s", c.arrows, res.Key, res.Problems, res.Text)
+		}
+	}
+	if res := editCall(t, EditRequest{Text: src, Op: "arrows", Key: "(a -> b)[0]", Value: ptr("=>")}); len(res.Problems) == 0 {
+		t.Errorf("an unknown direction was written: %s", res.Text)
+	}
+}
+
+// Setting nothing takes a setting away, puts a shape's kind back to the
+// rectangle, and never removes a shape or a connection.
+func TestEditClear(t *testing.T) {
+	src := "a: A {shape: oval; style.fill: red; tooltip: hi}\nb\na -> b: x {target-arrowhead.shape: diamond}\n"
+	for _, c := range []struct{ key, gone, want string }{
+		{"a.style.fill", "fill", ""},
+		{"a.tooltip", "tooltip", ""},
+		{"(a -> b)[0].target-arrowhead.shape", "diamond", ""},
+		{"a.shape", "oval", "shape: rectangle"},
+	} {
+		res := editCall(t, EditRequest{Text: src, Op: "set", Key: c.key})
+		if len(res.Problems) != 0 || strings.Contains(res.Text, c.gone) || !strings.Contains(res.Text, c.want) || strings.Contains(res.Text, c.key+"\n") {
+			t.Errorf("clearing %s:\n%s", c.key, res.Text)
+		}
+	}
+	for _, key := range []string{"a", "(a -> b)[0]"} {
+		if res := editCall(t, EditRequest{Text: src, Op: "set", Key: key}); len(res.Problems) == 0 {
+			t.Errorf("setting nothing on %s was allowed:\n%s", key, res.Text)
+		}
+	}
+}
+
+// The outline carries what the inspector shows: a shape's style, icon,
+// link and tooltip, and a connection's direction, arrowheads and style.
+func TestOutlineSettings(t *testing.T) {
+	src := "a: A {shape: oval; style.fill: \"#ff0000\"; style.bold: true; link: https://example.com; tooltip: hi}\nb\nb <-> a: x {source-arrowhead: 1; target-arrowhead.shape: diamond; style.stroke-dash: 5}\n"
+	var res OutlineResponse
+	callJSON(t, "outline", TextRequest{Text: src}, &res)
+	var a Shape
+	for _, s := range res.Shapes {
+		if s.ID == "a" {
+			a = s
+		}
+	}
+	if a.Style["fill"] != "#ff0000" || a.Style["bold"] != "true" || a.Link != "https://example.com" || a.Tooltip != "hi" {
+		t.Errorf("shape a: %+v", a)
+	}
+	c := res.Connections[0]
+	if c.Arrows != "<->" || c.Source == nil || c.Source.Label != "1" || c.Target == nil || c.Target.Shape != "diamond" || c.Style["stroke-dash"] != "5" {
+		t.Errorf("connection: %+v source %+v target %+v", c, c.Source, c.Target)
 	}
 }

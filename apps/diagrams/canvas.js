@@ -106,10 +106,16 @@
                 /* Six screen pixels whatever the drawing's scale, with a
                    wider ring that takes the pointer. */
                 var lr = layer.getBoundingClientRect(), k = lr.width ? out.width / lr.width : 1;
-                var grip = el('circle', { cx: box.x + box.w, cy: box.y + box.h / 2, r: 12 * k, 'class': 'dg-handle dg-handle-grip' });
-                var h = el('circle', { cx: box.x + box.w, cy: box.y + box.h / 2, r: 6 * k, 'class': 'dg-handle' });
-                layer.appendChild(grip);
-                layer.appendChild(h);
+                /* One on each side, so a connection can be dragged out
+                   whichever way it is going; D2's layout still decides where
+                   the line meets the shape. */
+                [[box.x + box.w, box.y + box.h / 2], [box.x, box.y + box.h / 2], [box.x + box.w / 2, box.y], [box.x + box.w / 2, box.y + box.h]].forEach(function (pt) {
+                    var grip = el('circle', { cx: pt[0], cy: pt[1], r: 12 * k, 'class': 'dg-handle dg-handle-grip' });
+                    var h = el('circle', { cx: pt[0], cy: pt[1], r: 6 * k, 'class': 'dg-handle' });
+                    grip.__at = h.__at = pt;
+                    layer.appendChild(grip);
+                    layer.appendChild(h);
+                });
             }
         }
         function shapeBox(key) { return (out && out.shapes || []).find(function (s) { return s.id === key; }) || null; }
@@ -158,7 +164,7 @@
             if (e.button !== 0 || !out) { return; }
             var handle = e.target.classList && e.target.classList.contains('dg-handle');
             var key = handle ? sel : hitOf(e.target);
-            press = { x: e.clientX, y: e.clientY, key: key, kind: handle ? 'connect' : (key && key === sel && !/^\(/.test(key) ? 'move' : null), moved: false };
+            press = { x: e.clientX, y: e.clientY, key: key, at: handle ? e.target.__at : null, kind: handle ? 'connect' : (key && key === sel && !/^\(/.test(key) ? 'move' : null), moved: false };
             layer.setPointerCapture(e.pointerId);
             e.preventDefault();
         });
@@ -172,7 +178,8 @@
             if (!box) { return; }
             if (press.kind === 'connect') {
                 if (!ghost) { ghost = el('line', { 'class': 'dg-ghost' }); layer.appendChild(ghost); }
-                ghost.setAttribute('x1', box.x + box.w); ghost.setAttribute('y1', box.y + box.h / 2);
+                var from = press.at || [box.x + box.w, box.y + box.h / 2];
+                ghost.setAttribute('x1', from[0]); ghost.setAttribute('y1', from[1]);
                 ghost.setAttribute('x2', at.x); ghost.setAttribute('y2', at.y);
                 target(shapeAt(e, null));
             } else {

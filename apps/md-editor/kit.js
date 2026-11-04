@@ -7,6 +7,7 @@
      yavcMdEditor.codeTheme(CM)         the site's colours for a code editor, from PUDL's tokens
      yavcMdEditor.codeSearch(CM, onQuery)   CodeMirror's search with the site's find bar
      yavcMdEditor.findBar(driver, onQuery)  the find bar, for a search of the host's own
+     yavcMdEditor.colourRows(fields), wireColours(body)   a picker beside a colour's text field
      yavcMdEditor.pageView()            the page view (page-view.js), loaded
      yavcMdEditor.mermaid()             Mermaid, loaded
      yavcMdEditor.drawMermaid(place, source, opts)   a Mermaid diagram drawn into place
@@ -463,7 +464,7 @@
     }
     function pickerRows(fields) {
         return fields.map(function (f, k) {
-            var id = 'md-col-' + dlgCount + '-' + k, v = f.value || '';
+            var id = f.id || ('md-col-' + dlgCount + '-' + k), v = f.value || '';
             return '<div class="form-group md-colour-row"><label class="form-label" for="' + id + '">' + esc(f.label) + '</label>' +
                 '<div class="md-colour-pair"><input type="color" class="md-colour-pick" aria-label="' + esc(f.label) + ' Picker" data-for="' + id + '" value="' + esc(/^#[0-9a-f]{6}$/i.test(v) ? v : (f.fallback || '#000000')) + '">' +
                 '<input class="form-input" id="' + id + '" data-key="' + esc(f.key) + '" value="' + esc(v) + '" placeholder="' + esc(f.placeholder || '') + '" autocomplete="off" spellcheck="false"' + (f.help ? ' aria-describedby="' + id + '-help"' : '') + '></div>' +
@@ -1312,6 +1313,7 @@
 
     window.yavcMdEditor = {
         here: HERE, stamp: STAMP, placeholder: PLACEHOLDER,
+        colourRows: pickerRows, wireColours: wirePickers,
         libs: libs, codeTheme: codeTheme, codeSearch: codeSearch, findBar: findBar, pageView: pageView, mermaid: mermaid, drawMermaid: drawDiagram, loadScript: loadScript,
         FORMATS: FORMATS, STYLES: STYLES, INSERTS: INSERTS, SHORTCODES: SHORTCODES, MENU: MENU, STOCK_CLASSES: STOCK_CLASSES,
         tableCommand: tableCommand, wordCount: wordCount, readingMinutes: readingMinutes,

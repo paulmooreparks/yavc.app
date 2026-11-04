@@ -114,3 +114,22 @@
 /* The palette sits over the drawing of a D2 diagram, and not a Mermaid one. */
 .dg-palette { flex: none; min-width: 0; padding: var(--space-1) var(--space-2); border-bottom: 1px solid var(--border); background: var(--surface-alt); }
 .dg[data-kind="mermaid"] .dg-palette { display: none; }
+
+/* === The inspector (milestone D3) ========================================= */
+/* Beside the drawing, a column of PUDL's sunken fields for what is
+   selected; it scrolls on its own, and narrows the drawing rather than
+   covering it. */
+.dg-body { flex: 1 1 auto; min-height: 0; display: flex; }
+.dg-body > .dg-stage { flex: 1 1 auto; min-width: 0; }
+.dg-inspector { flex: none; width: 17rem; max-width: 45%; overflow: auto; padding: var(--space-3); border-inline-start: 1px solid var(--border); background: var(--surface-alt); font-size: var(--text-sm); }
+.dg-inspector[hidden] { display: none; }
+.dg-inspector .form-group { margin-bottom: var(--space-3); }
+.dg-inspector .form-input, .dg-inspector .form-select { width: 100%; box-sizing: border-box; }
+.dg-inspector-title { margin: 0; font-size: var(--text-md, 1rem); font-weight: 700; }
+.dg-inspector-id { margin: 2px 0 var(--space-3); font-family: var(--mono); color: var(--text-muted); overflow-wrap: anywhere; }
+.dg-inspector-empty { margin: 0; color: var(--text-muted); }
+.dg-row { display: flex; gap: var(--space-2); align-items: center; }
+.dg-row > .form-select-wrap { flex: 1 1 auto; min-width: 0; }
+.dg-inspector-fields { border: 0; padding: 0; margin: 0; min-width: 0; }
+.dg-inspector-blocked { margin: 0 0 var(--space-3); }
+.dg[data-kind="mermaid"] .dg-inspector { display: none; }

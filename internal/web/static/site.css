@@ -154,3 +154,9 @@ body.desktop .md-layout { --md-sidebar-w: 300px; }
 .ed-find-opts { display: inline-flex; gap: 4px; }
 .ed-find-opt { min-width: 2.4em; font-family: var(--mono); justify-content: center; }
 .ed-find-close { margin-inline-start: auto; }
+
+/* A colour's field with its picker beside it (apps/md-editor/kit.js
+   colourRows), in the editing kit's dialogs and Diagrams' inspector. */
+.md-colour-pair { display: flex; gap: var(--space-2); align-items: center; }
+.md-colour-pair .form-input { flex: 1 1 auto; }
+.md-colour-pick { flex: none; width: 2.4em; height: 2.2em; padding: 2px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); cursor: pointer; }
