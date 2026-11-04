@@ -93,7 +93,7 @@
     var VIEWS = [['text', 'Text'], ['preview', 'Preview'], ['split', 'Split']];
     /* Where the drawing sits beside the text, as Slides docks its canvas. */
     var DOCKS = [['left', 'Left'], ['right', 'Right'], ['top', 'Top'], ['bottom', 'Bottom']];
-    var SETTINGS = { view: 'split', dock: 'left', fit: true, inspector: true, inspectorSplit: null, inspectorWidth: null };
+    var SETTINGS = { view: 'split', dock: 'left', fit: true, inspector: true, inspectorSplit: null, inspectorWidth: null, outline: false };
     /* The inspector's choices (milestone D3): line styles as D2's
        stroke-dash, and the arrowheads D2 draws. */
     var DASHES = [['', 'Solid', 'yavc-line-solid'], ['5', 'Dashed', 'yavc-line-dashed'], ['2', 'Dotted', 'yavc-line-dotted']];
@@ -135,10 +135,12 @@
             '<div class="dg-main" data-role="main">' +
               '<div class="dg-work split" data-role="work">' +
                 '<div class="dg-stagebox split-pane" data-role="stagebox">' +
+                  '<div class="dg-visual-row"><aside class="dg-outline" data-role="outline" aria-label="Canvas Outline" hidden></aside>' +
                   '<div class="dg-body split" data-role="body" data-split-pane="first">' +
                     '<div class="dg-stage split-pane" data-role="stage" tabindex="0" role="region" aria-label="The Drawing" aria-describedby="dg-keys-' + n + '"><div class="dg-canvas" data-role="canvas"></div></div>' +
                     '<div class="split-handle dg-inspector-split" aria-label="Resize the Inspector" data-split-min="176"></div>' +
                     '<aside class="dg-inspector split-pane" data-role="inspector" aria-label="Inspector" hidden></aside>' +
+                  '</div>' +
                   '</div>' +
                   '<p class="dg-keys visually-hidden" id="dg-keys-' + n + '">In a D2 diagram, the arrow keys select a shape or a connection, Enter edits its label, F2 renames it, N adds a shape of the palette\'s kind, C connects the selected shape to another, Delete deletes it, and Escape goes back to the palette\'s Select. The Shape menu moves a shape into another.</p>' +
                 '</div>' +
@@ -148,7 +150,7 @@
             '</div>' +
             '<div class="dg-status" data-role="status"><span data-role="where"></span><span data-role="kind"></span><span data-role="state"></span><span class="dg-message" data-role="message" role="status" aria-live="polite"></span></div>';
         var q = function (sel) { return root.querySelector(sel); };
-        var el = { body: q('[data-role="body"]'), inspector: q('[data-role="inspector"]'), tabsEl: q('[data-role="tabs"]'), work: q('[data-role="work"]'), stagebox: q('[data-role="stagebox"]'), stage: q('[data-role="stage"]'), canvas: q('[data-role="canvas"]'),
+        var el = { outline: q('[data-role="outline"]'), body: q('[data-role="body"]'), inspector: q('[data-role="inspector"]'), tabsEl: q('[data-role="tabs"]'), work: q('[data-role="work"]'), stagebox: q('[data-role="stagebox"]'), stage: q('[data-role="stage"]'), canvas: q('[data-role="canvas"]'),
             split: q('[data-role="split"]'), text: q('[data-role="text"]'), where: q('[data-role="where"]'), kind: q('[data-role="kind"]'), state: q('[data-role="state"]'), message: q('[data-role="message"]') };
 
         function keepSetting(key, value) {
@@ -547,8 +549,59 @@
                     try { cm.dispatch({ selection: { anchor: range.from, head: range.to }, effects: CM.EditorView.scrollIntoView(range.from, { y: 'center' }) }); } finally { quiet = false; }
                 }
             }
-            commandsChanged(); renderInspector();
+            commandsChanged(); renderInspector(); renderOutline();
         }
+        var outlineText = null, outlineOwner = null, outlineAnchor = null;
+        function renderOutline() {
+            var t = current(), show = settings.outline && t && t.kind === 'canvas' && !!t.cv;
+            el.outline.hidden = !show;
+            if (!show) { outlineOwner = null; outlineText = null; el.outline.replaceChildren(); return; }
+            var items = canvasItems(t), selected = canvasSelections();
+            if (outlineOwner !== t || outlineText !== t.cvText) {
+                var focused = el.outline.contains(document.activeElement) ? document.activeElement.dataset.outline : null;
+                if (outlineOwner !== t) { outlineAnchor = null; }
+                outlineOwner = t; outlineText = t.cvText;
+                el.outline.innerHTML = '<h3 class="dg-inspector-title">Outline</h3><ul>' + items.map(function (s, i) {
+                    var item = (s.kind === 'node' ? t.cvDoc.nodes : t.cvDoc.edges).find(function (x) { return x.id === s.id; });
+                    var label = String(item.text || item.label || item.file || item.url || item.id).replace(/\s+/g, ' ').slice(0, 160);
+                    return '<li><button type="button" class="btn btn-sm" data-outline="' + i + '" aria-pressed="false" title="' + esc(s.kind + ' ' + s.id) + '">' + optionGlyph(['', '', s.kind === 'node' ? 'square' : 'yavc-connect']) + '<span>' + esc(label) + '</span></button></li>';
+                }).join('') + '</ul><p class="form-help">Ctrl or Command toggles items; Shift selects a range. Arrow keys move between rows.</p>';
+                if (focused !== null) { var back = el.outline.querySelector('[data-outline="' + focused + '"]'); if (back) { back.focus({ preventScroll: true }); } }
+            }
+            el.outline.querySelectorAll('[data-outline]').forEach(function (button) {
+                var item = items[Number(button.dataset.outline)]; button.disabled = !!canvasWhy(false);
+                button.setAttribute('aria-pressed', String(selected.some(function (s) { return s.id === item.id && s.kind === item.kind; })));
+            });
+        }
+        function toggleOutline() { settings.outline = !settings.outline; keepSetting('outline', settings.outline); renderOutline(); commandsChanged(); }
+        el.outline.addEventListener('click', function (e) {
+            var button = e.target.closest('[data-outline]'); if (!button || canvasWhy(false)) { return; }
+            var t = current(), items = canvasItems(t), i = Number(button.dataset.outline), item = items[i], chosen = [item];
+            if (e.shiftKey && outlineAnchor !== null && outlineAnchor < items.length) { chosen = items.slice(Math.min(i, outlineAnchor), Math.max(i, outlineAnchor) + 1); }
+            else if (e.ctrlKey || e.metaKey) {
+                chosen = canvasSelections(); var at = chosen.findIndex(function (s) { return s.id === item.id && s.kind === item.kind; });
+                if (at < 0) { chosen.push(item); } else { chosen.splice(at, 1); }
+            }
+            if (!e.shiftKey) { outlineAnchor = i; }
+            t.cv.select(chosen, 'outline'); t.cv.reveal();
+        });
+        el.outline.addEventListener('keydown', function (e) {
+            var buttons = Array.from(el.outline.querySelectorAll('[data-outline]')), i = buttons.indexOf(e.target), next;
+            if (i < 0 || !['ArrowUp', 'ArrowDown', 'Home', 'End'].includes(e.key)) { return; }
+            next = e.key === 'Home' ? 0 : e.key === 'End' ? buttons.length - 1 : Math.max(0, Math.min(buttons.length - 1, i + (e.key === 'ArrowUp' ? -1 : 1)));
+            e.preventDefault(); buttons[next].focus();
+        });
+        /* F6 leaves item cycling and reaches each editing pane directly. */
+        root.addEventListener('keydown', function (e) {
+            if (e.key !== 'F6' || !isCanvas()) { return; }
+            var panes = [el.stage, el.outline, el.inspector, el.text].filter(function (p) { return p.getClientRects().length && getComputedStyle(p).visibility !== 'hidden'; });
+            var at = panes.findIndex(function (p) { return p === document.activeElement || p.contains(document.activeElement); });
+            var next = panes[(at + (e.shiftKey ? panes.length - 1 : 1) + panes.length) % panes.length];
+            if (!next) { return; } e.preventDefault(); e.stopPropagation();
+            if (next === el.text) { cm.focus(); }
+            else if (next === el.stage) { el.stage.focus(); }
+            else { var first = next.querySelector('button:not(:disabled), input:not(:disabled), textarea:not(:disabled), select:not(:disabled)'); if (first) { first.focus(); } else { next.tabIndex = -1; next.focus(); } }
+        }, true);
         function followCanvasCursor(t, pos) {
             if (!t.cv || t.cvText !== t.text) { return; }
             var range = (t.cvRanges || []).find(function (r) { return pos >= r.from && pos < r.to; });
@@ -564,6 +617,7 @@
             if (!t.cv || t.cvText !== t.text || (t.problems && t.problems.length)) { return 'Wait for a valid drawing before editing the canvas.'; }
             if (needs && !s) { return 'Select a node or connector first.'; }
             if (needs === 'nodes' && !canvasSelections().some(function (s) { return s.kind === 'node'; })) { return 'Select one or more nodes first.'; }
+            if ((needs === 'align' || needs === 'distribute') && (canvasSelections().some(function (s) { return s.kind !== 'node'; }) || canvasSelections().length < (needs === 'align' ? 2 : 3))) { return 'Select at least ' + (needs === 'align' ? 'two' : 'three') + ' nodes.'; }
             if (needs === 'shape' && (canvasSelections().length !== 1 || !s || s.kind !== 'node')) { return 'Select one node first.'; }
             if (needs === 'text' && (canvasSelections().length !== 1 || !s || s.kind !== 'node' || !t.cvDoc.nodes.some(function (n) { return n.id === s.id && n.type === 'text' && !window.yavcCanvas.isAnchor(n); }))) { return 'Select one text shape first.'; }
             if (needs === 'edge' && (canvasSelections().length !== 1 || !s || s.kind !== 'edge')) { return 'Select one connector first.'; }
@@ -591,7 +645,7 @@
         }
         function canvasRequest(req) {
             var s = canvasSelection();
-            if (canvasSelections().length > 1 && ['move', 'delete'].indexOf(req.op) >= 0) { return canvasEdit(Object.assign({ items: canvasSelections() }, req)); }
+            if (canvasSelections().length > 1 && ['move', 'delete', 'align', 'distribute'].indexOf(req.op) >= 0) { return canvasEdit(Object.assign({ items: canvasSelections() }, req)); }
             return canvasEdit(Object.assign({ key: s ? s.id : '', kind: s ? s.kind : 'node' }, req));
         }
         function canvasCreate(x, y, type) {
@@ -679,6 +733,7 @@
             } catch (err) { say('The selection could not be pasted. ' + err.message, 'problem'); }
         }
         function renderCanvasInspector(t) {
+            renderOutline();
             var selected = canvasSelections(), show = !!(settings.inspector && t.cv);
             inspectorPresentation(show);
             if (!show) { inspected = null; return; }
@@ -811,6 +866,12 @@
                 commands.push(c(d[0], 'Move ' + d[1], function () { canvasRequest({ op: 'move', dx: d[2], dy: d[3] }); }, 'Arrow' + d[1], 'nodes'));
                 commands.push(c('pan-' + d[0], 'Pan ' + d[1], function () { current().cv.pan(d[2] * 80, d[3] * 80); }, 'Alt-Arrow' + d[1], false));
             });
+            [['left', 'Left'], ['center', 'Horizontal Centers'], ['right', 'Right'], ['top', 'Top'], ['middle', 'Vertical Centers'], ['bottom', 'Bottom']].forEach(function (d) {
+                commands.push(c('align-' + d[0], 'Align ' + d[1], function () { canvasRequest({ op: 'align', direction: d[0] }); }, null, 'align'));
+            });
+            ['horizontal', 'vertical'].forEach(function (direction) {
+                commands.push(c('distribute-' + direction, 'Distribute ' + (direction === 'horizontal' ? 'Horizontally' : 'Vertically'), function () { canvasRequest({ op: 'distribute', direction: direction }); }, null, 'distribute'));
+            });
             return commands;
         }
         function canvasKey(e) {
@@ -869,6 +930,9 @@
                paints a solid one, as d2.js finds it, so the canvas has no
                box of its own. */
             for (var a = place; a && a.nodeType === 1; a = a.parentElement) {
+                /* The live canvas paints its document override here. Theme
+                   defaults must come from the host behind that canvas. */
+                if (a === place && a.classList.contains('dg-cv-editor')) { continue; }
                 var m = /^rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)$/.exec(getComputedStyle(a).backgroundColor);
                 if (m && (m[4] === undefined || +m[4] === 1)) { pal.bg = '#' + [m[1], m[2], m[3]].map(function (v) { return ('0' + (+v).toString(16)).slice(-2); }).join(''); break; }
                 if (m && +m[4] > 0) { break; }
@@ -1039,6 +1103,7 @@
         }
         function dashOf(st) { var d = st['stroke-dash']; return d && d !== '0' ? (+d <= 3 ? '2' : '5') : ''; }
         function renderInspector() {
+            renderOutline();
             var t = current(), key = selection();
             if (t && t.kind === 'canvas') { renderCanvasInspector(t); return; }
             var show = !!(settings.inspector && t && t.kind === 'd2' && t.canvas);
@@ -1817,6 +1882,7 @@
                 cmd('shape-delete', 'Delete', 'yavc-bin', deleteSelected, { builtIn: 'Delete', danger: true, hidden: function () { return !isD2(); }, disabled: function () { return !!whyNot(true); }, reason: function () { return whyNot(true); } }),
                 cmd('redraw', 'Draw Again', 'reload', function () { drawNow(); }),
                 cmd('toggle-inspector', 'Show the Inspector', 'panel', toggleInspector, { hidden: function () { return !isD2() && !isCanvas(); }, checked: function () { return !!settings.inspector; } }),
+                cmd('toggle-outline', 'Show the Outline', 'panel', toggleOutline, { hidden: function () { return !isCanvas(); }, checked: function () { return !!settings.outline; } }),
                 cmd('fit', 'Fit the Drawing to the Pane', 'maximize', function () { if (isCanvas()) { var t = current(); if (t.cv) { t.cv.fit(); } return; } settings.fit = !settings.fit; applyFit(); keepSetting('fit', settings.fit); commandsChanged(); }, { checked: function () { return !isCanvas() && !!settings.fit; } }),
                 { id: 'dock', label: 'Drawing', glyph: 'dock', current: function () { var d = DOCKS.find(function (x) { return x[0] === settings.dock; }); return d ? d[1] : null; },
                     items: DOCKS.map(function (d) { return { id: 'dock-' + d[0], label: d[1], choice: 'dg-dock', value: d[0], checked: function () { return settings.dock === d[0]; }, run: function () { setDock(d[0]); } }; }) }
@@ -1831,7 +1897,7 @@
                 { label: 'File', glyph: 'file', priority: 3, items: ['new', 'open', 'save', 'export-svg', 'export-png'] },
                 { label: 'Edit', glyph: 'pencil', priority: 4, items: ['undo', 'redo', 'find', 'format-text', 'copy-embed'] },
                 { label: 'Shape', glyph: 'square', priority: 5, items: ['shape-add', 'connect', 'shape-label', 'shape-type', 'shape-delete', 'cv-new', 'cv-connect', 'cv-delete', 'cv-pan', 'cv-zoom-in', 'cv-zoom-out'] },
-                { label: 'View', glyph: 'panel', priority: 1, end: true, items: [{ choice: 'dg-view' }, 'dock', 'fit', 'toggle-inspector'] }
+                { label: 'View', glyph: 'panel', priority: 1, end: true, items: [{ choice: 'dg-view' }, 'dock', 'fit', 'toggle-inspector', 'toggle-outline'] }
             ] }];
         }
         /* Diagrams' help is a page of the site, /help/diagrams, which the
@@ -1841,8 +1907,8 @@
                 { label: 'Diagrams', glyph: 'document', items: H.identity ? H.identity(root, []) : [] },
                 { id: 'file', label: 'File', glyph: 'file', items: ['new', 'new-mermaid', 'new-canvas', 'open', 'save', 'save-as', '-', 'edit-in-editor', '-', 'export-svg', 'export-png', 'export-source', '-', 'close-diagram'] },
                 { id: 'edit', label: 'Edit', glyph: 'pencil', items: ['undo', 'redo', '-', 'cv-copy', 'cv-paste', 'cv-duplicate', 'cv-delete', 'copy-embed', '-', 'cv-select-all', 'cv-select-items', '-', 'find', '-', 'format-text', 'redraw', 'language-restart'] },
-                { id: 'shape', label: 'Shape', glyph: 'square', items: (isD2() || isCanvas() ? [{ label: 'Drawing Tool', glyph: 'square', items: ['tool-select'].concat(PALETTE.map(function (k) { return 'tool-' + k[0]; })) }, '-'] : []).concat(['shape-add', 'shape-add-inside', 'connect', 'cv-new', 'cv-group', 'cv-connect', 'cv-reconnect-start', 'cv-reconnect-end', 'cv-resize', 'cv-edit-text', '-', 'shape-label', 'shape-rename', 'shape-type', '-', 'shape-move-into', 'shape-move-top', 'cv-left', 'cv-right', 'cv-up', 'cv-down', 'cv-forward', 'cv-back', '-', 'shape-delete']) }
-            ], into: { view: ['view-text', 'view-preview', 'view-split', '-', 'dock', 'fit', 'toggle-inspector', '-', 'cv-pan', 'cv-pan-left', 'cv-pan-right', 'cv-pan-up', 'cv-pan-down', 'cv-zoom-in', 'cv-zoom-out', 'cv-actual'], go: ['go-to-line', 'cv-next', 'cv-previous'] } };
+                { id: 'shape', label: 'Shape', glyph: 'square', items: (isD2() || isCanvas() ? [{ label: 'Drawing Tool', glyph: 'square', items: ['tool-select'].concat(PALETTE.map(function (k) { return 'tool-' + k[0]; })) }, '-'] : []).concat(['shape-add', 'shape-add-inside', 'connect', 'cv-new', 'cv-group', 'cv-connect', 'cv-reconnect-start', 'cv-reconnect-end', 'cv-resize', 'cv-edit-text', '-', { label: 'Align and Distribute', items: ['cv-align-left', 'cv-align-center', 'cv-align-right', 'cv-align-top', 'cv-align-middle', 'cv-align-bottom', '-', 'cv-distribute-horizontal', 'cv-distribute-vertical'] }, '-', 'shape-label', 'shape-rename', 'shape-type', '-', 'shape-move-into', 'shape-move-top', 'cv-left', 'cv-right', 'cv-up', 'cv-down', 'cv-forward', 'cv-back', '-', 'shape-delete']) }
+            ], into: { view: ['view-text', 'view-preview', 'view-split', '-', 'dock', 'fit', 'toggle-inspector', 'toggle-outline', '-', 'cv-pan', 'cv-pan-left', 'cv-pan-right', 'cv-pan-up', 'cv-pan-down', 'cv-zoom-in', 'cv-zoom-out', 'cv-actual'], go: ['go-to-line', 'cv-next', 'cv-previous'] } };
         }
         root.addEventListener('pudl:contextmenu', function (e) {
             var t = e.detail.target;

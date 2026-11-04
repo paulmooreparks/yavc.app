@@ -120,6 +120,14 @@ Diagrams refuses a canvas over 2 MB or with more than 5,000 nodes and connectors
 
 A D2 diagram takes the site's colours, so it follows light and dark mode and the colour theme you chose in View. A diagram that sets its own `theme-id` or `theme-overrides` in a `vars: {d2-config: {...}}` block keeps them. Mermaid diagrams use Mermaid's own light and dark themes. A canvas takes the site's colours too, and its six preset colours (red, orange, yellow, green, cyan and purple, written `"1"` to `"6"`) have a lighter set in dark mode.
 
+## Canvas Outline and arrangement
+
+In a Canvas, View, Show the Outline lists shapes and connectors beside the drawing. Click a row to select it, Ctrl or Command-click to toggle it, or Shift-click to select a range. The arrow keys move between rows, and Enter or Space selects the focused row. F6 moves between the drawing, visible Outline, Inspector and source; Shift+F6 moves back.
+
+Shape, Align and Distribute arranges selected Canvas nodes. Alignment needs at least two independent shapes or groups; distribution needs three. Selected groups move their contents together. Distribution spaces the gaps between the selected units, keeping the outer positions fixed. Undo reverses the whole operation.
+
+When no Canvas item is selected, the Inspector shows diagram settings. Theme Default removes a custom background and restores the surrounding theme's background.
+
 ## In documents and slides
 
 Edit, Copy as Embed puts the diagram on the clipboard as a fenced block, which the Editor and Slides draw wherever it is pasted. The block contains the diagram's text, so it is drawn the same in any document. File, Open in the Editor opens the diagram's file as text in the Editor.
