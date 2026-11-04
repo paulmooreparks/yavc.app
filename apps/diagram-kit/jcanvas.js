@@ -364,8 +364,8 @@
     /* The drawing. opts.palette: { text, muted, line, surface, bg, accent,
        presets: [six #rrggbb] }, all checked colours from the page;
        opts.pad, the margin around the contents; opts.title, the
-       picture's text alternative. Groups are drawn first,
-       then the nodes in the file's order, then the edges on top. */
+       picture's text alternative. Nodes use the file's drawing order,
+       and the edges are drawn on top. */
     var FONT = 14;
     function render(doc, opts) {
         opts = opts || {};
@@ -378,8 +378,7 @@
             var c = colourOf(n.color, pal);
             return { stroke: c || pal.line, fill: c ? mixHex(c, pal.surface, 0.14) : pal.surface, text: pal.text };
         }
-        var groups = doc.nodes.filter(function (n) { return n.type === 'group'; }), others = doc.nodes.filter(function (n) { return n.type !== 'group'; });
-        groups.concat(others).forEach(function (n) {
+        doc.nodes.forEach(function (n) {
             var x = n.x - ox, y = n.y - oy, cols = nodeColours(n), y2 = isObj(n.yavc) ? n.yavc : {};
             var lw = y2.lineWidth || (n.type === 'group' ? 1 : 2), dash = dashOf(y2, lw);
             var line = { fill: cols.fill, stroke: cols.stroke, 'stroke-width': lw };
@@ -446,6 +445,6 @@
     });
 
     var api = Object.freeze({ read: read, write: write, render: render, route: function (e, nodes) { var by = Object.create(null); nodes.forEach(function (n) { by[n.id] = n; }); return route(e, by); },
-        PRESETS: PRESETS, SHAPES: SHAPES.slice(), HEADS: HEADS.slice(), ROUTES: ROUTES.slice(), LINES: LINES.slice(), EXT_VERSION: EXT_VERSION });
+        PRESETS: PRESETS, SHAPES: SHAPES.slice(), HEADS: HEADS.slice(), ROUTES: ROUTES.slice(), LINES: LINES.slice(), EXT_VERSION: EXT_VERSION, LIMITS: Object.freeze({ text: MAX_TEXT, items: MAX_ITEMS }) });
     if (typeof module === 'object' && module.exports) { module.exports = api; } else { root.yavcCanvas = api; }
 })(typeof window !== 'undefined' ? window : this);

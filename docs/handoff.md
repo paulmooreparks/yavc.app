@@ -1,6 +1,8 @@
 # Handoff: Diagrams and the canvas editor
 
-Written on 2026-11-04 for whoever picks this work up next, human or agent. It describes where the Diagrams work stands, how this repository expects work to be done, and what comes next. Read `CLAUDE.md`, `DESIGN.md` and the design documents it points to before changing anything structural.
+Updated on 2026-11-04. C2 is implemented on `codex/canvas-c2` for review, with the complete PUDL 0.97.10 asset set. The C2 model tests run in the regular checks, and `scripts/test-canvas.cjs` exercises the browser editor against disposable local data. The intermittent blank startup is fixed by loading document tabs before the applet loader; the delayed-dependency regression covers Diagrams, Editor and Slides. The Outline pane, multiple-selection alignment and distribution, conversion, embedding and Obsidian checks remain C3/C4 work. The original C2 plan below is retained as the breakdown of this implementation. Paul still merges and deploys.
+
+Originally written on 2026-11-04 for whoever picks this work up next, human or agent. It describes where the Diagrams work stands, how this repository expects work to be done, and what comes next. Read `CLAUDE.md`, `DESIGN.md` and the design documents it points to before changing anything structural.
 
 ## How work is done here
 
@@ -20,7 +22,7 @@ Written on 2026-11-04 for whoever picks this work up next, human or agent. It de
 
 - Build the engine with `go build -o /tmp/yavc ./cmd/yavc` and run it with `/tmp/yavc -data /tmp/yavc-data`. It serves `http://localhost:8400`, and each applet's standalone page at `http://<applet>.localhost:8400/`, for example `http://diagrams.localhost:8400/`.
 - Rebuild the D2 engine after changing `internal/d2api` with `GOOS=js GOARCH=wasm go build -o apps/diagram-kit/yavc-d2.wasm ./cmd/yavc-d2`.
-- There is no browser test suite in the repository. Changes to what the site draws were checked with Playwright scripts run by hand against the local server, driving the applet through its agent actions: `window.pudlActions.run('yavc.diagrams/new@1', { kind: 'canvas' }, { grant: 'all' })` returns the action's output directly. `set-text@1`, `diagram@1`, `format@1` and `render@1` are the useful ones.
+- The focused C2 browser suite is `scripts/test-canvas.cjs`; `docs/review.md` records its setup. It drives the applet through its agent actions: `window.pudlActions.run('yavc.diagrams/new@1', { kind: 'canvas' }, { grant: 'all' })` returns the action's output directly. `set-text@1`, `diagram@1`, `format@1` and `render@1` are the useful ones.
 - Deploying is Paul's: he tags `vX.Y.Z` on main, then on the server runs `cd /opt/yavc && sed -i 's/^YAVC_TAG=.*/YAVC_TAG=vX.Y.Z/' .env && sudo docker compose pull && sudo docker compose up -d`. The last tag was v0.2.7; v0.2.8 carries the canvas.
 
 ## Where Diagrams stands
@@ -29,36 +31,36 @@ Diagrams (`apps/diagrams`) opens three kinds of file in tabs, with the text in C
 
 - **D2** (`.d2`) is drawn by D2 v0.7.2 compiled to WebAssembly (`internal/d2api`, `cmd/yavc-d2`, run in a worker by `apps/diagram-kit/d2.js`). It has a visual editor (milestone D3, mostly done): selection tied to the text, a palette of shapes, handles on four sides for dragging connections, moving shapes into containers, and an inspector. Every change on the drawing is one of D2's own edits to the text, so Undo covers it. D2 lays the diagram out itself, so shapes cannot be placed by hand. That is why the canvas exists.
 - **Mermaid** (`.mmd`, `.mermaid`) is drawn by the vendored Mermaid and is text only.
-- **Canvas** (`.canvas`) is JSON Canvas 1.0 with the site's extension. Milestone C1 is done and merged: it is read-only on the drawing.
+- **Canvas** (`.canvas`) is JSON Canvas 1.0 with the site's extension. C1 is merged. C2 now provides editing on the drawing, ready for review after the recorded checks.
 
 The remaining D3 items are the Outline pane, arrow keys that follow connections, and choosing a new shape's place among its siblings. They wait behind the canvas work.
 
 ## The canvas
 
-`docs/canvas-design.md` holds the fourteen decisions and the milestones; read it first. `docs/canvas-extension.md` is the specification of the `yavc` extension, version 1. The short version follows.
+`docs/canvas-design.md` holds the numbered decisions and the milestones; read it first. `docs/canvas-extension.md` is the specification of the `yavc` extension, version 1. The short version follows.
 
 - The file is valid JSON Canvas 1.0, so it opens in Obsidian. Shapes, routes, line styles and richer line ends live in one `yavc` property on a node or an edge. The writer keeps `fromEnd` and `toEnd` in agreement with the extension's heads, so a file stripped of the extension still draws sensibly.
 - `apps/diagram-kit/jcanvas.js` is a DOM-free module (UMD; `window.yavcCanvas` in the browser, `require` under Node). It has `read(text)` (validation, refusals, problems with offsets), `write(doc)` (the stable form: keys in the specification's order, two spaces, extension last), `route(edge, nodes)` (elbow, straight or curve, computed and never stored) and `render(doc, opts)`, which returns `{ svg, width, height, boxes, edges, origin }`. `boxes` gives each node's box in drawing coordinates and, for text nodes, the box its text fills. `origin` converts file coordinates to drawing coordinates. Its tests are `apps/diagram-kit/test/jcanvas.test.mjs`.
 - In `apps/diagrams/diagrams.js`, `drawCanvas` reads, renders and puts the SVG in the tab's place. `richText` then replaces each text node's SVG text with the Markdown drawn as HTML in a `foreignObject`, through the Markdown engine (`apps/md-engine/loader.js`, `source()`) and the HTML cleaner. Links and applets inside are reduced to plain content, because the drawing is one labelled picture. `canvasPalette` reads the page's tokens and the background behind the drawing. Exports use the plain SVG with SVG text.
-- Tidy the Text and `format@1` rewrite a canvas in the stable form. The palette and inspector are hidden for canvases by `.dg[data-kind="canvas"]` rules in `diagrams.css`.
+- Tidy the Text and `format@1` rewrite a canvas in the stable form. C2 shows the palette and inspector for canvases; only Mermaid keeps them hidden.
 
 Two traps were found while building C1, and both are fixed.
 
-- PUDL 0.97.8 writes `data-skin` on the root again, unchanged, after any DOM change (paulmooreparks/pudl#33). A mutation observer on the root's theme attributes must compare each record's `oldValue` with the current value, or a redraw triggers itself for ever.
+- PUDL 0.97.8 writes `data-skin` on the root again, unchanged, after any DOM change (paulmooreparks/pudl#33). The original workaround compared each record's `oldValue` with the current value. PUDL 0.97.10 now includes the upstream fix, and both workaround checks have been removed.
 - A canvas draws so fast that its result can arrive before CodeMirror's linter asks for it. The tab keeps its last result (`t.settled`) and the linter uses it.
 
-## What comes next: milestone C2, editing on the canvas
+## C2 implementation scope
 
-Paul agreed that C1 is a viewer and that editing is the next step. The plan proposed to him builds C2 in four pull requests, each one he can try as it lands.
+Paul agreed that C1 is a viewer and that editing comes next. The implementation covers the following four parts of the original proposal together on `codex/canvas-c2`.
 
 1. **Select, move and resize, with pan and zoom.** Put a hit layer over the canvas SVG, as `apps/diagrams/canvas.js` does for D2, but built from `render().boxes`, which are exact because the site drew them. Click and Tab select; the selection is PUDL's focus ring. Drag moves; handles on corners and sides resize, Shift keeps proportions. While dragging, snap to an 8-pixel grid and to the edges and centres of nearby shapes, with a guide line for each match; Alt turns snapping off. Arrow keys move by 1 pixel, by 8 with Shift. Pan and zoom while editing; export and embed use the contents' bounds (open question 3 of the canvas design). Each gesture is one replacement of the text, made with `write()` and dispatched as one CodeMirror transaction through `replaceText`, so Undo and the text pane stay one history (decision 4).
 2. **New shapes and connectors.** A palette of the extension's thirteen shapes; a click or N places one. Connectors are dragged from a handle on one of a shape's four sides to a side of another, which sets `fromSide` and `toSide`. New ids must not collide with existing ones.
 3. **The inspector, delete, duplicate, copy and paste, and order.** The inspector edits text, colour (hex or the six presets), shape, line style and width, route and the two heads. The array order of `nodes` is the drawing order, so Bring Forward and Send Back move a node in the array.
 4. **Groups.** Membership is by area (decision 9): moving a group moves the nodes inside its box, and a node dragged out leaves it.
 
-Every gesture needs a command with a menu row and a key (decision 14), and the agent actions should grow to match (`edit@1` is D2-only today). Run the PUDL review on each step: it checks the selection, handles, toolbar and inspector against PUDL's rules. Milestones C3 (keyboard paths, Outline pane, align and distribute) and C4 (conversion to and from D2, the `{{diagram}}` embed, and checking a round trip through Obsidian) follow.
+Every gesture needs a command with a menu row and a key (decision 14), and the matching agent actions are now `canvas-edit@1` and `canvas-view@1` (`edit@1` remains D2-only). Run the PUDL review on each step: it checks the selection, handles, toolbar and inspector against PUDL's rules. Milestones C3 (keyboard paths, Outline pane, align and distribute) and C4 (conversion to and from D2, the `{{diagram}}` embed, and checking a round trip through Obsidian) follow.
 
 ## Open items outside the canvas
 
 - A D2 upstream issue was drafted for Paul to file; it is not in the repository.
-- pudl#32 (the segmented control needs glyphs) and pudl#33 (the unchanged `data-skin` writes) are open on PUDL. When either ships, move to the new PUDL release as `docs/review.md` describes and remove the workaround.
+- pudl#32 (the segmented control needs glyphs) remains outside this work. PUDL 0.97.10 includes the fix for pudl#33, and this branch adopts it with both observer workarounds removed.

@@ -10,6 +10,21 @@ import (
 	"testing"
 )
 
+func TestDocumentTabsPrecedeAppletStartup(t *testing.T) {
+	s := newSite(t, testDomain)
+	for _, url := range []string{site("/"), "https://dice." + testDomain + "/"} {
+		page := req(t, s, "GET", url, "").Body.String()
+		last := -1
+		for _, src := range []string{"/pudl/pudl-tabs.js?v=", "/static/doc-tabs.js?v=", "/pudl/pudl-applets.js?v=", "/applets/registry.js?v="} {
+			at := strings.Index(page, `src="`+src)
+			if at < 0 || at <= last || strings.Count(page, `src="`+src) != 1 {
+				t.Fatalf("%s must load %s once, after its dependencies", url, src)
+			}
+			last = at
+		}
+	}
+}
+
 func TestStaticDigestAndCaching(t *testing.T) {
 	s := newSite(t, testDomain)
 	if len(s.staticVersion) != 12 {

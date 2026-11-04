@@ -39,6 +39,11 @@
     /* JSON Canvas (docs/canvas-design.md), and the Markdown engine that
        draws a text node's Markdown on the screen (decision 6). */
     function jcanvas() { return once('jcanvas', '/applets/diagram-kit/jcanvas.js', 'yavcCanvas'); }
+    async function canvasEditor() {
+        await jcanvas();
+        await once('canvas-model', '/applets/diagrams/canvas-model.js', 'yavcCanvasModel');
+        return once('canvas-view', '/applets/diagrams/canvas-view.js', 'yavcCanvasView');
+    }
     function mdEngine() { return once('md', '/applets/md-engine/loader.js', 'yavcMdEngine').then(function (f) { return f(); }); }
 
     /* The styles New offers (decision 7). A style is a starter text; the
@@ -79,7 +84,7 @@
        the kinds of shape flowcharts and architecture diagrams reach for. A
        kind chosen is placed by the next click on the drawing, inside the
        shape clicked or at the top on empty space, and by N. */
-    var PALETTE = [['rectangle', 'Rectangle'], ['oval', 'Oval'], ['diamond', 'Diamond'], ['parallelogram', 'Parallelogram'], ['document', 'Document'],
+    var PALETTE = [['rectangle', 'Rectangle'], ['rounded', 'Rounded Rectangle'], ['oval', 'Oval'], ['diamond', 'Diamond'], ['parallelogram', 'Parallelogram'], ['document', 'Document'],
         ['cylinder', 'Cylinder'], ['queue', 'Queue'], ['person', 'Person'], ['cloud', 'Cloud'], ['hexagon', 'Hexagon'], ['package', 'Package'], ['text', 'Text Only']];
     /* D2's reserved words (d2graph's ReservedKeywords, D2 0.7.2), which
        cannot name a shape. */
@@ -189,7 +194,9 @@
         /* Each tab keeps its own editor state, so its undo history and its
            cursor survive a switch to another tab and back. */
         function stateFor(t, text) {
-            var ext = [CM.lineNumbers(), CM.highlightActiveLineGutter(), CM.history(), CM.drawSelection(), CM.highlightActiveLine(), CM.highlightSelectionMatches(), CM.bracketMatching(), CM.closeBrackets(),
+            var visualChange = CM.StateField.define({ create: function () { return false; }, update: function (v, tr) { return tr.docChanged ? tr.isUserEvent('input.canvas') : v; } });
+            var history = t.kind === 'canvas' ? CM.history({ joinToEvent: function (tr, adjacent) { return adjacent && !tr.isUserEvent('input.canvas') && !tr.startState.field(visualChange); } }) : CM.history();
+            var ext = [visualChange, CM.lineNumbers(), CM.highlightActiveLineGutter(), history, CM.drawSelection(), CM.highlightActiveLine(), CM.highlightSelectionMatches(), CM.bracketMatching(), CM.closeBrackets(),
                 CM.keymap.of([].concat(CM.closeBracketsKeymap, CM.completionKeymap, CM.lintKeymap, CM.defaultKeymap, CM.searchKeymap, CM.historyKeymap, [CM.indentWithTab])),
                 window.yavcMdEditor.codeSearch(CM),
                 CM.indentUnit.of('  '),
@@ -209,15 +216,16 @@
             try { cm.setState(t.state); } finally { quiet = false; }
         }
         /* The text a command replaces, as one change, so Undo takes it back. */
-        function replaceText(text) {
+        function replaceText(text, userEvent) {
             var t = current();
             if (!t || !cm || cm.state.doc.toString() === text) { return; }
-            cm.dispatch({ changes: { from: 0, to: cm.state.doc.length, insert: text } });
+            cm.dispatch({ changes: { from: 0, to: cm.state.doc.length, insert: text }, userEvent: userEvent });
         }
         function textChanged(text) {
             var t = current();
             if (!t) { return; }
             t.text = text;
+            if (t.cv) { t.cv.cancel(); t.place.classList.add('sc-diagram-stale'); }
             if (!t.modified) { t.modified = true; commandsChanged(); }
             scheduleDraw();
             keep();
@@ -292,7 +300,7 @@
             el.state.textContent = 'Drawing…';
             var drawn = t.kind === 'd2'
                 ? d2().then(function (E) { return E.draw(t.place, text, { keep: true, report: false, alt: altOf(t) }); })
-                : t.kind === 'canvas' ? drawCanvas(t, text, function () { return seq === drawSeq && t === current(); })
+                : t.kind === 'canvas' ? drawCanvas(t, text, function () { return seq === drawSeq && t === current() && t.text === text; })
                 : kit().then(function (K) { return K.drawMermaid(t.place, text, { keep: true, report: false, alt: altOf(t) }); });
             return drawn.then(function (out) {
                 /* No answer means another drawing of this place replaced
@@ -359,28 +367,219 @@
             var end = text.charAt(at) === '"' ? text.indexOf('"', at + 1) + 1 : 0;
             return [at, end > at ? end : Math.min(text.length, at + 1)];
         }
-        function drawCanvas(t, text, isCurrent) {
-            return jcanvas().then(function (J) {
-                var got = J.read(text), place = t.place;
-                var faults = got.problems.filter(function (p) { return !p.warning; });
-                if (!got.doc || faults.length) {
-                    if (place.firstElementChild) { place.classList.add('sc-diagram-stale'); }
-                    return { problems: faults.map(function (p) { var s = spanAt(text, p.at); return { message: p.message, line: lineAt(text, p.at) || 1, from: s[0], to: s[1] }; }) };
+        async function drawCanvas(t, text, isCurrent) {
+            var J = await jcanvas(), V = await canvasEditor();
+            var got = J.read(text), place = t.place;
+            var faults = got.problems.filter(function (p) { return !p.warning; });
+            if (!got.doc || faults.length) {
+                if (place.firstElementChild) { place.classList.add('sc-diagram-stale'); }
+                return { problems: faults.map(function (p) { var s = spanAt(text, p.at); return { message: p.message, line: lineAt(text, p.at) || 1, from: s[0], to: s[1] }; }) };
+            }
+            var palette = canvasPalette(place, J), out = J.render(got.doc, { palette: palette, pad: 24, font: getComputedStyle(root).fontFamily, title: altOf(t) });
+            var warning = got.problems.filter(function (p) { return p.warning; })[0];
+            if (warning) { say(warning.message, 'warn'); }
+            if (isCurrent()) {
+                var svg = new DOMParser().parseFromString(out.svg, 'image/svg+xml').documentElement;
+                svg = document.importNode(svg, true);
+                svg.setAttribute('role', 'img');
+                svg.setAttribute('aria-label', altOf(t));
+                svg.style.backgroundColor = palette.bg;
+                place.classList.remove('sc-diagram-stale');
+                place.replaceChildren(svg);
+                t.cvDoc = got.doc; t.cvText = text;
+                if (!t.cv) {
+                    t.cv = V.attach(place, el.stage, {
+                        selected: function (s, how) {
+                            if (t !== current()) { return; }
+                            if (how === 'pointer') { el.stage.focus({ preventScroll: true }); }
+                            say(s ? 'Selected ' + s.kind + ' "' + s.id + '".' : '');
+                            commandsChanged(); renderInspector();
+                        },
+                        enabled: function () { return t === current() && t.text === t.cvText && !t.place.classList.contains('sc-diagram-stale'); },
+                        text: function () { return t.text; },
+                        tool: function () { return tool; }, panTool: function () { return canvasPan; },
+                        create: function (x, y) { canvasCreate(x, y); },
+                        edit: function (req, expected) { canvasEdit(req, expected); }
+                    });
                 }
-                var palette = canvasPalette(place, J), out = J.render(got.doc, { palette: palette, pad: 24, font: getComputedStyle(root).fontFamily, title: altOf(t) });
-                var warning = got.problems.filter(function (p) { return p.warning; })[0];
-                if (warning) { say(warning.message, 'warn'); }
-                if (isCurrent()) {
-                    var svg = new DOMParser().parseFromString(out.svg, 'image/svg+xml').documentElement;
-                    svg = document.importNode(svg, true);
-                    svg.setAttribute('role', 'img');
-                    svg.setAttribute('aria-label', altOf(t));
-                    place.classList.remove('sc-diagram-stale');
-                    place.replaceChildren(svg);
-                    richText(t, got.doc, out, svg, palette, isCurrent);
-                }
-                return { svg: out.svg, width: out.width, height: out.height, problems: [] };
+                t.cv.show(got.doc, out, svg);
+                if (t.cvPending) { t.cv.select(t.cvPending, 'edit'); t.cvPending = null; }
+                richText(t, got.doc, out, svg, palette, isCurrent);
+            }
+            return { svg: out.svg, width: out.width, height: out.height, problems: [] };
+        }
+        /* === Editing JSON Canvas ========================================= */
+        function canvasSelection() { var t = current(); return t && t.cv ? t.cv.selected() : null; }
+        function canvasWhy(needs) {
+            var t = current(), s = canvasSelection();
+            if (!t || t.kind !== 'canvas') { return 'Open a canvas first.'; }
+            if (!t.cv || t.cvText !== t.text || (t.problems && t.problems.length)) { return 'Wait for a valid drawing before editing the canvas.'; }
+            if (needs && !s) { return 'Select a node or connector first.'; }
+            if (needs === 'shape' && (!s || s.kind !== 'node')) { return 'Select a node first.'; }
+            return null;
+        }
+        async function canvasEdit(req, expected, strict) {
+            var t = current();
+            try {
+                if (!t || t.kind !== 'canvas' || (expected != null && expected !== t.text)) { throw new Error('The canvas changed before the edit finished. Try again on the current drawing.'); }
+                var J = window.yavcCanvas, M = window.yavcCanvasModel, got = J.read(t.text);
+                if (!got.doc) { throw new Error('Put the mistake in the canvas text right before editing the drawing.'); }
+                var out = M.edit(got.doc, req);
+                if (out.text === t.text) { return out; }
+                var isEdge = out.doc.edges.some(function (x) { return x.id === out.key; }) && (req.op === 'connect' || req.kind === 'edge');
+                t.cvPending = out.key ? { kind: isEdge ? 'edge' : 'node', id: out.key } : null;
+                replaceText(out.text, 'input.canvas');
+                await drawNow();
+                if (t === current()) { say('Changed the canvas. Undo puts it back.'); }
+                return out;
+            } catch (err) {
+                if (strict) { throw err; }
+                say('The canvas could not be changed. ' + err.message, 'problem');
+                return null;
+            }
+        }
+        function canvasRequest(req) {
+            var s = canvasSelection();
+            return canvasEdit(Object.assign({ key: s ? s.id : '', kind: s ? s.kind : 'node' }, req));
+        }
+        function canvasCreate(x, y, type) {
+            var t = current();
+            if (canvasWhy(false)) { return; }
+            var p = t.cv.centre(), shape = tool || 'rectangle';
+            setTool(null);
+            return canvasEdit({ op: 'create', type: type || 'text', shape: shape, x: x == null ? p.x : x, y: y == null ? p.y : y });
+        }
+        function canvasConnect() {
+            if (canvasWhy('shape')) { return; }
+            var t = current(), s = canvasSelection(), text = t.text;
+            var targets = t.cvDoc.nodes.filter(function (x) { return x.id !== s.id; }).map(function (x) { return x.id; });
+            window.yavcDialog.askText('Connect to a Node', 'Target Node', targets[0] || '', {
+                okLabel: 'Connect', help: 'Give the target node ID. Change either side in the inspector after connecting.',
+                validate: function (v) { return targets.indexOf(v) < 0 ? 'Choose another node in this canvas.' : null; }
+            }).then(function (v) { if (v != null && t === current()) { canvasEdit({ op: 'connect', from: s.id, to: v }, text); } });
+        }
+        function canvasResize() {
+            if (canvasWhy('shape')) { return; }
+            var t = current(), s = canvasSelection(), text = t.text, node = t.cvDoc.nodes.find(function (x) { return x.id === s.id; });
+            window.yavcDialog.askText('Resize the Node', 'Width and Height', node.width + ' ' + node.height, {
+                okLabel: 'Resize', help: 'Give the width and height in whole pixels, separated by a space.',
+                validate: function (v) { return !/^\d+\s+\d+$/.test(v.trim()) || v.trim().split(/\s+/).some(function (x) { return !Number.isSafeInteger(+x) || +x < 1; }) ? 'Give two positive whole numbers.' : null; }
+            }).then(function (v) { if (v != null && t === current()) { var dims = v.trim().split(/\s+/).map(Number); canvasEdit({ op: 'resize', key: s.id, width: dims[0], height: dims[1] }, text); } });
+        }
+        function canvasCopy() {
+            if (canvasWhy('shape')) { return; }
+            var t = current(), s = canvasSelection(), fragment = window.yavcCanvasModel.fragment(t.cvDoc, s.id, s.kind);
+            return navigator.clipboard.writeText(window.yavcCanvas.write(fragment)).then(function () { say('Copied the node and its contained nodes.'); }, function (err) { say('The selection could not be copied. ' + err.message, 'problem'); });
+        }
+        async function canvasPaste() {
+            if (canvasWhy(false)) { return; }
+            var t = current(), text = t.text;
+            try {
+                var clip = await navigator.clipboard.readText();
+                if (t !== current()) { return; }
+                await canvasEdit({ op: 'paste', text: clip }, text);
+            } catch (err) { say('The selection could not be pasted. ' + err.message, 'problem'); }
+        }
+        function renderCanvasInspector(t) {
+            var s = canvasSelection(), show = !!(settings.inspector && t.cv);
+            el.inspector.hidden = !show;
+            if (!show) { inspected = null; return; }
+            var blocked = !!canvasWhy(false), state = 'canvas|' + (s ? s.kind + s.id : '') + '|' + blocked;
+            if (inspected === state && el.inspector.contains(document.activeElement)) { return; }
+            inspected = state;
+            if (!s) { el.inspector.innerHTML = '<p class="dg-inspector-empty">Select a node or connector to change its settings.</p>'; return; }
+            var item = (s.kind === 'node' ? t.cvDoc.nodes : t.cvDoc.edges).find(function (x) { return x.id === s.id; });
+            if (!item) { return; }
+            var ext = item.yavc || {}, p = 'dg-cv-in-' + n + '-', had = el.inspector.contains(document.activeElement) ? document.activeElement.id : null;
+            var html = '<h3 class="dg-inspector-title">' + (s.kind === 'node' ? 'Node' : 'Connector') + '</h3><p class="dg-inspector-id">' + esc(item.id) + '</p>';
+            if (item.type === 'text') {
+                html += field(p + 'text', 'Text', '<textarea class="form-input" id="' + p + 'text" data-set="text" data-was="' + esc(item.text) + '" rows="4">' + esc(item.text) + '</textarea>') +
+                    selectField(p + 'shape', 'shape', 'Shape', ext.shape || 'rectangle', [['rectangle', 'Rectangle'], ['rounded', 'Rounded Rectangle']].concat(PALETTE.filter(function (x) { return x[0] !== 'rectangle' && x[0] !== 'rounded'; })));
+            } else if (s.kind === 'edge' || item.type === 'group') { html += textField(p + 'label', 'label', 'Label', item.label); }
+            if (s.kind === 'node') {
+                ['x', 'y', 'width', 'height'].forEach(function (k) { html += numberField(p + k, k, k === 'x' ? 'X' : k === 'y' ? 'Y' : k === 'width' ? 'Width' : 'Height', String(item[k]), k === 'width' || k === 'height' ? 1 : -Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER); });
+            }
+            html += textField(p + 'colour', 'color', 'Colour', item.color, 'Use #rrggbb, #rgb, or a preset from 1 to 6 (red, orange, yellow, green, cyan, purple). Leave it blank for the theme.') +
+                selectField(p + 'line', 'line', 'Line Style', ext.line || 'solid', [['solid', 'Solid'], ['dashed', 'Dashed'], ['dotted', 'Dotted']]) +
+                numberField(p + 'line-width', 'lineWidth', 'Line Width', String(ext.lineWidth || 2), 1, 8);
+            if (s.kind === 'edge') {
+                html += selectField(p + 'route', 'route', 'Route', ext.route || 'elbow', [['elbow', 'Elbow'], ['straight', 'Straight'], ['curve', 'Curve']]);
+                var heads = [['none', 'None'], ['arrow', 'Arrow'], ['triangle', 'Triangle'], ['diamond', 'Diamond'], ['circle', 'Circle'], ['box', 'Box'], ['cross', 'Cross'], ['cf-one', 'One'], ['cf-one-required', 'Exactly One'], ['cf-many', 'Many'], ['cf-many-required', 'One or More']];
+                html += selectField(p + 'from-head', 'fromHead', 'Start Head', ext.fromHead || item.fromEnd || 'none', heads) + selectField(p + 'to-head', 'toHead', 'End Head', ext.toHead || item.toEnd || 'arrow', heads);
+                var sides = [['', 'Automatic'], ['top', 'Top'], ['right', 'Right'], ['bottom', 'Bottom'], ['left', 'Left']];
+                html += selectField(p + 'from-side', 'fromSide', 'Start Side', item.fromSide, sides) + selectField(p + 'to-side', 'toSide', 'End Side', item.toSide, sides);
+            }
+            el.inspector.innerHTML = '<fieldset class="dg-inspector-fields"' + (blocked ? ' disabled' : '') + '>' + html + '</fieldset>';
+            if (blocked) { el.inspector.insertAdjacentHTML('afterbegin', '<p class="form-help">Put the canvas text right before changing these settings.</p>'); }
+            if (window.pudlFields) { window.pudlFields.enhance(el.inspector); }
+            if (had) { var back = document.getElementById(had); if (back && !back.disabled) { back.focus({ preventScroll: true }); } }
+        }
+        async function canvasInspectorChanged(f) {
+            if (canvasWhy(true)) { return; }
+            var property = f.dataset.set, value = f.value, s = canvasSelection();
+            if (value === f.dataset.was) { return; }
+            var req = { op: 'set', key: s.id, kind: s.kind, property: property, value: property === 'text' ? value : value || null };
+            if (['x', 'y', 'width', 'height'].indexOf(property) >= 0) { req = { op: 'resize', key: s.id }; req[property] = Number(value); }
+            if (property === 'lineWidth') { req.value = Number(value); }
+            try { await canvasEdit(req, current().text, true); f.dataset.was = value; markField(f, null); }
+            catch (err) { markField(f, err.message); }
+        }
+        function canvasCommands() {
+            function c(id, label, run, key, needs, glyph) { return cmd('cv-' + id, label, glyph, run, { hidden: function () { return !isCanvas(); }, builtIn: key, disabled: function () { return !!canvasWhy(needs); }, reason: function () { return canvasWhy(needs); } }); }
+            var commands = [
+                c('new', 'Add Shape', function () { canvasCreate(); }, 'n', false, 'plus'),
+                c('group', 'Add Group', function () { canvasCreate(null, null, 'group'); }, 'g', false, 'folder'),
+                c('connect', 'Connect to a Node…', canvasConnect, 'c', 'shape', 'yavc-connect'),
+                c('resize', 'Resize…', canvasResize, 'r', 'shape'),
+                c('copy', 'Copy Node', canvasCopy, 'Mod-c', 'shape', 'copy'),
+                c('paste', 'Paste Nodes', canvasPaste, 'Mod-v', false),
+                c('duplicate', 'Duplicate', function () { canvasRequest({ op: 'duplicate' }); }, 'Mod-d', 'shape', 'copy'),
+                c('forward', 'Bring Forward', function () { canvasRequest({ op: 'order', direction: 'forward' }); }, 'Mod-]', 'shape'),
+                c('back', 'Send Back', function () { canvasRequest({ op: 'order', direction: 'back' }); }, 'Mod-[', 'shape'),
+                c('delete', 'Delete', function () { canvasRequest({ op: 'delete' }); }, 'Delete', true, 'yavc-bin'),
+                c('next', 'Select Next', function () { current().cv.cycle(1); el.stage.focus(); }, 'Tab', false),
+                c('previous', 'Select Previous', function () { current().cv.cycle(-1); el.stage.focus(); }, 'Shift-Tab', false),
+                c('zoom-in', 'Zoom In', function () { current().cv.zoom(1.25); }, '+', false, 'plus'),
+                c('zoom-out', 'Zoom Out', function () { current().cv.zoom(0.8); }, '-', false, 'minus'),
+                c('actual', 'Actual Size', function () { current().cv.actual(); }, '1', false),
+                Object.assign(c('pan', 'Pan', function () { setCanvasPan(!canvasPan); }, 'h', false, 'move'), { choice: 'dg-tool', choiceLabel: 'Palette', value: 'pan', checked: function () { return canvasPan; } })
+            ];
+            [['left', 'Left', -1, 0], ['right', 'Right', 1, 0], ['up', 'Up', 0, -1], ['down', 'Down', 0, 1]].forEach(function (d) {
+                commands.push(c(d[0], 'Move ' + d[1], function () { canvasRequest({ op: 'move', dx: d[2], dy: d[3] }); }, 'Arrow' + d[1], 'shape'));
+                commands.push(c('pan-' + d[0], 'Pan ' + d[1], function () { current().cv.pan(d[2] * 80, d[3] * 80); }, 'Alt-Arrow' + d[1], false));
             });
+            return commands;
+        }
+        function canvasKey(e) {
+            var t = current(), mod = e.ctrlKey || e.metaKey, key = e.key.toLowerCase();
+            if (mod && key === 'z') { e.preventDefault(); if (e.shiftKey) { CM.redo(cm); } else { CM.undo(cm); } return; }
+            if (mod && key === 'y') { e.preventDefault(); CM.redo(cm); return; }
+            if (e.key === 'Escape') { setTool(null); t.cv.cancel(); t.cv.select(null); e.preventDefault(); return; }
+            if (e.key === 'Tab' || e.key === ' ') { if (t.cv.onKey(e)) { e.preventDefault(); } return; }
+            if (canvasWhy(false)) { return; }
+            if (/^Arrow/.test(e.key) && !mod) {
+                e.preventDefault();
+                var dx = e.key === 'ArrowLeft' ? -1 : e.key === 'ArrowRight' ? 1 : 0, dy = e.key === 'ArrowUp' ? -1 : e.key === 'ArrowDown' ? 1 : 0;
+                if (e.altKey) { t.cv.pan(dx * 80, dy * 80); }
+                else if (!canvasWhy('shape')) { canvasRequest({ op: 'move', dx: dx * (e.shiftKey ? 8 : 1), dy: dy * (e.shiftKey ? 8 : 1) }); }
+                return;
+            }
+            if (mod && key === 'c') { e.preventDefault(); canvasCopy(); }
+            else if (mod && key === 'v') { e.preventDefault(); canvasPaste(); }
+            else if (mod && key === 'd' && !canvasWhy('shape')) { e.preventDefault(); canvasRequest({ op: 'duplicate' }); }
+            else if (mod && (key === '[' || key === ']') && !canvasWhy('shape')) { e.preventDefault(); canvasRequest({ op: 'order', direction: key === '[' ? 'back' : 'forward' }); }
+            else if (!mod && !e.altKey) {
+                if (key === 'n') { e.preventDefault(); canvasCreate(); }
+                else if (key === 'g') { e.preventDefault(); canvasCreate(null, null, 'group'); }
+                else if (key === 'c') { e.preventDefault(); canvasConnect(); }
+                else if (key === 'r') { e.preventDefault(); canvasResize(); }
+                else if (key === 'h') { e.preventDefault(); setCanvasPan(!canvasPan); }
+                else if (key === 'delete' && !canvasWhy(true)) { e.preventDefault(); canvasRequest({ op: 'delete' }); }
+                else if (key === '+' || key === '=') { e.preventDefault(); t.cv.zoom(1.25); }
+                else if (key === '-') { e.preventDefault(); t.cv.zoom(0.8); }
+                else if (key === '0') { e.preventDefault(); t.cv.fit(); }
+                else if (key === '1') { e.preventDefault(); t.cv.actual(); }
+            }
         }
         /* The colours of a canvas, read from the page's tokens where it is
            drawn, as a D2 diagram's are (docs/diagrams-design.md, decision
@@ -455,6 +654,7 @@
             el.canvas.classList.toggle('dg-fit', !!settings.fit);
             var t = current();
             if (t && t.canvas) { t.canvas.fit(); }
+            if (t && t.cv) { t.cv.fit(); }
         }
 
         /* === The visual editor (milestone D3) =============================
@@ -556,6 +756,7 @@
         function dashOf(st) { var d = st['stroke-dash']; return d && d !== '0' ? (+d <= 3 ? '2' : '5') : ''; }
         function renderInspector() {
             var t = current(), key = selection();
+            if (t && t.kind === 'canvas') { renderCanvasInspector(t); return; }
             var show = !!(settings.inspector && t && t.kind === 'd2' && t.canvas);
             el.inspector.hidden = !show;
             if (!show) { inspected = null; return; }
@@ -638,6 +839,7 @@
            the leaving after it make one edit, not two. */
         function inspectorChanged(f) {
             var t = current(), key = selection();
+            if (t && t.kind === 'canvas') { canvasInspectorChanged(f); return; }
             if (!t || !key || !canEdit()) { return; }
             var now = f.type === 'checkbox' ? (f.checked ? 'true' : '') : f.value.trim();
             if (now === (f.getAttribute('data-was') || '')) { return; }
@@ -750,12 +952,16 @@
         function lastName(key) { var m = /([^.]+)$/.exec(key || ''); return m ? m[1] : key; }
         /* The palette's choice: null for Select, or a kind of shape. */
         var tool = null;
+        var canvasPan = false;
+        function setCanvasPan(value) { setTool(null); canvasPan = value; root.classList.toggle('dg-cv-panning', value); commandsChanged(); }
         function setTool(kind) {
+            canvasPan = false;
+            root.classList.remove('dg-cv-panning');
             tool = kind && kind !== 'select' ? kind : null;
             root.classList.toggle('dg-placing', !!tool);
             if (tool) {
                 var name = (PALETTE.find(function (x) { return x[0] === tool; }) || [tool, tool])[1].toLowerCase();
-                say('Click the drawing to place a ' + name + ': on a shape to put it inside, or on empty space; or press N. Escape goes back to Select.');
+                say(isCanvas() ? 'Click the drawing to place a ' + name + ', or press N. Escape goes back to Select.' : 'Click the drawing to place a ' + name + ': on a shape to put it inside, or on empty space; or press N. Escape goes back to Select.');
                 el.stage.focus({ preventScroll: true });
             }
             commandsChanged();
@@ -909,6 +1115,7 @@
            to this pane so that typing in the text never deletes a shape. */
         el.stage.addEventListener('keydown', function (e) {
             var t = current();
+            if (t && t.cv && e.target === el.stage) { canvasKey(e); return; }
             if (!t || !t.canvas || e.target !== el.stage) { return; }
             if (connecting && e.key === 'Escape') { e.preventDefault(); stopConnect('Stopped connecting.'); return; }
             if (tool && e.key === 'Escape') { e.preventDefault(); setTool(null); say('Back to Select.'); return; }
@@ -981,6 +1188,8 @@
         function stash() { var t = current(); if (t && cm) { t.state = cm.state; } }
         function activateTab(i) {
             if (!tabs[i]) { return; }
+            if (current() && current().cv) { current().cv.cancel(); }
+            setTool(null);
             stash();
             active = i;
             var t = tabs[i];
@@ -989,6 +1198,9 @@
             el.where.textContent = t.path || 'Not saved yet';
             el.kind.textContent = KIND_NAME[t.kind];
             root.setAttribute('data-kind', t.kind);
+            q('.dg-keys').textContent = t.kind === 'canvas'
+                ? 'Tab selects nodes and connectors in drawing order. Shift+Tab selects the previous item and leaves the drawing at the first item. Arrow keys move a node by one pixel, or eight with Shift. N adds a shape, G a group, C connects, R resizes, Delete deletes. Ctrl or Command with C, V and D copies, pastes and duplicates. Alt with arrow keys pans. Plus and minus zoom, 0 fits, and 1 shows actual size. Space with a drag pans. Escape cancels a drag and returns to Select.'
+                : 'Arrow keys select a shape or connection. Enter edits its label, F2 renames it, N adds a shape, C connects it, Delete deletes it, and Escape returns to Select.';
             inspected = undefined;
             renderInspector();
             applyDock();
@@ -1004,7 +1216,7 @@
             var t = makeTab(text, path, kind, view);
             /* The tab replaced is let go first, so that showing the new one
                does not keep the old one's text in the new one's place. */
-            if (untouched(current()) && tabs.length) { var at = active; tabs[at] = t; active = -1; activateTab(at); return t; }
+            if (untouched(current()) && tabs.length) { var at = active, old = current(); if (old.canvas) { old.canvas.destroy(); } if (old.cv) { old.cv.destroy(); } tabs[at] = t; active = -1; activateTab(at); return t; }
             tabs.push(t);
             activateTab(tabs.length - 1);
             return t;
@@ -1020,6 +1232,8 @@
             }
             stash();
             var front = active;
+            if (t.canvas) { t.canvas.destroy(); }
+            if (t.cv) { t.cv.destroy(); }
             tabs.splice(i, 1);
             if (i < front) { front--; } else if (i === front) { front = Math.min(i, tabs.length - 1); }
             if (!tabs.length) { tabs.push(makeTab(D2_STYLES[0].text, null, 'd2')); front = 0; }
@@ -1229,7 +1443,8 @@
            PUDL shows it on the disabled control and tells an agent. */
         function whyNot(needs) {
             var t = current();
-            if (!t || t.kind !== 'd2') { return 'Only a D2 diagram is edited on its drawing.'; }
+            if (t && t.kind === 'canvas') { return canvasWhy(needs); }
+            if (!t || t.kind !== 'd2') { return 'Only D2 diagrams and canvases are edited on their drawings.'; }
             if (t.problems && t.problems.length) { return 'The text has a mistake in it; put it right first.'; }
             if (!t.canvas) { return 'The drawing is not ready yet.'; }
             var k = t.canvas.selected();
@@ -1264,33 +1479,33 @@
                 { id: 'shape-type', label: 'Shape', glyph: 'square', hidden: function () { return !isD2(); }, disabled: function () { return !!whyNot('shape'); }, reason: function () { return whyNot('shape'); },
                     current: function () { var t = current(), s = t && shapeOf(t, selection()); var f = s && SHAPES.find(function (x) { return x[0] === s.shape; }); return f ? f[1] : null; },
                     items: SHAPES.map(function (sh) { return { id: 'shape-type-' + sh[0], label: sh[1], choice: 'dg-shape', value: sh[0], checked: function () { var t = current(), s = t && shapeOf(t, selection()); return !!s && s.shape === sh[0]; }, run: function () { setShape(sh[0]); } }; }) },
-                { id: 'tool-select', label: 'Select', glyph: 'yavc-select', choice: 'dg-tool', choiceLabel: 'Palette', value: 'select', hidden: function () { return !isD2(); },
-                    checked: function () { return !tool; }, run: function () { setTool(null); } }
+                { id: 'tool-select', label: 'Select', glyph: 'yavc-select', choice: 'dg-tool', choiceLabel: 'Palette', value: 'select', hidden: function () { return !isD2() && !isCanvas(); },
+                    checked: function () { return !tool && !canvasPan; }, run: function () { setTool(null); } }
             ].concat(PALETTE.map(function (k) {
                 return { id: 'tool-' + k[0], label: k[1], glyph: 'yavc-shape-' + k[0], // check-ignore(glyph-defined): one glyph for each PALETTE kind, each defined on :root in diagrams.css as --glyph-yavc-shape-<kind>
                      choice: 'dg-tool', choiceLabel: 'Palette', value: k[0],
-                    hidden: function () { return !isD2(); }, disabled: function () { return !!whyNot(false); }, reason: function () { return whyNot(false); },
+                    hidden: function () { return (!isD2() && !isCanvas()) || (k[0] === 'rounded' && !isCanvas()); }, disabled: function () { return !!whyNot(false); }, reason: function () { return whyNot(false); },
                     checked: function () { return tool === k[0]; }, run: function () { setTool(tool === k[0] ? null : k[0]); } };
             })).concat([
                 cmd('shape-move-into', 'Move Into…', null, moveInto, { hidden: function () { return !isD2(); }, disabled: function () { return !!whyNot('shape'); }, reason: function () { return whyNot('shape'); } }),
                 cmd('shape-move-top', 'Move to the Top', null, function () { moveTo(selection(), null); }, { hidden: function () { return !isD2(); }, disabled: function () { var k = selection(); return !!whyNot('shape') || k.indexOf('.') < 0; }, reason: function () { var w = whyNot('shape'); return w || (selection().indexOf('.') < 0 ? 'It is at the top already.' : null); } }),
                 cmd('shape-delete', 'Delete', 'yavc-bin', deleteSelected, { builtIn: 'Delete', danger: true, hidden: function () { return !isD2(); }, disabled: function () { return !!whyNot(true); }, reason: function () { return whyNot(true); } }),
                 cmd('redraw', 'Draw Again', 'reload', function () { drawNow(); }),
-                cmd('toggle-inspector', 'Show the Inspector', 'panel', toggleInspector, { hidden: function () { return !isD2(); }, checked: function () { return !!settings.inspector; } }),
-                cmd('fit', 'Fit the Drawing to the Pane', 'maximize', function () { settings.fit = !settings.fit; applyFit(); keepSetting('fit', settings.fit); commandsChanged(); }, { checked: function () { return !!settings.fit; } }),
+                cmd('toggle-inspector', 'Show the Inspector', 'panel', toggleInspector, { hidden: function () { return !isD2() && !isCanvas(); }, checked: function () { return !!settings.inspector; } }),
+                cmd('fit', 'Fit the Drawing to the Pane', 'maximize', function () { if (isCanvas()) { var t = current(); if (t.cv) { t.cv.fit(); } return; } settings.fit = !settings.fit; applyFit(); keepSetting('fit', settings.fit); commandsChanged(); }, { checked: function () { return !isCanvas() && !!settings.fit; } }),
                 { id: 'dock', label: 'Drawing', glyph: 'dock', current: function () { var d = DOCKS.find(function (x) { return x[0] === settings.dock; }); return d ? d[1] : null; },
                     items: DOCKS.map(function (d) { return { id: 'dock-' + d[0], label: d[1], choice: 'dg-dock', value: d[0], checked: function () { return settings.dock === d[0]; }, run: function () { setDock(d[0]); } }; }) }
             ]);
             VIEWS.forEach(function (v) {
-                table.push({ id: 'view-' + v[0], label: v[0] === 'preview' ? function () { return isD2() ? 'Visual' : 'Preview'; } : v[1], choice: 'dg-view', choiceLabel: 'View', value: v[0], checked: function () { return viewOf(current()) === v[0]; }, run: function () { setView(v[0]); } });
+                table.push({ id: 'view-' + v[0], label: v[0] === 'preview' ? function () { return isD2() || isCanvas() ? 'Visual' : 'Preview'; } : v[1], choice: 'dg-view', choiceLabel: 'View', value: v[0], checked: function () { return viewOf(current()) === v[0]; }, run: function () { setView(v[0]); } });
             });
-            return table;
+            return table.concat(canvasCommands());
         }
         function toolbars() {
             return [{ label: 'Diagrams', ribbon: 'hide', groups: [
                 { label: 'File', glyph: 'file', priority: 3, items: ['new', 'open', 'save'] },
                 { label: 'Edit', glyph: 'pencil', priority: 4, items: ['undo', 'redo', 'find'] },
-                { label: 'Shape', glyph: 'square', priority: 5, items: ['shape-add', 'connect', 'shape-label', 'shape-type', 'shape-delete'] },
+                { label: 'Shape', glyph: 'square', priority: 5, items: ['shape-add', 'connect', 'shape-label', 'shape-type', 'shape-delete', 'cv-new', 'cv-connect', 'cv-delete', 'cv-pan', 'cv-zoom-in', 'cv-zoom-out'] },
                 { label: 'Diagram', glyph: 'code', priority: 2, items: ['format-text', 'copy-embed', 'export-svg', 'export-png'] },
                 { label: 'View', glyph: 'panel', priority: 1, end: true, items: [{ choice: 'dg-view' }, 'dock', 'fit', 'toggle-inspector'] }
             ] }];
@@ -1301,16 +1516,16 @@
             return { titles: [
                 { label: 'Diagrams', glyph: 'document', items: H.identity ? H.identity(root, []) : [] },
                 { id: 'file', label: 'File', glyph: 'file', items: ['new', 'new-mermaid', 'new-canvas', 'open', 'save', 'save-as', '-', 'edit-in-editor', '-', 'export-svg', 'export-png', 'export-source', '-', 'close-diagram'] },
-                { id: 'edit', label: 'Edit', glyph: 'pencil', items: ['undo', 'redo', '-', 'find'] },
+                { id: 'edit', label: 'Edit', glyph: 'pencil', items: ['undo', 'redo', '-', 'cv-copy', 'cv-paste', 'cv-duplicate', 'cv-delete', '-', 'find'] },
                 { id: 'diagram', label: 'Diagram', glyph: 'code', items: ['format-text', 'redraw', '-', 'copy-embed'] },
-                { id: 'shape', label: 'Shape', glyph: 'square', items: ['shape-add', 'shape-add-inside', 'connect', '-', 'shape-label', 'shape-rename', 'shape-type', '-', 'shape-move-into', 'shape-move-top', '-', 'shape-delete', '-', 'tool-select'].concat(PALETTE.map(function (k) { return 'tool-' + k[0]; })) }
-            ], into: { view: ['view-text', 'view-preview', 'view-split', '-', 'dock', 'fit', 'toggle-inspector'], go: ['go-to-line'] } };
+                { id: 'shape', label: 'Shape', glyph: 'square', items: ['shape-add', 'shape-add-inside', 'connect', 'cv-new', 'cv-group', 'cv-connect', 'cv-resize', '-', 'shape-label', 'shape-rename', 'shape-type', '-', 'shape-move-into', 'shape-move-top', 'cv-left', 'cv-right', 'cv-up', 'cv-down', 'cv-forward', 'cv-back', '-', 'shape-delete', '-', 'tool-select'].concat(PALETTE.map(function (k) { return 'tool-' + k[0]; })) }
+            ], into: { view: ['view-text', 'view-preview', 'view-split', '-', 'dock', 'fit', 'toggle-inspector', '-', 'cv-pan', 'cv-pan-left', 'cv-pan-right', 'cv-pan-up', 'cv-pan-down', 'cv-zoom-in', 'cv-zoom-out', 'cv-actual'], go: ['go-to-line', 'cv-next', 'cv-previous'] } };
         }
         root.addEventListener('pudl:contextmenu', function (e) {
             var t = e.detail.target;
             var own = function (ids) { return window.pudlCommands ? window.pudlCommands.menuRows(ids, root) : ids; };
             if (t.closest && t.closest('.dg-stagebox')) {
-                var rows = isD2() && selection() ? ['shape-label', 'shape-rename', 'shape-type', 'connect', 'shape-add-inside', '-', 'shape-delete', '-'] : isD2() ? ['shape-add', '-'] : [];
+                var rows = isCanvas() ? ['cv-new', 'cv-group', 'cv-connect', 'cv-resize', '-', 'cv-copy', 'cv-paste', 'cv-duplicate', 'cv-forward', 'cv-back', 'cv-delete', '-'] : isD2() && selection() ? ['shape-label', 'shape-rename', 'shape-type', 'connect', 'shape-add-inside', '-', 'shape-delete', '-'] : isD2() ? ['shape-add', '-'] : [];
                 e.detail.add(own(rows.concat(['copy-embed', 'export-svg', 'export-png', '-', 'fit', 'redraw'])));
             }
             else if (t.closest && t.closest('.dg-text')) { e.detail.add(own(['undo', 'redo', '-', 'find', '-', 'format-text', 'copy-embed', '-', 'view-text', 'view-preview', 'view-split'])); }
@@ -1322,13 +1537,8 @@
            when the site's mode, colour theme or skin changes, as d2.js
            draws D2 again. */
         function modeChanged() { var t = current(); if (t && t.kind === 'canvas') { drawNow(); } }
-        /* Only a value that changed counts: PUDL's skins write data-skin
-           again, unchanged, after any change to the page, and a drawing
-           that answered each write would draw for ever (pudl#33). */
-        var modeWatch = new MutationObserver(function (records) {
-            if (records.some(function (r) { return r.oldValue !== document.documentElement.getAttribute(r.attributeName); })) { modeChanged(); }
-        });
-        modeWatch.observe(document.documentElement, { attributes: true, attributeOldValue: true, attributeFilter: ['data-theme', 'data-palette', 'data-skin'] });
+        var modeWatch = new MutationObserver(modeChanged);
+        modeWatch.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'data-palette', 'data-skin'] });
         var darkQuery = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
         if (darkQuery) { darkQuery.addEventListener('change', modeChanged); }
 
@@ -1473,6 +1683,32 @@
                 if (out.problems && out.problems.length) { throw new Error(out.problems[0].message); }
                 return { output: Object.assign({ key: out.key || '' }, await drawnNow()) };
             },
+            'canvas-view@1': async function (input) {
+                await booted;
+                var t = current();
+                if (!t || t.kind !== 'canvas') { throw new Error('Open a canvas before changing its drawing view.'); }
+                await drawNow();
+                if (destroyed || t !== current() || canvasWhy(false)) { throw new Error('The current canvas is not ready.'); }
+                if (input.op === 'select') {
+                    var key = input.key || null, kind = input.kind || 'node';
+                    if (key && !(kind === 'edge' ? t.cvDoc.edges : t.cvDoc.nodes).some(function (x) { return x.id === key; })) { throw new Error('There is no ' + kind + ' with that ID.'); }
+                    t.cv.select(key ? { id: key, kind: kind } : null);
+                } else if (input.op === 'pan') { t.cv.pan(input.dx || 0, input.dy || 0); }
+                else if (input.op === 'zoom') { t.cv.zoom(input.factor || 1); }
+                else if (input.op === 'fit') { t.cv.fit(); }
+                else if (input.op === 'actual') { t.cv.actual(); }
+                else { throw new Error('Unknown canvas view operation.'); }
+                return { output: { applied: true } };
+            },
+            'canvas-edit@1': async function (input) {
+                await booted;
+                var t = await front(input.index);
+                if (t.kind !== 'canvas') { throw new Error('Open a JSON Canvas file before using canvas-edit.'); }
+                await canvasEditor();
+                if (destroyed || t !== current()) { throw new Error('The open canvas changed before the edit could run.'); }
+                var out = await canvasEdit(input, t.text, true);
+                return { output: Object.assign({ key: out.key || '' }, await drawnNow()) };
+            },
             'render@1': async function (input) {
                 await booted;
                 var t = await front(input.index);
@@ -1505,7 +1741,7 @@
                 destroyed = true;
                 modeWatch.disconnect();
                 if (darkQuery) { darkQuery.removeEventListener('change', modeChanged); }
-                tabs.forEach(function (t) { if (t.canvas) { t.canvas.destroy(); } });
+                tabs.forEach(function (t) { if (t.canvas) { t.canvas.destroy(); } if (t.cv) { t.cv.destroy(); } });
                 clearTimeout(drawTimer);
                 settle(null, []);
                 if (detachLive) { detachLive(); }

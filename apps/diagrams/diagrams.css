@@ -114,7 +114,7 @@
 /* The palette sits over the drawing of a D2 diagram, and not a Mermaid one
    or a canvas, which is drawn and not yet edited (docs/canvas-design.md, C1). */
 .dg-palette { flex: none; min-width: 0; padding: var(--space-1) var(--space-2); border-bottom: 1px solid var(--border); background: var(--surface-alt); }
-.dg[data-kind="mermaid"] .dg-palette, .dg[data-kind="canvas"] .dg-palette { display: none; }
+.dg[data-kind="mermaid"] .dg-palette { display: none; }
 
 /* === The inspector (milestone D3) ========================================= */
 /* Beside the drawing, a column of PUDL's sunken fields for what is
@@ -133,7 +133,7 @@
 .dg-row > .form-select-wrap { flex: 1 1 auto; min-width: 0; }
 .dg-inspector-fields { border: 0; padding: 0; margin: 0; min-width: 0; }
 .dg-inspector-blocked { margin: 0 0 var(--space-3); }
-.dg[data-kind="mermaid"] .dg-inspector, .dg[data-kind="canvas"] .dg-inspector { display: none; }
+.dg[data-kind="mermaid"] .dg-inspector { display: none; }
 
 /* === A canvas (docs/canvas-design.md) ===================================== */
 /* A text node's Markdown, drawn as HTML over its shape (decision 6), at the
@@ -151,3 +151,34 @@
 .dg-cv-text :is(ul, ol) { padding-inline-start: 1.2em; }
 .dg-cv-text.is-centred :is(ul, ol) { text-align: start; }
 .dg-cv-text img { max-width: 100%; height: auto; }
+
+/* The editing camera is a viewport on file coordinates. The plain SVG
+   retained for export has its own content bounds and no editing controls. */
+:root { --glyph-yavc-shape-rounded: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4'%3E%3Crect x='2' y='4' width='12' height='8' rx='3'/%3E%3C/svg%3E"); }
+.dg[data-kind="canvas"] .dg-stage { padding: 0; overflow: hidden; }
+.dg[data-kind="canvas"] .dg-canvas { height: 100%; min-height: 0; }
+.dg-place.dg-cv-editor { display: block; position: relative; width: 100%; height: 100%; overflow: hidden; touch-action: none; user-select: none; }
+.dg[data-kind="canvas"] .dg-canvas .dg-cv-editor > svg { width: 100%; height: 100%; max-width: none; max-height: none; }
+.dg-cv-editor > svg:first-child { pointer-events: none; }
+.dg-cv-layer, .dg-cv-grips { position: absolute; inset: 0; pointer-events: none; }
+.dg-cv-hit { fill: transparent; pointer-events: all; cursor: grab; }
+.dg-cv-hit:hover { stroke: var(--accent); stroke-width: 1; stroke-dasharray: 3 3; vector-effect: non-scaling-stroke; }
+.dg-cv-edge-hit { fill: none; stroke: transparent; stroke-width: 14; vector-effect: non-scaling-stroke; pointer-events: stroke; cursor: pointer; }
+.dg-cv-ring { fill: none; stroke: var(--focus-ring); stroke-width: 3; vector-effect: non-scaling-stroke; pointer-events: none; }
+.dg-stage:focus-visible:has(.dg-cv-ring) { box-shadow: none; }
+.dg-cv-line-ring { stroke-width: 8; stroke-opacity: 0.5; }
+.dg-cv-preview { fill: none; stroke: var(--accent); stroke-width: 2; stroke-dasharray: 6 4; vector-effect: non-scaling-stroke; pointer-events: none; }
+.dg-cv-guide { stroke: var(--accent); stroke-width: 1; stroke-dasharray: 3 3; vector-effect: non-scaling-stroke; pointer-events: none; }
+.dg-cv-grips .dg-cv-grip { position: absolute; width: 12px; height: 12px; min-width: 12px; min-height: 12px; padding: 0; transform: translate(-50%, -50%); pointer-events: auto; }
+.dg-cv-grips .dg-cv-connect { width: 16px; height: 16px; border-radius: 50%; cursor: crosshair; }
+.dg-cv-grips .dg-cv-resize { border-radius: 2px; }
+.dg-cv-grips .dg-cv-connect::after { content: ''; width: 8px; height: 8px; background: currentColor; mask: var(--glyph-plus) center / contain no-repeat; }
+.dg-cv-editor.dg-cv-dragging, .dg-cv-editor.dg-cv-dragging .dg-cv-hit { cursor: grabbing; }
+.dg-place.sc-diagram-stale :is(.dg-cv-layer, .dg-cv-grips) { visibility: hidden; }
+.dg[data-kind="canvas"].dg-placing .dg-cv-editor { cursor: crosshair; }
+.dg[data-kind="canvas"].dg-placing .dg-cv-hit { cursor: crosshair; }
+.dg.dg-cv-panning :is(.dg-cv-editor, .dg-cv-hit) { cursor: grab; }
+@media (forced-colors: active) {
+  .dg-cv-ring, .dg-cv-hit:hover, .dg-cv-preview, .dg-cv-guide { stroke: Highlight; forced-color-adjust: none; }
+  .dg-cv-line-ring { stroke-opacity: 1; }
+}
