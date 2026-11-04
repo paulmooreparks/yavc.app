@@ -1,12 +1,14 @@
 # Handoff: Diagrams and the canvas editor
 
-Updated on 2026-11-04. C2 is implemented on `codex/canvas-c2` for review, with the complete PUDL 0.97.10 asset set. The C2 model tests run in the regular checks, and `scripts/test-canvas.cjs` exercises the browser editor against disposable local data. The intermittent blank startup is fixed by loading document tabs before the applet loader; the delayed-dependency regression covers Diagrams, Editor and Slides. The Outline pane, multiple-selection alignment and distribution, conversion, embedding and Obsidian checks remain C3/C4 work. The original C2 plan below is retained as the breakdown of this implementation. Paul still merges and deploys.
+Updated on 2026-11-04. C2 and the connector endpoint follow-up are merged. Tag `v0.2.11` is installed locally as `yavc-app-candidate` on port 8401, with Diagrams 0.12.0 and PUDL 0.97.10. Paul has authorised the local pull, next-version tag/push, Docker build and candidate run process after future merges. Keep his running candidate intact until its replacement is ready. Paul still authorises merges. The Outline pane, multiple-selection alignment and distribution, conversion, embedding and Obsidian checks remain C3/C4 work.
+
+The branch `codex/diagram-source-and-standalone-help` adds canvas/source selection linking, removes the duplicate palette and repairs shared standalone Help/About behavior. Diagrams is 0.13.0 there. PUDL's agent owns issue #32, which covers missing glyphs in ribbon choices; do not patch the vendored assets for it. Text alignment remains shape-dependent, as the help now explains.
 
 Originally written on 2026-11-04 for whoever picks this work up next, human or agent. It describes where the Diagrams work stands, how this repository expects work to be done, and what comes next. Read `CLAUDE.md`, `DESIGN.md` and the design documents it points to before changing anything structural.
 
 ## Connector endpoint follow-up
 
-The follow-up on `codex/canvas-endpoints` adds draggable start/end tips, automatic attachments on interior drops, live connector previews during node movement and free endpoints. Decisions 18 and 19 in `docs/canvas-design.md` and the additive `yavc.anchor` property in `docs/canvas-extension.md` state the contracts. The keyboard commands are E and Shift+E; `canvas-edit@1` adds `reconnect`. `scripts/test-canvas.cjs --endpoints chromium firefox webkit` covers the new behavior. This work awaits review and merge.
+The merged endpoint follow-up adds draggable start/end tips, automatic attachments on interior drops, live connector previews during node movement and free endpoints. Decisions 18 and 19 in `docs/canvas-design.md` and the additive `yavc.anchor` property in `docs/canvas-extension.md` state the contracts. The keyboard commands are E and Shift+E; `canvas-edit@1` adds `reconnect`. `scripts/test-canvas.cjs --endpoints chromium firefox webkit` covers the behavior.
 
 ## How work is done here
 

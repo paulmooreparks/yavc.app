@@ -17,7 +17,7 @@
   <script src="{{asset "/static/plausible.js"}}"></script>
   <script src="{{asset "/pudl/pudl-theme.js"}}"></script>
   <link rel="stylesheet" href="{{asset "/pudl/pudl.css"}}">
-  {{if .Desktop}}<link rel="stylesheet" href="{{asset "/pudl/pudl-windows.css"}}">{{end}}
+  {{if or .Desktop .Standalone}}<link rel="stylesheet" href="{{asset "/pudl/pudl-windows.css"}}">{{end}}
   {{range .Skins}}{{if .Stylesheet}}<link rel="stylesheet" href="{{asset (print "/pudl/" .Stylesheet)}}" data-pudl-skin="{{.ID}}">
   {{end}}{{end}}{{range .Palettes}}{{if .Stylesheet}}<link rel="stylesheet" href="{{asset (print "/pudl/" .Stylesheet)}}">
   {{end}}{{end}}<link rel="stylesheet" href="{{asset "/static/site.css"}}">
@@ -40,8 +40,8 @@
   <script src="{{asset "/static/snapshot.js"}}"></script>
   <script src="{{asset "/static/continuity.js"}}"></script>
   <script src="{{asset "/static/desktop.js"}}"></script>
-  {{if .Desktop}}<script src="{{asset "/pudl/pudl-windows.js"}}" defer></script>
-  <script src="{{asset "/pudl/pudl-regions.js"}}" defer></script>
+  {{if or .Desktop .Standalone}}<script src="{{asset "/pudl/pudl-windows.js"}}" defer></script>{{end}}
+  {{if .Desktop}}<script src="{{asset "/pudl/pudl-regions.js"}}" defer></script>
   <script src="{{asset "/pudl/pudl-md.js"}}" defer></script>{{end}}
   <script src="{{asset "/pudl/pudl-menu.js"}}" defer></script>
   <script src="{{asset "/pudl/pudl-commands.js"}}" defer></script>
@@ -78,7 +78,7 @@
         <ul data-menubar-source hidden>
           <li data-menubar-id="site"><img src="{{asset "/static/icon.svg"}}" alt=""> {{.Site}}<ul>
             <li><a href="{{.SiteURL}}">Desktop</a></li>
-            <li><a href="{{.SiteURL}}about" data-dialog="about-site">About yavc.app</a></li>
+            <li><a href="{{.AboutSite}}" data-dialog="about-site">About yavc.app</a></li>
             <li>-</li>
             <li><a href="{{.SiteURL}}?open=settings&amp;top=settings"{{if .Desktop}} data-win-open="settings"{{end}}>Settings</a></li>
           </ul></li>
@@ -113,7 +113,7 @@
             {{range .Help}}<li><a href="{{$.SiteURL}}?open=help-{{.Name}}&amp;top=help-{{.Name}}"{{if $.Desktop}} data-win-open="help-{{.Name}}"{{end}}>{{.Title}} Help</a></li>
             {{end}}<li>-</li>
             <li><a href="{{.SiteURL}}?open=author&amp;top=author"{{if .Desktop}} data-win-open="author"{{end}}>About the Author</a></li>
-            <li><a href="{{.SiteURL}}about/pudl" data-dialog="about-pudl">About PUDL</a></li>
+            <li><a href="{{.AboutPUDL}}" data-dialog="about-pudl">About PUDL</a></li>
             <li><a href="{{.SiteURL}}?open=agents&amp;top=agents"{{if .Desktop}} data-win-open="agents"{{end}}>For Agents</a></li>
             <li>-</li>
             <li><a href="{{.SiteURL}}?open=privacy&amp;top=privacy"{{if .Desktop}} data-win-open="privacy"{{end}}>Privacy Policy</a></li>
@@ -233,17 +233,18 @@
               {{end}}
             </ul></li>
           </ul></li>
+          <li data-menubar-if="windows" data-menubar-id="window" data-menubar-windows>Window<ul></ul></li>
           <li data-menubar-id="help">Help<ul>
-            {{if .AppletHelp}}<li><a href="{{.SiteURL}}help/{{.Applet.Name}}">{{.Applet.Title}} Help</a></li>
-            {{end}}<li><a href="{{.SiteURL}}help">Help Contents</a></li>
+            {{if .AppletHelp}}<li><a href="{{index .WindowLinks (print "help-" .Applet.Name)}}" data-win-open="help-{{.Applet.Name}}">{{.Applet.Title}} Help</a></li>
+            {{end}}<li><a href="{{index .WindowLinks "help"}}" data-win-open="help">Help Contents</a></li>
             <li>-</li>
-            <li><a href="{{.SiteURL}}about" data-dialog="about-site">About yavc.app</a></li>
-            <li><a href="{{.SiteURL}}author">About the Author</a></li>
-            <li><a href="{{.SiteURL}}about/pudl" data-dialog="about-pudl">About PUDL</a></li>
-            <li><a href="{{.SiteURL}}agents">For Agents</a></li>
+            <li><a href="{{.AboutSite}}" data-dialog="about-site">About yavc.app</a></li>
+            <li><a href="{{index .WindowLinks "author"}}" data-win-open="author">About the Author</a></li>
+            <li><a href="{{.AboutPUDL}}" data-dialog="about-pudl">About PUDL</a></li>
+            <li><a href="{{index .WindowLinks "agents"}}" data-win-open="agents">For Agents</a></li>
             <li>-</li>
-            <li><a href="{{.SiteURL}}privacy">Privacy Policy</a></li>
-            <li><a href="{{.SiteURL}}terms">Terms &amp; Conditions</a></li>
+            <li><a href="{{index .WindowLinks "privacy"}}" data-win-open="privacy">Privacy Policy</a></li>
+            <li><a href="{{index .WindowLinks "terms"}}" data-win-open="terms">Terms &amp; Conditions</a></li>
           </ul></li>
         </ul>
         <a class="brand topbar-pill" href="{{.SiteURL}}" data-menubar-fallback><img src="{{asset "/static/icon.svg"}}" alt=""> <span class="site-menu-name">{{.Site}}</span></a>
@@ -251,10 +252,12 @@
       {{template "ribbon-slot"}}
     </div>
   </header>
-  <main class="standalone-main" data-applet-page>
+  <main class="standalone-main win-host" data-applet-page>
     <nav data-page-menu hidden aria-label="Page Menu"><ul></ul></nav>
     {{.Mount}}
+    <div class="win-layer" data-win-layer data-win-pane="off" data-win-src="/win/{key}">{{.Windows}}</div>
   </main>
+  <nav class="win-dock standalone-dock" data-win-dock aria-label="Open Help Windows"></nav>
   {{template "dialogs" .}}
   {{template "scripts" .}}
 </body>
