@@ -195,6 +195,12 @@ Standalone Help pages now use the existing PUDL window layer, dock and Window me
 
 The PUDL source review caught the missing Window menu, applet windows lost on reload and intercepted modified About clicks. Each was corrected, and the focused source re-review found no remaining issues. The new browser suite passed in Chromium, Firefox and WebKit, including source-driven camera reveal without focus loss. The existing canvas suite's resize test also exposed a measurement error: a hovered hit shape's bounding box includes its stroke in Firefox. Its scale now comes from the SVG screen transform, as the endpoint suite already does. The existing canvas suite passes in all three engines, and the full repository checks pass. PUDL's agent owns issue #32 for missing ribbon-choice glyphs; this change does not patch PUDL.
 
+## PUDL 0.97.11 adoption
+
+The candidate includes the complete 187-file `dist` set from the published `pudl-0.97.11.zip`. Its SHA-256 is `7f22d176d23104ce7bb3b6a8bc0f6694f830724f6b65995a1eeda5aadc9bd75e`, matching the published checksum. Every installed file matches the archive, with no extra files. No vendor files were patched locally.
+
+The release fixes command-choice glyphs through `fillChoice`, but the Shape ribbon uses the separate `ribbonSeg` path, which still writes labels alone. Opening a canvas, enabling the ribbon and selecting Shape reproduces the missing glyphs in Chromium, Firefox and WebKit. Screenshots are retained as `yavc-ribbon-{engine}.png` in the temporary folder. The source and Help browser suite passes with the new assets in all three engines. The remaining ribbon defect belongs upstream.
+
 ## Items for other projects
 
 These problems belong to PUDL or to applets that are maintained elsewhere, so they were reported instead of patched here.
