@@ -42,6 +42,10 @@ body:not(.desktop) { min-height: 100vh; display: flex; flex-direction: column; }
 body.standalone { height: 100dvh; min-height: 0; overflow: hidden; }
 .standalone-main { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; padding: var(--space-3); box-sizing: border-box; overflow: auto; }
 .standalone-main > [data-applet-fit="fill"] { flex: 1 1 auto; min-height: 0; }
+/* An applet that lays out its own chrome (data-applet-flush: the Editor,
+   Slides and Diagrams) meets the edges of its standalone page, as it meets
+   a window's frame on the desktop, so its toolbar and tabs are not inset. */
+.standalone-main:has(> [data-applet-flush]) { padding: 0; }
 
 /* === The desktop ========================================================== */
 body.desktop { height: 100dvh; }
