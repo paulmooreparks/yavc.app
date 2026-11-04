@@ -1,6 +1,6 @@
 # Diagrams: an application for D2 and Mermaid diagrams
 
-Status: designed on 2026-11-03, not yet built. Paul asked for a Diagrams application at `diagrams.yavc.app` that sits on D2, Mermaid or both, as the Editor and Slides sit on Markdown. It has to create diagrams in a visual editor (placing and connecting elements for a given style of diagram), in a text editor, or in both side by side, and the diagrams have to embed in the Editor and in Slides. He left the choice of language to the designer. The decisions below were taken under that authority, each is marked, and he can overturn any of them.
+Status: designed on 2026-11-03; milestone D1 built on 2026-11-03, and the first part of D2 on 2026-11-04. Paul asked for a Diagrams application at `diagrams.yavc.app` that sits on D2, Mermaid or both, as the Editor and Slides sit on Markdown. It has to create diagrams in a visual editor (placing and connecting elements for a given style of diagram), in a text editor, or in both side by side, and the diagrams have to embed in the Editor and in Slides. He left the choice of language to the designer. The decisions below were taken under that authority, each is marked, and he can overturn any of them.
 
 In outline, a diagram is a text file, `something.d2` or `something.mmd`. Diagrams edits D2 visually and as text, and edits Mermaid as text with a live preview. Both draw through engines that run in the browser, so a diagram's text never leaves it. A document embeds a diagram with `{{diagram:path}}`, or with a fenced block when the source should travel inside the document, and either form draws the same way in the Editor, in Slides and in their exports.
 
@@ -50,7 +50,7 @@ The choice of language rests on what each one can do for an editor, so the facts
 
 15. **Diagrams looks and works as the Editor and Slides do, and what is new is PUDL's** (2026-11-03, Paul). Wherever the Editor or Slides has settled something, Diagrams does the same: the toolbar and menus built from a command table, the document tabs shown only while more than one diagram is open, the view switch, the canvas docking as Slides docks its canvas, the status bar, the site's dialogs (`static/dialogs.js`), the editing kit's forms and right-click menus drawn from the command table. What has no precedent is built from PUDL's components and follows its rules: the palette is a toolbar of raised buttons, the inspector is a form of sunken fields, the Outline pane is PUDL's tree, the canvas's selection is the focus ring, a status has a glyph as well as a colour, and an error is a PUDL notice beside what failed. Each milestone that adds to what the site draws is checked against PUDL by the PUDL reviewer before it is reported.
 
-    How Diagrams tells the person something follows PUDL's division (README, notices and toasts; the status area), as Paul reminded on 2026-11-03. A fault the person must deal with, such as a mistake in a diagram, is a notice beside it, through the site's shared `yavcUtil.notice`, and never a toast, because a toast goes away. Something taking a moment, such as the engine starting, is PUDL's loading state where the wait is, with words beside the spinner. A toast is for a confirmation that passes: saved, copied as an embed, exported. Work that goes on in the background, such as an agent editing a diagram or a diagram changed in another window, would belong in the status area and in a notification list, which the site does not have yet; DESIGN.md open question 5 says when it would be worth building.
+    How Diagrams tells the person something follows PUDL's division (README, notices and toasts; the status area), as Paul reminded on 2026-11-03. A fault the person must deal with, such as a mistake in a diagram, is a notice beside it, through the site's shared `yavcUtil.notice`, and never a toast, because a toast goes away. Something taking a moment, such as the engine starting, is PUDL's loading state where the wait is, with words beside the spinner. A confirmation that passes (saved, copied as an embed, exported) goes in the status line, as it does in Slides and the Editor, which is the precedent this decision follows; PUDL's toast would also suit it, and moving all three applications to toasts together is a change for Paul to make if he wants it (2026-11-04, after the PUDL review of the first part of D2). Work that goes on in the background, such as an agent editing a diagram or a diagram changed in another window, would belong in the status area and in a notification list, which the site does not have yet; DESIGN.md open question 5 says when it would be worth building.
 
 ## Styles of diagram
 
@@ -159,6 +159,22 @@ The milestone left four things for later.
 - Icons from the site and the home folder, which decision 11 lets the page allow, wait for milestone D2; until then only icons already written as data addresses are drawn and every other icon is left out.
 - Imports work through the file map, but no page supplies files for them until the Diagrams application arrives in milestone D2.
 - The site's own font waits on open question 5.
+
+Milestone D2 is being built in two parts. The first part (2026-11-04) is the application itself, and it added these.
+
+- `apps/diagrams`, at `diagrams.yavc.app` and in a window, with tabs, Open, Save and Save As, a reload that keeps unsaved diagrams, and Text, Preview and Split with the drawing docked on any side of the text, as Slides docks its canvas. Preview stands where Visual will stand once the visual editor exists.
+- New Diagram with a starter for each of the eight D2 styles, and New Mermaid Diagram with eleven of Mermaid's kinds
+- Colouring for D2 and Mermaid (`apps/diagram-kit/modes.js`), and completions in D2 from D2's own language service, which the engine now offers with `completions`
+- A mistake in the text keeps the last good drawing dimmed, with the site's notice above it and the place marked in the text; the D2 client's `draw` and the editing kit's new `drawMermaid` both take this as an option and report their result
+- Tidy the Text, through the engine's new `format`, as one change that Undo takes back
+- Download as SVG, as PNG at one to three times the size, and as text, and Copy as Embed, which copies a fenced block
+- The provider `yavc.diagrams` with twelve actions, including `outline@1`, which reads a D2 diagram's shapes and connections with where each is written, through the engine's new `outline`
+- Files opens `.d2`, `.mmd` and `.mermaid` in Diagrams, the site's file system treats them as text, Diagrams is on the list of applications a document may not embed, and the stock home folder has a sample, `~/Howto/Diagrams.d2`
+- The CodeMirror colours the Editor used moved into the editing kit (`codeTheme`), so the Editor and Diagrams share one copy
+
+Two faults turned up while it was checked in Chromium, and both are fixed. Two requests to draw one place could reach the engine out of order, because a part already loaded was handed to a later caller as a new promise, which ran first; the older request then replaced the newer one and the status stayed at "Drawing…". Every caller now shares one promise per part. And all tabs drew into one element, so a D2 drawing that finished after a switch painted over the Mermaid tab in front; each tab now draws into an element of its own.
+
+The second part is the embedding: the `{{diagram}}` shortcode with its form and Insert entries, live update over a `BroadcastChannel`, icons from the site and the home folder, imports from the diagram's folder, the colouring in the Editor's own text view, and the browser test of Mermaid drawn as an image. Download as PDF and as Word wait for the editing kit's exports (docs/docs-design.md, decision 18).
 
 ## Open questions
 

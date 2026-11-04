@@ -1,0 +1,17 @@
+# A sample diagram for Diagrams. Change any line and the drawing follows.
+# Help, Diagrams Help explains the parts.
+direction: right
+
+reader: You {shape: person}
+
+browser: Your browser {
+  page: The page
+  worker: The D2 engine {shape: hexagon}
+  page -> worker: the text
+  worker -> page: the drawing
+}
+
+files: Your files {shape: cylinder}
+
+reader -> browser.page: types
+browser.page -> files: saves {style.stroke-dash: 4}

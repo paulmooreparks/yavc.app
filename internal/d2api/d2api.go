@@ -7,8 +7,11 @@
 // and the package has no build tag, so the functions are tested and fuzzed
 // as any other package is, and cmd/yavc-d2 only puts them on the page.
 //
-//	compile(req)  -> {svg, width, height, problems, icons}
-//	version()     -> {d2}
+//	compile(req)      -> {svg, width, height, problems, icons}
+//	completions(req)  -> {items}
+//	format(req)       -> {text} or {problems}
+//	outline(req)      -> {shapes, connections, boards, problems}
+//	version()         -> {d2}
 //
 // A diagram's text is untrusted. The engine reads only the files it is
 // given, never draws an icon that is not already a data address, refuses a
@@ -29,11 +32,14 @@ import (
 	"runtime/debug"
 	"strings"
 
+	"oss.terrastruct.com/d2/d2ast"
 	"oss.terrastruct.com/d2/d2compiler"
+	"oss.terrastruct.com/d2/d2format"
 	"oss.terrastruct.com/d2/d2graph"
 	"oss.terrastruct.com/d2/d2layouts/d2dagrelayout"
 	"oss.terrastruct.com/d2/d2layouts/d2elklayout"
 	"oss.terrastruct.com/d2/d2lib"
+	"oss.terrastruct.com/d2/d2lsp"
 	"oss.terrastruct.com/d2/d2parser"
 	"oss.terrastruct.com/d2/d2renderers/d2svg"
 	"oss.terrastruct.com/d2/d2target"
@@ -111,8 +117,175 @@ type CompileResponse struct {
 }
 
 var functions = map[string]func(string) (any, error){
-	"compile": compile,
-	"version": func(string) (any, error) { return map[string]string{"d2": D2Version()}, nil },
+	"compile":     compile,
+	"completions": completions,
+	"format":      format,
+	"outline":     outline,
+	"version":     func(string) (any, error) { return map[string]string{"d2": D2Version()}, nil },
+}
+
+// TextRequest is what completions, format and outline take. Line and
+// Column, for completions, are where the cursor is, counted from 0.
+type TextRequest struct {
+	Text   string `json:"text"`
+	Line   int    `json:"line,omitempty"`
+	Column int    `json:"column,omitempty"`
+}
+
+func textRequest(arg string) (TextRequest, error) {
+	var req TextRequest
+	if err := json.Unmarshal([]byte(arg), &req); err != nil {
+		return req, errors.New("the request is not valid JSON")
+	}
+	if len(req.Text) > MaxSource {
+		return req, fmt.Errorf("the diagram is over %d KB", MaxSource>>10)
+	}
+	return req, nil
+}
+
+// Completion is one thing D2's language service offers to type at the
+// cursor. Insert is the text to put in, when it differs from Label.
+type Completion struct {
+	Label  string `json:"label"`
+	Detail string `json:"detail,omitempty"`
+	Insert string `json:"insert,omitempty"`
+	Kind   string `json:"kind"`
+}
+
+// completions is D2's own language service (d2lsp), which knows the
+// keywords, the shapes, the style names and the values each takes.
+func completions(arg string) (any, error) {
+	req, err := textRequest(arg)
+	if err != nil {
+		return nil, err
+	}
+	items, err := d2lsp.GetCompletionItems(req.Text, req.Line, req.Column)
+	if err != nil {
+		return map[string]any{"items": []Completion{}}, nil
+	}
+	kinds := map[d2lsp.CompletionKind]string{d2lsp.KeywordCompletion: "keyword", d2lsp.StyleCompletion: "style", d2lsp.ShapeCompletion: "shape"}
+	out := make([]Completion, 0, len(items))
+	for _, it := range items {
+		c := Completion{Label: it.Label, Detail: it.Detail, Kind: kinds[it.Kind]}
+		if c.Kind == "" {
+			c.Kind = "value"
+		}
+		if it.InsertText != "" && it.InsertText != it.Label {
+			c.Insert = it.InsertText
+		}
+		out = append(out, c)
+	}
+	return map[string]any{"items": out}, nil
+}
+
+// format is the text as D2's formatter writes it, which is how the visual
+// editor's edits will write it too (docs/diagrams-design.md, decision 5).
+// A text with a mistake in it is not formatted, and its problems are
+// returned instead.
+func format(arg string) (any, error) {
+	req, err := textRequest(arg)
+	if err != nil {
+		return nil, err
+	}
+	ast, err := d2parser.Parse(inputPath, strings.NewReader(req.Text), &d2parser.ParseOptions{UTF16Pos: true})
+	if err != nil {
+		return map[string]any{"problems": problemsOf(err, req.Text)}, nil
+	}
+	return map[string]any{"text": d2format.Format(ast)}, nil
+}
+
+// Place is where something is written in the text: 1-based lines and
+// columns, and UTF-16 offsets as Problem has.
+type Place struct {
+	Line   int `json:"line"`
+	Column int `json:"column"`
+	From   int `json:"from"`
+	To     int `json:"to"`
+}
+
+// Shape is one object of the diagram in an outline: a shape or a
+// container, by its full name (a.b for b inside a).
+type Shape struct {
+	ID     string  `json:"id"`
+	Label  string  `json:"label"`
+	Shape  string  `json:"shape"`
+	Parent string  `json:"parent,omitempty"`
+	Places []Place `json:"places"`
+}
+
+// Connection is one connection of the diagram in an outline.
+type Connection struct {
+	ID     string  `json:"id"`
+	From   string  `json:"from"`
+	To     string  `json:"to"`
+	Label  string  `json:"label,omitempty"`
+	Places []Place `json:"places"`
+}
+
+// OutlineResponse is the diagram's structure, for the Outline pane, an
+// agent and the visual editor: its shapes and connections in text order,
+// each with where it is written, and the names of its boards.
+type OutlineResponse struct {
+	Shapes      []Shape      `json:"shapes"`
+	Connections []Connection `json:"connections"`
+	Boards      []string     `json:"boards,omitempty"`
+	Problems    []Problem    `json:"problems,omitempty"`
+}
+
+func placeOf(r d2ast.Range, n int) Place {
+	return Place{Line: r.Start.Line + 1, Column: r.Start.Column + 1, From: clamp(r.Start.Byte, n), To: clamp(r.End.Byte, n)}
+}
+
+// outline compiles the text without laying it out, which is quick, and
+// reads the structure D2's compiler documents.
+func outline(arg string) (any, error) {
+	req, err := textRequest(arg)
+	if err != nil {
+		return nil, err
+	}
+	fsys, err := memfs.New(map[string]string{inputPath: req.Text})
+	if err != nil {
+		return nil, errors.New("the diagram is not usable")
+	}
+	g, _, err := d2compiler.Compile(inputPath, strings.NewReader(req.Text), &d2compiler.CompileOptions{UTF16Pos: true, FS: fsys})
+	if err != nil {
+		return &OutlineResponse{Shapes: []Shape{}, Connections: []Connection{}, Problems: problemsOf(err, req.Text)}, nil
+	}
+	if len(g.Objects) > MaxObjects {
+		return &OutlineResponse{Shapes: []Shape{}, Connections: []Connection{}, Problems: []Problem{{Message: fmt.Sprintf("The diagram has %d shapes, which is more than the %d Diagrams will read.", len(g.Objects), MaxObjects)}}}, nil
+	}
+	n := len(req.Text)
+	out := &OutlineResponse{Shapes: make([]Shape, 0, len(g.Objects)), Connections: make([]Connection, 0, len(g.Edges))}
+	for _, o := range g.Objects {
+		s := Shape{ID: o.AbsID(), Label: o.Label.Value, Shape: o.Shape.Value, Places: []Place{}}
+		if s.Shape == "" {
+			s.Shape = "rectangle"
+		}
+		if o.Parent != nil && o.Parent != g.Root {
+			s.Parent = o.Parent.AbsID()
+		}
+		for _, ref := range o.References {
+			if ref.Key != nil && ref.Key.Range.Path == inputPath {
+				s.Places = append(s.Places, placeOf(ref.Key.Range, n))
+			}
+		}
+		out.Shapes = append(out.Shapes, s)
+	}
+	for _, e := range g.Edges {
+		c := Connection{ID: e.AbsID(), From: e.Src.AbsID(), To: e.Dst.AbsID(), Label: e.Label.Value, Places: []Place{}}
+		for _, ref := range e.References {
+			if ref.Edge != nil && ref.Edge.Range.Path == inputPath {
+				c.Places = append(c.Places, placeOf(ref.Edge.Range, n))
+			}
+		}
+		out.Connections = append(out.Connections, c)
+	}
+	for _, boards := range [][]*d2graph.Graph{g.Layers, g.Scenarios, g.Steps} {
+		for _, b := range boards {
+			out.Boards = append(out.Boards, b.Name)
+		}
+	}
+	return out, nil
 }
 
 // Names is the functions Call knows, in no particular order.

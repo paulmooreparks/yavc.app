@@ -1,0 +1,800 @@
+{
+  "id": "yavc.diagrams",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "title": "Diagrams",
+  "description": "Diagrams as D2 or Mermaid text files: read, write and draw the diagrams open in Diagrams, read a D2 diagram's structure, and export the drawing.",
+  "actions": [
+    {
+      "ref": "yavc.diagrams/open@1",
+      "title": "Open in Diagrams",
+      "description": "Open a diagram file (.d2, .mmd or .mermaid) in Diagrams for the person at the page, in a new tab of its window.",
+      "handles": "diagram",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024
+          },
+          "view": {
+            "enum": [
+              "text",
+              "preview",
+              "split"
+            ]
+          }
+        },
+        "required": [
+          "path"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "opened"
+        ],
+        "properties": {
+          "opened": {
+            "const": true
+          },
+          "view": {
+            "enum": [
+              "window",
+              "tab"
+            ]
+          }
+        }
+      },
+      "capabilities": [
+        "window.open"
+      ],
+      "replay": "once"
+    },
+    {
+      "ref": "yavc.diagrams/diagrams@1",
+      "title": "List the Open Diagrams",
+      "description": "The diagrams open in Diagrams, each with its number, name, file, language (d2 or mermaid), whether it has unsaved changes, and its view.",
+      "live": true,
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": [
+          "active",
+          "diagrams"
+        ],
+        "properties": {
+          "active": {
+            "type": "integer"
+          },
+          "diagrams": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "index",
+                "name",
+                "path",
+                "kind",
+                "modified",
+                "view"
+              ],
+              "properties": {
+                "index": {
+                  "type": "integer"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "kind": {
+                  "enum": [
+                    "d2",
+                    "mermaid"
+                  ]
+                },
+                "modified": {
+                  "type": "boolean"
+                },
+                "view": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "capabilities": [
+        "files.read"
+      ],
+      "replay": "pure"
+    },
+    {
+      "ref": "yavc.diagrams/diagram@1",
+      "title": "Read a Diagram",
+      "description": "One open diagram, by its number or the current one, with its text and the mistakes the last drawing found in it.",
+      "live": true,
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "index": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "A diagram's number among the open ones; the current one when left out."
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": [
+          "index",
+          "name",
+          "path",
+          "kind",
+          "modified",
+          "view",
+          "text",
+          "problems"
+        ],
+        "properties": {
+          "index": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "path": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "kind": {
+            "enum": [
+              "d2",
+              "mermaid"
+            ]
+          },
+          "modified": {
+            "type": "boolean"
+          },
+          "view": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "problems": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "message",
+                "line"
+              ],
+              "properties": {
+                "message": {
+                  "type": "string"
+                },
+                "line": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        }
+      },
+      "capabilities": [
+        "files.read"
+      ],
+      "replay": "pure"
+    },
+    {
+      "ref": "yavc.diagrams/new@1",
+      "title": "Start a Diagram",
+      "description": "A new, unsaved diagram in a tab of its own: the starter of a style, or the text given. D2 styles are flowchart, architecture, sequence, entity, class, state, org and grid; Mermaid ones are flowchart, sequence, class, state, entity, gantt, pie, mindmap, timeline, journey and git. Returns whether it drew and, if not, its mistakes.",
+      "live": true,
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "enum": [
+              "d2",
+              "mermaid"
+            ],
+            "default": "d2"
+          },
+          "style": {
+            "type": "string",
+            "maxLength": 40
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 262144
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": [
+          "index",
+          "name",
+          "path",
+          "kind",
+          "modified",
+          "view",
+          "drawn",
+          "problems"
+        ],
+        "properties": {
+          "index": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "path": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "kind": {
+            "enum": [
+              "d2",
+              "mermaid"
+            ]
+          },
+          "modified": {
+            "type": "boolean"
+          },
+          "view": {
+            "type": "string"
+          },
+          "drawn": {
+            "type": "boolean"
+          },
+          "problems": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "message",
+                "line"
+              ],
+              "properties": {
+                "message": {
+                  "type": "string"
+                },
+                "line": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        }
+      },
+      "capabilities": [],
+      "replay": "once"
+    },
+    {
+      "ref": "yavc.diagrams/open-file@1",
+      "title": "Open a Diagram File",
+      "description": "Open a diagram file in the Diagrams already on the page, or bring its tab to the front if it is open.",
+      "live": true,
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024
+          },
+          "view": {
+            "enum": [
+              "text",
+              "preview",
+              "split"
+            ]
+          }
+        },
+        "required": [
+          "path"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": [
+          "index",
+          "name",
+          "path",
+          "kind",
+          "modified",
+          "view"
+        ],
+        "properties": {
+          "index": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "path": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "kind": {
+            "enum": [
+              "d2",
+              "mermaid"
+            ]
+          },
+          "modified": {
+            "type": "boolean"
+          },
+          "view": {
+            "type": "string"
+          }
+        }
+      },
+      "capabilities": [
+        "files.read"
+      ],
+      "replay": "once"
+    },
+    {
+      "ref": "yavc.diagrams/set-text@1",
+      "title": "Replace a Diagram's Text",
+      "description": "Replace the whole text of a diagram, or the current one, as one change the person can undo, and draw it. Returns whether it drew and, if not, its mistakes with their lines.",
+      "live": true,
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "index": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "A diagram's number among the open ones; the current one when left out."
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 262144
+          }
+        },
+        "required": [
+          "text"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": [
+          "index",
+          "name",
+          "path",
+          "kind",
+          "modified",
+          "view",
+          "drawn",
+          "problems"
+        ],
+        "properties": {
+          "index": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "path": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "kind": {
+            "enum": [
+              "d2",
+              "mermaid"
+            ]
+          },
+          "modified": {
+            "type": "boolean"
+          },
+          "view": {
+            "type": "string"
+          },
+          "drawn": {
+            "type": "boolean"
+          },
+          "problems": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "message",
+                "line"
+              ],
+              "properties": {
+                "message": {
+                  "type": "string"
+                },
+                "line": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        }
+      },
+      "capabilities": [],
+      "replay": "once"
+    },
+    {
+      "ref": "yavc.diagrams/save@1",
+      "title": "Save a Diagram",
+      "description": "Write a diagram, or the current one, to its file, or to the path given (~/diagrams/plan.d2), which becomes its file. A path that is already a file is refused.",
+      "live": true,
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "index": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "A diagram's number among the open ones; the current one when left out."
+          },
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": [
+          "index",
+          "name",
+          "path",
+          "kind",
+          "modified",
+          "view"
+        ],
+        "properties": {
+          "index": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "path": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "kind": {
+            "enum": [
+              "d2",
+              "mermaid"
+            ]
+          },
+          "modified": {
+            "type": "boolean"
+          },
+          "view": {
+            "type": "string"
+          }
+        }
+      },
+      "capabilities": [
+        "files.write",
+        "files.read"
+      ],
+      "replay": "once"
+    },
+    {
+      "ref": "yavc.diagrams/close@1",
+      "title": "Close a Diagram",
+      "description": "Close a diagram's tab, or the current one. The person is asked first when it has unsaved changes.",
+      "live": true,
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "index": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "A diagram's number among the open ones; the current one when left out."
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": [
+          "closed",
+          "open"
+        ],
+        "properties": {
+          "closed": {
+            "type": "boolean"
+          },
+          "open": {
+            "type": "integer"
+          }
+        }
+      },
+      "capabilities": [],
+      "replay": "once"
+    },
+    {
+      "ref": "yavc.diagrams/view@1",
+      "title": "Set the View",
+      "description": "How the person sees the current diagram: its text, the drawing, or both, and which side of the text the drawing sits on.",
+      "live": true,
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "mode": {
+            "enum": [
+              "text",
+              "preview",
+              "split"
+            ]
+          },
+          "dock": {
+            "enum": [
+              "left",
+              "right",
+              "top",
+              "bottom"
+            ]
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": [
+          "mode",
+          "dock"
+        ],
+        "properties": {
+          "mode": {
+            "type": "string"
+          },
+          "dock": {
+            "type": "string"
+          }
+        }
+      },
+      "capabilities": [],
+      "replay": "once"
+    },
+    {
+      "ref": "yavc.diagrams/outline@1",
+      "title": "Read a Diagram's Structure",
+      "description": "A D2 diagram's shapes and connections, each with its full name (a.b for b inside a), its label, its shape and where it is written, and the names of its boards. Mermaid diagrams have no outline.",
+      "live": true,
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "index": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "A diagram's number among the open ones; the current one when left out."
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": [
+          "shapes",
+          "connections",
+          "boards",
+          "problems"
+        ],
+        "properties": {
+          "shapes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "label": {
+                  "type": "string"
+                },
+                "shape": {
+                  "type": "string"
+                },
+                "parent": {
+                  "type": "string"
+                },
+                "places": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "line": {
+                        "type": "integer"
+                      },
+                      "column": {
+                        "type": "integer"
+                      },
+                      "from": {
+                        "type": "integer"
+                      },
+                      "to": {
+                        "type": "integer"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "connections": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "from": {
+                  "type": "string"
+                },
+                "to": {
+                  "type": "string"
+                },
+                "label": {
+                  "type": "string"
+                },
+                "places": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "line": {
+                        "type": "integer"
+                      },
+                      "column": {
+                        "type": "integer"
+                      },
+                      "from": {
+                        "type": "integer"
+                      },
+                      "to": {
+                        "type": "integer"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "boards": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "problems": {
+            "type": "array"
+          }
+        }
+      },
+      "capabilities": [
+        "files.read"
+      ],
+      "replay": "pure"
+    },
+    {
+      "ref": "yavc.diagrams/format@1",
+      "title": "Tidy a Diagram's Text",
+      "description": "Write a D2 diagram's text as D2's own formatter does, as one change the person can undo. A text with a mistake is left as it is.",
+      "live": true,
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "index": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "A diagram's number among the open ones; the current one when left out."
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": [
+          "index",
+          "changed"
+        ],
+        "properties": {
+          "index": {
+            "type": "integer"
+          },
+          "changed": {
+            "type": "boolean"
+          }
+        }
+      },
+      "capabilities": [],
+      "replay": "once"
+    },
+    {
+      "ref": "yavc.diagrams/render@1",
+      "title": "Export a Diagram as a Picture",
+      "description": "The drawing of a diagram, or the current one, as an SVG file or a PNG at one to three times its size.",
+      "live": true,
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "index": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "A diagram's number among the open ones; the current one when left out."
+          },
+          "format": {
+            "enum": [
+              "svg",
+              "png"
+            ],
+            "default": "svg"
+          },
+          "scale": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 3,
+            "default": 2
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": [
+          "name",
+          "width",
+          "height"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "width": {
+            "type": "number"
+          },
+          "height": {
+            "type": "number"
+          }
+        }
+      },
+      "capabilities": [
+        "artifact.create",
+        "files.read"
+      ],
+      "replay": "once"
+    }
+  ]
+}

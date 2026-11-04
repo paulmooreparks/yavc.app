@@ -28,7 +28,7 @@
   var DROPPED = 'script,style,iframe,frame,frameset,object,embed,applet,noscript,template,link,meta,base,form,portal';
   /* The site's own applications (apps/ in the repository), which a
      document may not embed; scripts/check.mjs keeps this list complete. */
-  var NOT_EMBEDDED = ['editor', 'files', 'settings', 'slides', 'terminal'];
+  var NOT_EMBEDDED = ['diagrams', 'editor', 'files', 'settings', 'slides', 'terminal'];
   /* What a style attribute may set: how the element itself looks. Never
      position, inset, z-index or transforms, with which a document could
      lay a false control over the page's own, and never an address. */

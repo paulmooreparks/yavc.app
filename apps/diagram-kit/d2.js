@@ -9,7 +9,15 @@
 
      yavcD2Engine.compile(req, key) -> Promise of { svg, width, height, problems, icons },
                                        or null when a newer request with the same key replaced it
-     yavcD2Engine.draw(place, source, opts) draws a diagram into place, as an image
+     yavcD2Engine.draw(place, source, opts) draws a diagram into place, as an image,
+                                       and resolves with what compile gave, or null
+     yavcD2Engine.call(name, req, key) -> Promise of another function's answer:
+                                       completions, format or outline (internal/d2api)
+
+   draw's opts: alt, the image's text alternative; keep, to leave the last
+   good drawing in place, dimmed, when the text has a mistake, as Diagrams'
+   preview does (decision 5); report: false, to leave the mistake to the
+   caller instead of showing the site's notice above the diagram.
 
    A drawn diagram is an image (decision 10): the SVG is shown through an
    img element with a data address, which the browser draws in a static
@@ -200,6 +208,10 @@
     }
 
     var drawCount = 0;
+    function call(name, req, key) {
+        return request(name, JSON.stringify(req), key);
+    }
+
     function draw(place, source, opts) {
         opts = opts || {};
         if (!place.__yavcD2) { place.__yavcD2Key = 'd2-' + (++drawCount); }
@@ -228,9 +240,9 @@
         function settled() { clearTimeout(cue); if (loading) { loading.remove(); loading = null; } }
         return compile(req, place.__yavcD2Key).then(function (out) {
             settled();
-            if (!out || !place.isConnected) { return; }
+            if (!out || !place.isConnected) { return out; }
             place.removeAttribute('aria-busy');
-            if (out.problems && out.problems.length) { showProblems(place, out.problems); return; }
+            if (out.problems && out.problems.length) { failed(out.problems); return out; }
             var img = document.createElement('img');
             img.className = 'sc-diagram-image';
             img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(out.svg);
@@ -238,6 +250,7 @@
             img.height = out.height;
             img.alt = opts.alt || 'A diagram drawn from D2 source';
             place.replaceChildren(img);
+            place.classList.remove('sc-diagram-stale');
             place.classList.add('ed-diagram');
             /* Icons left out are a fault the author can fix, so where the
                document is being edited they are a warning beside the
@@ -254,12 +267,22 @@
                     window.yavcUtil.notice(img, words + ' Diagrams draws only icons written into the diagram itself.', 'warn');
                 }
             }
+            return out;
         }, function (err) {
             settled();
-            if (!place.isConnected) { return; }
+            var out = { problems: [{ message: String((err && err.message) || err), line: 0, column: 0 }] };
+            if (!place.isConnected) { return out; }
             place.removeAttribute('aria-busy');
-            showProblems(place, [{ message: String((err && err.message) || err) }]);
+            failed(out.problems);
+            return out;
         });
+        /* A mistake keeps the last good drawing, dimmed, where the caller
+           asked, and is reported unless the caller reports it itself. */
+        function failed(problems) {
+            var old = opts.keep && place.querySelector(':scope > img.sc-diagram-image');
+            if (old) { place.classList.add('sc-diagram-stale'); } else if (opts.report === false) { place.replaceChildren(); }
+            if (opts.report !== false) { showProblems(place, problems); }
+        }
     }
 
     var redrawTimer = 0;
@@ -276,5 +299,5 @@
     new MutationObserver(redrawAll).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'data-palette', 'data-skin'] });
     if (window.matchMedia) { window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', redrawAll); }
 
-    window.yavcD2Engine = Object.freeze({ compile: compile, draw: draw, version: function () { return request('version', '').then(function (o) { return o && o.d2; }); } });
+    window.yavcD2Engine = Object.freeze({ compile: compile, draw: draw, call: call, version: function () { return request('version', '').then(function (o) { return o && o.d2; }); } });
 })();
