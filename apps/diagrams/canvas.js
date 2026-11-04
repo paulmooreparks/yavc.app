@@ -117,7 +117,7 @@
             if (!n) { return false; }
             var to = null;
             if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { to = order[(i + 1) % n]; }
-            else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { to = order[(i - 1 + n) % n]; }
+            else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { to = order[i < 0 ? n - 1 : (i - 1 + n) % n]; }
             else if (e.key === 'Home') { to = order[0]; }
             else if (e.key === 'End') { to = order[n - 1]; }
             else if (e.key === 'Enter' && sel) { host.activate(sel); return true; }
