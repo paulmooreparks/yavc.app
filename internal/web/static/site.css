@@ -121,3 +121,31 @@ body.desktop .md-layout { --md-sidebar-w: 300px; }
    follows it, and gone when dismissed. */
 .yavc-notice { margin: var(--space-2) var(--space-3) 0; flex: none; }
 .yavc-notice[hidden] { display: none; }
+
+/* The find bar of the Editor and Diagrams (apps/md-editor/kit.js findBar),
+   in PUDL's parts: the two fields sunken, the buttons raised, Match Case,
+   Whole Word and Regular Expression latching, the count between, and
+   Close at the end. */
+/* Two columns shared by both rows, so the Find and Replace fields line up:
+   the fields take what room there is, each row's buttons sit beside them. */
+.ed-find {
+  container: ed-find / inline-size;
+  padding: var(--space-2) var(--space-3); background: var(--surface);
+  font: var(--text-sm) / 1.4 var(--font); color: var(--text);
+}
+.ed-find-grid { display: grid; grid-template-columns: minmax(7rem, 1fr) auto; align-items: center; gap: var(--space-2) var(--space-3); }
+/* A narrow bar, such as the page's in Split, puts each row's buttons under
+   its field. */
+@container ed-find (max-width: 520px) {
+  .ed-find-grid { grid-template-columns: minmax(0, 1fr); gap: var(--space-1); }
+  .ed-find-tools { flex-wrap: wrap; margin-bottom: var(--space-1); }
+}
+.ed-find-row { display: contents; }
+.ed-find-row[hidden] { display: none; }
+.ed-find-field { width: 100%; min-width: 0; height: 28px; padding-block: 2px; font-size: var(--text-sm); }
+.ed-find-tools { display: flex; align-items: center; gap: var(--space-2); white-space: nowrap; }
+.ed-find-count { min-width: 6.5em; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.ed-find-count.ed-find-none { color: var(--danger); }
+.ed-find-opts { display: inline-flex; gap: 4px; }
+.ed-find-opt { min-width: 2.4em; font-family: var(--mono); justify-content: center; }
+.ed-find-close { margin-inline-start: auto; }

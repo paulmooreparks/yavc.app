@@ -4,7 +4,7 @@
 
 ## The file
 
-A D2 diagram names its shapes and connects them with arrows. A shape's label follows a colon, and its settings go between braces.
+In D2 you give each shape a name and connect shapes with arrows. A shape's label follows a colon, and its settings go between braces.
 
 ```
 direction: right
@@ -21,7 +21,7 @@ reader -> site.web: HTTPS
 site.app -> db: reads and writes
 ```
 
-A shape written inside another one is drawn inside it, and is named from outside by both names joined with a dot, such as `site.web`. A Mermaid diagram begins with the kind of diagram it is, such as `flowchart LR` or `sequenceDiagram`. The [D2 tour](https://d2lang.com/tour/intro) and the [Mermaid syntax reference](https://mermaid.js.org/intro/syntax-reference.html) describe each language in full.
+A shape written inside another one is drawn inside it, and outside it you refer to it by both names joined with a dot, such as `site.web`. A Mermaid diagram begins with the kind of diagram it is, such as `flowchart LR` or `sequenceDiagram`. The [D2 tour](https://d2lang.com/tour/intro) and the [Mermaid syntax reference](https://mermaid.js.org/intro/syntax-reference.html) describe each language in full.
 
 ## Starting a diagram
 
@@ -29,11 +29,13 @@ File, New Diagram starts a D2 diagram in one of eight styles: a flowchart, an ar
 
 ## Editing
 
-The text pane colours the language as you type, numbers its lines and keeps its own undo history for each open diagram. In a D2 diagram, typing a dot or a colon after a shape offers what can follow there, such as the shapes after `shape:` and the style names after `style.`, and Ctrl+Space offers them anywhere.
+The text pane colours the language as you type, numbers its lines and keeps its own undo history for each open diagram. Edit has Undo, Redo and Find and Replace, and Go, Go to Line moves to a line by its number. In a D2 diagram, typing a dot or a colon after a shape offers what can follow there, such as the shapes after `shape:` and the style names after `style.`, and Ctrl+Space offers them anywhere.
 
 When the text has a mistake in it, the last drawing that worked stays in place, dimmed, and a notice above it says what is wrong and on which line. The line is underlined in the text, and the mark in the margin gives the message too. Diagram, Tidy the Text writes a D2 diagram's text as D2's own formatter does, with even spacing and indents, and Undo puts it back.
 
 The View menu shows the text, the drawing or both, and Drawing chooses which side of the text the drawing sits on. Fit the Drawing to the Pane shrinks a large drawing to fit, and with it off the drawing shows at its own size and scrolls.
+
+File, Close Diagram closes the diagram in front, and asks first when it has changes that are not saved.
 
 ## Colours
 
@@ -41,7 +43,7 @@ A D2 diagram takes the site's colours, so it follows light and dark mode and the
 
 ## In documents and slides
 
-Diagram, Copy as Embed puts the diagram on the clipboard as a fenced block, which the Editor and Slides draw wherever it is pasted. The block carries the diagram's text with it, so it is drawn the same in any document. File, Open in the Editor opens the diagram's file as text in the Editor.
+Diagram, Copy as Embed puts the diagram on the clipboard as a fenced block, which the Editor and Slides draw wherever it is pasted. The block contains the diagram's text, so it is drawn the same in any document. File, Open in the Editor opens the diagram's file as text in the Editor.
 
 ## Downloading
 
@@ -51,7 +53,7 @@ Diagram, Copy as Embed puts the diagram on the clipboard as a fenced block, whic
 
 ## What is drawn and what is not
 
-A diagram is drawn as a picture, which runs nothing and loads nothing, so a diagram written by somebody else cannot make your browser contact another site. An icon from another site is left out of the drawing, and a note says so; an icon written into the diagram itself as a `data:` address is drawn. A D2 file can `import` other D2 files only once Diagrams supplies them, which it does not do yet. D2 lays diagrams out with its dagre engine; a diagram that asks for ELK says so and is not drawn. A diagram is limited to 256 KB of text and 2,000 shapes.
+A diagram is drawn as a picture, which runs nothing and loads nothing, so a diagram written by somebody else cannot make your browser contact another site. An icon from another site is left out of the drawing, and a note says so; an icon written into the diagram itself as a `data:` address is drawn. A D2 file can `import` other D2 files only once Diagrams supplies them, which it does not do yet. D2 lays diagrams out with its dagre engine. Diagrams does not draw a diagram that asks for ELK, and its notice says why. A diagram is limited to 256 KB of text and 2,000 shapes.
 
 The first diagram you draw takes a few seconds while the D2 engine, about 7 MB, loads and starts. The browser keeps it after that.
 

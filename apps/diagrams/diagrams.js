@@ -141,8 +141,9 @@
         /* Each tab keeps its own editor state, so its undo history and its
            cursor survive a switch to another tab and back. */
         function stateFor(t, text) {
-            var ext = [CM.lineNumbers(), CM.highlightActiveLineGutter(), CM.history(), CM.drawSelection(), CM.highlightActiveLine(), CM.bracketMatching(), CM.closeBrackets(),
-                CM.keymap.of([].concat(CM.closeBracketsKeymap, CM.completionKeymap, CM.lintKeymap, CM.defaultKeymap, CM.historyKeymap, [CM.indentWithTab])),
+            var ext = [CM.lineNumbers(), CM.highlightActiveLineGutter(), CM.history(), CM.drawSelection(), CM.highlightActiveLine(), CM.highlightSelectionMatches(), CM.bracketMatching(), CM.closeBrackets(),
+                CM.keymap.of([].concat(CM.closeBracketsKeymap, CM.completionKeymap, CM.lintKeymap, CM.defaultKeymap, CM.searchKeymap, CM.historyKeymap, [CM.indentWithTab])),
+                window.yavcMdEditor.codeSearch(CM),
                 CM.indentUnit.of('  '),
                 window.yavcMdEditor.codeTheme(CM), language(t.kind),
                 CM.EditorView.contentAttributes.of({ 'aria-label': 'The Diagram\'s Text' }),
@@ -237,7 +238,7 @@
             el.state.textContent = 'Drawing…';
             var drawn = t.kind === 'd2'
                 ? d2().then(function (E) { return E.draw(t.place, text, { keep: true, report: false, alt: altOf(t) }); })
-                : kit().then(function (K) { return K.drawMermaid(t.place, text, { keep: true, report: false }); });
+                : kit().then(function (K) { return K.drawMermaid(t.place, text, { keep: true, report: false, alt: altOf(t) }); });
             return drawn.then(function (out) {
                 /* No answer means another drawing of this place replaced
                    this one; if this is still the newest, it draws again. */
@@ -257,16 +258,27 @@
         }
         function showOutcome(t) {
             var p = t.problems || [];
+            var stale = t.place.classList.contains('sc-diagram-stale');
+            markStale(t, stale);
             if (p.length) {
                 var first = p[0], where = first.line > 0 ? 'Line ' + first.line + ': ' : '';
                 var more = p.length > 1 ? ' (and ' + (p.length - 1) + ' more)' : '';
-                window.yavcUtil.notice(el.stage, 'The diagram could not be drawn. ' + where + first.message + more, 'problem');
+                window.yavcUtil.notice(el.stage, 'The diagram could not be drawn. ' + where + first.message + more + (stale ? ' The drawing shown is the last one that worked.' : ''), 'problem');
                 el.state.textContent = p.length === 1 ? 'One mistake' : p.length + ' mistakes';
             } else {
                 window.yavcUtil.notice(el.stage, '');
                 el.state.textContent = 'Drawn';
             }
             commandsChanged();
+        }
+        /* The last good drawing, kept while the text has a mistake, is out
+           of date, and its text alternative says so, so the dimming is not
+           the only sign (PUDL: meaning never by colour alone). */
+        function markStale(t, stale) {
+            var pic = t.place.querySelector(':scope > img, :scope > svg, :scope > * > svg');
+            if (!pic) { return; }
+            var name = altOf(t) + (stale ? ' (out of date)' : '');
+            if (pic.tagName.toLowerCase() === 'img') { pic.alt = name; } else { pic.setAttribute('aria-label', name); }
         }
         /* A Mermaid drawing's size, from its viewBox, for a picture of it. */
         function sizeOfSvg(svg) {
@@ -379,15 +391,16 @@
                 if (tabs[i].path === p) { activateTab(i); if (view) { setView(view); } return true; }
             }
             if (!H.fs || !H.fs.readText) { say('There is no file service here.', true); return false; }
-            var text = await H.fs.readText(p);
+            var text;
+            try { text = await H.fs.readText(p); } catch (err) { say(p + ' could not be read: ' + ((err && err.message) || err), true); return false; }
             if (text == null) { say('There is no file at ' + p + '.', true); return false; }
             openInTab(text, p, null, view);
             say('Opened ' + p + '.');
             return true;
         }
         async function open() {
-            if (!H.fs || !H.fs.open) { return; }
-            var res = await H.fs.open({ title: 'Open a Diagram', host: root, start: '~', accept: ['.d2', '.mmd', '.mermaid'] });
+            if (!H.fs || !H.fs.open) { say('There is no file service here, so nothing can be opened.', true); return; }
+            var res = await H.fs.open({ title: 'Open a Diagram', host: root, start: '~', accept: ['.d2', '.mmd', '.mermaid'] }).catch(function (err) { say('The file could not be opened: ' + ((err && err.message) || err), true); return null; });
             if (!res) { return; }
             if (res.path) { await openPath(res.path); return; }
             var t = openInTab(res.text, null, kindOf(res.name, res.text));
@@ -433,7 +446,20 @@
             if (!t || !t.path) { say('Save the diagram first, so the Editor can open it.'); return; }
             if (window.pudlApplets && window.pudlApplets.can && window.pudlApplets.can('open', 'file')) {
                 window.pudlApplets.request('open', { path: t.path, kind: 'file' }, root);
-            }
+            } else { say('The Editor is not on this page, so the diagram cannot be opened in it here.', true); }
+        }
+        /* Find, in the text, with the editing kit's find bar; from Preview
+           the text comes back beside the drawing first. */
+        function openFind() {
+            if (!cm) { return; }
+            if (viewOf(current()) === 'preview') { setView('split'); }
+            CM.openSearchPanel(cm);
+        }
+        function goToLine() {
+            if (!cm) { return; }
+            if (viewOf(current()) === 'preview') { setView('split'); }
+            var binding = CM.searchKeymap.find(function (key) { return key.key === 'Mod-Alt-g'; });
+            if (binding) { binding.run(cm); }
         }
 
         /* === Export (decision 14) ========================================= */
@@ -529,7 +555,13 @@
 
         /* === Commands ===================================================== */
 
-        function cmd(id, label, glyph, run, more) { return Object.assign({ id: id, label: label, glyph: glyph || undefined, run: run }, more || {}); }
+        /* builtIn is a key CodeMirror binds itself, such as Ctrl+Z, which
+           the menus show and PUDL leaves to CodeMirror (bind: false). */
+        function cmd(id, label, glyph, run, more) {
+            var c = Object.assign({ id: id, label: label, glyph: glyph || undefined, run: run }, more || {});
+            if (c.builtIn) { c.shortcut = window.yavcUtil.shortcut(c.builtIn); c.bind = false; delete c.builtIn; }
+            return c;
+        }
         function isD2() { var t = current(); return !!(t && t.kind === 'd2'); }
         function commandTable() {
             var table = [
@@ -538,6 +570,11 @@
                 cmd('open', 'Open…', 'folder', open, { shortcut: 'Mod+O' }),
                 cmd('save', 'Save', 'yavc-save', save, { shortcut: 'Mod+S', disabled: function () { return !current(); } }),
                 cmd('save-as', 'Save As…', null, saveAs, { disabled: function () { return !current(); } }),
+                cmd('close-diagram', 'Close Diagram', null, function () { closeTab(active); }, { disabled: function () { return !current(); } }),
+                cmd('undo', 'Undo', 'yavc-undo', function () { if (cm) { CM.undo(cm); } }, { builtIn: 'Mod-z', glyphOnly: true }),
+                cmd('redo', 'Redo', 'yavc-redo', function () { if (cm) { CM.redo(cm); } }, { builtIn: 'Mod-y', glyphOnly: true }),
+                cmd('find', 'Find and Replace…', 'search', openFind, { builtIn: 'Mod-f' }),
+                cmd('go-to-line', 'Go to Line…', null, goToLine, { builtIn: 'Mod-Alt-g' }),
                 cmd('edit-in-editor', 'Open in the Editor', 'pencil', editInEditor, { disabled: function () { var c = current(); return !(c && c.path); } }),
                 cmd('export-svg', 'Download as SVG', 'download', downloadSVG, { disabled: function () { return !drawable(); } }),
                 cmd('export-png', 'Download as PNG', 'download', null, { disabled: function () { return !drawable(); }, items: [1, 2, 3].map(function (k) { return { id: 'export-png-' + k, label: k === 1 ? 'Actual Size' : k + ' Times the Size', run: function () { downloadPNG(k); } }; }) }),
@@ -557,6 +594,7 @@
         function toolbars() {
             return [{ label: 'Diagrams', ribbon: 'hide', groups: [
                 { label: 'File', glyph: 'file', priority: 3, items: ['new', 'open', 'save'] },
+                { label: 'Edit', glyph: 'pencil', priority: 4, items: ['undo', 'redo', 'find'] },
                 { label: 'Diagram', glyph: 'code', priority: 2, items: ['format-text', 'copy-embed', 'export-svg', 'export-png'] },
                 { label: 'View', glyph: 'panel', priority: 1, end: true, items: [{ choice: 'dg-view' }, 'dock', 'fit'] }
             ] }];
@@ -566,15 +604,16 @@
         function menus() {
             return { titles: [
                 { label: 'Diagrams', glyph: 'document', items: H.identity ? H.identity(root, []) : [] },
-                { id: 'file', label: 'File', glyph: 'file', items: ['new', 'new-mermaid', 'open', 'save', 'save-as', '-', 'edit-in-editor', '-', 'export-svg', 'export-png', 'export-source'] },
+                { id: 'file', label: 'File', glyph: 'file', items: ['new', 'new-mermaid', 'open', 'save', 'save-as', '-', 'edit-in-editor', '-', 'export-svg', 'export-png', 'export-source', '-', 'close-diagram'] },
+                { id: 'edit', label: 'Edit', glyph: 'pencil', items: ['undo', 'redo', '-', 'find'] },
                 { id: 'diagram', label: 'Diagram', glyph: 'code', items: ['format-text', 'redraw', '-', 'copy-embed'] }
-            ], into: { view: ['view-text', 'view-preview', 'view-split', '-', 'dock', 'fit'] } };
+            ], into: { view: ['view-text', 'view-preview', 'view-split', '-', 'dock', 'fit'], go: ['go-to-line'] } };
         }
         root.addEventListener('pudl:contextmenu', function (e) {
             var t = e.detail.target;
             var own = function (ids) { return window.pudlCommands ? window.pudlCommands.menuRows(ids, root) : ids; };
             if (t.closest && t.closest('.dg-stagebox')) { e.detail.add(own(['copy-embed', 'export-svg', 'export-png', '-', 'fit', 'redraw'])); }
-            else if (t.closest && t.closest('.dg-text')) { e.detail.add(own(['format-text', 'copy-embed', '-', 'view-text', 'view-preview', 'view-split'])); }
+            else if (t.closest && t.closest('.dg-text')) { e.detail.add(own(['undo', 'redo', '-', 'find', '-', 'format-text', 'copy-embed', '-', 'view-text', 'view-preview', 'view-split'])); }
         });
 
         /* === Start ======================================================== */
@@ -722,7 +761,7 @@
                 booted.then(function () {
                     var file = p.get('file'), view = p.get('view');
                     var t = current();
-                    if (file && (!t || file !== t.path)) { openPath(file, view); }
+                    if (file && (!t || file !== t.path)) { openPath(file, view).catch(function (err) { say(String((err && err.message) || err), true); }); }
                     else if (view) { setView(view); }
                 });
             },

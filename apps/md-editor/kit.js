@@ -5,6 +5,8 @@
 
      yavcMdEditor.libs()                CodeMirror, loaded beside this file
      yavcMdEditor.codeTheme(CM)         the site's colours for a code editor, from PUDL's tokens
+     yavcMdEditor.codeSearch(CM, onQuery)   CodeMirror's search with the site's find bar
+     yavcMdEditor.findBar(driver, onQuery)  the find bar, for a search of the host's own
      yavcMdEditor.pageView()            the page view (page-view.js), loaded
      yavcMdEditor.mermaid()             Mermaid, loaded
      yavcMdEditor.drawMermaid(place, source, opts)   a Mermaid diagram drawn into place
@@ -944,27 +946,182 @@
                .catch(function (err) { code.textContent = 'The file could not be loaded: ' + (err && err.message || err); });
         });
     }
+    /* === Find and replace ===========================================
+       The Editor's and Diagrams' find bar, kept here so there is one:
+       One find bar for the text and the page, in PUDL's parts: the two
+       fields sunken, the buttons raised, Match Case, Whole Word and
+       Regular Expression as latching buttons (as Chat's Thinking is),
+       the count of matches, and Close. In the text the bar is
+       CodeMirror's search panel (search({ createPanel })), so CodeMirror
+       highlights the matches and keeps the query with the tab; on the
+       page it sits over the frame and drives the visual editor's own
+       search (js/editor-visual.js). The query carries over when the view
+       changes. Enter finds the next match and Shift+Enter the one
+       before; in the Replace field Enter replaces it and Ctrl+Enter
+       replaces them all; Escape closes the bar. */
+    var FIND_OPTS = [['caseSensitive', 'Aa', 'Match Case'], ['wholeWord', 'W', 'Whole Word'], ['regexp', '.*', 'Regular Expression']];
+    function findBar(driver, onQuery) {
+        var dom = document.createElement('div');
+        dom.className = 'ed-find';
+        dom.setAttribute('role', 'search');
+        dom.setAttribute('aria-label', 'Find and Replace');
+        var g = function (name) { return '<span class="glyph" style="--glyph: var(--glyph-' + name + ')" aria-hidden="true"></span>'; };
+        /* The grid inside the bar, so the bar's own width can set it out
+           (a container query in the site's stylesheet). */
+        dom.innerHTML = '<div class="ed-find-grid">' +
+            '<div class="ed-find-row">' +
+              '<input class="form-input ed-find-field" type="text" data-find="search" placeholder="Find" aria-label="Find" autocomplete="off" spellcheck="false" main-field="true" />' +
+              '<span class="ed-find-tools">' +
+                '<span class="ed-find-count" data-find="count" aria-live="polite"></span>' +
+                '<button type="button" class="btn btn-sm" data-find="prev" aria-label="Previous Match" title="Previous Match (Shift+Enter)">' + g('arrow-up') + '</button>' +
+                '<button type="button" class="btn btn-sm" data-find="next" aria-label="Next Match" title="Next Match (Enter)">' + g('arrow-down') + '</button>' +
+                '<span class="ed-find-opts" role="group" aria-label="Options">' + FIND_OPTS.map(function (o) {
+                    return '<button type="button" class="btn btn-sm ed-find-opt" data-opt="' + o[0] + '" aria-pressed="false" aria-label="' + o[2] + '" title="' + o[2] + '">' + o[1] + '</button>';
+                }).join('') + '</span>' +
+                '<button type="button" class="icon-btn ed-find-close" data-find="close" aria-label="Close" title="Close (Escape)">' + g('close') + '</button>' +
+              '</span>' +
+            '</div>' +
+            '<div class="ed-find-row" data-find="replace-row">' +
+              '<input class="form-input ed-find-field" type="text" data-find="replace" placeholder="Replace With" aria-label="Replace With" autocomplete="off" spellcheck="false" />' +
+              '<span class="ed-find-tools">' +
+                '<button type="button" class="btn btn-sm" data-find="replace-one" title="Replace This Match (Enter)">Replace</button>' +
+                '<button type="button" class="btn btn-sm" data-find="replace-all" title="Replace Every Match (Ctrl+Enter)">Replace All</button>' +
+              '</span>' +
+            '</div>' +
+        '</div>';
+        var f = function (k) { return dom.querySelector('[data-find="' + k + '"]'); };
+        var search = f('search'), replace = f('replace');
+        var opt = function (k) { return dom.querySelector('[data-opt="' + k + '"]'); };
+        function query() {
+            var q = { search: search.value, replace: replace.value };
+            FIND_OPTS.forEach(function (o) { q[o[0]] = opt(o[0]).getAttribute('aria-pressed') === 'true'; });
+            return q;
+        }
+        function show(q) {
+            if (!q) { return; }
+            if (search.value !== (q.search || '')) { search.value = q.search || ''; }
+            if (replace.value !== (q.replace || '')) { replace.value = q.replace || ''; }
+            FIND_OPTS.forEach(function (o) { opt(o[0]).setAttribute('aria-pressed', String(!!q[o[0]])); });
+        }
+        function refresh() {
+            var c = driver.count(), count = f('count');
+            count.textContent = !search.value ? '' : c.error ? 'Not a valid expression' : !c.total ? 'No matches'
+                : c.at ? c.at + ' of ' + (c.total >= 1000 ? '1000+' : c.total) : (c.total >= 1000 ? '1000+' : c.total) + (c.total === 1 ? ' match' : ' matches');
+            count.classList.toggle('ed-find-none', !!search.value && (!!c.error || !c.total));
+            f('prev').disabled = f('next').disabled = !c.total;
+            f('replace-row').hidden = driver.readOnly();
+            f('replace-one').disabled = f('replace-all').disabled = !c.total;
+        }
+        function apply() { var q = query(); if (onQuery) { onQuery(q); } driver.set(q); refresh(); }
+        search.addEventListener('input', apply);
+        replace.addEventListener('input', apply);
+        /* A press on a button leaves the keyboard in the field. */
+        dom.addEventListener('mousedown', function (e) { if (e.target.closest('button')) { e.preventDefault(); } });
+        dom.addEventListener('click', function (e) {
+            var b = e.target.closest('button');
+            if (!b || b.disabled) { return; }
+            if (b.hasAttribute('data-opt')) { b.setAttribute('aria-pressed', String(b.getAttribute('aria-pressed') !== 'true')); apply(); return; }
+            switch (b.getAttribute('data-find')) {
+                case 'prev': driver.prev(); break;
+                case 'next': driver.next(); break;
+                case 'replace-one': driver.replace(); break;
+                case 'replace-all': driver.replaceAll(); break;
+                case 'close': driver.close(); return;
+            }
+            refresh();
+        });
+        dom.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); driver.close(); return; }
+            if (e.key !== 'Enter' || e.isComposing) { return; }
+            e.preventDefault(); e.stopPropagation();
+            if (e.target === replace) { if (e.ctrlKey || e.metaKey) { driver.replaceAll(); } else { driver.replace(); } }
+            else if (e.shiftKey) { driver.prev(); } else { driver.next(); }
+            refresh();
+        });
+        return { dom: dom, show: show, refresh: refresh, focus: function () { search.focus(); search.select(); } };
+    }
+
+    /* The text's search, which is CodeMirror's. */
+    function textFind(CM, v) {
+        return {
+            set: function (q) { v.dispatch({ effects: CM.setSearchQuery.of(new CM.SearchQuery(q)) }); },
+            next: function () { CM.findNext(v); },
+            prev: function () { CM.findPrevious(v); },
+            replace: function () { CM.replaceNext(v); },
+            replaceAll: function () { CM.replaceAll(v); },
+            close: function () { CM.closeSearchPanel(v); v.focus(); },
+            readOnly: function () { return v.state.readOnly; },
+            count: function () {
+                var q = CM.getSearchQuery(v.state);
+                if (!q.search) { return { total: 0 }; }
+                if (!q.valid) { return { total: 0, error: true }; }
+                var sel = v.state.selection.main, total = 0, at = 0, cur = q.getCursor(v.state);
+                for (var r = cur.next(); !r.done && total < 1000; r = cur.next()) {
+                    total++;
+                    if (r.value.from === sel.from && r.value.to === sel.to) { at = total; }
+                }
+                return { total: total, at: at };
+            }
+        };
+    }
+    /* CodeMirror's search panel, made as the find bar. */
+    function findPanel(CM, onQuery, v) {
+        var bar = findBar(textFind(CM, v), onQuery), shown = null;
+        return {
+            dom: bar.dom, top: true,
+            /* As CodeMirror's own panel does, the bar takes the keyboard
+               when it first appears; openSearchPanel focuses it after. */
+            mount: function () { shown = CM.getSearchQuery(v.state); bar.show(shown); bar.refresh(); bar.focus(); },
+            update: function (u) {
+                var q = CM.getSearchQuery(u.state);
+                if (q !== shown) { shown = q; bar.show(q); }
+                bar.refresh();
+            }
+        };
+    }
+
+    /* CodeMirror's search, with the find bar as its panel: the extension
+       an editor adds. onQuery hears each query the person types. */
+    function codeSearch(CM, onQuery) {
+        return CM.search({ top: true, createPanel: function (v) { return findPanel(CM, onQuery, v); } });
+    }
+
     /* A Mermaid diagram drawn into its place, made safe with its own
        stylesheet kept under its id (apps/md-engine/safe-html.js). */
-    /* opts, as for D2 (apps/diagram-kit/d2.js draw): keep leaves the last
-       good drawing, dimmed, when the text has a mistake, and report: false
-       leaves the mistake to the caller. Resolves with { svg } or with
-       { problem }. */
+    /* opts, as for D2 (apps/diagram-kit/d2.js draw): alt, the drawing's
+       text alternative; keep leaves the last good drawing, dimmed, when the
+       text has a mistake; and report: false leaves the mistake to the
+       caller. Resolves with { svg } or with { problem }. While Mermaid
+       loads, which the first time is about 3 MB, the place shows PUDL's
+       loading state with words, after 400 ms as D2's does. */
     var diagramCount = 0;
     function drawDiagram(place, source, opts) {
         opts = opts || {};
-        var id = 'md-diagram-' + (++diagramCount);
+        var id = 'md-diagram-' + (++diagramCount), loading = null;
+        var cue = setTimeout(function () {
+            if (!place.isConnected || place.querySelector(':scope > .loading')) { return; }
+            loading = document.createElement('div');
+            loading.className = 'loading';
+            loading.setAttribute('role', 'status');
+            loading.innerHTML = '<span class="spinner" aria-hidden="true"></span><span>' + (window.mermaid ? 'Drawing the diagram…' : 'Loading Mermaid, which takes a moment the first time…') + '</span>';
+            place.insertBefore(loading, place.firstChild);
+        }, 400);
+        function settled() { clearTimeout(cue); if (loading) { loading.remove(); loading = null; } }
         return Promise.all([mermaid(), safeHTML()]).then(function () {
             window.mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', suppressErrorRendering: true,
                 theme: document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'default' });
             return window.mermaid.render(id, source);
         }).then(function (out) {
+            settled();
             if (!place.isConnected) { return { svg: out.svg }; }
             place.replaceChildren(window.yavcHTML.fragment(out.svg, { diagram: true }));
+            var svg = place.querySelector('svg');
+            if (svg && opts.alt) { svg.setAttribute('role', 'img'); svg.setAttribute('aria-label', opts.alt); }
             place.classList.add('ed-diagram');
             place.classList.remove('sc-diagram-stale');
             return { svg: out.svg };
         }).catch(function (err) {
+            settled();
             /* Mermaid leaves a scratch element behind when it fails. */
             var scratch = document.getElementById('d' + id);
             if (scratch) { scratch.remove(); }
@@ -1155,7 +1312,7 @@
 
     window.yavcMdEditor = {
         here: HERE, stamp: STAMP, placeholder: PLACEHOLDER,
-        libs: libs, codeTheme: codeTheme, pageView: pageView, mermaid: mermaid, drawMermaid: drawDiagram, loadScript: loadScript,
+        libs: libs, codeTheme: codeTheme, codeSearch: codeSearch, findBar: findBar, pageView: pageView, mermaid: mermaid, drawMermaid: drawDiagram, loadScript: loadScript,
         FORMATS: FORMATS, STYLES: STYLES, INSERTS: INSERTS, SHORTCODES: SHORTCODES, MENU: MENU, STOCK_CLASSES: STOCK_CLASSES,
         tableCommand: tableCommand, wordCount: wordCount, readingMinutes: readingMinutes,
         commands: commands, apply: apply, classesOf: classesOf, insertItem: insertItem, inserts: inserts, textFormat: textFormat, textInsert: textInsert,
