@@ -248,3 +248,106 @@ func TestUnknownFunctionAndBadJSON(t *testing.T) {
 		t.Fatal(out)
 	}
 }
+
+func callJSON(t *testing.T, name string, req any, into any) string {
+	t.Helper()
+	arg, _ := json.Marshal(req)
+	out := Call(name, string(arg))
+	if err := json.Unmarshal([]byte(out), into); err != nil {
+		t.Fatalf("not JSON: %s", out)
+	}
+	return out
+}
+
+// Completions come from D2's own language service: the shapes after
+// "shape:" and the style names after "style.", counted from 0 as the
+// service counts.
+func TestCompletions(t *testing.T) {
+	var res struct{ Items []Completion }
+	callJSON(t, "completions", TextRequest{Text: "a.shape: ", Line: 0, Column: 9}, &res)
+	has := func(label string) bool {
+		for _, it := range res.Items {
+			if it.Label == label {
+				return true
+			}
+		}
+		return false
+	}
+	if !has("cylinder") || !has("sequence_diagram") {
+		t.Fatalf("shape completions lack cylinder or sequence_diagram: %+v", res.Items)
+	}
+	callJSON(t, "completions", TextRequest{Text: "a.style.", Line: 0, Column: 8}, &res)
+	if !has("fill") || !has("stroke") {
+		t.Fatalf("style completions lack fill or stroke: %+v", res.Items)
+	}
+	callJSON(t, "completions", TextRequest{Text: "a -> ", Line: 0, Column: 5}, &res)
+	if res.Items == nil {
+		t.Fatal("no completions is an empty list, not null")
+	}
+}
+
+// Formatting writes the text as D2's formatter does, and a text with a
+// mistake is left alone, its problems reported.
+func TestFormat(t *testing.T) {
+	var res struct {
+		Text     string
+		Problems []Problem
+	}
+	callJSON(t, "format", TextRequest{Text: "a:   {  shape: cylinder }\n# kept\na->b\n"}, &res)
+	if !strings.Contains(res.Text, "a: {shape: cylinder}") || !strings.Contains(res.Text, "# kept") || !strings.Contains(res.Text, "a -> b") {
+		t.Fatalf("formatted:\n%s", res.Text)
+	}
+	res.Text, res.Problems = "", nil
+	callJSON(t, "format", TextRequest{Text: "a: {\n"}, &res)
+	if len(res.Problems) == 0 || res.Text != "" {
+		t.Fatalf("a broken text was formatted: %+v", res)
+	}
+}
+
+// The outline is the diagram's shapes and connections, each with where it
+// is written, in UTF-16 offsets, so a place found from the outline selects
+// the right characters in CodeMirror even after a non-ASCII character.
+func TestOutline(t *testing.T) {
+	text := "# é\nweb: Web {\n  app: App\n}\ndb: {shape: cylinder}\nweb.app -> db: reads\nlayers: {\n  deploy: {\n    x\n  }\n}\n"
+	var res OutlineResponse
+	callJSON(t, "outline", TextRequest{Text: text}, &res)
+	if len(res.Problems) != 0 {
+		t.Fatalf("problems: %+v", res.Problems)
+	}
+	byID := map[string]Shape{}
+	for _, s := range res.Shapes {
+		byID[s.ID] = s
+	}
+	app, ok := byID["web.app"]
+	if !ok || app.Parent != "web" || app.Label != "App" {
+		t.Fatalf("web.app: %+v (all %+v)", app, res.Shapes)
+	}
+	if byID["db"].Shape != "cylinder" || byID["web"].Shape != "rectangle" {
+		t.Fatalf("shapes: %+v", res.Shapes)
+	}
+	at := app.Places[0]
+	// "# é\n" is four UTF-16 units, so "app" on line 3 starts where the
+	// JavaScript string has it.
+	js := strings.Index(text, "app: App") - 1 // é is two bytes, one unit
+	if at.Line != 3 || at.From != js || at.To != js+3 {
+		t.Fatalf("web.app is placed at %+v, want line 3 from %d", at, js)
+	}
+	if len(res.Connections) != 1 || res.Connections[0].From != "web.app" || res.Connections[0].To != "db" || res.Connections[0].Label != "reads" {
+		t.Fatalf("connections: %+v", res.Connections)
+	}
+	if len(res.Boards) != 1 || res.Boards[0] != "deploy" {
+		t.Fatalf("boards: %+v", res.Boards)
+	}
+	res = OutlineResponse{}
+	callJSON(t, "outline", TextRequest{Text: "a: {\n"}, &res)
+	if len(res.Problems) == 0 || res.Shapes == nil {
+		t.Fatalf("a broken text: %+v", res)
+	}
+}
+
+func TestTextRequestLimit(t *testing.T) {
+	out := Call("outline", `{"text":"`+strings.Repeat("a", MaxSource+1)+`"}`)
+	if !strings.Contains(out, `"error"`) {
+		t.Fatalf("an oversized text was read: %.100s", out)
+	}
+}

@@ -1074,7 +1074,7 @@
     /* Whether a file is text an editor can open. Files in this browser's ~
        always are; a server file is judged by its extension, and one with
        none, such as a script, counts as text. */
-    var TEXT_EXT = /\.(txt|md|markdown|json|xfer|xferlang|html?|css|js|mjs|cjs|ts|cs|cshtml|razor|xml|svg|csv|tsv|sh|cells|sudoku|ya?ml|ini|conf|log|webmanifest|py|go|rs|c|h|cpp|hpp|java|sql|ps1|bat|editorconfig|gitignore)$/i;
+    var TEXT_EXT = /\.(txt|md|markdown|json|xfer|xferlang|html?|css|js|mjs|cjs|ts|cs|cshtml|razor|xml|svg|csv|tsv|sh|cells|sudoku|d2|mmd|mermaid|ya?ml|ini|conf|log|webmanifest|py|go|rs|c|h|cpp|hpp|java|sql|ps1|bat|editorconfig|gitignore)$/i;
     function isText(n) {
         var r = realOf(n);
         if (r.children) { return false; }

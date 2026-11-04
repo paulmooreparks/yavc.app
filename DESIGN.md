@@ -112,7 +112,7 @@ Manifests stay JSON, since the package format is shared with parkscomputing.com 
 | arcade games | PUDLSplash | To be read when installed |
 | terminal, files, editor, settings | parkscomputing.com's own applets, installed as site packages under `apps/` (done 2026-11-02) | The virtual file system with its browser-kept guest home, the session store, and later the administrator's mounts; these four are the site's own |
 | slides | New, in `apps/slides` (prototype 2026-11-03; design in `docs/slides-design.md`) | fs for decks as Markdown files, snapshot and config; the Editor's page view on the slide canvas; full-screen presenting, a presenter window, export as a page |
-| diagrams | New, in `apps/diagrams` (designed 2026-11-03; `docs/diagrams-design.md`) | fs for diagram files, snapshot and config; D2 compiled to WebAssembly and run in a worker; an embed renderer shared with the Editor and Slides |
+| diagrams | New, in `apps/diagrams` (designed 2026-11-03, text editing built 2026-11-04; `docs/diagrams-design.md`) | fs for diagram files, snapshot and config; D2 compiled to WebAssembly and run in a worker; an embed renderer shared with the Editor and Slides |
 | rss | New, in `apps/rss` | config for subscriptions and read state, the `rss-fetch` service |
 
 parkscomputing.com's other applets (account, comments, moderation, logs, visits, pins) are that site's plumbing and are not carried over.

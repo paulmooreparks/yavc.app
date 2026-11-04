@@ -4,8 +4,10 @@
    engine, written once. It gives a host
 
      yavcMdEditor.libs()                CodeMirror, loaded beside this file
+     yavcMdEditor.codeTheme(CM)         the site's colours for a code editor, from PUDL's tokens
      yavcMdEditor.pageView()            the page view (page-view.js), loaded
      yavcMdEditor.mermaid()             Mermaid, loaded
+     yavcMdEditor.drawMermaid(place, source, opts)   a Mermaid diagram drawn into place
      yavcMdEditor.FORMATS, STYLES, INSERTS, SHORTCODES   the tables
      yavcMdEditor.commands(ctx)         PUDL command entries for the formats,
                                         the paragraph style and Insert
@@ -41,6 +43,52 @@
     var PLACEHOLDER = 'Type here.';
 
     var loadScript = window.yavcUtil.loadScript;
+
+    /* Colours from PUDL's tokens, as CSS variables, so an editor follows
+       the theme with no code of its own: the Editor's and Diagrams'. */
+    function codeTheme(CM) {
+        var tint = function (pct) { return 'color-mix(in srgb, var(--accent) ' + pct + '%, transparent)'; };
+        return [
+            CM.EditorView.theme({
+                '&': { color: 'var(--text)', backgroundColor: 'var(--input-bg)', height: '100%', fontSize: '14px' },
+                '.cm-scroller': { fontFamily: 'var(--mono)', lineHeight: '1.5' },
+                '.cm-content': { caretColor: 'var(--accent)' },
+                '.cm-gutters': { backgroundColor: 'var(--surface)', color: 'var(--text-muted)', borderRight: '1px solid var(--border)' },
+                '.cm-activeLine': { backgroundColor: tint(6) },
+                '.cm-activeLineGutter': { backgroundColor: tint(12), color: 'var(--text)' },
+                '&.cm-focused .cm-cursor': { borderLeftColor: 'var(--accent)' },
+                '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection': { backgroundColor: tint(26) + ' !important' },
+                '.cm-selectionMatch': { backgroundColor: tint(14) },
+                '.cm-matchingBracket, &.cm-focused .cm-matchingBracket': { backgroundColor: tint(22), outline: '1px solid ' + tint(50) },
+                '.cm-searchMatch': { backgroundColor: 'color-mix(in srgb, var(--warn) 30%, transparent)' },
+                '.cm-searchMatch.cm-searchMatch-selected': { backgroundColor: 'color-mix(in srgb, var(--warn) 55%, transparent)' },
+                '.cm-panels': { backgroundColor: 'var(--surface)', color: 'var(--text)', borderColor: 'var(--border)' },
+                /* CodeMirror's own panels (Go to Line); the find bar is PUDL's. */
+                '.cm-panels input:not(.form-input), .cm-panels button:not(.btn):not(.icon-btn)': { font: 'inherit', fontSize: '13px' },
+                '.cm-tooltip': { backgroundColor: 'var(--surface)', color: 'var(--text)', border: '1px solid var(--border)' },
+                '.cm-diagnostic-error': { borderLeftColor: 'var(--syntax-error)' },
+                '.cm-lintRange-error': { backgroundImage: 'none', textDecoration: 'underline wavy var(--syntax-error)' },
+                '&.cm-focused': { outline: 'none' }
+            }),
+            /* PUDL's syntax tokens (0.26.0), after the README's CodeMirror
+               recipe, with the Markdown and shell tags this editor meets. */
+            CM.syntaxHighlighting(CM.HighlightStyle.define([
+                { tag: [CM.tags.keyword, CM.tags.operator], color: 'var(--syntax-keyword)' },
+                { tag: [CM.tags.string, CM.tags.special(CM.tags.string), CM.tags.regexp, CM.tags.monospace], color: 'var(--syntax-string)' },
+                { tag: [CM.tags.number, CM.tags.bool, CM.tags.null], color: 'var(--syntax-number)' },
+                { tag: [CM.tags.comment, CM.tags.meta, CM.tags.quote, CM.tags.processingInstruction], color: 'var(--syntax-comment)', fontStyle: 'italic' },
+                { tag: [CM.tags.function(CM.tags.variableName), CM.tags.variableName, CM.tags.definition(CM.tags.variableName)], color: 'var(--syntax-name)' },
+                { tag: [CM.tags.tagName, CM.tags.typeName, CM.tags.angleBracket], color: 'var(--syntax-tag)' },
+                { tag: [CM.tags.attributeName, CM.tags.propertyName], color: 'var(--syntax-attr)' },
+                { tag: CM.tags.heading, color: 'var(--syntax-heading)', fontWeight: '700' },
+                { tag: [CM.tags.link, CM.tags.url], color: 'var(--syntax-link)', textDecoration: 'underline' },
+                { tag: CM.tags.invalid, color: 'var(--syntax-error)' },
+                { tag: CM.tags.strong, fontWeight: '700' },
+                { tag: CM.tags.emphasis, fontStyle: 'italic' }
+            ]))
+        ];
+    }
+
     var cmReady = null, pvReady = null, mmReady = null;
     function libs() {
         if (window.CM && window.CM.EditorView) { return Promise.resolve(window.CM); }
@@ -51,6 +99,15 @@
         if (window.yavcPageView) { return Promise.resolve(window.yavcPageView); }
         if (!pvReady) { pvReady = loadScript(HERE + 'page-view.js' + STAMP).then(function () { return window.yavcPageView; }).catch(function (e) { pvReady = null; throw e; }); }
         return pvReady;
+    }
+    /* The HTML cleaner (apps/md-engine/safe-html.js), which a page with the
+       Markdown engine has already, and which Diagrams, drawing Mermaid with
+       no Markdown engine, loads here. */
+    var htmlReady = null;
+    function safeHTML() {
+        if (window.yavcHTML) { return Promise.resolve(window.yavcHTML); }
+        if (!htmlReady) { htmlReady = loadScript(window.yavcUtil.versioned('/applets/md-engine/safe-html.js')).then(function () { return window.yavcHTML; }).catch(function (e) { htmlReady = null; throw e; }); }
+        return htmlReady;
     }
     function mermaid() {
         if (window.mermaid) { return Promise.resolve(window.mermaid); }
@@ -889,18 +946,34 @@
     }
     /* A Mermaid diagram drawn into its place, made safe with its own
        stylesheet kept under its id (apps/md-engine/safe-html.js). */
+    /* opts, as for D2 (apps/diagram-kit/d2.js draw): keep leaves the last
+       good drawing, dimmed, when the text has a mistake, and report: false
+       leaves the mistake to the caller. Resolves with { svg } or with
+       { problem }. */
     var diagramCount = 0;
-    function drawDiagram(place, source) {
+    function drawDiagram(place, source, opts) {
+        opts = opts || {};
         var id = 'md-diagram-' + (++diagramCount);
-        mermaid().then(function () {
+        return Promise.all([mermaid(), safeHTML()]).then(function () {
             window.mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', suppressErrorRendering: true,
                 theme: document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'default' });
             return window.mermaid.render(id, source);
         }).then(function (out) {
-            if (!place.isConnected) { return; }
+            if (!place.isConnected) { return { svg: out.svg }; }
             place.replaceChildren(window.yavcHTML.fragment(out.svg, { diagram: true }));
             place.classList.add('ed-diagram');
-        }).catch(function (err) { diagramFailed(place, err); });
+            place.classList.remove('sc-diagram-stale');
+            return { svg: out.svg };
+        }).catch(function (err) {
+            /* Mermaid leaves a scratch element behind when it fails. */
+            var scratch = document.getElementById('d' + id);
+            if (scratch) { scratch.remove(); }
+            var problem = String((err && err.message) || err);
+            if (opts.keep && place.classList.contains('ed-diagram') && place.firstElementChild) { place.classList.add('sc-diagram-stale'); }
+            else if (opts.report === false) { place.replaceChildren(); }
+            if (opts.report !== false) { diagramFailed(place, err); }
+            return { problem: problem };
+        });
     }
     /* A diagram that could not be drawn at all says so in the site's
        notice above it, as the house rules ask of every error. */
@@ -1082,7 +1155,7 @@
 
     window.yavcMdEditor = {
         here: HERE, stamp: STAMP, placeholder: PLACEHOLDER,
-        libs: libs, pageView: pageView, mermaid: mermaid, loadScript: loadScript,
+        libs: libs, codeTheme: codeTheme, pageView: pageView, mermaid: mermaid, drawMermaid: drawDiagram, loadScript: loadScript,
         FORMATS: FORMATS, STYLES: STYLES, INSERTS: INSERTS, SHORTCODES: SHORTCODES, MENU: MENU, STOCK_CLASSES: STOCK_CLASSES,
         tableCommand: tableCommand, wordCount: wordCount, readingMinutes: readingMinutes,
         commands: commands, apply: apply, classesOf: classesOf, insertItem: insertItem, inserts: inserts, textFormat: textFormat, textInsert: textInsert,
