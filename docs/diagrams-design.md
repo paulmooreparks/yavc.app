@@ -183,7 +183,16 @@ Milestone D3 began on 2026-11-04, ahead of the second part of D2, because Paul w
 - The Shape menu and toolbar group: Add Shape (N), Add Shape Inside (Shift+N), Connect To (C, then a click or Enter on the other shape), Edit Label (Enter or a double click), Rename (F2, with the name checked in the dialog), Shape, and Delete, the keys working only while the drawing has the focus so typing in the text never changes the drawing; the view is called Visual for a D2 diagram
 - The note in the status line the first time a change rewrites an untidy file (decision 5), and the action `edit@1`, so an agent can draw a diagram shape by shape
 
-A new shape is called `item`, because `shape` is one of D2's keywords and D2 renames a shape given that name. Still to come in D3 are the palette, by which a shape is placed by pointing, dragging a connection from a handle, dragging a shape into or out of a container, the inspector for colours and other settings, the Outline pane, and the arrow keys moving along connections rather than in drawing order.
+A new shape is called `item`, because `shape` is one of D2's keywords and D2 renames a shape given that name.
+
+The second part of D3 (2026-11-04) added these.
+
+- The palette, a toolbar of its own over the drawing, with Select and twelve kinds of shape, each a project glyph (`--glyph-yavc-shape-*`); a kind chosen is placed by the next click, inside the shape clicked or at the top on empty space, and the palette goes back to Select after each one. It is not in the main toolbar, because thirteen more buttons there folded every group into a menu.
+- A handle on the selected shape, from which a connection is dragged to another shape, or to empty space, where it makes a new shape of the palette's kind
+- Dragging a selected shape onto a container to move it inside, or onto empty space to move it to the top, through D2's move with its descendants, so every reference follows
+- The engine's `create` taking the new shape's kind, so placing a shape of a kind is one change and one Undo; when the change is a connection, the kind is set on the far end only if the connection made it
+
+A connection dragged out to empty space needs a free name for its far end, since D2 joins a connection to whatever shape already has the name in its key; the first version used `item` and joined an existing `item`, which the browser check caught. Still to come in D3 are the order of a new shape among its siblings (decision 6), the inspector for colours and other settings, the Outline pane, and the arrow keys moving along connections rather than in drawing order.
 
 The second part of D2 is the embedding: the `{{diagram}}` shortcode with its form and Insert entries, live update over a `BroadcastChannel`, icons from the site and the home folder, imports from the diagram's folder, the colouring in the Editor's own text view, and the browser test of Mermaid drawn as an image. Download as PDF and as Word wait for the editing kit's exports (docs/docs-design.md, decision 18).
 

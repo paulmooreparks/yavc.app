@@ -63,6 +63,12 @@
         { id: 'mm-git', label: 'Git Graph', text: 'gitGraph\n    commit\n    branch feature\n    commit\n    checkout main\n    merge feature\n    commit\n' }
     ];
     var EXT = { d2: '.d2', mermaid: '.mmd' };
+    /* The palette (decision 15: a toolbar of raised buttons): Select, and
+       the kinds of shape flowcharts and architecture diagrams reach for. A
+       kind chosen is placed by the next click on the drawing, inside the
+       shape clicked or at the top on empty space, and by N. */
+    var PALETTE = [['rectangle', 'Rectangle'], ['oval', 'Oval'], ['diamond', 'Diamond'], ['parallelogram', 'Parallelogram'], ['document', 'Document'],
+        ['cylinder', 'Cylinder'], ['queue', 'Queue'], ['person', 'Person'], ['cloud', 'Cloud'], ['hexagon', 'Hexagon'], ['package', 'Package'], ['text', 'Text Only']];
     /* D2's reserved words (d2graph's ReservedKeywords, D2 0.7.2), which
        cannot name a shape. */
     var RESERVED = ['label', 'shape', 'icon', 'constraint', 'tooltip', 'link', 'near', 'width', 'height', 'top', 'left', 'direction', 'class', 'classes', 'vars',
@@ -110,6 +116,12 @@
             '<div class="dg-main" data-role="main">' +
               '<div class="dg-work split" data-role="work">' +
                 '<div class="dg-stagebox split-pane" data-role="stagebox">' +
+                  /* The palette, a toolbar of its own over the drawing, so
+                     the main toolbar keeps its groups; PUDL draws its
+                     latched buttons from the command table's dg-tool choice. */
+                  '<div class="toolbar dg-palette" role="toolbar" aria-label="Palette" data-toolbar-fold><div class="toolbar-group">' +
+                    ['select'].concat(PALETTE.map(function (k) { return k[0]; })).map(function (k) { return '<button type="button" data-command="tool-' + k + '"></button>'; }).join('') +
+                  '</div></div>' +
                   '<div class="dg-stage" data-role="stage" tabindex="0" role="region" aria-label="The Drawing" aria-describedby="dg-keys-' + n + '"><div class="dg-canvas" data-role="canvas"></div></div>' +
                   '<p class="dg-keys visually-hidden" id="dg-keys-' + n + '">In a D2 diagram, the arrow keys select a shape or a connection, Enter edits its label, F2 renames it, N adds a shape, C connects the selected shape to another, and Delete deletes it.</p>' +
                 '</div>' +
@@ -320,7 +332,10 @@
                     t.canvas = C.attach(t.place, {
                         selected: function (key, how) { canvasSelected(t, key, how); },
                         activate: function (key) { if (t === current()) { editLabel(key); } },
-                        pick: function (key) { return t === current() && pickEnd(key); }
+                        pick: function (key) { return t === current() && pickEnd(key); },
+                        tool: function () { return tool; },
+                        place: function (container) { if (t === current()) { placeShape(container); } },
+                        drop: function (d) { if (t === current()) { dropped(d); } }
                     });
                 }
                 t.canvas.show(out);
@@ -420,12 +435,68 @@
             say(msg + (out.rewrote ? ' D2 also wrote the whole text in its own layout, as the first change on the drawing does; Undo puts it back as it was.' : ''));
         }
         function lastName(key) { var m = /([^.]+)$/.exec(key || ''); return m ? m[1] : key; }
+        /* The palette's choice: null for Select, or a kind of shape. */
+        var tool = null;
+        function setTool(kind) {
+            tool = kind && kind !== 'select' ? kind : null;
+            root.classList.toggle('dg-placing', !!tool);
+            if (tool) {
+                var name = (PALETTE.find(function (x) { return x[0] === tool; }) || [tool, tool])[1].toLowerCase();
+                say('Click the drawing to place a ' + name + ': on a shape to put it inside, or on empty space. Escape goes back to Select.');
+                el.stage.focus({ preventScroll: true });
+            }
+            commandsChanged();
+        }
+        function placeShape(container) {
+            var kind = tool || 'rectangle';
+            setTool(null);
+            return applyEdit({ op: 'create', key: (container ? container + '.' : '') + 'item', shape: kind }).then(function (out) {
+                if (out && out.key) { done(out, 'Placed ' + out.key + (container ? ' inside ' + container : '') + '. Press Enter to give it a label.'); }
+            });
+        }
+        /* A drag on the drawing: a connection dragged out from a shape's
+           handle, to another shape or to empty space, where it makes a new
+           shape of the palette's kind; or a shape dragged into a container,
+           or out to the top, which D2 moves with everything that refers to
+           it (decision 5). */
+        function dropped(d) {
+            if (!canEdit()) { return; }
+            if (d.kind === 'connect') {
+                if (d.to === d.from) { say('A connection needs another shape at its far end.'); return; }
+                var kind = tool || 'rectangle';
+                setTool(null);
+                applyEdit({ op: 'create', key: d.from + ' -> ' + (d.to || freeName('')), shape: d.to ? '' : kind }).then(function (out) {
+                    done(out, 'Connected ' + d.from + ' to ' + (d.to || 'a new shape') + '. Press Enter to label the connection.');
+                });
+                return;
+            }
+            if (d.kind === 'move') {
+                var to = (d.to ? d.to + '.' : '') + lastName(d.from);
+                if (to === d.from) { return; }
+                applyEdit({ op: 'move', key: d.from, to: to, descendants: true }).then(function (out) {
+                    done(out, 'Moved ' + d.from + (d.to ? ' into ' + d.to : ' out to the top') + '. Undo puts it back.');
+                });
+            }
+        }
+        /* The next free name for a new shape in a container ('' for the
+           top): item, item 2, item 3, as D2 numbers them. A connection's
+           key names its far end, so the name must be free, or the
+           connection would go to the shape already called that. */
+        function freeName(parent) {
+            var t = current(), taken = {};
+            ((t && t.outline && t.outline.shapes) || []).forEach(function (s) { if ((s.parent || '') === parent) { taken[lastName(s.id).toLowerCase()] = true; } });
+            var name = 'item', i = 1;
+            while (taken[name]) { name = 'item ' + (++i); }
+            return (parent ? parent + '.' : '') + name;
+        }
         function addShape(inside) {
             var sel = selection(), parent = inside && sel && !isConnection(sel) ? sel + '.' : '';
             el.stage.focus({ preventScroll: true });
+            var kind = tool || 'rectangle';
+            setTool(null);
             /* A new shape is called item, which D2 numbers when it is taken;
                shape would be D2's own keyword, which it renames. */
-            return applyEdit({ op: 'create', key: parent + 'item' }).then(function (out) {
+            return applyEdit({ op: 'create', key: parent + 'item', shape: kind }).then(function (out) {
                 if (out && out.key) { done(out, 'Added ' + out.key + '. Press Enter to give it a label, or F2 to rename it.'); }
             });
         }
@@ -513,6 +584,7 @@
             var t = current();
             if (!t || !t.canvas || e.target !== el.stage) { return; }
             if (connecting && e.key === 'Escape') { e.preventDefault(); stopConnect('Stopped connecting.'); return; }
+            if (tool && e.key === 'Escape') { e.preventDefault(); setTool(null); say('Back to Select.'); return; }
             if (connecting && e.key === 'Enter') {
                 e.preventDefault();
                 if (selection() && selection() !== connecting) { pickEnd(selection()); } else { say('Move to the shape to connect to, then press Enter; Escape stops.'); }
@@ -589,6 +661,7 @@
             el.canvas.replaceChildren(t.place);
             el.where.textContent = t.path || 'Not saved yet';
             el.kind.textContent = KIND_NAME[t.kind];
+            root.setAttribute('data-kind', t.kind);
             applyDock();
             drawNow();
             commandsChanged();
@@ -669,7 +742,7 @@
                 t.modified = false;
                 /* A new suffix may make it the other language. */
                 var kind = kindOf(res.path, t.text);
-                if (kind !== t.kind) { t.kind = kind; stash(); t.state = stateFor(t, t.text); showTab(t); el.kind.textContent = KIND_NAME[kind]; drawNow(); }
+                if (kind !== t.kind) { t.kind = kind; stash(); t.state = stateFor(t, t.text); showTab(t); el.kind.textContent = KIND_NAME[kind]; root.setAttribute('data-kind', kind); drawNow(); }
                 el.where.textContent = t.path;
                 say('Saved ' + t.path + '.');
                 announce();
@@ -841,12 +914,20 @@
                 { id: 'shape-type', label: 'Shape', glyph: 'square', hidden: function () { return !isD2(); }, disabled: function () { return !!whyNot('shape'); }, reason: function () { return whyNot('shape'); },
                     current: function () { var t = current(), s = t && shapeOf(t, selection()); var f = s && SHAPES.find(function (x) { return x[0] === s.shape; }); return f ? f[1] : null; },
                     items: SHAPES.map(function (sh) { return { id: 'shape-type-' + sh[0], label: sh[1], choice: 'dg-shape', value: sh[0], checked: function () { var t = current(), s = t && shapeOf(t, selection()); return !!s && s.shape === sh[0]; }, run: function () { setShape(sh[0]); } }; }) },
+                { id: 'tool-select', label: 'Select', glyph: 'yavc-select', choice: 'dg-tool', choiceLabel: 'Palette', value: 'select', hidden: function () { return !isD2(); },
+                    checked: function () { return !tool; }, run: function () { setTool(null); } }
+            ].concat(PALETTE.map(function (k) {
+                return { id: 'tool-' + k[0], label: k[1], glyph: 'yavc-shape-' + k[0], // check-ignore(glyph-defined): one glyph for each PALETTE kind, each defined on :root in diagrams.css as --glyph-yavc-shape-<kind>
+                     choice: 'dg-tool', choiceLabel: 'Palette', value: k[0], glyphOnly: true,
+                    hidden: function () { return !isD2(); }, disabled: function () { return !!whyNot(false); }, reason: function () { return whyNot(false); },
+                    checked: function () { return tool === k[0]; }, run: function () { setTool(tool === k[0] ? null : k[0]); } };
+            })).concat([
                 cmd('shape-delete', 'Delete', 'yavc-bin', deleteSelected, { builtIn: 'Delete', danger: true, hidden: function () { return !isD2(); }, disabled: function () { return !!whyNot(true); }, reason: function () { return whyNot(true); } }),
                 cmd('redraw', 'Draw Again', 'reload', function () { drawNow(); }),
                 cmd('fit', 'Fit the Drawing to the Pane', 'maximize', function () { settings.fit = !settings.fit; applyFit(); keepSetting('fit', settings.fit); commandsChanged(); }, { checked: function () { return !!settings.fit; } }),
                 { id: 'dock', label: 'Drawing', glyph: 'dock', current: function () { var d = DOCKS.find(function (x) { return x[0] === settings.dock; }); return d ? d[1] : null; },
                     items: DOCKS.map(function (d) { return { id: 'dock-' + d[0], label: d[1], choice: 'dg-dock', value: d[0], checked: function () { return settings.dock === d[0]; }, run: function () { setDock(d[0]); } }; }) }
-            ];
+            ]);
             VIEWS.forEach(function (v) {
                 table.push({ id: 'view-' + v[0], label: v[0] === 'preview' ? function () { return isD2() ? 'Visual' : 'Preview'; } : v[1], choice: 'dg-view', choiceLabel: 'View', value: v[0], checked: function () { return viewOf(current()) === v[0]; }, run: function () { setView(v[0]); } });
             });

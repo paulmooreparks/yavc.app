@@ -139,3 +139,27 @@ func TestCompileGeometry(t *testing.T) {
 		t.Errorf("deleting by the drawn key: %+v", r)
 	}
 }
+
+// Placing a shape of a chosen kind is one change, and so is dragging a
+// connection out to empty space, which makes the shape at its far end.
+func TestEditCreateWithShape(t *testing.T) {
+	head := "# A plan\ndirection: right\n\nweb: Web {\n  app: App\n}\ndb: Database {shape: cylinder}\n\nweb.app -> db: reads\n"
+	res := editCall(t, EditRequest{Op: "create", Key: "web.item", Shape: "hexagon"})
+	if want := "# A plan\ndirection: right\n\nweb: Web {\n  app: App\n  item: {shape: hexagon}\n}\ndb: Database {shape: cylinder}\n\nweb.app -> db: reads\n"; res.Text != want || res.Key != "web.item" {
+		t.Errorf("a hexagon inside web (key %q):\n%s", res.Key, res.Text)
+	}
+	res = editCall(t, EditRequest{Op: "create", Key: "db -> item", Shape: "person"})
+	if !strings.HasPrefix(res.Text, head) || !strings.Contains(res.Text, "db -> item") || !strings.Contains(res.Text, "item.shape: person") {
+		t.Errorf("a connection to a new person:\n%s", res.Text)
+	}
+	// A connection between shapes that exist changes neither end's kind.
+	res = editCall(t, EditRequest{Op: "create", Key: "db -> web", Shape: "person"})
+	if strings.Contains(res.Text, "person") {
+		t.Errorf("an existing end changed its kind:\n%s", res.Text)
+	}
+	// Rectangle is D2's own kind, so nothing is written for it.
+	res = editCall(t, EditRequest{Op: "create", Key: "plain", Shape: "rectangle"})
+	if strings.Contains(res.Text, "plain:") {
+		t.Errorf("a rectangle wrote its kind:\n%s", res.Text)
+	}
+}

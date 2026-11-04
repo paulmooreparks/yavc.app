@@ -52,6 +52,10 @@ A D2 diagram can also be changed on its drawing, in the Visual and Split views. 
 
 The Shape menu has the same commands, and Shape chooses the kind of shape, such as an oval, a diamond, a cylinder or a person. A double click on a shape edits its label too.
 
+The palette above the drawing places shapes by pointing. Choose a kind of shape in it, then click the drawing: a click on empty space puts the new shape at the top of the diagram, and a click on a shape puts it inside that shape, which makes that shape a container. The palette goes back to Select after each shape, and Escape goes back to it at any time. N places the palette's kind too, when one is chosen.
+
+A selected shape has a round handle on its right edge. Drag from the handle to another shape to connect them, or to empty space to connect it to a new shape of the palette's kind. Drag a selected shape onto another shape to move it inside, or onto empty space to move it out to the top of the diagram; its connections follow it. While you drag, the shape it would land on has a dashed edge.
+
 Every change on the drawing is a change to the text, made through D2's own editing, so Undo takes it back as it does typing, and the text is always the whole diagram. D2 writes the whole text again in its own layout as it makes a change, which tidies the spacing and keeps every comment; the first time it does this in a file, the status line says so. D2 places the shapes itself, so a new shape goes where the layout puts it rather than where you clicked. While the text has a mistake in it, the drawing cannot be changed until the mistake is put right.
 
 ## Colours
