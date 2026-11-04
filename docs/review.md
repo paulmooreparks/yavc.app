@@ -154,6 +154,7 @@ The Diagrams application (2026-11-04, the first part of milestone D2) found two 
 
 - **Drawings arriving out of order.** The D2 client replaces a waiting request with a newer one for the same place. Diagrams loaded its parts through a helper that handed a part already loaded to each later caller as a new resolved promise, which runs ahead of an earlier caller still waiting on the load, so after a reload the newer drawing reached the engine first and the older one replaced it. The status line then stayed at "Drawing…". Every caller now shares one promise per part, and a newest drawing that is replaced all the same draws again.
 - **One element for every tab.** Every tab drew into one element, so a D2 drawing that finished after a switch painted over the Mermaid tab in front, and the site's mode change would have redrawn old D2 text there. Each tab now has an element of its own, and only the front tab's is on the page.
+- **A margin in the window.** On the desktop the Diagrams window had 16 to 18 pixels of padding inside its frame that the Editor and Slides do not have, because the site's stylesheet took the padding off by a list of applet names. It now takes it off for any page marked `data-applet-flush`, which Slides and Diagrams both are, so the next application of this kind matches by its own markup.
 
 ## Items for other projects
 
