@@ -207,6 +207,16 @@ Diagrams 0.14.0 moves drawing tools into the Shape menu's Drawing Tool submenu, 
 
 Text nodes now expose independent horizontal and vertical alignment settings in the inspector and `canvas-edit@1`. The additive extension properties are validated and retained in JSON, with Shape Default removing the chosen override. Existing shape-dependent defaults remain. Live Markdown and SVG export use the resolved alignment within the same text inset. Module tests cover all nine combinations, export anchors and positions, round-tripping, validation, independent resets and preservation of unrelated properties. The focused browser suite passed in Chromium, Firefox and WebKit, covering inspector edits, undo, default restoration and the ribbon picker with glyphs and checked state. Chromium also passed the existing canvas editor suite. The PUDL review caught an unsupported empty picker for Mermaid; conditional menu construction and a browser absence check fixed it, and the re-review found no remaining issues.
 
+## Combined Edit menu
+
+Diagrams 0.15.0 combines the former Diagram menu with Edit. Copy as Embed joins the clipboard commands, while Tidy the Text and Draw Again share a group after Find. PUDL derives the ribbon tabs from this same menu description, so the separate Diagram tab disappears too. The ordinary toolbar also loses its Diagram group; formatting and embed copying join Edit, and exports join File. Existing command implementations and shortcuts are unchanged.
+
+## Multiple selection and inspector controls
+
+Diagrams 0.15.0 adds typed canvas selections, atomic movement/property/deletion operations and an inspector limited to properties supported by every selected item. Mixed values have separate UI state, so a literal `__mixed__` remains valid text. Group movement uses a union of members to avoid moving a selected child twice. The model tests cover shared-property support, atomic failure, typed node/edge IDs and group movement. The browser suite covers modifier selection, marquee, keyboard subset/all selection, movement/undo, shared properties, color presets/custom values/reset and inspector resizing in Chromium, Firefox and WebKit.
+
+The PUDL review caught missing keyboard subset selection and a mixed-value sentinel collision. A shared Select Items dialog and explicit mixed-state attributes address those findings. The inspector uses PUDL's nested splitter and segmented alignment, Line Style and Route controls. Debugger inspection exposed a delayed splitter notification interacting with the host's size rewrite; the host now persists live geometry without changing layout in response to a notification. The regression resizes by keyboard and pointer before a marquee gesture. Pointer hit mapping uses the SVG screen transform. The endpoint regression allows one screen pixel of pointer quantisation at fractional viewport offsets, while keyboard-entered coordinates remain exact. Original failure images and the debugger capture remain in the temporary evidence folders.
+
 ## Items for other projects
 
 These problems belong to PUDL or to applets that are maintained elsewhere, so they were reported instead of patched here.
