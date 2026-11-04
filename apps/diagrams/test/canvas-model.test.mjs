@@ -8,6 +8,21 @@ const J = require('../../diagram-kit/jcanvas.js');
 const n = (id, x = 0, y = 0, width = 100, height = 60) => ({ id, type: 'text', x, y, width, height, text: id });
 const base = () => ({ nodes: [n('a'), n('b', 300)], edges: [{ id: 'ab', fromNode: 'a', toNode: 'b' }], custom: { keep: true } });
 
+test('alignment edits validate, preserve other data and reset independently', () => {
+    const original = base(); original.nodes[0].yavc = { shape: 'diamond', custom: 'kept' };
+    let doc = M.edit(original, { op: 'set', key: 'a', property: 'textAlign', value: 'right' }).doc;
+    doc = M.edit(doc, { op: 'set', key: 'a', property: 'textVerticalAlign', value: 'bottom' }).doc;
+    assert.deepEqual(doc.nodes[0].yavc, { shape: 'diamond', custom: 'kept', textAlign: 'right', textVerticalAlign: 'bottom' });
+    assert.equal(original.nodes[0].yavc.textAlign, undefined);
+    assert.equal(M.fragment(doc, 'a', 'node').nodes[0].yavc.textAlign, 'right');
+    doc = M.edit(doc, { op: 'set', key: 'a', property: 'textAlign', value: null }).doc;
+    assert.equal(doc.nodes[0].yavc.textAlign, undefined); assert.equal(doc.nodes[0].yavc.textVerticalAlign, 'bottom');
+    assert.throws(() => M.edit(doc, { op: 'set', key: 'a', property: 'textAlign', value: 'justify' }), /textAlign/);
+    assert.throws(() => M.edit(doc, { op: 'set', key: 'ab', kind: 'edge', property: 'textAlign', value: 'left' }), /cannot be changed/);
+    doc.nodes[0].type = 'group'; delete doc.nodes[0].text; delete doc.nodes[0].yavc.textVerticalAlign;
+    assert.throws(() => M.edit(doc, { op: 'set', key: 'a', property: 'textAlign', value: 'left' }), /cannot be changed/);
+});
+
 test('moving and resizing preserve unknown data and never change the input', () => {
     const doc = base(), before = JSON.stringify(doc);
     const moved = M.edit(doc, { op: 'move', key: 'a', dx: -9, dy: 8 });

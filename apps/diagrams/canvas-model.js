@@ -127,9 +127,9 @@
             pruneAnchors(doc);
         } else if (req.op === 'set') {
             needItem();
-            var property = req.property, allowed = item === n ? ['text', 'label', 'color', 'shape', 'line', 'lineWidth'] : ['label', 'color', 'route', 'fromHead', 'toHead', 'fromSide', 'toSide', 'line', 'lineWidth'];
-            if (allowed.indexOf(property) < 0 || (property === 'text' && n.type !== 'text') || (property === 'shape' && n.type !== 'text')) { throw new Error('That property cannot be changed on this item.'); }
-            var target = ['shape', 'route', 'fromHead', 'toHead', 'line', 'lineWidth'].indexOf(property) >= 0 ? (item.yavc || (item.yavc = {})) : item;
+            var property = req.property, allowed = item === n ? ['text', 'label', 'color', 'shape', 'line', 'lineWidth', 'textAlign', 'textVerticalAlign'] : ['label', 'color', 'route', 'fromHead', 'toHead', 'fromSide', 'toSide', 'line', 'lineWidth'];
+            if (allowed.indexOf(property) < 0 || (['text', 'shape', 'textAlign', 'textVerticalAlign'].indexOf(property) >= 0 && n.type !== 'text')) { throw new Error('That property cannot be changed on this item.'); }
+            var target = ['shape', 'route', 'fromHead', 'toHead', 'line', 'lineWidth', 'textAlign', 'textVerticalAlign'].indexOf(property) >= 0 ? (item.yavc || (item.yavc = {})) : item;
             if (req.value === null || (req.value === '' && property !== 'text')) { delete target[property]; } else { target[property] = req.value; }
         } else if (req.op === 'delete') {
             needItem();

@@ -892,6 +892,7 @@
             ]
           },
           "property": {
+            "description": "textAlign accepts left, center or right; textVerticalAlign accepts top, middle or bottom. Both apply only to text nodes. A null value restores that axis to its shape default.",
             "enum": [
               "text",
               "label",
@@ -899,6 +900,8 @@
               "shape",
               "line",
               "lineWidth",
+              "textAlign",
+              "textVerticalAlign",
               "route",
               "fromHead",
               "toHead",

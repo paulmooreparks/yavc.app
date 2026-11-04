@@ -134,8 +134,8 @@
 /* A text node's Markdown, drawn as HTML over its shape (decision 6), at the
    size and colour the picture's SVG text uses, cut off at the node's edge
    as the format's own applications do. */
-.dg-cv-text { box-sizing: border-box; width: 100%; height: 100%; overflow: hidden; padding: 6px 8px; font-size: 14px; line-height: 1.3; overflow-wrap: anywhere; }
-.dg-cv-text.is-centred { display: flex; flex-direction: column; justify-content: center; text-align: center; }
+.dg-cv-text { box-sizing: border-box; display: flex; flex-direction: column; width: 100%; height: 100%; overflow: hidden; padding: 6px 8px; font-size: 14px; line-height: 1.3; overflow-wrap: anywhere; }
+.dg-cv-text > * { flex-shrink: 0; }
 .dg-cv-text > :first-child { margin-top: 0; }
 .dg-cv-text > :last-child { margin-bottom: 0; }
 .dg-cv-text :is(p, ul, ol, pre, blockquote, table) { margin: 0 0 0.5em; }
@@ -144,7 +144,7 @@
 .dg-cv-text h2 { font-size: 1.25em; }
 .dg-cv-text :is(h3, h4, h5, h6) { font-size: 1.1em; }
 .dg-cv-text :is(ul, ol) { padding-inline-start: 1.2em; }
-.dg-cv-text.is-centred :is(ul, ol) { text-align: start; }
+.dg-cv-text.is-auto-align :is(ul, ol) { text-align: start; }
 .dg-cv-text img { max-width: 100%; height: auto; }
 
 /* The editing camera is a viewport on file coordinates. The plain SVG
