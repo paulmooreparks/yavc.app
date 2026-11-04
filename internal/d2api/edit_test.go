@@ -4,6 +4,9 @@ package d2api
 
 import (
 	"encoding/json"
+	"math"
+	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -226,3 +229,68 @@ func TestOutlineSettings(t *testing.T) {
 		t.Errorf("connection: %+v source %+v target %+v", c, c.Source, c.Target)
 	}
 }
+
+// A curved route's points are read as D2's renderer draws them: the first
+// is the start, then cubic Bezier control points in threes. D2 does not
+// document this (Paul accepted it as a pinned exception, 2026-11-04), so
+// this test holds the reading to D2's own drawing: every control point the
+// engine reports must be one the drawn path uses, in order. The path's
+// first and last points are moved by the arrowheads, so they are left out.
+// A newer D2 that draws curves differently fails here.
+func TestCurvedRouteMatchesDrawing(t *testing.T) {
+	// A loop back makes dagre curve its lines.
+	res := call(t, CompileRequest{Text: "a -> b -> c -> a\na -> c\n", Pad: ptrInt(0)})
+	var curved *ConnectionPath
+	for i := range res.Connections {
+		if res.Connections[i].Curve && len(res.Connections[i].Points) >= 4 {
+			curved = &res.Connections[i]
+			break
+		}
+	}
+	if curved == nil {
+		t.Fatalf("dagre drew no curved connection to check: %+v", res.Connections)
+	}
+	if (len(curved.Points)-1)%3 != 0 {
+		t.Fatalf("a curved route of %d points is not a start and threes", len(curved.Points))
+	}
+	// The drawn paths, in the drawing's own numbers.
+	paths := regexp.MustCompile(`<path d="(M [^"]+)"[^>]*class="connection`).FindAllStringSubmatch(res.SVG, -1)
+	num := regexp.MustCompile(`-?[0-9]+(?:\.[0-9]+)?`)
+	// The engine's points are offset by the drawing's origin; the view box of
+	// the drawn diagram gives the same origin.
+	vb := regexp.MustCompile(`class="[^"]*d2-svg"[^>]*viewBox="(-?[0-9.]+) (-?[0-9.]+) `).FindStringSubmatch(res.SVG)
+	if vb == nil {
+		t.Fatal("the drawing has no view box to place the route in")
+	}
+	ox, oy := atof(vb[1]), atof(vb[2])
+	inner := curved.Points[1 : len(curved.Points)-1]
+	for _, m := range paths {
+		if !strings.Contains(m[1], " C ") {
+			continue
+		}
+		ns := num.FindAllString(m[1], -1)
+		var drawn [][2]float64
+		for i := 0; i+1 < len(ns); i += 2 {
+			drawn = append(drawn, [2]float64{atof(ns[i]) - ox, atof(ns[i+1]) - oy})
+		}
+		if len(drawn) != len(curved.Points) {
+			continue
+		}
+		ok := true
+		for i, p := range inner {
+			d := drawn[i+1]
+			if math.Abs(d[0]-p[0]) > 0.01 || math.Abs(d[1]-p[1]) > 0.01 {
+				ok = false
+				break
+			}
+		}
+		if ok {
+			return
+		}
+	}
+	t.Fatalf("no drawn path uses the control points of %s: %v", curved.ID, curved.Points)
+}
+
+func ptrInt(n int64) *int64 { return &n }
+
+func atof(s string) float64 { f, _ := strconv.ParseFloat(s, 64); return f }

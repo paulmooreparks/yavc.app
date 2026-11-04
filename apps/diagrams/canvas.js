@@ -84,10 +84,10 @@
                 order.push(s.id);
             });
             (out.connections || []).forEach(function (c) {
-                var pts = c.points.map(function (p) { return p[0] + ',' + p[1]; }).join(' ');
+                var d = pathOf(c);
                 var g = el('g', { 'class': 'dg-hit dg-hit-line' });
-                g.appendChild(el('polyline', { points: pts, 'class': 'dg-hit-wide' }));
-                g.appendChild(el('polyline', { points: pts, 'class': 'dg-hit-thin' }));
+                g.appendChild(el('path', { d: d, 'class': 'dg-hit-wide' }));
+                g.appendChild(el('path', { d: d, 'class': 'dg-hit-thin' }));
                 g.__key = c.id;
                 layer.appendChild(g);
                 order.push(c.id);
@@ -95,6 +95,23 @@
             if (sel && order.indexOf(sel) < 0) { sel = null; host.selected(null, 'redraw'); }
             mark();
             fitLayer();
+        }
+        /* A connection's line as D2 draws it: straight from point to point,
+           or, for a curved route, cubic Bezier segments whose control points
+           come in threes after the start, as D2's SVG renderer reads them.
+           That reading is not documented by D2; Paul accepted it as a pinned
+           exception, held to D2's drawing by TestCurvedRouteMatchesDrawing
+           in internal/d2api (2026-11-04). */
+        function pathOf(c) {
+            var p = c.points, xy = function (q) { return q[0] + ' ' + q[1]; };
+            if (!p || !p.length) { return ''; }
+            var d = 'M ' + xy(p[0]);
+            if (c.curve && p.length >= 4 && (p.length - 1) % 3 === 0) {
+                for (var i = 1; i + 2 < p.length; i += 3) { d += ' C ' + xy(p[i]) + ' ' + xy(p[i + 1]) + ' ' + xy(p[i + 2]); }
+            } else {
+                for (var j = 1; j < p.length; j++) { d += ' L ' + xy(p[j]); }
+            }
+            return d;
         }
         function mark() {
             Array.prototype.forEach.call(layer.children, function (e) { e.classList.toggle('is-selected', !!e.__key && e.__key === sel); });

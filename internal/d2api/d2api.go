@@ -136,13 +136,21 @@ type ShapeBox struct {
 	H    int    `json:"h"`
 }
 
-// ConnectionPath is a drawn connection: its key, its ends and the points
-// its line passes through.
+// ConnectionPath is a drawn connection: its key, its ends and its route.
+// When Curve is false the line runs straight from point to point. When it
+// is true the points after the first are cubic Bezier control points in
+// threes, the third of each three an end of the segment, which is how D2's
+// SVG renderer draws a curved route (d2svg pathData). D2 does not document
+// that reading of a curved route, so it is a deliberate exception to the
+// rule against relying on undocumented behaviour (Paul, 2026-11-04), held
+// to D2's own drawing by TestCurvedRouteMatchesDrawing at the pinned
+// release.
 type ConnectionPath struct {
 	ID     string       `json:"id"`
 	From   string       `json:"from"`
 	To     string       `json:"to"`
 	Points [][2]float64 `json:"points"`
+	Curve  bool         `json:"curve,omitempty"`
 }
 
 var functions = map[string]func(string) (any, error){
@@ -566,7 +574,7 @@ func compile(arg string) (any, error) {
 		res.Shapes = append(res.Shapes, ShapeBox{ID: sh.ID, Type: sh.Type, X: sh.Pos.X - ox, Y: sh.Pos.Y - oy, W: sh.Width, H: sh.Height})
 	}
 	for _, c := range diagram.Connections {
-		cp := ConnectionPath{ID: c.ID, From: c.Src, To: c.Dst, Points: make([][2]float64, 0, len(c.Route))}
+		cp := ConnectionPath{ID: c.ID, From: c.Src, To: c.Dst, Points: make([][2]float64, 0, len(c.Route)), Curve: c.IsCurve}
 		for _, pt := range c.Route {
 			cp.Points = append(cp.Points, [2]float64{pt.X - float64(ox), pt.Y - float64(oy)})
 		}
