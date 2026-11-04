@@ -18,8 +18,9 @@ export {
     foldGutter, foldKeymap, indentUnit
 } from '@codemirror/language';
 export { linter, lintGutter, lintKeymap, forceLinting } from '@codemirror/lint';
-export { closeBrackets, closeBracketsKeymap, autocompletion, completionKeymap, startCompletion, acceptCompletion } from '@codemirror/autocomplete';
+export { closeBrackets, closeBracketsKeymap, autocompletion, completionKeymap, startCompletion, acceptCompletion, completionStatus, currentCompletions } from '@codemirror/autocomplete';
 export { markdown } from '@codemirror/lang-markdown';
 export { json, jsonParseLinter } from '@codemirror/lang-json';
 export { shell } from '@codemirror/legacy-modes/mode/shell';
 export { tags } from '@lezer/highlight';
+export { LSPClient, LSPPlugin, serverCompletion, serverCompletionSource, hoverTooltips, serverDiagnostics, formatDocument } from '@codemirror/lsp-client';

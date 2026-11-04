@@ -2,6 +2,12 @@
 
 [Diagrams](/diagrams) draws a diagram from a text file and shows the drawing beside the text, redrawing it as you type. It reads two languages: [D2](https://d2lang.com), in files named `something.d2`, and [Mermaid](https://mermaid.js.org), in files named `something.mmd` or `something.mermaid`. It also draws canvases, freeform diagrams in the open [JSON Canvas](https://github.com/obsidianmd/jsoncanvas) format, in files named `something.canvas`. The file is the whole diagram, so anything that can open a text file can read it. Diagrams runs in a window on the desktop and on its own at `diagrams.yavc.app`.
 
+## Canvas language assistance
+
+The Canvas source pane offers JSON property and value completion, documentation on hover and schema error markers. Ctrl+Space asks for completion. Shift+Alt+F formats whitespace in one undoable change; Tidy the Text still uses the canvas writer's standard property order. The drawing also reports semantic problems, such as a connector referring to a missing shape.
+
+The language service runs in this browser from bundled assets. If it stops, Edit, Restart Language Assistance retries it while keeping your text. D2 retains its existing completion provider; Mermaid does not have language-server assistance.
+
 ## The file
 
 In D2 you give each shape a name and connect shapes with arrows. A shape's label follows a colon, and its settings go between braces.

@@ -217,6 +217,16 @@ Diagrams 0.15.0 adds typed canvas selections, atomic movement/property/deletion 
 
 The PUDL review caught missing keyboard subset selection and a mixed-value sentinel collision. A shared Select Items dialog and explicit mixed-state attributes address those findings. The inspector uses PUDL's nested splitter and segmented alignment, Line Style and Route controls. Debugger inspection exposed a delayed splitter notification interacting with the host's size rewrite; the host now persists live geometry without changing layout in response to a notification. The regression resizes by keyboard and pointer before a marquee gesture. Pointer hit mapping uses the SVG screen transform. The endpoint regression allows one screen pixel of pointer quantisation at fractional viewport offsets, while keyboard-entered coordinates remain exact. Original failure images and the debugger capture remain in the temporary evidence folders.
 
+## Shared browser-local LSP
+
+Editor 45.16.0 and Diagrams 0.16.0 share the official CodeMirror LSP client, a browser worker wrapping Microsoft's JSON language service, and a bundled JSON Canvas/yavc schema. Slides 0.21.1 consumes the rebuilt shared editor bundle. `apps/md-editor/language-service/README.md` records the locked build, license provenance and artifact reproduction; module tests compare source/output hashes and exercise the actual generated worker.
+
+The focused LSP browser suite checks completion acceptance, hover, diagnostic display/clearing, whitespace formatting and undo, late formatting after typing or a tab change, completion after close/reopen, worker failure/restart and automatic size-limit recovery in Chromium, Firefox and WebKit. A shared-boundary fixture starts with a document larger than the transport limit, then shrinks it and checks read-only formatting. No document or schema requests go to external hosts. The test supplies an empty inherited shortcode catalog and intercepts analytics. It does not claim Markdown catalog integration or cached offline application startup.
+
+The independent source review found an initially silent size refusal with no recovery and startup continuing after disposal during language-service loading. The bridge now checks size before mounting document services, retains a watcher while suspended and opens a fresh URI when eligible. Both hosts check disposal immediately after loading. The final source re-review found no remaining issues. Browser diagnostic checks also exposed an idle-linter refresh gap; a StateEffect and the documented needsRefresh hook now schedule diagnostics that arrive after the ordinary idle check. These cases are covered by the focused suite. The full repository checks and shared consumer regression results accompany the candidate PR.
+
+The Editor's existing asynchronous save-completion behavior still needs a separate correction before migration. The Dinah brief records that finding and the inherited shortcode catalog's missing host endpoint. This LSP round does not claim either fix.
+
 ## Items for other projects
 
 These problems belong to PUDL or to applets that are maintained elsewhere, so they were reported instead of patched here.

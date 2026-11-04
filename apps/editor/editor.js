@@ -147,7 +147,7 @@
 
         var CM = null, F = null, view = null, destroyed = false, unsubscribe = null;
         var tabs = [], active = -1, untitled = 0;
-        var wrapComp = null, langComp = null, lintComp = null, roComp = null, keyComp = null;
+        var wrapComp = null, langComp = null, lintComp = null, roComp = null, keyComp = null, lspComp = null, lsp = null;
         var startFile = fileFrom(opts.state) || (opts.ownsUrl ? fileFrom(location.search) : null);
 
         function fileFrom(s) {
@@ -182,7 +182,7 @@
         function languageFor(path) {
             var p = String(path || '');
             if (/\.(md|markdown)$/i.test(p)) { return 'markdown'; }
-            if (/\.json$/i.test(p)) { return 'json'; }
+            if (/\.(json|canvas)$/i.test(p)) { return 'json'; }
             if (/^~\/bin\/|^\/bin\/|\.sh$/i.test(p)) { return 'script'; }
             return 'text';
         }
@@ -279,11 +279,14 @@
         /* JSON is checked as it is typed. */
         function lintExtension(tab) {
             if (tab.lang !== 'json' || tab.readOnly) { return []; }
-            return [CM.linter(CM.jsonParseLinter()), CM.lintGutter()];
+            return [lsp ? [] : CM.linter(CM.jsonParseLinter()), CM.lintGutter()];
         }
 
         function stateFor(tab, text) {
             return CM.EditorState.create({ doc: text, extensions: extensionsFor(tab) });
+        }
+        function languageAssistance(tab) {
+            return lsp && tab.lang === 'json' ? lsp.extension(/\.canvas$/i.test(tab.path || tab.name) ? 'canvas' : 'json', !!tab.readOnly) : [];
         }
         function extensionsFor(tab) {
             return [
@@ -303,6 +306,7 @@
                     wrapComp.of(wrapOn ? CM.EditorView.lineWrapping : []),
                     langComp.of(langExtension(tab.lang)),
                     lintComp.of(lintExtension(tab)),
+                    lspComp.of(languageAssistance(tab)),
                     roComp.of([CM.EditorState.readOnly.of(!!tab.readOnly), CM.EditorView.editable.of(!tab.readOnly)]),
                     CM.EditorView.contentAttributes.of({ 'aria-label': 'Text of ' + tab.name }),
                     CM.EditorView.updateListener.of(function (u) {
@@ -412,7 +416,7 @@
             view.setState(t.state);
             /* A tab kept from before the key bindings last changed takes
                the bindings as they are now. */
-            view.dispatch({ effects: keyComp.reconfigure(keyBindings()) });
+            view.dispatch({ effects: [keyComp.reconfigure(keyBindings()), lspComp.reconfigure(languageAssistance(t))] });
             /* Each tab keeps its place, and a search panel kept open from
                before a reload opens again. */
             scrollTo(t.scroll);
@@ -557,6 +561,7 @@
                 t.lang = lang;
                 view.dispatch({ effects: [langComp.reconfigure(langExtension(lang)), lintComp.reconfigure(lintExtension(t)),
                     roComp.reconfigure([CM.EditorState.readOnly.of(false), CM.EditorView.editable.of(true)])] });
+                if (current() === t) { view.dispatch({ effects: lspComp.reconfigure(languageAssistance(t)) }); }
             }
             renderTabs();
             announce();
@@ -1594,6 +1599,8 @@
                 cmd('undo', 'Undo', 'yavc-undo', function () { CM.undo(view); }, { builtIn: 'Mod-z', glyphOnly: true }),
                 cmd('redo', 'Redo', 'yavc-redo', function () { CM.redo(view); }, { builtIn: 'Mod-y', glyphOnly: true }),
                 cmd('find', 'Find and Replace…', 'search', openFind, { builtIn: 'Mod-f' }),
+                cmd('json-format', 'Format JSON', 'code', function () { if (lsp) { lsp.format(view); } }, { shortcut: 'Shift+Alt+F', hidden: function () { return !tab || tab.lang !== 'json'; }, disabled: function () { return !editable || !lsp; } }),
+                cmd('language-restart', 'Restart Language Assistance', 'reload', function () { if (lsp) { lsp.restart(); view.dispatch({ effects: lspComp.reconfigure(languageAssistance(current())) }); } }, { hidden: function () { return !tab || tab.lang !== 'json'; }, disabled: function () { return !ready || !lsp; } }),
                 cmd('go-to-line', 'Go to Line…', null, goToLine, { builtIn: 'Mod-Alt-g' }),
                 cmd('toggle-wrap', 'Wrap Lines', 'yavc-wrap', function () { setWrap(!wrapOn, true); }, { checked: function () { return wrapOn; } }),
                 cmd('insert-timestamp', 'Insert Date and Time', null, COMMANDS['insert-timestamp'], { disabled: function () { return !ready || !editable; } }),
@@ -1679,7 +1686,7 @@
             var titles = [
                 { label: 'Editor', glyph: 'document', items: window.pcAppletIdentity(root, ['key-bindings']) },
                 { id: 'file', label: 'File', glyph: 'file', items: ['new', 'open', 'save', 'save-as', '-', 'properties', 'present', '-', 'close-document'] },
-                { id: 'edit', label: 'Edit', glyph: 'pencil', items: ['undo', 'redo', '-', 'find'] },
+                { id: 'edit', label: 'Edit', glyph: 'pencil', items: ['undo', 'redo', '-', 'find', '-', 'json-format', 'language-restart'] },
                 { id: 'insert', label: 'Insert', glyph: 'plus', items: ['link', 'insert', 'table', 'box', '-', 'insert-timestamp', 'insert-date', 'stamp-modified'] }
             ];
             /* Format, where there is formatting to do. */
@@ -1692,6 +1699,13 @@
         var boot = Promise.all([loadCodeMirror(), loadSiteFs().then(function (api) { F = api; return F.load(); }), loadBrowser()]).then(async function (res) {
             if (destroyed) { return; }
             CM = res[0];
+            lspComp = new CM.Compartment();
+            try {
+                var languageServices = await window.yavcMdEditor.languageServices();
+                if (destroyed) { return; }
+                lsp = languageServices.create(CM, function (message) { say(message, true); });
+            } catch (err) { if (!destroyed) { say('Language assistance could not load. Text editing remains available.', true); } }
+            if (destroyed) { return; }
             FB = res[2];
             /* Settings that can't be read leave the defaults in place. */
             var config = await loadConfig().catch(function () { return null; });
@@ -1816,6 +1830,7 @@
                 unguard();
                 if (explorer) { explorer.destroy(); }
                 if (view) { view.destroy(); }
+                if (lsp) { lsp.dispose(); }
             },
             ready: boot
         };
