@@ -66,6 +66,8 @@ Three things matter for this design. The format has no shapes, since every node 
 
 24. **Inspector resizing uses PUDL's nested splitter** (2026-11-04). The divider is operable by pointer and keyboard and can reset to the default width. Its current proportion is saved through the host configuration service. Split notifications persist the live geometry without writing another size into the layout, so a delayed notification cannot restore an earlier width during a gesture. Short fixed choices use segmented buttons, while long shape and arrowhead lists stay menus. Multiple selection with differing values has no pressed segment until the user chooses a value. Color supplies a native custom-color picker, the six format presets and a default reset.
 
+25. **Frequent tools lead the menu and visual choices carry glyphs** (2026-11-05, Paul). Drawing Tool is the first item under Shape in both Canvas and D2. Canvas Route keeps three segments with route glyphs. Start Head and End Head use PUDL menu pickers so every option can show its endpoint symbol alongside its label and checked state, without depending on native select rendering. Mixed selections have no checked option until a value is chosen. Save As uses a project glyph in Diagrams because the pinned PUDL release has no standard glyph for that command. This changes no file format or drawing behavior.
+
 ## Work, in order
 
 | Milestone | Work | Size |

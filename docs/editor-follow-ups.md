@@ -1,6 +1,6 @@
 # Editing follow-ups
 
-Paul asked to finish the shared LSP round before discussing these ideas. This list records requests and tentative design directions, without authorising their implementation as part of that round.
+Paul asked to finish the shared LSP round before discussing these ideas, then authorised starting the follow-ups on 5 November 2026. The LSP candidate is installed locally while a GitHub Actions outage delays its CI. The first follow-up batch covers Drawing Tool placement, Canvas route/arrowhead glyphs and a Diagrams Save As glyph. Larger features remain separate work.
 
 ## Commands and Inspector
 
