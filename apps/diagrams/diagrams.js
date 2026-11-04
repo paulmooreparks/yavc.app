@@ -36,6 +36,10 @@
     function modes() { return once('modes', '/applets/diagram-kit/modes.js', 'yavcDiagramModes'); }
     function d2() { return once('d2', '/applets/diagram-kit/d2.js', 'yavcD2Engine'); }
     function canvasLib() { return once('canvas', '/applets/diagrams/canvas.js', 'yavcDiagramCanvas'); }
+    /* JSON Canvas (docs/canvas-design.md), and the Markdown engine that
+       draws a text node's Markdown on the screen (decision 6). */
+    function jcanvas() { return once('jcanvas', '/applets/diagram-kit/jcanvas.js', 'yavcCanvas'); }
+    function mdEngine() { return once('md', '/applets/md-engine/loader.js', 'yavcMdEngine').then(function (f) { return f(); }); }
 
     /* The styles New offers (decision 7). A style is a starter text; the
        style itself is read from the text, never recorded in the file. */
@@ -62,7 +66,15 @@
         { id: 'mm-journey', label: 'User Journey', text: 'journey\n    title Drawing a diagram\n    section Start\n      Open Diagrams: 5: Reader\n      Choose a style: 4: Reader\n    section Finish\n      Save it: 5: Reader\n' },
         { id: 'mm-git', label: 'Git Graph', text: 'gitGraph\n    commit\n    branch feature\n    commit\n    checkout main\n    merge feature\n    commit\n' }
     ];
-    var EXT = { d2: '.d2', mermaid: '.mmd' };
+    /* A new canvas: two shapes joined by a connector, in JSON Canvas 1.0
+       with the site's extension (docs/canvas-extension.md). */
+    var CANVAS_STARTER = '{\n  "nodes": [\n' +
+        '    { "id": "start", "type": "text", "x": 0, "y": 0, "width": 180, "height": 80, "text": "**Start** here", "yavc": { "shape": "rounded" } },\n' +
+        '    { "id": "next", "type": "text", "x": 300, "y": 0, "width": 180, "height": 80, "text": "Then this", "color": "5" }\n' +
+        '  ],\n  "edges": [\n' +
+        '    { "id": "start-next", "fromNode": "start", "fromSide": "right", "toNode": "next", "toSide": "left", "toEnd": "arrow", "label": "leads to" }\n' +
+        '  ],\n  "yavc": { "version": 1 }\n}\n';
+    var EXT = { d2: '.d2', mermaid: '.mmd', canvas: '.canvas' };
     /* The palette (decision 15: a toolbar of raised buttons): Select, and
        the kinds of shape flowcharts and architecture diagrams reach for. A
        kind chosen is placed by the next click on the drawing, inside the
@@ -79,7 +91,7 @@
     var SHAPES = [['rectangle', 'Rectangle'], ['square', 'Square'], ['oval', 'Oval'], ['circle', 'Circle'], ['diamond', 'Diamond'], ['hexagon', 'Hexagon'],
         ['parallelogram', 'Parallelogram'], ['step', 'Step'], ['cylinder', 'Cylinder'], ['queue', 'Queue'], ['stored_data', 'Stored Data'], ['package', 'Package'],
         ['page', 'Page'], ['document', 'Document'], ['person', 'Person'], ['cloud', 'Cloud'], ['callout', 'Callout'], ['text', 'Text Only']];
-    var KIND_NAME = { d2: 'D2', mermaid: 'Mermaid' };
+    var KIND_NAME = { d2: 'D2', mermaid: 'Mermaid', canvas: 'Canvas' };
     var VIEWS = [['text', 'Text'], ['preview', 'Preview'], ['split', 'Split']];
     /* Where the drawing sits beside the text, as Slides docks its canvas. */
     var DOCKS = [['left', 'Left'], ['right', 'Right'], ['top', 'Top'], ['bottom', 'Bottom']];
@@ -96,7 +108,10 @@
         var p = String(path || '').toLowerCase();
         if (/\.d2$/.test(p)) { return 'd2'; }
         if (/\.(mmd|mermaid)$/.test(p)) { return 'mermaid'; }
-        /* A text with no suffix to go by: Mermaid begins with its type. */
+        if (/\.canvas$/.test(p)) { return 'canvas'; }
+        /* A text with no suffix to go by: a canvas is a JSON object, and
+           Mermaid begins with its type. */
+        if (/^\s*\{/.test(text || '')) { return 'canvas'; }
         return /^\s*(%%[^\n]*\n\s*)*(graph|flowchart|sequenceDiagram|classDiagram|stateDiagram(-v2)?|erDiagram|gantt|pie|journey|gitGraph|mindmap|timeline|quadrantChart)\b/.test(text || '') ? 'mermaid' : 'd2';
     }
     function baseName(path) { return String(path || '').replace(/^.*\//, ''); }
@@ -168,7 +183,7 @@
         /* === The text (CodeMirror) ======================================= */
 
         function language(kind) {
-            if (!langs[kind]) { langs[kind] = window.yavcDiagramModes[kind](CM); }
+            if (!langs[kind]) { langs[kind] = kind === 'canvas' ? CM.json() : window.yavcDiagramModes[kind](CM); }
             return langs[kind];
         }
         /* Each tab keeps its own editor state, so its undo history and its
@@ -232,7 +247,10 @@
            drawing finds them: the linter waits for the drawing of the text
            it was asked about. */
         function lintSource(view) {
-            var text = view.state.doc.toString();
+            var text = view.state.doc.toString(), t = current();
+            /* A drawing can finish before the linter asks, as a canvas's
+               does, so the answer for the text drawn last is kept. */
+            if (t && t.settled && t.settled.text === text) { return diagnostics(view.state.doc, t.kind, t.settled.problems); }
             return new Promise(function (resolve) { waiters.push({ text: text, resolve: resolve, doc: view.state.doc, kind: (current() || {}).kind }); });
         }
         function settle(text, problems) {
@@ -252,7 +270,7 @@
                 if (kind === 'mermaid' && !line) { var m = /line (\d+)/i.exec(p.message); line = m ? +m[1] : 0; }
                 if (!(line >= 1 && line <= doc.lines)) { return; }
                 var l = doc.line(line), from = l.from, to = l.to;
-                if (kind === 'd2' && p.to > p.from && p.from >= l.from && p.to <= doc.length) { from = p.from; to = p.to; }
+                if (kind !== 'mermaid' && p.to > p.from && p.from >= l.from && p.to <= doc.length) { from = p.from; to = p.to; }
                 else if (kind === 'd2' && p.column > 1) { from = Math.min(l.to, l.from + p.column - 1); }
                 out.push({ from: from, to: Math.max(to, from), severity: 'error', message: p.message });
             });
@@ -274,6 +292,7 @@
             el.state.textContent = 'Drawing…';
             var drawn = t.kind === 'd2'
                 ? d2().then(function (E) { return E.draw(t.place, text, { keep: true, report: false, alt: altOf(t) }); })
+                : t.kind === 'canvas' ? drawCanvas(t, text, function () { return seq === drawSeq && t === current(); })
                 : kit().then(function (K) { return K.drawMermaid(t.place, text, { keep: true, report: false, alt: altOf(t) }); });
             return drawn.then(function (out) {
                 /* No answer means another drawing of this place replaced
@@ -286,6 +305,7 @@
                     if (!problems.length && t.kind === 'd2') { showCanvas(t, out, text); }
                     showOutcome(t);
                 }
+                t.settled = { text: text, problems: problems };
                 settle(text, problems);
             }, function (err) {
                 var problems = [{ message: String((err && err.message) || err), line: 0 }];
@@ -322,6 +342,114 @@
         function sizeOfSvg(svg) {
             var m = /viewBox="\s*[-\d.]+[\s,]+[-\d.]+[\s,]+([\d.]+)[\s,]+([\d.]+)/.exec(svg || '');
             return m ? { w: Math.ceil(+m[1]), h: Math.ceil(+m[2]) } : null;
+        }
+        /* === A canvas (docs/canvas-design.md, milestone C1) ===============
+           The site reads and draws a canvas itself (decision 5): the file is
+           checked against JSON Canvas and the extension before anything is
+           drawn (decision 13), drawn as SVG made from numbers and escaped
+           text, and each text node's Markdown is then drawn over its shape
+           by the Markdown engine and the HTML cleaner (decision 6). The SVG
+           without that, with the text as SVG text, is the drawing a picture
+           or an export is made from. */
+        function lineAt(text, at) { return at == null ? 0 : text.slice(0, at).split('\n').length; }
+        /* What a problem at an offset marks: the quoted id it is at, or one
+           character. */
+        function spanAt(text, at) {
+            if (at == null) { return [null, null]; }
+            var end = text.charAt(at) === '"' ? text.indexOf('"', at + 1) + 1 : 0;
+            return [at, end > at ? end : Math.min(text.length, at + 1)];
+        }
+        function drawCanvas(t, text, isCurrent) {
+            return jcanvas().then(function (J) {
+                var got = J.read(text), place = t.place;
+                var faults = got.problems.filter(function (p) { return !p.warning; });
+                if (!got.doc || faults.length) {
+                    if (place.firstElementChild) { place.classList.add('sc-diagram-stale'); }
+                    return { problems: faults.map(function (p) { var s = spanAt(text, p.at); return { message: p.message, line: lineAt(text, p.at) || 1, from: s[0], to: s[1] }; }) };
+                }
+                var palette = canvasPalette(place, J), out = J.render(got.doc, { palette: palette, pad: 24, font: getComputedStyle(root).fontFamily, title: altOf(t) });
+                var warning = got.problems.filter(function (p) { return p.warning; })[0];
+                if (warning) { say(warning.message, 'warn'); }
+                if (isCurrent()) {
+                    var svg = new DOMParser().parseFromString(out.svg, 'image/svg+xml').documentElement;
+                    svg = document.importNode(svg, true);
+                    svg.setAttribute('role', 'img');
+                    svg.setAttribute('aria-label', altOf(t));
+                    place.classList.remove('sc-diagram-stale');
+                    place.replaceChildren(svg);
+                    richText(t, got.doc, out, svg, palette, isCurrent);
+                }
+                return { svg: out.svg, width: out.width, height: out.height, problems: [] };
+            });
+        }
+        /* The colours of a canvas, read from the page's tokens where it is
+           drawn, as a D2 diagram's are (docs/diagrams-design.md, decision
+           12), with the format's six presets in a set readable on the
+           background. Every value is a plain #rrggbb. */
+        function canvasPalette(place, J) {
+            var probe = document.createElement('span');
+            probe.setAttribute('aria-hidden', 'true');
+            probe.style.cssText = 'position:absolute;visibility:hidden;pointer-events:none';
+            place.appendChild(probe);
+            function read(css, prop) {
+                probe.style.color = ''; probe.style.backgroundColor = '';
+                probe.style[prop || 'color'] = css;
+                var m = /rgba?\((\d+(?:\.\d+)?),\s*(\d+(?:\.\d+)?),\s*(\d+(?:\.\d+)?)/.exec(getComputedStyle(probe)[prop || 'color']);
+                return m ? '#' + [m[1], m[2], m[3]].map(function (v) { return ('0' + Math.round(+v).toString(16)).slice(-2); }).join('') : null;
+            }
+            var pal = { text: read('var(--text)') || '#1a1a1a', muted: read('var(--text-muted)') || '#5c5c5c', line: read('var(--text-muted)') || '#5c5c5c',
+                surface: read('var(--surface)', 'backgroundColor') || '#ffffff', bg: read('var(--bg)', 'backgroundColor') || '#ffffff', accent: read('var(--accent)') || '#0057b8' };
+            probe.remove();
+            /* The colour behind the drawing, from the nearest ancestor that
+               paints a solid one, as d2.js finds it, so the canvas has no
+               box of its own. */
+            for (var a = place; a && a.nodeType === 1; a = a.parentElement) {
+                var m = /^rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)$/.exec(getComputedStyle(a).backgroundColor);
+                if (m && (m[4] === undefined || +m[4] === 1)) { pal.bg = '#' + [m[1], m[2], m[3]].map(function (v) { return ('0' + (+v).toString(16)).slice(-2); }).join(''); break; }
+                if (m && +m[4] > 0) { break; }
+            }
+            var rgb = [1, 3, 5].map(function (i) { return parseInt(pal.bg.substr(i, 2), 16) / 255; });
+            var light = 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2] > 0.45;
+            pal.presets = (light ? J.PRESETS.light : J.PRESETS.dark).slice();
+            return pal;
+        }
+        /* Each text node's Markdown, drawn as HTML in the place of its SVG
+           text once the Markdown engine is here. Applets are not started
+           inside a node, so their attributes are taken away. */
+        function richText(t, doc, out, svg, palette, isCurrent) {
+            var texts = doc.nodes.filter(function (nd) { return nd.type === 'text' && nd.text; });
+            if (!texts.length) { return; }
+            mdEngine().then(function (md) {
+                if (!isCurrent() || !svg.isConnected) { return; }
+                var byId = {};
+                out.boxes.forEach(function (b) { byId[b.id] = b; });
+                texts.forEach(function (nd) {
+                    var box = byId[nd.id] && byId[nd.id].text, g = svg.querySelector('g[data-text="' + CSS.escape(nd.id) + '"]');
+                    if (!box || !g) { return; }
+                    var html = md.source(nd.text).html;
+                    var frag = window.yavcHTML.fragment(html);
+                    frag.querySelectorAll('[data-applet]').forEach(function (a) {
+                        Array.prototype.slice.call(a.attributes).forEach(function (at) { if (/^data-applet/i.test(at.name)) { a.removeAttribute(at.name); } });
+                    });
+                    /* The drawing is one labelled picture, so a link in it is
+                       its words only, as in the exported picture: a link
+                       inside a picture cannot be reached properly, and
+                       following one would leave the page. */
+                    frag.querySelectorAll('a').forEach(function (a) {
+                        var span = document.createElement('span');
+                        while (a.firstChild) { span.appendChild(a.firstChild); }
+                        a.replaceWith(span);
+                    });
+                    var fo = document.createElementNS('http://www.w3.org/2000/svg', 'foreignObject');
+                    fo.setAttribute('x', box.x); fo.setAttribute('y', box.y); fo.setAttribute('width', box.w); fo.setAttribute('height', box.h);
+                    var div = document.createElement('div');
+                    div.className = 'dg-cv-text' + (box.centred ? ' is-centred' : '');
+                    div.style.color = palette.text;
+                    div.appendChild(frag);
+                    fo.appendChild(div);
+                    g.replaceChildren(fo);
+                });
+            }).catch(function (err) { say('The text in the canvas is shown plainly, because the Markdown engine did not load: ' + ((err && err.message) || err), 'warn'); });
         }
         function applyFit() {
             el.canvas.classList.toggle('dg-fit', !!settings.fit);
@@ -874,7 +1002,9 @@
         function openInTab(text, path, kind, view) {
             stash();
             var t = makeTab(text, path, kind, view);
-            if (untouched(current()) && tabs.length) { tabs[active] = t; activateTab(active); return t; }
+            /* The tab replaced is let go first, so that showing the new one
+               does not keep the old one's text in the new one's place. */
+            if (untouched(current()) && tabs.length) { var at = active; tabs[at] = t; active = -1; activateTab(at); return t; }
             tabs.push(t);
             activateTab(tabs.length - 1);
             return t;
@@ -913,7 +1043,7 @@
         }
         async function open() {
             if (!H.fs || !H.fs.open) { say('There is no file service here, so nothing can be opened.', true); return; }
-            var res = await H.fs.open({ title: 'Open a Diagram', host: root, start: '~', accept: ['.d2', '.mmd', '.mermaid'] }).catch(function (err) { say('The file could not be opened: ' + ((err && err.message) || err), true); return null; });
+            var res = await H.fs.open({ title: 'Open a Diagram', host: root, start: '~', accept: ['.d2', '.mmd', '.mermaid', '.canvas'] }).catch(function (err) { say('The file could not be opened: ' + ((err && err.message) || err), true); return null; });
             if (!res) { return; }
             if (res.path) { await openPath(res.path); return; }
             var t = openInTab(res.text, null, kindOf(res.name, res.text));
@@ -977,7 +1107,7 @@
 
         /* === Export (decision 14) ========================================= */
 
-        function stem(t) { return tabTitle(t).replace(/\.(d2|mmd|mermaid)$/i, '') || 'diagram'; }
+        function stem(t) { return tabTitle(t).replace(/\.(d2|mmd|mermaid|canvas)$/i, '') || 'diagram'; }
         function drawable() { var t = current(); return !!(t && t.svg && !(t.problems && t.problems.length)); }
         function needDrawing() { say('The diagram has a mistake in it, so there is no drawing to export. Put the mistake right first.', 'warn'); }
         function downloadSVG() {
@@ -1033,8 +1163,25 @@
                 function () { say('The clipboard could not be written to.', true); });
         }
         /* D2's own formatting of the text (decision 5), as one change. */
+        /* A canvas's text written in the stable form (docs/canvas-design.md,
+           decision 4), or null with the reason when it has a mistake. */
+        function tidyCanvas(text) {
+            return jcanvas().then(function (J) {
+                var got = J.read(text), fault = got.problems.filter(function (p) { return !p.warning; })[0];
+                return fault || !got.doc ? { problem: fault ? fault.message : 'it could not be read' } : { text: J.write(got.doc) };
+            });
+        }
         function formatText() {
             var t = current();
+            if (t && t.kind === 'canvas') {
+                tidyCanvas(t.text).then(function (out) {
+                    if (out.problem) { say('The text has a mistake in it, so it was not tidied. Put the mistake right first.', 'warn'); return; }
+                    if (out.text === t.text) { say('The text was tidy already.'); return; }
+                    replaceText(out.text);
+                    say('Tidied the text. Undo puts it back as it was.');
+                }).catch(function (err) { say('The text could not be tidied: ' + err.message, true); });
+                return;
+            }
             if (!t || t.kind !== 'd2') { return; }
             d2().then(function (E) { return E.call('format', { text: t.text }); }).then(function (out) {
                 if (!out) { return; }
@@ -1076,6 +1223,7 @@
             return c;
         }
         function isD2() { var t = current(); return !!(t && t.kind === 'd2'); }
+        function isCanvas() { var t = current(); return !!(t && t.kind === 'canvas'); }
         /* Why a shape command cannot run now, or null when it can: needs is
            false for none, true for anything selected, 'shape' for a shape.
            PUDL shows it on the disabled control and tells an agent. */
@@ -1093,6 +1241,7 @@
             var table = [
                 cmd('new', 'New Diagram', 'file', null, { items: D2_STYLES.map(function (s) { return { id: 'new-' + s.id, label: s.label, run: function () { newDiagram(s, 'd2'); } }; }) }),
                 cmd('new-mermaid', 'New Mermaid Diagram', 'file', null, { items: MERMAID_STYLES.map(function (s) { return { id: 'new-' + s.id, label: s.label, run: function () { newDiagram(s, 'mermaid'); } }; }) }),
+                cmd('new-canvas', 'New Canvas', 'file', function () { newDiagram({ label: 'Canvas', text: CANVAS_STARTER }, 'canvas'); }),
                 cmd('open', 'Open…', 'folder', open, { shortcut: 'Mod+O' }),
                 cmd('save', 'Save', 'yavc-save', save, { shortcut: 'Mod+S', disabled: function () { return !current(); } }),
                 cmd('save-as', 'Save As…', null, saveAs, { disabled: function () { return !current(); } }),
@@ -1105,8 +1254,8 @@
                 cmd('export-svg', 'Download as SVG', 'download', downloadSVG, { disabled: function () { return !drawable(); } }),
                 cmd('export-png', 'Download as PNG', 'download', null, { disabled: function () { return !drawable(); }, items: [1, 2, 3].map(function (k) { return { id: 'export-png-' + k, label: k === 1 ? 'Actual Size' : k + ' Times the Size', run: function () { downloadPNG(k); } }; }) }),
                 cmd('export-source', 'Download the Text', 'download', downloadSource, { disabled: function () { return !current(); } }),
-                cmd('copy-embed', 'Copy as Embed', 'copy', copyEmbed, { disabled: function () { return !current(); } }),
-                cmd('format-text', 'Tidy the Text', 'code', formatText, { hidden: function () { return !isD2(); } }),
+                cmd('copy-embed', 'Copy as Embed', 'copy', copyEmbed, { hidden: function () { return isCanvas(); }, disabled: function () { return !current(); } }),
+                cmd('format-text', 'Tidy the Text', 'code', formatText, { hidden: function () { return !isD2() && !isCanvas(); } }),
                 cmd('shape-add', 'Add Shape', 'plus', function () { addShape(false); }, { builtIn: 'n', hidden: function () { return !isD2(); }, disabled: function () { return !!whyNot(false); }, reason: function () { return whyNot(false); } }),
                 cmd('shape-add-inside', 'Add Shape Inside', null, function () { addShape(true); }, { builtIn: 'Shift-n', hidden: function () { return !isD2(); }, disabled: function () { return !!whyNot('shape'); }, reason: function () { return whyNot('shape'); } }),
                 cmd('connect', 'Connect To…', 'yavc-connect', function () { if (connecting) { stopConnect('Stopped connecting.'); } else { startConnect(); } }, { builtIn: 'c', hidden: function () { return !isD2(); }, checked: function () { return !!connecting; }, disabled: function () { return !connecting && !!whyNot('shape'); }, reason: function () { return connecting ? null : whyNot('shape'); } }),
@@ -1151,7 +1300,7 @@
         function menus() {
             return { titles: [
                 { label: 'Diagrams', glyph: 'document', items: H.identity ? H.identity(root, []) : [] },
-                { id: 'file', label: 'File', glyph: 'file', items: ['new', 'new-mermaid', 'open', 'save', 'save-as', '-', 'edit-in-editor', '-', 'export-svg', 'export-png', 'export-source', '-', 'close-diagram'] },
+                { id: 'file', label: 'File', glyph: 'file', items: ['new', 'new-mermaid', 'new-canvas', 'open', 'save', 'save-as', '-', 'edit-in-editor', '-', 'export-svg', 'export-png', 'export-source', '-', 'close-diagram'] },
                 { id: 'edit', label: 'Edit', glyph: 'pencil', items: ['undo', 'redo', '-', 'find'] },
                 { id: 'diagram', label: 'Diagram', glyph: 'code', items: ['format-text', 'redraw', '-', 'copy-embed'] },
                 { id: 'shape', label: 'Shape', glyph: 'square', items: ['shape-add', 'shape-add-inside', 'connect', '-', 'shape-label', 'shape-rename', 'shape-type', '-', 'shape-move-into', 'shape-move-top', '-', 'shape-delete', '-', 'tool-select'].concat(PALETTE.map(function (k) { return 'tool-' + k[0]; })) }
@@ -1169,6 +1318,20 @@
 
         /* === Start ======================================================== */
 
+        /* A canvas takes its colours from the page, so it is drawn again
+           when the site's mode, colour theme or skin changes, as d2.js
+           draws D2 again. */
+        function modeChanged() { var t = current(); if (t && t.kind === 'canvas') { drawNow(); } }
+        /* Only a value that changed counts: PUDL's skins write data-skin
+           again, unchanged, after any change to the page, and a drawing
+           that answered each write would draw for ever (pudl#33). */
+        var modeWatch = new MutationObserver(function (records) {
+            if (records.some(function (r) { return r.oldValue !== document.documentElement.getAttribute(r.attributeName); })) { modeChanged(); }
+        });
+        modeWatch.observe(document.documentElement, { attributes: true, attributeOldValue: true, attributeFilter: ['data-theme', 'data-palette', 'data-skin'] });
+        var darkQuery = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+        if (darkQuery) { darkQuery.addEventListener('change', modeChanged); }
+
         var booted = (async function () {
             var got = await Promise.all([kit(), modes()]);
             CM = await got[0].libs();
@@ -1183,8 +1346,8 @@
                     var k = kept.tabs[i], text = k.text;
                     if (text == null && k.path && H.fs && H.fs.readText) { text = await H.fs.readText(k.path).catch(function () { return null; }); }
                     if (text == null) { continue; }
-                    var t = makeTab(text, k.path || null, k.kind === 'mermaid' ? 'mermaid' : k.kind === 'd2' ? 'd2' : null, k.view);
-                    if (!k.path && k.name && /^untitled-\d+\.(d2|mmd)$/.test(k.name)) { t.name = k.name; untitled = Math.max(untitled, +/\d+/.exec(k.name)[0]); }
+                    var t = makeTab(text, k.path || null, EXT[k.kind] ? k.kind : null, k.view);
+                    if (!k.path && k.name && /^untitled-\d+\.(d2|mmd|canvas)$/.test(k.name)) { t.name = k.name; untitled = Math.max(untitled, +/\d+/.exec(k.name)[0]); }
                     t.modified = k.text != null;
                     tabs.push(t);
                 }
@@ -1218,7 +1381,8 @@
             },
             'new@1': async function (input) {
                 await booted;
-                var kind = input.kind === 'mermaid' ? 'mermaid' : 'd2', list = kind === 'd2' ? D2_STYLES : MERMAID_STYLES;
+                var kind = input.kind === 'mermaid' || input.kind === 'canvas' ? input.kind : 'd2';
+                var list = kind === 'd2' ? D2_STYLES : kind === 'mermaid' ? MERMAID_STYLES : [{ id: 'canvas', label: 'Canvas', text: CANVAS_STARTER }];
                 var style = list.find(function (s) { return s.id === input.style || s.id === 'mm-' + input.style; }) || list[0];
                 var t = openInTab(input.text != null ? String(input.text) : style.text, null, kind, null);
                 if (input.text != null) { t.modified = true; commandsChanged(); }
@@ -1275,16 +1439,22 @@
             'outline@1': async function (input) {
                 await booted;
                 var t = await front(input.index);
-                if (t.kind !== 'd2') { throw new Error('an outline is read from D2 diagrams; this one is Mermaid'); }
+                if (t.kind !== 'd2') { throw new Error('an outline is read from D2 diagrams; this one is ' + KIND_NAME[t.kind]); }
                 var out = await (await d2()).call('outline', { text: t.text });
                 return { output: { shapes: out.shapes || [], connections: out.connections || [], boards: out.boards || [], problems: out.problems || [] } };
             },
             'format@1': async function (input) {
                 await booted;
                 var t = await front(input.index);
-                if (t.kind !== 'd2') { throw new Error('only D2 text is tidied; this diagram is Mermaid'); }
-                var out = await (await d2()).call('format', { text: t.text });
-                if (out.problems && out.problems.length) { throw new Error('the text has a mistake on line ' + (out.problems[0].line || 1) + ': ' + out.problems[0].message); }
+                if (t.kind === 'mermaid') { throw new Error('only D2 and canvas text is tidied; this diagram is Mermaid'); }
+                var out;
+                if (t.kind === 'canvas') {
+                    out = await tidyCanvas(t.text);
+                    if (out.problem) { throw new Error('the text has a mistake: ' + out.problem); }
+                } else {
+                    out = await (await d2()).call('format', { text: t.text });
+                    if (out.problems && out.problems.length) { throw new Error('the text has a mistake on line ' + (out.problems[0].line || 1) + ': ' + out.problems[0].message); }
+                }
                 var changed = out.text !== t.text;
                 replaceText(out.text);
                 return { output: { index: active + 1, changed: changed } };
@@ -1292,7 +1462,7 @@
             'edit@1': async function (input) {
                 await booted;
                 var t = await front(input.index);
-                if (t.kind !== 'd2') { throw new Error('only D2 diagrams are edited shape by shape; this one is Mermaid'); }
+                if (t.kind !== 'd2') { throw new Error('only D2 diagrams are edited shape by shape; this one is ' + KIND_NAME[t.kind]); }
                 if (!t.canvas) { await drawNow(); }
                 var req = { op: String(input.op), key: String(input.key) };
                 ['value', 'name', 'from', 'to'].forEach(function (k) { if (input[k] != null) { req[k] = String(input[k]); } });
@@ -1333,6 +1503,8 @@
             commandTable: commandTable, toolbars: toolbars, menus: menus,
             destroy: function () {
                 destroyed = true;
+                modeWatch.disconnect();
+                if (darkQuery) { darkQuery.removeEventListener('change', modeChanged); }
                 tabs.forEach(function (t) { if (t.canvas) { t.canvas.destroy(); } });
                 clearTimeout(drawTimer);
                 settle(null, []);
