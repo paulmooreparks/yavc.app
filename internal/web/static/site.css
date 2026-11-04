@@ -68,13 +68,16 @@ body.desktop .md-layout { --md-sidebar-w: 300px; }
 /* An applet that fills its window lays itself out; the wrapper adds no
    padding of its own over the window body's, as parkscomputing.com's
    wrappers add none. The Editor and the Terminal take the whole body,
-   edge to edge, so their tab bars and screens meet the window's frame. */
+   edge to edge, so their tab bars and screens meet the window's frame,
+   and so does any applet whose page is marked data-applet-flush (Slides
+   and Diagrams), which a new one of that kind gets by its markup alone
+   rather than by joining a list here. */
 .win-body:has(> .win-content > [data-applet-fit="fill"]) > .win-content { padding: 0; }
 .win-body:has(> .win-content > [data-applet-flush]) > .win-content { padding: 0; }
 .win-body:has(> .win-content > [data-applet="editor"][data-applet-fit="fill"]),
 .win-body:has(> .win-content > [data-applet="files"][data-applet-fit="fill"]),
 .win-body:has(> .win-content > [data-applet="terminal"][data-applet-fit="fill"]),
-.win-body:has(> .win-content > [data-applet="slides"]) { padding: 0; }
+.win-body:has(> .win-content > [data-applet-flush]) { padding: 0; }
 
 
 
