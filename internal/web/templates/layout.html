@@ -46,6 +46,10 @@
   <script src="{{asset "/pudl/pudl-menu.js"}}" defer></script>
   <script src="{{asset "/pudl/pudl-commands.js"}}" defer></script>
   <script src="{{asset "/pudl/pudl-toolbar.js"}}" defer></script>
+  {{/* Applet init may run as soon as its dynamic script registers. Its
+       document-tab dependency must precede the loader and registry. */}}
+  <script src="{{asset "/pudl/pudl-tabs.js"}}" defer></script>
+  <script src="{{asset "/static/doc-tabs.js"}}" defer></script>
   <script src="{{asset "/pudl/pudl-applets.js"}}" defer></script>
   <script src="{{asset "/static/pudl-host-kit.js"}}" defer></script>
   <script src="{{asset "/static/host.js"}}" defer></script>
@@ -56,9 +60,7 @@
   <script src="{{asset "/pudl/pudl-menubar.js"}}" defer></script>
   <script src="{{asset "/pudl/pudl-dialog.js"}}" defer></script>
   <script src="{{asset "/pudl/pudl-tooltip.js"}}" defer></script>
-  <script src="{{asset "/pudl/pudl-tabs.js"}}" defer></script>
   <script src="{{asset "/pudl/pudl-tree.js"}}" defer></script>
-  <script src="{{asset "/static/doc-tabs.js"}}" defer></script>
   <script src="{{asset "/pudl/pudl-fields.js"}}" defer></script>
   <script src="{{asset "/pudl/pudl-split.js"}}" defer></script>
   <script src="{{asset "/pudl/pudl-date.js"}}" defer></script>

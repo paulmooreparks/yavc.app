@@ -158,8 +158,8 @@ test('the drawing escapes text and marks every node and edge', () => {
   assert.ok(r.svg.includes('data-edge="e"'));
   assert.ok(r.svg.includes('stroke="#cc0000"'), 'preset 1 is the palette\'s first');
   assert.ok(r.svg.includes('stroke-dasharray'));
-  // The group is drawn below the nodes, although the file lists it later.
-  assert.ok(r.svg.indexOf('data-node="g"') < r.svg.indexOf('data-node="a"'));
+  // Groups follow the same file drawing order as every other node.
+  assert.ok(r.svg.indexOf('data-node="g"') > r.svg.indexOf('data-node="a"'));
   assert.equal(r.boxes.length, 4);
   assert.ok(r.width > 460 && r.height > 240);
 });

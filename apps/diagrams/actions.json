@@ -829,6 +829,249 @@
       "replay": "once"
     },
     {
+      "ref": "yavc.diagrams/canvas-edit@1",
+      "title": "Edit a Canvas",
+      "description": "One undoable JSON Canvas edit. create uses type, shape, x and y; move uses key, dx and dy (a group carries nodes fully inside it); resize uses key and x, y, width or height; connect uses from, to and their sides; set uses key, kind, property and value (null removes it); delete and duplicate use key; paste uses text containing JSON Canvas nodes and internal edges and remaps their IDs; order uses key and direction. kind distinguishes a node from an edge with the same ID. Returns the changed item ID and drawing status. No file is saved by this action.",
+      "live": true,
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "op"
+        ],
+        "properties": {
+          "index": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "op": {
+            "enum": [
+              "create",
+              "move",
+              "resize",
+              "connect",
+              "set",
+              "delete",
+              "duplicate",
+              "paste",
+              "order"
+            ]
+          },
+          "key": {
+            "type": "string",
+            "maxLength": 1024
+          },
+          "kind": {
+            "enum": [
+              "node",
+              "edge"
+            ]
+          },
+          "type": {
+            "enum": [
+              "text",
+              "group"
+            ]
+          },
+          "shape": {
+            "enum": [
+              "rectangle",
+              "rounded",
+              "oval",
+              "diamond",
+              "parallelogram",
+              "document",
+              "cylinder",
+              "queue",
+              "person",
+              "cloud",
+              "hexagon",
+              "package",
+              "text"
+            ]
+          },
+          "property": {
+            "enum": [
+              "text",
+              "label",
+              "color",
+              "shape",
+              "line",
+              "lineWidth",
+              "route",
+              "fromHead",
+              "toHead",
+              "fromSide",
+              "toSide"
+            ]
+          },
+          "value": {
+            "type": [
+              "string",
+              "integer",
+              "null"
+            ],
+            "maxLength": 65536
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 2097152
+          },
+          "direction": {
+            "enum": [
+              "forward",
+              "back"
+            ]
+          },
+          "x": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "y": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "width": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "height": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "dx": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "dy": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "from": {
+            "type": "string",
+            "maxLength": 1024
+          },
+          "to": {
+            "type": "string",
+            "maxLength": 1024
+          },
+          "fromSide": {
+            "enum": [
+              "top",
+              "right",
+              "bottom",
+              "left"
+            ]
+          },
+          "toSide": {
+            "enum": [
+              "top",
+              "right",
+              "bottom",
+              "left"
+            ]
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": [
+          "key",
+          "drawn",
+          "problems"
+        ],
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "drawn": {
+            "type": "boolean"
+          },
+          "problems": {
+            "type": "array"
+          }
+        }
+      },
+      "capabilities": [],
+      "replay": "once"
+    },
+    {
+      "ref": "yavc.diagrams/canvas-view@1",
+      "title": "Set the Canvas View",
+      "description": "Select a canvas node or edge by key and kind (null clears selection), pan by dx/dy in screen pixels, zoom by a relative factor, fit the contents, or show actual size. These operations affect only the current open canvas view and leave file content and export bounds unchanged.",
+      "live": true,
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "op"
+        ],
+        "properties": {
+          "op": {
+            "enum": [
+              "select",
+              "pan",
+              "zoom",
+              "fit",
+              "actual"
+            ]
+          },
+          "key": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 1024
+          },
+          "kind": {
+            "enum": [
+              "node",
+              "edge"
+            ]
+          },
+          "dx": {
+            "type": "integer",
+            "minimum": -100000,
+            "maximum": 100000
+          },
+          "dy": {
+            "type": "integer",
+            "minimum": -100000,
+            "maximum": 100000
+          },
+          "factor": {
+            "type": "number",
+            "minimum": 0.1,
+            "maximum": 10
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": [
+          "applied"
+        ],
+        "properties": {
+          "applied": {
+            "type": "boolean"
+          }
+        }
+      },
+      "capabilities": [],
+      "replay": "once"
+    },
+    {
       "ref": "yavc.diagrams/render@1",
       "title": "Export a Diagram as a Picture",
       "description": "The drawing of a diagram, or the current one, as an SVG file or a PNG at one to three times its size.",
