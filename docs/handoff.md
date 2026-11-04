@@ -4,6 +4,10 @@ Updated on 2026-11-04. C2 is implemented on `codex/canvas-c2` for review, with t
 
 Originally written on 2026-11-04 for whoever picks this work up next, human or agent. It describes where the Diagrams work stands, how this repository expects work to be done, and what comes next. Read `CLAUDE.md`, `DESIGN.md` and the design documents it points to before changing anything structural.
 
+## Connector endpoint follow-up
+
+The follow-up on `codex/canvas-endpoints` adds draggable start/end tips, automatic attachments on interior drops, live connector previews during node movement and free endpoints. Decisions 18 and 19 in `docs/canvas-design.md` and the additive `yavc.anchor` property in `docs/canvas-extension.md` state the contracts. The keyboard commands are E and Shift+E; `canvas-edit@1` adds `reconnect`. `scripts/test-canvas.cjs --endpoints chromium firefox webkit` covers the new behavior. This work awaits review and merge.
+
 ## How work is done here
 
 - Run `bash scripts/check.sh --since HEAD` before every commit. CI runs the same script. It covers Go formatting, vet, tests with the race detector, govulncheck, the WebAssembly builds, the Node tests of browser modules (`node --test 'apps/*/test/*.test.mjs'`) and the project's own rules in `scripts/check.mjs`.

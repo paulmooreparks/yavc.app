@@ -20,6 +20,27 @@
         var g = node(doc, id);
         return g && g.type === 'group' ? doc.nodes.filter(function (n) { return inside(n, g); }).map(function (n) { return n.id; }) : [];
     }
+    function pruneAnchors(doc) {
+        var used = new Set();
+        doc.edges.forEach(function (e) { used.add(e.fromNode); used.add(e.toNode); });
+        doc.nodes = doc.nodes.filter(function (n) { return !J.isAnchor(n) || used.has(n.id); });
+    }
+    /* A pointer near a side-centre pins that side. The rest of the node
+       means automatic attachment, including a drop near its centre. */
+    function attachment(doc, point, tolerance, exclude) {
+        var result = null;
+        doc.nodes.slice().reverse().some(function (n) {
+            if (n.id === exclude || J.isAnchor(n) || point.x < n.x - tolerance || point.x > n.x + n.width + tolerance || point.y < n.y - tolerance || point.y > n.y + n.height + tolerance) { return false; }
+            var inside = point.x >= n.x && point.x <= n.x + n.width && point.y >= n.y && point.y <= n.y + n.height;
+            var centre = point.x >= n.x + n.width / 4 && point.x <= n.x + n.width * 3 / 4 && point.y >= n.y + n.height / 4 && point.y <= n.y + n.height * 3 / 4;
+            var spots = [['top', n.x + n.width / 2, n.y], ['right', n.x + n.width, n.y + n.height / 2], ['bottom', n.x + n.width / 2, n.y + n.height], ['left', n.x, n.y + n.height / 2]];
+            spots.sort(function (a, b) { return Math.hypot(a[1] - point.x, a[2] - point.y) - Math.hypot(b[1] - point.x, b[2] - point.y); });
+            var near = Math.hypot(spots[0][1] - point.x, spots[0][2] - point.y) <= tolerance;
+            if (!inside && !near) { return false; }
+            result = { node: n.id, side: near && !centre ? spots[0][0] : null }; return true;
+        });
+        return result || { node: null, x: Math.round(point.x), y: Math.round(point.y) };
+    }
     function checked(doc) {
         var text = J.write(doc), got = J.read(text), problem = got.problems.find(function (p) { return !p.warning; });
         if (!got.doc || problem) { throw new Error(problem ? problem.message : 'The canvas is invalid.'); }
@@ -33,7 +54,7 @@
         [['x', 'width'], ['y', 'height']].forEach(function (axis) {
             var a = axis[0], size = axis[1], factors = resize ? [1] : [0, 0.5, 1], best = null;
             nodes.forEach(function (n) {
-                if (ignore.indexOf(n.id) >= 0) { return; }
+                if (J.isAnchor(n) || ignore.indexOf(n.id) >= 0) { return; }
                 [0, 0.5, 1].forEach(function (f) {
                     var at = n[a] + n[size] * f;
                     factors.forEach(function (q) {
@@ -66,6 +87,17 @@
         var freeId = idMaker(doc);
         function needNode() { if (!n || req.kind === 'edge') { throw new Error('Select a node first.'); } }
         function needItem() { if (!item) { throw new Error('That node or connector is no longer here.'); } }
+        function endpoint(edge, end, target, side, x, y) {
+            if (side != null && ['top', 'right', 'bottom', 'left'].indexOf(side) < 0) { throw new Error('Choose a valid connector side or Automatic.'); }
+            if (target != null && target !== '') {
+                if (!node(doc, target)) { throw new Error('That endpoint node is no longer here.'); }
+                edge[end + 'Node'] = target;
+            } else {
+                var point = { id: freeId('anchor'), type: 'text', x: integer(x), y: integer(y), width: 0, height: 0, text: '', yavc: { shape: 'text', anchor: true } };
+                doc.nodes.push(point); edge[end + 'Node'] = point.id;
+            }
+            if (side) { edge[end + 'Side'] = side; } else { delete edge[end + 'Side']; }
+        }
         if (req.op === 'move') {
             needNode();
             var dx = integer(req.dx), dy = integer(req.dy), moving = [key].concat(members(doc, key));
@@ -83,9 +115,16 @@
             if (type === 'group') { doc.nodes.unshift(n); } else { doc.nodes.push(n); }
             key = n.id;
         } else if (req.op === 'connect') {
-            if (!node(doc, req.from) || !node(doc, req.to)) { throw new Error('Choose two nodes for the connector.'); }
-            e = { id: freeId('edge'), fromNode: req.from, toNode: req.to, fromSide: req.fromSide || 'right', toSide: req.toSide || 'left', toEnd: 'arrow' };
+            if (!node(doc, req.from)) { throw new Error('Choose a source node for the connector.'); }
+            e = { id: freeId('edge'), fromNode: req.from, toEnd: 'arrow' };
+            endpoint(e, 'from', req.from, req.fromSide);
+            endpoint(e, 'to', req.to, req.toSide, req.x, req.y);
             doc.edges.push(e); key = e.id;
+        } else if (req.op === 'reconnect') {
+            if (!e || req.kind === 'node') { throw new Error('Select a connector first.'); }
+            if (req.end !== 'from' && req.end !== 'to') { throw new Error('Choose the start or end of the connector.'); }
+            endpoint(e, req.end, req.node, req.side, req.x, req.y);
+            pruneAnchors(doc);
         } else if (req.op === 'set') {
             needItem();
             var property = req.property, allowed = item === n ? ['text', 'label', 'color', 'shape', 'line', 'lineWidth'] : ['label', 'color', 'route', 'fromHead', 'toHead', 'fromSide', 'toSide', 'line', 'lineWidth'];
@@ -98,6 +137,7 @@
                 doc.nodes = doc.nodes.filter(function (x) { return x.id !== key; });
                 doc.edges = doc.edges.filter(function (x) { return x.fromNode !== key && x.toNode !== key; });
             } else { doc.edges = doc.edges.filter(function (x) { return x.id !== key; }); }
+            pruneAnchors(doc);
             key = '';
         } else if (req.op === 'order') {
             needNode();
@@ -123,8 +163,12 @@
     }
     function fragmentOf(doc, key, kind) {
         var ids = kind === 'edge' ? [] : [key].concat(members(doc, key));
+        doc.edges.forEach(function (e) {
+            if (ids.indexOf(e.fromNode) >= 0 && J.isAnchor(node(doc, e.toNode))) { ids.push(e.toNode); }
+            if (ids.indexOf(e.toNode) >= 0 && J.isAnchor(node(doc, e.fromNode))) { ids.push(e.fromNode); }
+        });
         return copy({ nodes: doc.nodes.filter(function (n) { return ids.indexOf(n.id) >= 0; }), edges: doc.edges.filter(function (e) { return ids.indexOf(e.fromNode) >= 0 && ids.indexOf(e.toNode) >= 0; }) });
     }
-    var api = Object.freeze({ edit: edit, snap: snap, resize: resize, members: members, fragment: fragmentOf });
+    var api = Object.freeze({ edit: edit, snap: snap, resize: resize, members: members, fragment: fragmentOf, attachment: attachment });
     if (typeof module === 'object' && module.exports) { module.exports = api; } else { root.yavcCanvasModel = api; }
 })(typeof window !== 'undefined' ? window : this);

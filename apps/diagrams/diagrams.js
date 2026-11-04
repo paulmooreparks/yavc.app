@@ -416,6 +416,7 @@
             if (!t.cv || t.cvText !== t.text || (t.problems && t.problems.length)) { return 'Wait for a valid drawing before editing the canvas.'; }
             if (needs && !s) { return 'Select a node or connector first.'; }
             if (needs === 'shape' && (!s || s.kind !== 'node')) { return 'Select a node first.'; }
+            if (needs === 'edge' && (!s || s.kind !== 'edge')) { return 'Select a connector first.'; }
             return null;
         }
         async function canvasEdit(req, expected, strict) {
@@ -426,7 +427,7 @@
                 if (!got.doc) { throw new Error('Put the mistake in the canvas text right before editing the drawing.'); }
                 var out = M.edit(got.doc, req);
                 if (out.text === t.text) { return out; }
-                var isEdge = out.doc.edges.some(function (x) { return x.id === out.key; }) && (req.op === 'connect' || req.kind === 'edge');
+                var isEdge = out.doc.edges.some(function (x) { return x.id === out.key; }) && (req.op === 'connect' || req.op === 'reconnect' || req.kind === 'edge');
                 t.cvPending = out.key ? { kind: isEdge ? 'edge' : 'node', id: out.key } : null;
                 replaceText(out.text, 'input.canvas');
                 await drawNow();
@@ -452,7 +453,7 @@
         function canvasConnect() {
             if (canvasWhy('shape')) { return; }
             var t = current(), s = canvasSelection(), text = t.text;
-            var targets = t.cvDoc.nodes.filter(function (x) { return x.id !== s.id; }).map(function (x) { return x.id; });
+            var targets = t.cvDoc.nodes.filter(function (x) { return x.id !== s.id && !window.yavcCanvas.isAnchor(x); }).map(function (x) { return x.id; });
             window.yavcDialog.askText('Connect to a Node', 'Target Node', targets[0] || '', {
                 okLabel: 'Connect', help: 'Give the target node ID. Change either side in the inspector after connecting.',
                 validate: function (v) { return targets.indexOf(v) < 0 ? 'Choose another node in this canvas.' : null; }
@@ -465,6 +466,52 @@
                 okLabel: 'Resize', help: 'Give the width and height in whole pixels, separated by a space.',
                 validate: function (v) { return !/^\d+\s+\d+$/.test(v.trim()) || v.trim().split(/\s+/).some(function (x) { return !Number.isSafeInteger(+x) || +x < 1; }) ? 'Give two positive whole numbers.' : null; }
             }).then(function (v) { if (v != null && t === current()) { var dims = v.trim().split(/\s+/).map(Number); canvasEdit({ op: 'resize', key: s.id, width: dims[0], height: dims[1] }, text); } });
+        }
+        function canvasReconnect(end) {
+            if (canvasWhy('edge')) { return; }
+            var t = current(), s = canvasSelection(), text = t.text, J = window.yavcCanvas;
+            var edge = t.cvDoc.edges.find(function (e) { return e.id === s.id; }), node = t.cvDoc.nodes.find(function (x) { return x.id === edge[end + 'Node']; });
+            var route = J.route(edge, t.cvDoc.nodes), point = route.points[end === 'from' ? 0 : route.points.length - 1], p = 'dg-end-' + n + '-';
+            var options = [['', 'Free Point']].concat(t.cvDoc.nodes.filter(function (x) { return !J.isAnchor(x); }).map(function (x) { return [x.id, x.id]; }));
+            var body = selectField(p + 'node', 'target', 'Attach To', J.isAnchor(node) ? '' : node.id, options) +
+                selectField(p + 'side', 'side', 'Anchor', edge[end + 'Side'] || '', [['', 'Automatic'], ['top', 'Top'], ['right', 'Right'], ['bottom', 'Bottom'], ['left', 'Left']]) +
+                numberField(p + 'x', 'x', 'X', String(Math.round(point[0])), null, null) +
+                numberField(p + 'y', 'y', 'Y', String(Math.round(point[1])), null, null) +
+                '<p class="form-help">Automatic chooses the nearest side as the shapes move. Free Point places the endpoint at X and Y.</p>';
+            function read(body) {
+                var get = function (k) { return body.querySelector('[data-set="' + k + '"]').value; };
+                return { op: 'reconnect', kind: 'edge', key: s.id, end: end, node: get('target') || null, side: get('target') ? get('side') || null : null, x: get('x') === '' ? NaN : Number(get('x')), y: get('y') === '' ? NaN : Number(get('y')) };
+            }
+            return window.yavcDialog.open({ title: end === 'from' ? 'Reconnect the Start' : 'Reconnect the End', body: body,
+                buttons: [{ id: 'cancel', label: 'Cancel' }, { id: 'apply', label: 'Reconnect', primary: true }],
+                check: function (value, body) {
+                    var req = read(body);
+                    var invalid = [];
+                    ['x', 'y'].forEach(function (k) {
+                        var field = body.querySelector('[data-set="' + k + '"]'), bad = !req.node && !Number.isSafeInteger(req[k]);
+                        markField(field, bad ? 'Give a whole-number coordinate within the safe numeric range.' : null);
+                        if (bad) { invalid.push(field); }
+                    });
+                    if (invalid.length) {
+                        var label = invalid[0].closest('.form-group').querySelector('label');
+                        (label && label.control ? label.control : invalid[0]).focus();
+                    }
+                    return invalid.length > 0;
+                },
+                onOpen: function (o) {
+                    o.dialog.querySelector('form').noValidate = true;
+                    function changed() {
+                        var free = !o.body.querySelector('[data-set="target"]').value;
+                        ['x', 'y'].forEach(function (k) { o.body.querySelector('[data-set="' + k + '"]').disabled = !free; });
+                        o.body.querySelector('[data-set="side"]').disabled = free;
+                    }
+                    o.body.querySelector('[data-set="target"]').addEventListener('change', changed); changed();
+                    o.body.addEventListener('input', function (e) {
+                        if (!e.target.matches('[data-set="x"], [data-set="y"]')) { return; }
+                        if (e.target.value !== '' && Number.isSafeInteger(Number(e.target.value))) { markField(e.target, null); }
+                    });
+                }
+            }).then(function (out) { if (out.value === 'apply' && t === current()) { return canvasEdit(read(out.body), text); } });
         }
         function canvasCopy() {
             if (canvasWhy('shape')) { return; }
@@ -497,12 +544,13 @@
                     selectField(p + 'shape', 'shape', 'Shape', ext.shape || 'rectangle', [['rectangle', 'Rectangle'], ['rounded', 'Rounded Rectangle']].concat(PALETTE.filter(function (x) { return x[0] !== 'rectangle' && x[0] !== 'rounded'; })));
             } else if (s.kind === 'edge' || item.type === 'group') { html += textField(p + 'label', 'label', 'Label', item.label); }
             if (s.kind === 'node') {
-                ['x', 'y', 'width', 'height'].forEach(function (k) { html += numberField(p + k, k, k === 'x' ? 'X' : k === 'y' ? 'Y' : k === 'width' ? 'Width' : 'Height', String(item[k]), k === 'width' || k === 'height' ? 1 : -Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER); });
+                ['x', 'y', 'width', 'height'].forEach(function (k) { var size = k === 'width' || k === 'height'; html += numberField(p + k, k, k === 'x' ? 'X' : k === 'y' ? 'Y' : k === 'width' ? 'Width' : 'Height', String(item[k]), size ? 1 : null, size ? Number.MAX_SAFE_INTEGER : null); });
             }
             html += textField(p + 'colour', 'color', 'Colour', item.color, 'Use #rrggbb, #rgb, or a preset from 1 to 6 (red, orange, yellow, green, cyan, purple). Leave it blank for the theme.') +
                 selectField(p + 'line', 'line', 'Line Style', ext.line || 'solid', [['solid', 'Solid'], ['dashed', 'Dashed'], ['dotted', 'Dotted']]) +
                 numberField(p + 'line-width', 'lineWidth', 'Line Width', String(ext.lineWidth || 2), 1, 8);
             if (s.kind === 'edge') {
+                html += '<fieldset class="form-fieldset"><legend>Endpoints</legend><div class="hstack"><button type="button" class="btn btn-sm" data-command="cv-reconnect-start"></button><button type="button" class="btn btn-sm" data-command="cv-reconnect-end"></button></div></fieldset>';
                 html += selectField(p + 'route', 'route', 'Route', ext.route || 'elbow', [['elbow', 'Elbow'], ['straight', 'Straight'], ['curve', 'Curve']]);
                 var heads = [['none', 'None'], ['arrow', 'Arrow'], ['triangle', 'Triangle'], ['diamond', 'Diamond'], ['circle', 'Circle'], ['box', 'Box'], ['cross', 'Cross'], ['cf-one', 'One'], ['cf-one-required', 'Exactly One'], ['cf-many', 'Many'], ['cf-many-required', 'One or More']];
                 html += selectField(p + 'from-head', 'fromHead', 'Start Head', ext.fromHead || item.fromEnd || 'none', heads) + selectField(p + 'to-head', 'toHead', 'End Head', ext.toHead || item.toEnd || 'arrow', heads);
@@ -530,6 +578,8 @@
                 c('new', 'Add Shape', function () { canvasCreate(); }, 'n', false, 'plus'),
                 c('group', 'Add Group', function () { canvasCreate(null, null, 'group'); }, 'g', false, 'folder'),
                 c('connect', 'Connect to a Node…', canvasConnect, 'c', 'shape', 'yavc-connect'),
+                c('reconnect-start', 'Reconnect Start…', function () { return canvasReconnect('from'); }, 'Shift-e', 'edge', 'yavc-connect'),
+                c('reconnect-end', 'Reconnect End…', function () { return canvasReconnect('to'); }, 'e', 'edge', 'yavc-connect'),
                 c('resize', 'Resize…', canvasResize, 'r', 'shape'),
                 c('copy', 'Copy Node', canvasCopy, 'Mod-c', 'shape', 'copy'),
                 c('paste', 'Paste Nodes', canvasPaste, 'Mod-v', false),
@@ -572,6 +622,7 @@
                 if (key === 'n') { e.preventDefault(); canvasCreate(); }
                 else if (key === 'g') { e.preventDefault(); canvasCreate(null, null, 'group'); }
                 else if (key === 'c') { e.preventDefault(); canvasConnect(); }
+                else if (key === 'e') { e.preventDefault(); canvasReconnect(e.shiftKey ? 'from' : 'to'); }
                 else if (key === 'r') { e.preventDefault(); canvasResize(); }
                 else if (key === 'h') { e.preventDefault(); setCanvasPan(!canvasPan); }
                 else if (key === 'delete' && !canvasWhy(true)) { e.preventDefault(); canvasRequest({ op: 'delete' }); }
@@ -742,7 +793,7 @@
                 options.map(function (o) { return '<option value="' + esc(o[0]) + '"' + (o[0] === (value || '') ? ' selected' : '') + '>' + esc(o[1]) + '</option>'; }).join('') + '</select></span>');
         }
         function numberField(id, key, label, value, min, max) {
-            return field(id, label, '<span class="number-field"><input class="form-input" type="number" step="1" min="' + min + '" max="' + max + '" id="' + id + '" data-set="' + esc(key) + '" data-was="' + esc(value || '') + '" value="' + esc(value || '') + '"></span>');
+            return field(id, label, '<span class="number-field"><input class="form-input" type="number" step="1"' + (min == null ? '' : ' min="' + min + '"') + (max == null ? '' : ' max="' + max + '"') + ' id="' + id + '" data-set="' + esc(key) + '" data-was="' + esc(value || '') + '" value="' + esc(value || '') + '"></span>');
         }
         function colourField(id, key, label, value) {
             return window.yavcMdEditor.colourRows([{ id: id, key: key, label: label, value: value || '', fallback: '#808080', placeholder: 'The theme\'s own' }])
@@ -1199,7 +1250,7 @@
             el.kind.textContent = KIND_NAME[t.kind];
             root.setAttribute('data-kind', t.kind);
             q('.dg-keys').textContent = t.kind === 'canvas'
-                ? 'Tab selects nodes and connectors in drawing order. Shift+Tab selects the previous item and leaves the drawing at the first item. Arrow keys move a node by one pixel, or eight with Shift. N adds a shape, G a group, C connects, R resizes, Delete deletes. Ctrl or Command with C, V and D copies, pastes and duplicates. Alt with arrow keys pans. Plus and minus zoom, 0 fits, and 1 shows actual size. Space with a drag pans. Escape cancels a drag and returns to Select.'
+                ? 'Tab selects nodes and connectors in drawing order. Shift+Tab selects the previous item and leaves the drawing at the first item. Arrow keys move a node by one pixel, or eight with Shift. N adds a shape, G a group, C connects, R resizes, E reconnects a connector end, Shift+E reconnects its start, and Delete deletes. Ctrl or Command with C, V and D copies, pastes and duplicates. Alt with arrow keys pans. Plus and minus zoom, 0 fits, and 1 shows actual size. Space with a drag pans. Escape cancels a drag and returns to Select.'
                 : 'Arrow keys select a shape or connection. Enter edits its label, F2 renames it, N adds a shape, C connects it, Delete deletes it, and Escape returns to Select.';
             inspected = undefined;
             renderInspector();
@@ -1518,14 +1569,14 @@
                 { id: 'file', label: 'File', glyph: 'file', items: ['new', 'new-mermaid', 'new-canvas', 'open', 'save', 'save-as', '-', 'edit-in-editor', '-', 'export-svg', 'export-png', 'export-source', '-', 'close-diagram'] },
                 { id: 'edit', label: 'Edit', glyph: 'pencil', items: ['undo', 'redo', '-', 'cv-copy', 'cv-paste', 'cv-duplicate', 'cv-delete', '-', 'find'] },
                 { id: 'diagram', label: 'Diagram', glyph: 'code', items: ['format-text', 'redraw', '-', 'copy-embed'] },
-                { id: 'shape', label: 'Shape', glyph: 'square', items: ['shape-add', 'shape-add-inside', 'connect', 'cv-new', 'cv-group', 'cv-connect', 'cv-resize', '-', 'shape-label', 'shape-rename', 'shape-type', '-', 'shape-move-into', 'shape-move-top', 'cv-left', 'cv-right', 'cv-up', 'cv-down', 'cv-forward', 'cv-back', '-', 'shape-delete', '-', 'tool-select'].concat(PALETTE.map(function (k) { return 'tool-' + k[0]; })) }
+                { id: 'shape', label: 'Shape', glyph: 'square', items: ['shape-add', 'shape-add-inside', 'connect', 'cv-new', 'cv-group', 'cv-connect', 'cv-reconnect-start', 'cv-reconnect-end', 'cv-resize', '-', 'shape-label', 'shape-rename', 'shape-type', '-', 'shape-move-into', 'shape-move-top', 'cv-left', 'cv-right', 'cv-up', 'cv-down', 'cv-forward', 'cv-back', '-', 'shape-delete', '-', 'tool-select'].concat(PALETTE.map(function (k) { return 'tool-' + k[0]; })) }
             ], into: { view: ['view-text', 'view-preview', 'view-split', '-', 'dock', 'fit', 'toggle-inspector', '-', 'cv-pan', 'cv-pan-left', 'cv-pan-right', 'cv-pan-up', 'cv-pan-down', 'cv-zoom-in', 'cv-zoom-out', 'cv-actual'], go: ['go-to-line', 'cv-next', 'cv-previous'] } };
         }
         root.addEventListener('pudl:contextmenu', function (e) {
             var t = e.detail.target;
             var own = function (ids) { return window.pudlCommands ? window.pudlCommands.menuRows(ids, root) : ids; };
             if (t.closest && t.closest('.dg-stagebox')) {
-                var rows = isCanvas() ? ['cv-new', 'cv-group', 'cv-connect', 'cv-resize', '-', 'cv-copy', 'cv-paste', 'cv-duplicate', 'cv-forward', 'cv-back', 'cv-delete', '-'] : isD2() && selection() ? ['shape-label', 'shape-rename', 'shape-type', 'connect', 'shape-add-inside', '-', 'shape-delete', '-'] : isD2() ? ['shape-add', '-'] : [];
+                var rows = isCanvas() ? ['cv-new', 'cv-group', 'cv-connect', 'cv-reconnect-start', 'cv-reconnect-end', 'cv-resize', '-', 'cv-copy', 'cv-paste', 'cv-duplicate', 'cv-forward', 'cv-back', 'cv-delete', '-'] : isD2() && selection() ? ['shape-label', 'shape-rename', 'shape-type', 'connect', 'shape-add-inside', '-', 'shape-delete', '-'] : isD2() ? ['shape-add', '-'] : [];
                 e.detail.add(own(rows.concat(['copy-embed', 'export-svg', 'export-png', '-', 'fit', 'redraw'])));
             }
             else if (t.closest && t.closest('.dg-text')) { e.detail.add(own(['undo', 'redo', '-', 'find', '-', 'format-text', 'copy-embed', '-', 'view-text', 'view-preview', 'view-split'])); }
@@ -1691,7 +1742,7 @@
                 if (destroyed || t !== current() || canvasWhy(false)) { throw new Error('The current canvas is not ready.'); }
                 if (input.op === 'select') {
                     var key = input.key || null, kind = input.kind || 'node';
-                    if (key && !(kind === 'edge' ? t.cvDoc.edges : t.cvDoc.nodes).some(function (x) { return x.id === key; })) { throw new Error('There is no ' + kind + ' with that ID.'); }
+                    if (key && !(kind === 'edge' ? t.cvDoc.edges : t.cvDoc.nodes.filter(function (n) { return !window.yavcCanvas.isAnchor(n); })).some(function (x) { return x.id === key; })) { throw new Error('There is no selectable ' + kind + ' with that ID.'); }
                     t.cv.select(key ? { id: key, kind: kind } : null);
                 } else if (input.op === 'pan') { t.cv.pan(input.dx || 0, input.dy || 0); }
                 else if (input.op === 'zoom') { t.cv.zoom(input.factor || 1); }

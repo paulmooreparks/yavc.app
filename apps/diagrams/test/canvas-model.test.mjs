@@ -99,3 +99,57 @@ test('drawing order includes groups in the file order', () => {
     assert.deepEqual(changed.doc.nodes.map(n => n.id), ['a', 'g', 'b']);
     assert.deepEqual(J.render(changed.doc, { palette: pal }).boxes.map(n => n.id), ['a', 'g', 'b']);
 });
+
+test('reattaching either endpoint preserves connector identity, styles and unknown data', () => {
+    const doc = base(); doc.nodes.push(n('c', 20, 240));
+    doc.edges[0].color = '4'; doc.edges[0].extra = { retain: true }; doc.edges[0].yavc = { route: 'curve', toHead: 'diamond' };
+    const changed = M.edit(doc, { op: 'reconnect', key: 'ab', end: 'to', node: 'c', side: 'top' }).doc;
+    assert.deepEqual(changed.edges[0], { ...doc.edges[0], toNode: 'c', toSide: 'top', toEnd: 'arrow' });
+    const automatic = M.edit(changed, { op: 'reconnect', key: 'ab', end: 'from', node: 'b' }).doc;
+    assert.equal(automatic.edges[0].fromNode, 'b'); assert.equal(automatic.edges[0].fromSide, undefined);
+    assert.equal(doc.edges[0].toNode, 'b');
+    assert.throws(() => M.edit(doc, { op: 'reconnect', key: 'ab', end: 'middle', node: 'a' }));
+    assert.throws(() => M.edit(doc, { op: 'reconnect', key: 'ab', end: 'to', node: 'missing' }));
+    assert.throws(() => M.edit(doc, { op: 'reconnect', key: 'ab', kind: 'node', end: 'to', node: 'a' }));
+});
+test('free endpoints remain standard nodes, are independently owned, and are pruned only when unused', () => {
+    let d = M.edit(base(), { op: 'reconnect', key: 'ab', end: 'to', node: null, x: -30, y: 170 }).doc;
+    const point = d.nodes.find(J.isAnchor);
+    assert.deepEqual(point, { id: point.id, type: 'text', x: -30, y: 170, width: 0, height: 0, text: '', yavc: { shape: 'text', anchor: true } });
+    assert.equal(d.edges[0].toNode, point.id); assert.equal(J.read(J.write(d)).problems.length, 0);
+    d.edges.push({ id: 'shared', fromNode: 'a', toNode: point.id });
+    d = M.edit(d, { op: 'reconnect', key: 'ab', end: 'to', node: 'b' }).doc;
+    assert.ok(d.nodes.find(x => x.id === point.id));
+    d = M.edit(d, { op: 'delete', key: 'shared', kind: 'edge' }).doc;
+    assert.equal(d.nodes.some(J.isAnchor), false);
+    const ordinary = { ...n('empty'), text: '', width: 0, height: 0, yavc: { shape: 'text' } };
+    d.nodes.push(ordinary);
+    assert.ok(M.edit(d, { op: 'delete', key: 'ab', kind: 'edge' }).doc.nodes.find(x => x.id === 'empty'));
+    assert.throws(() => M.edit(d, { op: 'reconnect', key: 'ab', end: 'from', node: null, x: Infinity, y: 0 }));
+});
+test('free-to-free connectors and deletion remove their owned point nodes', () => {
+    let d = M.edit(base(), { op: 'connect', from: 'a', to: null, x: 70, y: -50 });
+    const key = d.key;
+    d = M.edit(d.doc, { op: 'reconnect', key, end: 'from', node: null, x: 30, y: 100 });
+    assert.equal(d.doc.nodes.filter(J.isAnchor).length, 2);
+    assert.equal(M.edit(d.doc, { op: 'delete', key, kind: 'edge' }).doc.nodes.length, 2);
+});
+test('copying a node retains an attached free endpoint outside its box and remaps the connector', () => {
+    const d = M.edit(base(), { op: 'connect', from: 'a', x: 700, y: 700 }).doc;
+    const fragment = M.fragment(d, 'a', 'node');
+    assert.equal(fragment.nodes.length, 2); assert.equal(fragment.edges.length, 1);
+    const pasted = M.edit(d, { op: 'paste', text: J.write(fragment) }).doc;
+    assert.equal(pasted.nodes.filter(J.isAnchor).length, 2);
+    const edge = pasted.edges.at(-1);
+    assert.ok(pasted.nodes.find(x => x.id === edge.fromNode));
+    assert.ok(J.isAnchor(pasted.nodes.find(x => x.id === edge.toNode)));
+});
+test('interior drops are automatic and only a nearby side-centre pins the side', () => {
+    const d = base();
+    assert.deepEqual(M.attachment(d, { x: 350, y: 30 }, 12), { node: 'b', side: null });
+    assert.deepEqual(M.attachment(d, { x: 302, y: 30 }, 12), { node: 'b', side: 'left' });
+    assert.deepEqual(M.attachment(d, { x: 298, y: 30 }, 12), { node: 'b', side: 'left' });
+    assert.deepEqual(M.attachment(d, { x: 350, y: 30 }, 120), { node: 'b', side: null });
+    assert.deepEqual(M.attachment(d, { x: 302, y: 30 }, 1), { node: 'b', side: null });
+    assert.deepEqual(M.attachment(d, { x: -20.1, y: 99.3 }, 12), { node: null, x: -20, y: 99 });
+});

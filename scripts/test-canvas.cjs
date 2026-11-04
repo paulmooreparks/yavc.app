@@ -274,6 +274,118 @@ async function hostSmoke(engine) {
         throw err;
     } finally { await browser.close(); }
 }
+async function endpoints(engine) {
+    const browser = await playwright[engine].launch({ headless: true });
+    const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } }), page = await context.newPage(), errors = [];
+    page.on('pageerror', e => errors.push(e.message));
+    const action = (name, input = {}) => page.evaluate(({ name, input }) => window.pudlActions.run('yavc.diagrams/' + name + '@1', input, { grant: 'all' }), { name, input });
+    const text = async () => (await action('diagram')).text, doc = async () => JSON.parse(await text());
+    const idle = () => page.waitForFunction(() => document.querySelector('.dg-cv-editor') && !document.querySelector('.dg-place.sc-diagram-stale'));
+    const stage = page.locator('.dg-stage'), hit = id => page.locator(`.dg-cv-hit[data-id="${id}"]`);
+    const selectEdge = () => action('canvas-view', { op: 'select', key: 'ab', kind: 'edge' });
+    const filePoint = async (x, y) => {
+        const n = (await doc()).nodes.find(x => x.id === 'a');
+        return hit('a').evaluate((e, p) => {
+            const q = new DOMPoint(p.x - p.n.x + Number(e.getAttribute('x')), p.y - p.n.y + Number(e.getAttribute('y'))).matrixTransform(e.getScreenCTM());
+            return { x: q.x, y: q.y };
+        }, { n, x, y });
+    };
+    const dragEnd = async (end, to) => {
+        const b = await page.locator(`[data-kind="reconnect"][data-grip="${end}"]`).boundingBox(); assert.ok(b);
+        await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2); await page.mouse.down();
+        await page.mouse.move(to.x, to.y, { steps: 8 }); await page.mouse.up(); await idle();
+    };
+    try {
+        await page.goto(url); await page.locator('.dg .cm-editor').waitFor();
+        const data = fixture(); data.nodes.push(node('c', 180, 300)); data.edges[0].color = '4'; data.edges[0].extra = 'keep';
+        await action('new', { kind: 'canvas', text: JSON.stringify(data) }); await idle();
+        await page.evaluate(() => { const r = document.querySelector('.dg'); window.pudlCommands.run('fit', null, r); window.pudlCommands.run('cv-actual', null, r); });
+        const middle = await page.locator('.dg-cv-edge-hit[data-id="ab"]').evaluate(e => {
+            const p = e.getPointAtLength(e.getTotalLength() / 2).matrixTransform(e.getScreenCTM()); return { x: p.x, y: p.y };
+        });
+        await page.mouse.click(middle.x, middle.y);
+        assert.equal(await page.locator('[data-kind="reconnect"]').count(), 2);
+        const c = await hit('c').boundingBox();
+        await dragEnd('to', { x: c.x + c.width / 2 + 3, y: c.y + c.height / 2 });
+        let d = await doc(); assert.equal(d.edges[0].toNode, 'c'); assert.equal(d.edges[0].toSide, undefined);
+        assert.equal(d.edges[0].extra, 'keep'); assert.equal(d.edges[0].color, '4');
+        const b = await hit('b').boundingBox();
+        await dragEnd('to', { x: b.x + b.width / 2, y: b.y + 2 });
+        d = await doc(); assert.equal(d.edges[0].toNode, 'b'); assert.equal(d.edges[0].toSide, 'top');
+        const pinned = await text();
+        await dragEnd('to', await filePoint(80, 200));
+        d = await doc(); let anchor = d.nodes.find(n => n.yavc?.anchor);
+        assert.ok(anchor); assert.equal(anchor.x, 80); assert.equal(anchor.y, 200);
+        assert.equal(d.edges[0].toNode, anchor.id); assert.equal(d.edges[0].toSide, undefined);
+        assert.equal(await page.locator(`.dg-cv-hit[data-id="${anchor.id}"]`).count(), 0);
+        const free = await text();
+        await stage.focus(); await page.keyboard.press('Control+z'); await idle(); assert.equal(await text(), pinned);
+        await page.keyboard.press('Control+y'); await idle(); assert.equal(await text(), free);
+        await selectEdge(); await dragEnd('to', { x: c.x + c.width / 2, y: c.y + c.height / 2 });
+        d = await doc(); assert.equal(d.nodes.filter(n => n.yavc?.anchor).length, 0);
+
+        // A moving node previews the same automatic route that will be saved.
+        const beforeMove = await text();
+        await hit('c').click(); const cr = await hit('c').boundingBox();
+        await page.mouse.move(cr.x + cr.width / 2, cr.y + cr.height / 2); await page.keyboard.down('Alt'); await page.mouse.down();
+        await page.mouse.move(cr.x + cr.width / 2 - 380, cr.y + cr.height / 2 - 500, { steps: 8 });
+        assert.equal(await text(), beforeMove);
+        const preview = await page.locator('[data-preview-edge="ab"]').getAttribute('d');
+        const expected = await page.evaluate(data => {
+            const origin = document.querySelector('.dg-cv-hit[data-id="a"]'), a = data.nodes.find(n => n.id === 'a');
+            const ox = a.x - Number(origin.getAttribute('x')), oy = a.y - Number(origin.getAttribute('y'));
+            data.nodes.find(n => n.id === 'c').x -= 380; data.nodes.find(n => n.id === 'c').y -= 500;
+            const r = window.yavcCanvas.route(data.edges[0], data.nodes);
+            r.points = r.points.map(p => [p[0] - ox, p[1] - oy]);
+            return { d: window.yavcCanvas.path(r), side: r.to };
+        }, d);
+        assert.equal(preview, expected.d); assert.equal(expected.side, 'bottom');
+        await page.mouse.up(); await page.keyboard.up('Alt'); await idle();
+        assert.equal((await doc()).nodes.find(n => n.id === 'c').y, -200);
+        await stage.focus(); await page.keyboard.press('Control+z'); await idle();
+
+        // Escape and text edits cancel an endpoint drag without allocating a point.
+        await selectEdge(); const beforeCancel = await text();
+        let g = await page.locator('[data-kind="reconnect"][data-grip="from"]').boundingBox();
+        await page.mouse.move(g.x + 8, g.y + 8); await page.mouse.down(); await page.mouse.move(g.x + 65, g.y + 65);
+        await page.keyboard.press('Escape'); await page.mouse.up(); assert.equal(await text(), beforeCancel);
+        await selectEdge(); g = await page.locator('[data-kind="reconnect"][data-grip="from"]').boundingBox();
+        await page.mouse.move(g.x + 8, g.y + 8); await page.mouse.down(); await page.mouse.move(g.x + 40, g.y + 60);
+        const updated = await doc(); updated.nodes[0].text = 'Newer source';
+        await action('set-text', { text: JSON.stringify(updated) }); await page.mouse.up(); await idle();
+        assert.equal((await doc()).nodes[0].text, 'Newer source'); assert.equal((await doc()).nodes.some(n => n.yavc?.anchor), false);
+
+        // Keyboard reconnect supports both a free point and an automatic node.
+        await selectEdge(); await stage.focus(); await page.keyboard.press('e');
+        await page.locator('dialog[open]').waitFor();
+        await page.locator('dialog [data-set="target"]').selectOption('');
+        await page.getByRole('spinbutton', { name: 'X', exact: true }).fill('');
+        await page.getByRole('spinbutton', { name: 'Y', exact: true }).fill('220');
+        await page.getByRole('button', { name: 'Reconnect', exact: true }).click();
+        await page.waitForFunction(() => document.activeElement?.getAttribute('aria-invalid') === 'true');
+        assert.equal(await page.getByRole('spinbutton', { name: 'X', exact: true }).evaluate(e => e === document.activeElement), true);
+        await page.getByRole('spinbutton', { name: 'X', exact: true }).fill('-80');
+        await page.getByRole('button', { name: 'Reconnect', exact: true }).click(); await idle();
+        assert.equal((await doc()).nodes.find(n => n.yavc?.anchor).x, -80);
+        assert.equal((await doc()).nodes.find(n => n.yavc?.anchor).y, 220);
+        await selectEdge(); await stage.focus(); await page.keyboard.press('Shift+e');
+        await page.locator('dialog[open]').waitFor();
+        await page.locator('dialog [data-set="target"]').selectOption('b'); await page.locator('dialog [data-set="side"]').selectOption('');
+        await page.getByRole('button', { name: 'Reconnect', exact: true }).click(); await idle();
+        assert.equal((await doc()).edges[0].fromNode, 'b'); assert.equal((await doc()).edges[0].fromSide, undefined);
+        await action('canvas-edit', { op: 'reconnect', key: 'ab', end: 'from', node: null, x: -80, y: 100 }); await idle();
+        assert.equal((await doc()).nodes.filter(n => n.yavc?.anchor).length, 2);
+        await page.screenshot({ path: path.join(evidence, engine + '-endpoints.png') });
+        const exported = await action('render', { format: 'png', scale: 1 }); assert.ok(exported.width > 0 && exported.height > 0);
+        await action('canvas-edit', { op: 'delete', key: 'ab', kind: 'edge' }); await idle();
+        assert.equal((await doc()).nodes.filter(n => n.yavc?.anchor).length, 0);
+        assert.deepEqual(errors, []);
+        console.log(engine + ': endpoint reattachment, free points, live automatic routes, undo, cancellation, keyboard and PNG export passed');
+    } catch (err) {
+        await page.screenshot({ path: path.join(evidence, engine + '-endpoint-failure-' + Date.now() + '.png') }).catch(() => {});
+        throw err;
+    } finally { await browser.close(); }
+}
 async function startup(engine) {
     const browser = await playwright[engine].launch({ headless: true });
     try {
@@ -302,6 +414,6 @@ async function startup(engine) {
     } finally { await browser.close(); }
 }
 (async () => {
-    const args = process.argv.slice(2), host = args.includes('--host'), boot = args.includes('--startup'), engines = args.filter(x => x !== '--host' && x !== '--startup');
-    for (const engine of engines.length ? engines : ['chromium']) await (boot ? startup(engine) : host ? hostSmoke(engine) : run(engine));
+    const args = process.argv.slice(2), host = args.includes('--host'), boot = args.includes('--startup'), ends = args.includes('--endpoints'), engines = args.filter(x => !x.startsWith('--'));
+    for (const engine of engines.length ? engines : ['chromium']) await (ends ? endpoints(engine) : boot ? startup(engine) : host ? hostSmoke(engine) : run(engine));
 })().catch(err => { console.error(err); process.exitCode = 1; });

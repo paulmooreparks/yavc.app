@@ -7,7 +7,7 @@
     var NS = 'http://www.w3.org/2000/svg';
     function attach(place, stage, host) {
         var M = window.yavcCanvasModel, J = window.yavcCanvas, doc, out, picture, selection = null;
-        var camera = null, scale = 1, autoFit = true, drag = null, space = false, destroyed = false;
+        var camera = null, scale = 1, autoFit = true, drag = null, space = false, destroyed = false, previewId;
         var layer = document.createElementNS(NS, 'svg'), grips = document.createElement('div');
         layer.setAttribute('class', 'dg-cv-layer'); layer.setAttribute('aria-hidden', 'true');
         grips.className = 'dg-cv-grips';
@@ -61,7 +61,11 @@
             var n = selectedNode(), b = n && out.boxes.find(function (x) { return x.id === n.id; });
             if (!b) {
                 var edge = out.edges.find(function (e) { return e.id === selection.id; });
-                if (edge) { layer.appendChild(svg('path', { d: edge.d, 'class': 'dg-cv-ring dg-cv-line-ring' })); }
+                if (edge) {
+                    layer.appendChild(svg('path', { d: edge.d, 'class': 'dg-cv-ring dg-cv-line-ring' }));
+                    grip('from', 'Move the Start Endpoint', edge.fromPoint[0] + out.origin[0], edge.fromPoint[1] + out.origin[1], 'reconnect');
+                    grip('to', 'Move the End Endpoint', edge.toPoint[0] + out.origin[0], edge.toPoint[1] + out.origin[1], 'reconnect');
+                }
                 return;
             }
             layer.appendChild(svg('rect', { x: b.x, y: b.y, width: b.w, height: b.h, 'class': 'dg-cv-ring' }));
@@ -82,6 +86,8 @@
         }
         function show(d, o, pic) {
             cancel(); doc = d; out = o; picture = pic;
+            var used = new Set(doc.nodes.concat(doc.edges).map(function (n) { return n.id; })), i = 0;
+            do { previewId = '@pointer-' + (++i); } while (used.has(previewId));
             place.append(layer, grips);
             layer.replaceChildren();
             /* Edges are drawn above nodes by the renderer, so their hits
@@ -100,19 +106,54 @@
         function preview(box, guides) {
             layer.querySelectorAll('.dg-cv-preview, .dg-cv-guide').forEach(function (e) { e.remove(); });
             var n = selectedNode(), moving = drag.kind === 'move' ? M.members(doc, n.id) : [];
-            [Object.assign({}, n, box)].concat(doc.nodes.filter(function (x) { return moving.indexOf(x.id) >= 0; }).map(function (x) { return Object.assign({}, x, { x: x.x + box.x - n.x, y: x.y + box.y - n.y }); })).forEach(function (x) {
+            var changed = new Set([n.id].concat(moving));
+            [Object.assign({}, n, box)].concat(doc.nodes.filter(function (x) { return x.id !== n.id && changed.has(x.id) && !J.isAnchor(x); }).map(function (x) { return Object.assign({}, x, { x: x.x + box.x - n.x, y: x.y + box.y - n.y }); })).forEach(function (x) {
                 layer.appendChild(svg('rect', { x: x.x - out.origin[0], y: x.y - out.origin[1], width: x.width, height: x.height, 'class': 'dg-cv-preview' }));
             });
+            var nodes = doc.nodes.map(function (x) {
+                if (x.id === n.id) { return Object.assign({}, x, box); }
+                return changed.has(x.id) ? Object.assign({}, x, { x: x.x + box.x - n.x, y: x.y + box.y - n.y }) : x;
+            });
+            J.routes(doc.edges.filter(function (e) { return changed.has(e.fromNode) || changed.has(e.toNode); }), nodes).forEach(function (r) { previewRoute(r.id, r.route); });
             guides.forEach(function (g) {
                 var at = g.at - out.origin[g.axis === 'x' ? 0 : 1];
                 layer.appendChild(svg('line', { x1: g.axis === 'x' ? at : camera.x - out.origin[0], x2: g.axis === 'x' ? at : camera.x + camera.w - out.origin[0], y1: g.axis === 'y' ? at : camera.y - out.origin[1], y2: g.axis === 'y' ? at : camera.y + camera.h - out.origin[1], 'class': 'dg-cv-guide' }));
             });
+        }
+        function previewRoute(id, r) {
+            var g = picture.querySelector('g[data-edge="' + CSS.escape(id) + '"]');
+            if (g) { g.classList.add('dg-cv-route-muted'); }
+            r.points = r.points.map(function (p) { return [p[0] - out.origin[0], p[1] - out.origin[1]]; });
+            layer.appendChild(svg('path', { d: J.path(r), 'class': 'dg-cv-preview', 'data-preview-edge': id }));
+        }
+        function connectionRequest(d, p) {
+            var a = M.attachment(doc, p, 12 / scale, d.kind === 'connect' ? d.node.id : null);
+            return d.kind === 'connect'
+                ? { op: 'connect', from: d.node.id, fromSide: d.handle, to: a.node, toSide: a.side, x: a.x, y: a.y }
+                : { op: 'reconnect', kind: 'edge', key: d.edge.id, end: d.handle, node: a.node, side: a.side, x: a.x, y: a.y };
+        }
+        function previewConnection(d, p) {
+            layer.querySelectorAll('.dg-cv-preview').forEach(function (x) { x.remove(); });
+            var req = connectionRequest(d, p), end = d.kind === 'connect' ? 'to' : d.handle;
+            var edge = d.kind === 'connect' ? { id: previewId, fromNode: d.node.id, fromSide: d.handle } : Object.assign({}, d.edge);
+            var target = d.kind === 'connect' ? req.to : req.node, side = d.kind === 'connect' ? req.toSide : req.side;
+            edge[end + 'Node'] = target || previewId;
+            if (side) { edge[end + 'Side'] = side; } else { delete edge[end + 'Side']; }
+            var nodes = target ? doc.nodes : doc.nodes.concat([{ id: previewId, x: req.x, y: req.y, width: 0, height: 0 }]);
+            previewRoute(edge.id, J.route(edge, nodes));
+            if (target) {
+                var b = out.boxes.find(function (x) { return x.id === target; });
+                if (b) { layer.appendChild(svg('rect', { x: b.x, y: b.y, width: b.w, height: b.h, 'class': 'dg-cv-preview' })); }
+            }
         }
         function down(e) {
             if (drag || !out || !camera || !host.enabled() || (e.button !== 0 && e.button !== 1)) { return; }
             var grip = e.target.closest('[data-grip]'), hit = e.target.closest('[data-id]'), p = point(e);
             stage.focus({ preventScroll: true });
             if (space || e.button === 1 || host.panTool()) { drag = { kind: 'pan', px: e.clientX, py: e.clientY, camera: Object.assign({}, camera) }; }
+            else if (grip && grip.dataset.kind === 'reconnect' && selection && selection.kind === 'edge') {
+                drag = { kind: 'reconnect', handle: grip.dataset.grip, edge: doc.edges.find(function (x) { return x.id === selection.id; }), point: p };
+            }
             else if (grip && selectedNode()) { drag = { kind: grip.dataset.kind, handle: grip.dataset.grip, node: Object.assign({}, selectedNode()), point: p }; }
             else if (host.tool()) { host.create(Math.round(p.x), Math.round(p.y)); e.preventDefault(); return; }
             else if (hit) {
@@ -133,9 +174,8 @@
             if (host.text() !== drag.text || !host.enabled()) { cancel(); return; }
             var p = point(e), dx = Math.round(p.x - drag.point.x), dy = Math.round(p.y - drag.point.y);
             drag.moved = drag.moved || Math.hypot(e.clientX - drag.px, e.clientY - drag.py) >= 3;
-            if (drag.kind === 'connect') {
-                layer.querySelectorAll('.dg-cv-preview').forEach(function (x) { x.remove(); });
-                layer.appendChild(svg('line', { x1: drag.point.x - out.origin[0], y1: drag.point.y - out.origin[1], x2: p.x - out.origin[0], y2: p.y - out.origin[1], 'class': 'dg-cv-preview' }));
+            if (drag.kind === 'connect' || drag.kind === 'reconnect') {
+                previewConnection(drag, p);
                 return;
             }
             var box = drag.kind === 'move' ? Object.assign({}, drag.node, { x: drag.node.x + dx, y: drag.node.y + dy }) : M.resize(drag.node, drag.handle, dx, dy, e.shiftKey);
@@ -154,17 +194,11 @@
             if (!drag || drag.pointer !== e.pointerId) { return; }
             move(e);
             if (!drag) { return; }
-            var d = drag, p = point(e), target;
-            if (d.kind === 'connect') {
-                var nodes = doc.nodes.slice().reverse();
-                target = nodes.find(function (x) { return p.x >= x.x && p.x <= x.x + x.width && p.y >= x.y && p.y <= x.y + x.height && x.id !== d.node.id; });
-            }
+            var d = drag, p = point(e);
             cancel();
             if (host.text() !== d.text || !d.moved || !host.enabled()) { return; }
-            if (d.kind === 'connect' && target) {
-                var sides = [['left', Math.abs(p.x - target.x)], ['right', Math.abs(p.x - target.x - target.width)], ['top', Math.abs(p.y - target.y)], ['bottom', Math.abs(p.y - target.y - target.height)]];
-                sides.sort(function (a, b) { return a[1] - b[1]; });
-                host.edit({ op: 'connect', from: d.node.id, fromSide: d.handle, to: target.id, toSide: sides[0][0] }, d.text);
+            if (d.kind === 'connect' || d.kind === 'reconnect') {
+                host.edit(connectionRequest(d, p), d.text);
             } else if (d.box) {
                 host.edit(d.kind === 'move' ? { op: 'move', key: d.node.id, dx: d.box.x - d.node.x, dy: d.box.y - d.node.y } : { op: 'resize', key: d.node.id, x: d.box.x, y: d.box.y, width: d.box.width, height: d.box.height }, d.text);
             }
@@ -174,6 +208,7 @@
             if (d && place.hasPointerCapture(d.pointer)) { place.releasePointerCapture(d.pointer); }
             place.classList.remove('dg-cv-dragging');
             layer.querySelectorAll('.dg-cv-preview, .dg-cv-guide').forEach(function (e) { e.remove(); });
+            if (picture) { picture.querySelectorAll('.dg-cv-route-muted').forEach(function (e) { e.classList.remove('dg-cv-route-muted'); }); }
         }
         function wheel(e) {
             if (!camera || !host.enabled()) { return; }
@@ -184,7 +219,7 @@
         }
         function cycle(delta) {
             if (!doc) { return; }
-            var items = doc.nodes.map(function (n) { return { kind: 'node', id: n.id }; }).concat(doc.edges.map(function (e) { return { kind: 'edge', id: e.id }; }));
+            var items = doc.nodes.filter(function (n) { return !J.isAnchor(n); }).map(function (n) { return { kind: 'node', id: n.id }; }).concat(doc.edges.map(function (e) { return { kind: 'edge', id: e.id }; }));
             var i = items.findIndex(function (x) { return selection && x.kind === selection.kind && x.id === selection.id; }), next = i + delta;
             if (next < 0 || next >= items.length) { select(null); return false; }
             select(items[next]);

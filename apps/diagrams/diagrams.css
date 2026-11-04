@@ -172,6 +172,8 @@
 .dg-cv-grips .dg-cv-grip { position: absolute; width: 12px; height: 12px; min-width: 12px; min-height: 12px; padding: 0; transform: translate(-50%, -50%); pointer-events: auto; }
 .dg-cv-grips .dg-cv-connect { width: 16px; height: 16px; border-radius: 50%; cursor: crosshair; }
 .dg-cv-grips .dg-cv-resize { border-radius: 2px; }
+.dg-cv-grips .dg-cv-reconnect { width: 16px; height: 16px; border-radius: 50%; cursor: crosshair; }
+.dg-cv-route-muted { opacity: 0.2; }
 .dg-cv-grips .dg-cv-connect::after { content: ''; width: 8px; height: 8px; background: currentColor; mask: var(--glyph-plus) center / contain no-repeat; }
 .dg-cv-editor.dg-cv-dragging, .dg-cv-editor.dg-cv-dragging .dg-cv-hit { cursor: grabbing; }
 .dg-place.sc-diagram-stale :is(.dg-cv-layer, .dg-cv-grips) { visibility: hidden; }
