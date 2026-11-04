@@ -831,7 +831,7 @@
     {
       "ref": "yavc.diagrams/canvas-edit@1",
       "title": "Edit a Canvas",
-      "description": "One undoable JSON Canvas edit. create uses type, shape, x and y; move uses key, dx and dy (a group carries nodes fully inside it); resize uses key and x, y, width or height; connect uses from, to and their sides; set uses key, kind, property and value (null removes it); delete and duplicate use key; paste uses text containing JSON Canvas nodes and internal edges and remaps their IDs; order uses key and direction. kind distinguishes a node from an edge with the same ID. Returns the changed item ID and drawing status. No file is saved by this action.",
+      "description": "One undoable JSON Canvas edit. create uses type, shape, x and y; move uses key, dx and dy (a group carries nodes fully inside it); resize uses key and x, y, width or height; connect uses from, to and their sides; set uses key, kind, property and value (null removes it); delete and duplicate use key; paste uses text containing JSON Canvas nodes and internal edges and remaps their IDs; order uses key and direction. kind distinguishes a node from an edge with the same ID. Returns the changed item ID and drawing status. No file is saved by this action. reconnect changes one connector endpoint, using key, end (from/to), node and optional side; null node leaves a free point at x/y, and null side attaches automatically. connect also accepts a free target at x/y when to is omitted or null. Automatic sides update as shapes move.",
       "live": true,
       "inputSchema": {
         "type": "object",
@@ -854,7 +854,8 @@
               "delete",
               "duplicate",
               "paste",
-              "order"
+              "order",
+              "reconnect"
             ]
           },
           "key": {
@@ -963,7 +964,10 @@
             "maxLength": 1024
           },
           "to": {
-            "type": "string",
+            "type": [
+              "string",
+              "null"
+            ],
             "maxLength": 1024
           },
           "fromSide": {
@@ -976,6 +980,28 @@
           },
           "toSide": {
             "enum": [
+              "top",
+              "right",
+              "bottom",
+              "left"
+            ]
+          },
+          "end": {
+            "enum": [
+              "from",
+              "to"
+            ]
+          },
+          "node": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 1024
+          },
+          "side": {
+            "enum": [
+              null,
               "top",
               "right",
               "bottom",

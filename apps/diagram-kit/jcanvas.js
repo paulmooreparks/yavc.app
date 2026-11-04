@@ -33,6 +33,11 @@
         return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     }
     function isObj(v) { return v !== null && typeof v === 'object' && !Array.isArray(v); }
+    function isAnchor(n) { return !!(n && n.yavc && n.yavc.anchor === true); }
+    function routes(edges, nodes) {
+        var by = Object.create(null); nodes.forEach(function (n) { by[n.id] = n; });
+        return edges.map(function (e) { return { id: e.id, route: route(e, by) }; });
+    }
     function isColour(v) { return typeof v === 'string' && (/^#[0-9a-fA-F]{6}$/.test(v) || /^#[0-9a-fA-F]{3}$/.test(v) || /^[1-6]$/.test(v)); }
 
     /* === Reading ======================================================== */
@@ -117,6 +122,8 @@
         }
         if (n.yavc != null) {
             if (!isObj(n.yavc)) { return where + '\'s yavc property must be an object.'; }
+            if (n.yavc.anchor != null && typeof n.yavc.anchor !== 'boolean') { return where + '\'s anchor must be a boolean.'; }
+            if (isAnchor(n) && (n.type !== 'text' || n.text !== '' || n.width !== 0 || n.height !== 0 || n.yavc.shape !== 'text' || !Number.isSafeInteger(n.x) || !Number.isSafeInteger(n.y))) { return where + ' is a point anchor and must be empty text with shape text, zero size and integer coordinates.'; }
             if (n.yavc.shape != null && SHAPES.indexOf(n.yavc.shape) < 0) { return where + '\'s shape "' + n.yavc.shape + '" is not one of ' + SHAPES.join(', ') + '.'; }
             var lp = lineProblem(n.yavc);
             if (lp) { return where + lp; }
@@ -199,7 +206,14 @@
         var dx = bx - ax, dy = by - ay, horizontal = Math.abs(dx) >= Math.abs(dy);
         var from = e.fromSide || (horizontal ? (dx >= 0 ? 'right' : 'left') : (dy >= 0 ? 'bottom' : 'top'));
         var to = e.toSide || (horizontal ? (dx >= 0 ? 'left' : 'right') : (dy >= 0 ? 'top' : 'bottom'));
-        return [from, to];
+        var froms = e.fromSide ? [from] : [from].concat(SIDES.filter(function (s) { return s !== from; }));
+        var tos = e.toSide ? [to] : [to].concat(SIDES.filter(function (s) { return s !== to; }));
+        var best = null, distance = Infinity;
+        froms.forEach(function (f) { tos.forEach(function (t) {
+            var p = sidePoint(a, f), q = sidePoint(b, t), d = Math.hypot(p[0] - q[0], p[1] - q[1]);
+            if (d < distance) { distance = d; best = [f, t]; }
+        }); });
+        return best;
     }
     var STUB = 20;
     /* A connector's route. Elbow runs out from each side, then horizontally
@@ -379,6 +393,7 @@
             return { stroke: c || pal.line, fill: c ? mixHex(c, pal.surface, 0.14) : pal.surface, text: pal.text };
         }
         doc.nodes.forEach(function (n) {
+            if (isAnchor(n)) { return; }
             var x = n.x - ox, y = n.y - oy, cols = nodeColours(n), y2 = isObj(n.yavc) ? n.yavc : {};
             var lw = y2.lineWidth || (n.type === 'group' ? 1 : 2), dash = dashOf(y2, lw);
             var line = { fill: cols.fill, stroke: cols.stroke, 'stroke-width': lw };
@@ -416,7 +431,7 @@
             var fromHead = y3.fromHead || (e.fromEnd === 'arrow' ? 'arrow' : 'none');
             var toHead = y3.toHead || (e.toEnd === 'none' ? 'none' : 'arrow');
             var d = pathD(r);
-            paths.push({ id: e.id, d: d });
+            paths.push({ id: e.id, d: d, fromPoint: r.points[0].slice(), toPoint: r.points[r.points.length - 1].slice() });
             out.push('<g data-edge="' + esc(e.id) + '"><path d="' + d + '" fill="none" stroke="' + esc(colour) + '" stroke-width="' + lw + '"' + (dash ? ' stroke-dasharray="' + dash + '"' : '') + '/>' +
                 headAt(fromHead, r.points[0], endAngle(r, true), colour, lw, pal.bg) + headAt(toHead, r.points[r.points.length - 1], endAngle(r, false), colour, lw, pal.bg));
             if (e.label) {
@@ -444,7 +459,7 @@
         dark: ['#ff6b6b', '#ff9f43', '#f1c40f', '#66d17a', '#3cc8d8', '#b18cff']
     });
 
-    var api = Object.freeze({ read: read, write: write, render: render, route: function (e, nodes) { var by = Object.create(null); nodes.forEach(function (n) { by[n.id] = n; }); return route(e, by); },
+    var api = Object.freeze({ read: read, write: write, render: render, isAnchor: isAnchor, path: pathD, routes: routes, route: function (e, nodes) { return routes([e], nodes)[0].route; },
         PRESETS: PRESETS, SHAPES: SHAPES.slice(), HEADS: HEADS.slice(), ROUTES: ROUTES.slice(), LINES: LINES.slice(), EXT_VERSION: EXT_VERSION, LIMITS: Object.freeze({ text: MAX_TEXT, items: MAX_ITEMS }) });
     if (typeof module === 'object' && module.exports) { module.exports = api; } else { root.yavcCanvas = api; }
 })(typeof window !== 'undefined' ? window : this);

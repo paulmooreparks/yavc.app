@@ -180,3 +180,29 @@ test('every head draws', () => {
     assert.ok(!svg.includes('NaN'), head);
   }
 });
+
+test('automatic anchors use the nearest side centres, change on movement, and respect pinned sides', () => {
+  const a = node('a', 0, 0), b = node('b', 300, 0), e = { id: 'ab', fromNode: 'a', toNode: 'b' };
+  assert.deepEqual([jc.route(e, [a, b]).from, jc.route(e, [a, b]).to], ['right', 'left']);
+  const above = { ...b, x: 0, y: -200 };
+  assert.deepEqual([jc.route(e, [a, above]).from, jc.route(e, [a, above]).to], ['top', 'bottom']);
+  const pinned = jc.route({ ...e, toSide: 'left' }, [a, above]);
+  assert.equal(pinned.to, 'left');
+  const resized = jc.route(e, [a, { ...b, x: -100, y: -200, width: 1000, height: 60 }]);
+  const spots = n => [[n.x+n.width/2,n.y], [n.x+n.width,n.y+n.height/2], [n.x+n.width/2,n.y+n.height], [n.x,n.y+n.height/2]];
+  const expected = Math.min(...spots(a).flatMap(p => spots({ ...b, x: -100, y: -200, width: 1000, height: 60 }).map(q => Math.hypot(p[0]-q[0],p[1]-q[1]))));
+  assert.equal(Math.hypot(resized.points[0][0]-resized.points.at(-1)[0], resized.points[0][1]-resized.points.at(-1)[1]), expected);
+});
+test('point anchors validate, draw only their connectors, and retain endpoint geometry for controls', () => {
+  const p = { id: 'point', type: 'text', x: -80, y: 190, width: 0, height: 0, text: '', yavc: { shape: 'text', anchor: true } };
+  const d = { nodes: [node('a', 0, 0), p], edges: [{ id: 'ap', fromNode: 'a', toNode: 'point' }] };
+  assert.ok(jc.read(file(d)).doc);
+  for (const bad of [{ ...p, text: 'hidden' }, { ...p, width: 1 }, { ...p, yavc: { anchor: 'true' } }]) {
+    assert.equal(jc.read(file({ ...d, nodes: [node('a',0,0), bad] })).doc, null);
+  }
+  const out = jc.render(d, { palette: PALETTE });
+  assert.equal(out.boxes.length, 1); assert.ok(!out.svg.includes('data-node="point"'));
+  assert.deepEqual(out.edges[0].toPoint, [-80-out.origin[0],190-out.origin[1]]);
+  const plain = JSON.parse(file(d)); delete plain.nodes[1].yavc.anchor;
+  assert.ok(jc.read(file(plain)).doc);
+});
