@@ -1,6 +1,6 @@
 # Editing follow-ups
 
-Paul asked to finish the shared LSP round before discussing these ideas, then authorised starting the follow-ups on 5 November 2026. The LSP and the subsequent Drawing Tool/glyph changes are merged. The installed local release is v0.2.17. The branch `codex/canvas-editing-batch` implements the combined round below, including the later Inspector-width and segment-folding corrections.
+The installed local release is v0.2.18, including the shared LSP, inline shape text, independent colors, Canvas templates and diagram settings. The branch `codex/editor-productivity-batch` assembles the next combined candidate. Earlier requests below retain their context; completed work is described in the design decisions.
 
 ## Commands and Inspector
 
@@ -18,7 +18,7 @@ Paul asked to finish the shared LSP round before discussing these ideas, then au
 
 JSON Canvas remains the format. These discussions do not reopen the decision to retain it while implementing LSP support.
 
-## Next combined round
+## Completed Canvas round
 
 On 5 November 2026 Paul asked for substantive batches rather than a review and full test cycle for each small UI adjustment. The Canvas editing batch includes the following work in one candidate:
 
@@ -30,3 +30,16 @@ On 5 November 2026 Paul asked for substantive batches rather than a review and f
 The implementation should settle the file-extension and interaction contracts together, update schema assistance with any new document properties, and test the combined workflows. Focused checks may run during implementation, but the complete repository gate and combined browser/review pass belong to the assembled candidate. A concrete failure or subsequent code change can require another pass; cosmetic increments alone should not create separate candidates.
 
 The shared customizable toolbar is a separate cross-app batch for Diagrams, Slides and Editor/Docs. Its design should consume the existing command tables and host configuration rather than introduce another command registry.
+
+## Current productivity round
+
+Paul asked for the Inspector control-sizing and broken Theme Default corrections to join the substantive batch on 5 November 2026. This candidate combines the following work before one review and full check cycle:
+
+- Editor saves retain newer edits, serialize writes per tab, guard late acknowledgements and reconfigure the originating tab after Save As.
+- The Canvas Outline shares selection with the drawing/source and supports multiple selection and keyboard access.
+- Canvas alignment and distribution move selected nodes and groups through the source history and agent action contract.
+- F6 and Shift+F6 move between visible editing panes without trapping focus on pointer grips.
+- Inspector segments and menu buttons keep their natural widths while retaining whole-label wrapping and glyph-only folding.
+- Theme Default removes the background override and visibly restores the host theme color.
+
+Desktop packaging, the documented host adapter, desktop-webview acceptance and revision conflict handling remain migration gates. Finishing these browser features does not establish desktop integration readiness by itself.

@@ -8,6 +8,25 @@ const J = require('../../diagram-kit/jcanvas.js');
 const n = (id, x = 0, y = 0, width = 100, height = 60) => ({ id, type: 'text', x, y, width, height, text: id });
 const base = () => ({ nodes: [n('a'), n('b', 300)], edges: [{ id: 'ab', fromNode: 'a', toNode: 'b' }], custom: { keep: true } });
 
+test('arranging selected units preserves groups, unknown data and the original source', () => {
+    const source = { nodes: [n('a', -10, 20, 30), n('b', 100, 40, 50), n('c', 300, 100, 70)], edges: [], custom: { keep: true } };
+    const items = source.nodes.map(n => ({ id: n.id, kind: 'node' }));
+    const aligned = M.edit(source, { op: 'align', items, direction: 'middle' });
+    assert.deepEqual(aligned.doc.nodes.map(n => n.y), [60, 60, 60]);
+    assert.deepEqual(aligned.selection, items); assert.deepEqual(aligned.doc.custom, source.custom);
+    const spread = M.edit(source, { op: 'distribute', items, direction: 'horizontal' });
+    assert.deepEqual(spread.doc.nodes.map(n => n.x), [-10, 135, 300]);
+    assert.equal(source.nodes[1].x, 100);
+    const grouped = { nodes: [{ ...n('g', 100, 100, 200, 200), type: 'group', label: 'Group' }, n('child', 130, 140, 30, 20), n('other', 500, 0)], edges: [] };
+    delete grouped.nodes[0].text;
+    const groupItems = grouped.nodes.map(n => ({ id: n.id, kind: 'node' }));
+    const out = M.edit(grouped, { op: 'align', items: groupItems, direction: 'left' }).doc;
+    assert.equal(out.nodes[1].x - out.nodes[0].x, 30); assert.equal(out.nodes[2].x, 100);
+    assert.throws(() => M.edit(grouped, { op: 'distribute', items: groupItems, direction: 'horizontal' }), /three independent/);
+    assert.throws(() => M.edit(base(), { op: 'align', items: [{ id: 'a', kind: 'node' }, { id: 'ab', kind: 'edge' }], direction: 'left' }), /only nodes/);
+    assert.throws(() => M.edit(source, { op: 'align', items, direction: 'bogus' }), /supported alignment/);
+});
+
 test('independent node colors and document settings validate and reset without losing other data', () => {
     const original = base(); original.nodes[0].color = '5'; original.nodes[0].yavc = { custom: 'kept' };
     let doc = M.edit(original, { op: 'set', key: 'a', property: 'fillColor', value: '#123456' }).doc;
@@ -163,6 +182,7 @@ test('drawing order includes groups in the file order', () => {
     assert.ok(first.indexOf('data-node="g"') > first.indexOf('data-node="b"'));
     const changed = M.edit(doc, { op: 'order', key: 'g', direction: 'back' });
     assert.deepEqual(changed.doc.nodes.map(n => n.id), ['a', 'g', 'b']);
+    assert.throws(() => M.edit(doc, { op: 'order', key: 'g', direction: 'left' }), /forward or back/);
     assert.deepEqual(J.render(changed.doc, { palette: pal }).boxes.map(n => n.id), ['a', 'g', 'b']);
 });
 

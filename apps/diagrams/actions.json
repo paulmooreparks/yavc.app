@@ -857,7 +857,9 @@
               "paste",
               "order",
               "reconnect",
-              "document"
+              "document",
+              "align",
+              "distribute"
             ]
           },
           "key": {
@@ -945,9 +947,18 @@
             "maxLength": 2097152
           },
           "direction": {
+            "description": "For order: forward or back. For align with items: left, center, right, top, middle or bottom, relative to the selection bounds. For distribute with items: horizontal or vertical equal gaps, retaining outer positions. Select at least two independent node/group units for alignment or three for distribution; groups carry their contents. Mixed node/edge selections are refused.",
             "enum": [
               "forward",
-              "back"
+              "back",
+              "left",
+              "center",
+              "right",
+              "top",
+              "middle",
+              "bottom",
+              "horizontal",
+              "vertical"
             ]
           },
           "x": {

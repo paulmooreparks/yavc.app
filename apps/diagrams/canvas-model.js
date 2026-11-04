@@ -45,7 +45,9 @@
             var key = JSON.stringify([s.kind, s.id]);
             if (!seen.has(key)) { seen.add(key); selected.push({ id: s.id, kind: s.kind }); }
         });
-        if (req.op === 'move') {
+        if (req.op === 'align' || req.op === 'distribute') {
+            arrange(doc, selected, req);
+        } else if (req.op === 'move') {
             var ids = new Set(movingIds(doc, selected)), dx = integer(req.dx), dy = integer(req.dy);
             if (!ids.size) { throw new Error('Select a node to move.'); }
             doc.nodes.forEach(function (n) { if (ids.has(n.id)) { n.x = integer(n.x + dx); n.y = integer(n.y + dy); } });
@@ -67,6 +69,40 @@
             pruneAnchors(doc); selected = [];
         } else { throw new Error('This operation requires a single item.'); }
         var result = checked(doc); result.selection = selected; return result;
+    }
+    function arrange(doc, selected, req) {
+        if (selected.some(function (s) { return s.kind !== 'node'; })) { throw new Error('Choose only nodes to align or distribute.'); }
+        var chosen = selected.map(function (s) { return node(doc, s.id); });
+        /* A selected group is one unit, including any selected descendants. */
+        var units = chosen.filter(function (n) { return !chosen.some(function (g) { return g.type === 'group' && inside(n, g); }); });
+        if (units.length < (req.op === 'align' ? 2 : 3)) { throw new Error('Choose ' + (req.op === 'align' ? 'two' : 'three') + ' independent nodes or groups.'); }
+        var positions = new Map(), axis, size;
+        if (req.op === 'align') {
+            var modes = { left: ['x', 'width', 0], center: ['x', 'width', 0.5], right: ['x', 'width', 1], top: ['y', 'height', 0], middle: ['y', 'height', 0.5], bottom: ['y', 'height', 1] };
+            var mode = modes[req.direction];
+            if (!mode) { throw new Error('Choose a supported alignment.'); }
+            axis = mode[0]; size = mode[1];
+            var lo = Math.min.apply(null, units.map(function (n) { return n[axis]; }));
+            var hi = Math.max.apply(null, units.map(function (n) { return n[axis] + n[size]; }));
+            var at = lo + (hi - lo) * mode[2];
+            units.forEach(function (n) { positions.set(n.id, Math.round(at - n[size] * mode[2])); });
+        } else {
+            if (['horizontal', 'vertical'].indexOf(req.direction) < 0) { throw new Error('Choose horizontal or vertical distribution.'); }
+            axis = req.direction === 'horizontal' ? 'x' : 'y'; size = axis === 'x' ? 'width' : 'height';
+            units.sort(function (a, b) { return a[axis] - b[axis] || doc.nodes.indexOf(a) - doc.nodes.indexOf(b); });
+            var start = units[0][axis], last = units[units.length - 1];
+            var gap = (last[axis] + last[size] - start - units.reduce(function (sum, n) { return sum + n[size]; }, 0)) / (units.length - 1);
+            units.forEach(function (n) { positions.set(n.id, Math.round(start)); start += n[size] + gap; });
+        }
+        var moves = new Map();
+        units.forEach(function (n) {
+            var delta = positions.get(n.id) - n[axis];
+            [n.id].concat(members(doc, n.id)).forEach(function (id) {
+                if (moves.has(id) && moves.get(id) !== delta) { throw new Error('Overlapping groups cannot be arranged together.'); }
+                moves.set(id, delta);
+            });
+        });
+        doc.nodes.forEach(function (n) { if (moves.has(n.id)) { n[axis] = integer(n[axis] + moves.get(n.id)); } });
     }
     function pruneAnchors(doc) {
         var used = new Set();
@@ -193,6 +229,7 @@
             key = '';
         } else if (req.op === 'order') {
             needNode();
+            if (req.direction !== undefined && ['forward', 'back'].indexOf(req.direction) < 0) { throw new Error('Choose forward or back for drawing order.'); }
             var at = doc.nodes.indexOf(n), to = Math.max(0, Math.min(doc.nodes.length - 1, at + (req.direction === 'back' ? -1 : 1)));
             doc.nodes.splice(at, 1); doc.nodes.splice(to, 0, n);
         } else if (req.op === 'duplicate' || req.op === 'paste') {

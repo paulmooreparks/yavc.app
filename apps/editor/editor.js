@@ -324,7 +324,7 @@
         /* === Tabs ======================================================== */
 
         function markModified(tab) {
-            var mod = view.state.doc.toString() !== tab.saved;
+            var mod = !!tab.savePending || !!tab.saveFailed || view.state.doc.toString() !== tab.saved;
             if (mod !== tab.modified) { tab.modified = mod; renderTabs(); }
         }
 
@@ -538,35 +538,59 @@
         /* With strict, a write that fails throws, for the Save as dialog to
            show; otherwise the status line says why. */
         async function writeTo(t, path, strict) {
-            var text = view.state.doc.toString();
-            say('Saving…');
-            var res = await F.write(F.home(), path, text, false);
-            if (res.error) {
-                if (strict) { say(''); throw new Error('Not saved: ' + res.error); }
-                say('Not saved: ' + res.error, true);
+            var text = (current() === t ? view.state : t.state).doc.toString();
+            var ticket = t.saveTicket = (t.saveTicket || 0) + 1;
+            t.savePending = (t.savePending || 0) + 1;
+            var pending = (t.saveQueue || Promise.resolve()).then(function () {
+                if (destroyed || tabs.indexOf(t) < 0) { throw new Error('The document was closed before its queued save could run.'); }
+                return writeSubmitted(t, path, text, ticket);
+            });
+            t.saveQueue = pending.catch(function () { });
+            try { return await pending; }
+            catch (err) {
+                if (!destroyed && tabs.indexOf(t) >= 0) { t.saveFailed = true; t.modified = true; if (current() === t) { say(err.message, true); } }
+                if (strict) { throw err; }
                 return false;
+            } finally {
+                t.savePending--;
+                if (!destroyed && tabs.indexOf(t) >= 0) {
+                    t.modified = !!t.savePending || !!t.saveFailed || (current() === t ? view.state : t.state).doc.toString() !== t.saved;
+                    renderTabs(); keep();
+                }
             }
+        }
+        async function writeSubmitted(t, path, text, ticket) {
+            if (current() === t) { say('Saving…'); }
+            t.submittedWrite = { path: path, text: text };
+            var res;
+            try { res = await F.write(F.home(), path, text, false); }
+            finally { t.submittedWrite = null; }
+            if (res.error) { throw new Error('Not saved: ' + res.error); }
+            /* A removed tab object never acknowledges a reopened resource. */
+            if (destroyed || tabs.indexOf(t) < 0) { return false; }
             var display = F.displayPath(res.node);
             var renamed = t.path !== display;
             t.path = display;
             t.name = res.node.name;
             t.saved = text;
             t.mtime = res.node.server ? +res.node.mtime : null;
-            t.modified = false;
+            t.saveFailed = false;
+            t.modified = (current() === t ? view.state : t.state).doc.toString() !== text || ticket !== t.saveTicket;
             t.external = false;
             t.fresh = false;
             t.readOnly = false;
             if (renamed) {
                 var lang = languageFor(display);
                 t.lang = lang;
-                view.dispatch({ effects: [langComp.reconfigure(langExtension(lang)), lintComp.reconfigure(lintExtension(t)),
-                    roComp.reconfigure([CM.EditorState.readOnly.of(false), CM.EditorView.editable.of(true)])] });
-                if (current() === t) { view.dispatch({ effects: lspComp.reconfigure(languageAssistance(t)) }); }
+                var effects = [langComp.reconfigure(langExtension(lang)), lintComp.reconfigure(lintExtension(t)),
+                    roComp.reconfigure([CM.EditorState.readOnly.of(false), CM.EditorView.editable.of(true)])];
+                if (current() === t) { effects.push(lspComp.reconfigure(languageAssistance(t))); view.dispatch({ effects: effects }); }
+                else { t.state = t.state.update({ effects: effects }).state; }
             }
             renderTabs();
             announce();
             markExplorer();
-            say('Saved ' + display + '.');
+            if (current() === t) { say('Saved ' + display + (t.modified ? '; newer edits are still unsaved.' : '.')); }
             return true;
         }
 
@@ -586,7 +610,7 @@
             });
             if (!res) { return false; }
             if (res.download) {
-                download(res.download, new Blob([view.state.doc.toString()], { type: 'text/plain' }));
+                download(res.download, new Blob([(current() === t ? view.state : t.state).doc.toString()], { type: 'text/plain' }));
                 say('Downloaded ' + res.download + '. The tab still holds your text.');
                 return false;
             }
@@ -1145,6 +1169,7 @@
 
         function takeOutside(t, i, text) {
             if (i < 0 || text === t.saved) { return; }
+            if (t.submittedWrite && t.path === t.submittedWrite.path && text === t.submittedWrite.text) { return; }
             var edited = (i === active ? view.state.doc.toString() : t.state.doc.toString()) !== t.saved;
             if (!edited) {
                 t.saved = text;
@@ -1798,7 +1823,9 @@
                 var path = input.path ? String(input.path) : t.path;
                 if (!path) { throw new Error('the document has no file yet; give a path such as ~/notes/a.md'); }
                 await writeTo(t, path, true);
-                return { output: docView(i, false) };
+                var savedIndex = tabs.indexOf(t);
+                if (savedIndex < 0) { throw new Error('The document closed while its save was running.'); }
+                return { output: docView(savedIndex, false) };
             },
             'close@1': async function (input) { var i = docNo(input.index); var before = tabs.length; await closeTab(i); return { output: { closed: tabs.length < before, open: tabs.length } }; },
             'view@1': async function (input) { docNo(); await setView(input.mode); return { output: { mode: viewMode } }; },
