@@ -97,9 +97,19 @@
 .dg-handle:hover { fill: var(--accent); }
 .dg-ghost { fill: none; stroke: var(--accent); stroke-width: 2; stroke-dasharray: 6 4; vector-effect: non-scaling-stroke; pointer-events: none; }
 .dg-hit-shape.is-target { stroke: var(--accent); stroke-width: 3; stroke-dasharray: 6 3; }
-.dg-place.dg-dragging, .dg-place.dg-dragging .dg-hit { cursor: grabbing; }
+.dg-handle-grip { fill: transparent; stroke: none; }
+.dg-handle-grip:hover + .dg-handle { fill: var(--accent); }
+/* A selected shape can be dragged; a move grabs it, and a connection being
+   dragged out keeps the crosshair. */
+.dg-place:not(.dg-dragging) .dg-hit-shape.is-selected { cursor: grab; }
+.dg-placing .dg-place .dg-hit-shape.is-selected { cursor: crosshair; }
+.dg-place.dg-dragging-move, .dg-place.dg-dragging-move .dg-hit { cursor: grabbing; }
+.dg-place.dg-dragging-connect, .dg-place.dg-dragging-connect .dg-hit { cursor: crosshair; }
 @media (forced-colors: active) {
   .dg-handle, .dg-ghost, .dg-hit-shape.is-target { stroke: Highlight; }
+  .dg-handle { fill: Canvas; }
+  .dg-handle:hover, .dg-handle-grip:hover + .dg-handle { fill: Highlight; }
+  .dg-handle-grip { fill: transparent; stroke: none; }
 }
 /* The palette sits over the drawing of a D2 diagram, and not a Mermaid one. */
 .dg-palette { flex: none; min-width: 0; padding: var(--space-1) var(--space-2); border-bottom: 1px solid var(--border); background: var(--surface-alt); }

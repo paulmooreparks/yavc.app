@@ -100,11 +100,15 @@
             Array.prototype.forEach.call(layer.children, function (e) { e.classList.toggle('is-selected', !!e.__key && e.__key === sel); });
             /* A selected shape has a handle on its right edge, from which a
                connection is dragged out. */
-            var old = layer.querySelector('.dg-handle');
-            if (old) { old.remove(); }
+            layer.querySelectorAll('.dg-handle').forEach(function (h) { h.remove(); });
             var box = sel && !/^\(/.test(sel) && (out.shapes || []).find(function (s) { return s.id === sel; });
             if (box) {
-                var h = el('circle', { cx: box.x + box.w, cy: box.y + box.h / 2, r: 6, 'class': 'dg-handle' });
+                /* Six screen pixels whatever the drawing's scale, with a
+                   wider ring that takes the pointer. */
+                var lr = layer.getBoundingClientRect(), k = lr.width ? out.width / lr.width : 1;
+                var grip = el('circle', { cx: box.x + box.w, cy: box.y + box.h / 2, r: 12 * k, 'class': 'dg-handle dg-handle-grip' });
+                var h = el('circle', { cx: box.x + box.w, cy: box.y + box.h / 2, r: 6 * k, 'class': 'dg-handle' });
+                layer.appendChild(grip);
                 layer.appendChild(h);
             }
         }
@@ -141,7 +145,7 @@
         function clearDrag() {
             if (ghost) { ghost.remove(); ghost = null; }
             if (aim) { aim.classList.remove('is-target'); aim = null; }
-            place.classList.remove('dg-dragging');
+            place.classList.remove('dg-dragging', 'dg-dragging-connect', 'dg-dragging-move');
         }
         function target(key) {
             var r = key ? Array.prototype.find.call(layer.children, function (e) { return e.__key === key && e.classList.contains('dg-hit-shape'); }) : null;
@@ -163,7 +167,7 @@
             if (!press.moved && Math.hypot(e.clientX - press.x, e.clientY - press.y) < 5) { return; }
             press.moved = true;
             if (!press.kind) { return; }
-            place.classList.add('dg-dragging');
+            place.classList.add('dg-dragging', press.kind === 'connect' ? 'dg-dragging-connect' : 'dg-dragging-move');
             var at = toDrawing(e), box = shapeBox(press.key);
             if (!box) { return; }
             if (press.kind === 'connect') {

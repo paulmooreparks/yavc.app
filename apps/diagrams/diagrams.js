@@ -119,11 +119,11 @@
                   /* The palette, a toolbar of its own over the drawing, so
                      the main toolbar keeps its groups; PUDL draws its
                      latched buttons from the command table's dg-tool choice. */
-                  '<div class="toolbar dg-palette" role="toolbar" aria-label="Palette" data-toolbar-fold><div class="toolbar-group">' +
+                  '<div class="toolbar dg-palette" role="toolbar" aria-label="Palette" data-toolbar-fold><div class="toolbar-group" role="group" data-toolbar-group="Palette" data-toolbar-glyph="yavc-select">' +
                     ['select'].concat(PALETTE.map(function (k) { return k[0]; })).map(function (k) { return '<button type="button" data-command="tool-' + k + '"></button>'; }).join('') +
                   '</div></div>' +
                   '<div class="dg-stage" data-role="stage" tabindex="0" role="region" aria-label="The Drawing" aria-describedby="dg-keys-' + n + '"><div class="dg-canvas" data-role="canvas"></div></div>' +
-                  '<p class="dg-keys visually-hidden" id="dg-keys-' + n + '">In a D2 diagram, the arrow keys select a shape or a connection, Enter edits its label, F2 renames it, N adds a shape, C connects the selected shape to another, and Delete deletes it.</p>' +
+                  '<p class="dg-keys visually-hidden" id="dg-keys-' + n + '">In a D2 diagram, the arrow keys select a shape or a connection, Enter edits its label, F2 renames it, N adds a shape of the palette\'s kind, C connects the selected shape to another, Delete deletes it, and Escape goes back to the palette\'s Select. The Shape menu moves a shape into another.</p>' +
                 '</div>' +
                 '<div class="split-handle dg-split" data-role="split" aria-label="Resize the Text" data-split-min="200" data-split-max="70%"></div>' +
                 '<div class="dg-text split-pane code-surface" data-role="text"></div>' +
@@ -442,7 +442,7 @@
             root.classList.toggle('dg-placing', !!tool);
             if (tool) {
                 var name = (PALETTE.find(function (x) { return x[0] === tool; }) || [tool, tool])[1].toLowerCase();
-                say('Click the drawing to place a ' + name + ': on a shape to put it inside, or on empty space. Escape goes back to Select.');
+                say('Click the drawing to place a ' + name + ': on a shape to put it inside, or on empty space; or press N. Escape goes back to Select.');
                 el.stage.focus({ preventScroll: true });
             }
             commandsChanged();
@@ -470,18 +470,32 @@
                 });
                 return;
             }
-            if (d.kind === 'move') {
-                var to = (d.to ? d.to + '.' : '') + lastName(d.from);
-                if (to === d.from) { return; }
-                applyEdit({ op: 'move', key: d.from, to: to, descendants: true }).then(function (out) {
-                    done(out, 'Moved ' + d.from + (d.to ? ' into ' + d.to : ' out to the top') + '. Undo puts it back.');
-                });
-            }
+            if (d.kind === 'move') { moveTo(d.from, d.to); }
+        }
+        function moveTo(key, container) {
+            var to = (container ? container + '.' : '') + lastName(key);
+            if (!key || to === key) { return; }
+            applyEdit({ op: 'move', key: key, to: to, descendants: true }).then(function (out) {
+                done(out, 'Moved ' + key + (container ? ' into ' + container : ' out to the top') + '. Undo puts it back.');
+            });
+        }
+        /* Move Into, the keyboard's way to what a drag onto a container
+           does: the container is asked for by its full name, checked
+           against the diagram's shapes in the dialog. */
+        function moveInto() {
+            var key = selection(), t = current();
+            if (!key || isConnection(key) || !canEdit()) { return; }
+            var names = ((t.outline && t.outline.shapes) || []).map(function (s) { return s.id; }).filter(function (id) { return id !== key && id.indexOf(key + '.') !== 0; });
+            window.yavcDialog.askText('Move Into a Shape', 'Container', '', {
+                okLabel: 'Move',
+                help: 'The full name of the shape to move ' + key + ' into, such as ' + (names[0] || 'site') + '. It becomes a container if it is not one.',
+                validate: function (v) { return !v ? 'Give the name of a shape.' : names.indexOf(v) < 0 ? 'There is no shape called ' + v + ' here.' : null; }
+            }).then(function (v) { if (v) { moveTo(key, v); } });
         }
         /* The next free name for a new shape in a container ('' for the
            top): item, item 2, item 3, as D2 numbers them. A connection's
-           key names its far end, so the name must be free, or the
-           connection would go to the shape already called that. */
+           key contains the name of its far end, so the name must be free,
+           or the connection would go to the shape already called that. */
         function freeName(parent) {
             var t = current(), taken = {};
             ((t && t.outline && t.outline.shapes) || []).forEach(function (s) { if ((s.parent || '') === parent) { taken[lastName(s.id).toLowerCase()] = true; } });
@@ -918,10 +932,12 @@
                     checked: function () { return !tool; }, run: function () { setTool(null); } }
             ].concat(PALETTE.map(function (k) {
                 return { id: 'tool-' + k[0], label: k[1], glyph: 'yavc-shape-' + k[0], // check-ignore(glyph-defined): one glyph for each PALETTE kind, each defined on :root in diagrams.css as --glyph-yavc-shape-<kind>
-                     choice: 'dg-tool', choiceLabel: 'Palette', value: k[0], glyphOnly: true,
+                     choice: 'dg-tool', choiceLabel: 'Palette', value: k[0],
                     hidden: function () { return !isD2(); }, disabled: function () { return !!whyNot(false); }, reason: function () { return whyNot(false); },
                     checked: function () { return tool === k[0]; }, run: function () { setTool(tool === k[0] ? null : k[0]); } };
             })).concat([
+                cmd('shape-move-into', 'Move Into…', null, moveInto, { hidden: function () { return !isD2(); }, disabled: function () { return !!whyNot('shape'); }, reason: function () { return whyNot('shape'); } }),
+                cmd('shape-move-top', 'Move to the Top', null, function () { moveTo(selection(), null); }, { hidden: function () { return !isD2(); }, disabled: function () { var k = selection(); return !!whyNot('shape') || k.indexOf('.') < 0; }, reason: function () { var w = whyNot('shape'); return w || (selection().indexOf('.') < 0 ? 'It is at the top already.' : null); } }),
                 cmd('shape-delete', 'Delete', 'yavc-bin', deleteSelected, { builtIn: 'Delete', danger: true, hidden: function () { return !isD2(); }, disabled: function () { return !!whyNot(true); }, reason: function () { return whyNot(true); } }),
                 cmd('redraw', 'Draw Again', 'reload', function () { drawNow(); }),
                 cmd('fit', 'Fit the Drawing to the Pane', 'maximize', function () { settings.fit = !settings.fit; applyFit(); keepSetting('fit', settings.fit); commandsChanged(); }, { checked: function () { return !!settings.fit; } }),
@@ -950,7 +966,7 @@
                 { id: 'file', label: 'File', glyph: 'file', items: ['new', 'new-mermaid', 'open', 'save', 'save-as', '-', 'edit-in-editor', '-', 'export-svg', 'export-png', 'export-source', '-', 'close-diagram'] },
                 { id: 'edit', label: 'Edit', glyph: 'pencil', items: ['undo', 'redo', '-', 'find'] },
                 { id: 'diagram', label: 'Diagram', glyph: 'code', items: ['format-text', 'redraw', '-', 'copy-embed'] },
-                { id: 'shape', label: 'Shape', glyph: 'square', items: ['shape-add', 'shape-add-inside', 'connect', '-', 'shape-label', 'shape-rename', 'shape-type', '-', 'shape-delete'] }
+                { id: 'shape', label: 'Shape', glyph: 'square', items: ['shape-add', 'shape-add-inside', 'connect', '-', 'shape-label', 'shape-rename', 'shape-type', '-', 'shape-move-into', 'shape-move-top', '-', 'shape-delete', '-', 'tool-select'].concat(PALETTE.map(function (k) { return 'tool-' + k[0]; })) }
             ], into: { view: ['view-text', 'view-preview', 'view-split', '-', 'dock', 'fit'], go: ['go-to-line'] } };
         }
         root.addEventListener('pudl:contextmenu', function (e) {
