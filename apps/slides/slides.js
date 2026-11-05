@@ -1144,7 +1144,7 @@
                 cmd('present', 'Present from the Start', 'play', function () { present(0); }, { shortcut: 'Mod+Enter', disabled: function () { return !ready || !!presenting; } }),
                 cmd('present-here', 'Present from This Slide', 'forward', function () { present(at); }, { shortcut: 'Mod+Shift+Enter', disabled: function () { return !ready || !!presenting; } }),
                 cmd('leave', 'Leave the Show', 'stop', leave, { hidden: function () { return !presenting; } }),
-                cmd('presenter', 'Presenter Window', 'new-window', presenterWindow, { disabled: function () { return !path; } }),
+                cmd('presenter', 'Presenter Window', 'new-window', presenterWindow, { disabled: function () { return !path; }, reason: 'Save this deck in this browser before opening the presenter window.' }),
                 cmd('presenter-auto', 'Always Show Presenter Window', null, function () { settings.presenterOnPresent = !settings.presenterOnPresent; keepSetting('presenterOnPresent', settings.presenterOnPresent); commandsChanged(); }, { checked: function () { return !!settings.presenterOnPresent; } }),
                 cmd('toggle-film', 'Show the Filmstrip', 'panel', function () { settings.filmstrip = !settings.filmstrip; el.film.hidden = !settings.filmstrip; keepSetting('filmstrip', settings.filmstrip); fit(); commandsChanged(); }, { checked: function () { return settings.filmstrip; } }),
                 { id: 'dock', label: 'Canvas', glyph: 'dock', current: function () { var d = DOCKS.find(function (x) { return x[0] === settings.dock; }); return d ? d[1] : null; },
