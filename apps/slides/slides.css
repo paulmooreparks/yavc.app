@@ -13,7 +13,9 @@
 .deck .deck-toolbar-slot { flex: none; min-width: 0; padding: var(--space-1) var(--space-3) var(--space-2); }
 .deck-main { border-top: 1px solid var(--border); }
 .deck-main { flex: 1 1 auto; min-height: 0; display: flex; position: relative; }
-.deck-film { flex: none; width: 196px; overflow-y: auto; padding: var(--space-2); border-inline-end: 1px solid var(--border); background: var(--surface-alt); display: flex; flex-direction: column; gap: var(--space-2); }
+/* Thumbnail height follows the available width. Reserve classic scrollbar
+   space so crossing the overflow threshold cannot change that width. */
+.deck-film { flex: none; width: 196px; overflow-y: auto; scrollbar-gutter: stable; padding: var(--space-2); border-inline-end: 1px solid var(--border); background: var(--surface-alt); display: flex; flex-direction: column; gap: var(--space-2); }
 .deck-film[hidden] { display: none; }
 .deck-thumb { display: flex; gap: 6px; align-items: flex-start; padding: 4px; border: 2px solid transparent; border-radius: var(--radius-sm); background: none; cursor: pointer; text-align: start; font: inherit; color: inherit; }
 .deck-thumb:hover { border-color: var(--border); }

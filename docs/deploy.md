@@ -32,6 +32,31 @@ curl -fsSL -o .env https://raw.githubusercontent.com/paulmooreparks/yavc.app/mai
 chmod 600 .env
 ```
 
+## Automatic restart after a host reboot
+
+The production Compose file sets `restart: unless-stopped` on both `yavc` and `tunnel`. Docker restores running containers when its daemon starts after a reboot. A container stopped manually stays stopped until it is started again. These policies are described in [Docker's restart documentation](https://docs.docker.com/engine/containers/start-containers-automatically/).
+
+Enable Docker and containerd at boot, following [Docker's systemd setup](https://docs.docker.com/engine/install/linux-postinstall/):
+
+```bash
+sudo systemctl enable docker.service containerd.service
+sudo systemctl is-enabled docker.service containerd.service
+sudo docker inspect --format '{{.Name}} {{.HostConfig.RestartPolicy.Name}} {{.State.Status}}' yavc-app yavc-tunnel
+```
+
+Both services should report `enabled`, and both containers should report `unless-stopped running`. Run these commands against the installed server configuration; the repository's Compose file does not prove what is currently running on the host. If either container is stopped, start the stack with `cd /opt/yavc && sudo docker compose up -d` before the reboot. Do not run `docker compose down` as preparation for a reboot, since that removes the containers whose policies Docker would use.
+
+After reconnecting following a reboot, verify the stack and its tunnel:
+
+```bash
+cd /opt/yavc
+sudo docker compose ps
+sudo docker compose logs --tail=30 tunnel
+curl -fsSI https://yavc.app/
+```
+
+No boot-time pull is needed. The existing containers use the installed image tag from the last deployment.
+
 ## The tunnel, once
 
 The tunnel is managed in the Cloudflare dashboard, and the server holds only its token.

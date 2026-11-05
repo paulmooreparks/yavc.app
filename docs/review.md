@@ -301,6 +301,14 @@ The macro foundation parses one isolated definition body, ordered parameter meta
 
 Independent source review found no issues within the bounded components. The full repository gate passes with the new Go tests. These results do not cover the pending registry, recursive expansion, stylesheet lifecycle or app integration.
 
+## Slides filmstrip stability and presenter availability
+
+Paul reported continuous filmstrip stuttering at certain heights on a 4K monitor. A Chromium run with visible classic scrollbars reproduced it at 3840 by 1680 with sixteen slides. ResizeObserver delivery alternated between filmstrip widths of 180 and 195 pixels, while the thumbnail stage alternated between 77 and 85 pixels. Browser debugger pauses inside `fitThumbs` confirmed that its width-dependent sizing consumed the alternating width. Reserving the classic scrollbar gutter removes the feedback loop. The original failure frames, screenshot and debugger receipt are retained in the temporary evidence folders.
+
+`scripts/test-slides-filmstrip.cjs` fails on the original CSS at that height and passes with the fix. It samples consecutive animation frames across nearby heights and 4K/2560 viewports, navigation and reload. Chromium explicitly keeps its scrollbars visible because Playwright's default hides this regression. Firefox and WebKit also pass. Independent PUDL source and screenshot review has no findings.
+
+Presenter Window was disabled because a deck without a saved path cannot be opened in another window. The command now uses PUDL's documented reason to explain the save requirement. `scripts/test-slides-presenter.cjs` checks the unsaved explanation, availability after saving and a user-click popup that loads the saved deck. The checks pass in Firefox and actual Edge launched with InPrivate enabled, using isolated nonpersistent contexts. This does not claim to test every privacy policy or presenter synchronization path. `docs/deploy.md` now records how to verify Docker's boot services and both production container restart policies; no remote host setting was changed.
+
 ## Items for other projects
 
 These problems belong to PUDL or to applets that are maintained elsewhere, so they were reported instead of patched here.
