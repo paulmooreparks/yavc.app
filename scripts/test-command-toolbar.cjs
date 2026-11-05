@@ -190,6 +190,9 @@ async function run(engine) {
         await first.locator('.yavc-command-toolbar [data-command="cv-new"]').click(); assert.equal(await count(first), 1); assert.equal(await count(second), 0);
         await second.locator('.yavc-command-toolbar [data-command="cv-new"]').click(); assert.equal(await count(first), 1); assert.equal(await count(second), 1);
         phase = 'overflow focus on a shared preference update';
+        // Set an explicit overflow width. Desktop space no longer loses
+        // 300 pixels to an application sidebar.
+        await page.setViewportSize({ width: 1100, height: 1050 });
         await writePrefs(['save', 'undo', 'redo', '-', 'tool-rectangle', 'tool-rounded', 'tool-oval', '-', 'tool-diamond', 'tool-person', 'tool-cloud', '-', 'tool-hexagon', 'tool-package', 'tool-text', '-', 'cv-new', 'cv-connect', 'cv-delete', '-', 'fit', 'cv-zoom-in', 'cv-zoom-out']);
         const fold = first.locator('.yavc-command-toolbar .toolbar-fold > .menu-btn:visible, .yavc-command-toolbar .toolbar-more > .menu-btn:visible').first();
         await fold.waitFor(); await fold.focus();

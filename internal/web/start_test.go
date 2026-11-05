@@ -30,6 +30,10 @@ func TestStartCatalogAndRoutes(t *testing.T) {
 			t.Fatalf("Start markup invalid at %s", rawURL)
 		}
 	}
+	desktopBody := req(t, s, "GET", site("/"), "").Body.String()
+	if strings.Contains(desktopBody, `class="md-sidebar"`) || strings.Contains(desktopBody, `data-site-command="sidebar"`) || strings.Contains(desktopBody, `data-md-action="toggle"`) {
+		t.Fatal("Start replaces the application sidebar and its commands")
+	}
 	invalid := s.startCatalog(httptest.NewRequest("GET", site("/?start-category=missing&start-q="+strings.Repeat("a", 600)), nil))
 	if invalid["Category"] != "" || len(invalid["Query"].(string)) != 512 {
 		t.Fatal("unbounded or unknown Start state")

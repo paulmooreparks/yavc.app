@@ -1,9 +1,8 @@
 /* Copyright 2026 Paul Parks. SPDX-License-Identifier: Apache-2.0 */
 /* The site's own behaviour over PUDL, on every page: the View menu's
    appearance commands, which set the choice through PUDL's APIs and keep
-   it in the engine (DESIGN.md, Appearance); and on the desktop, after
-   parkscomputing.com's js/desktop.js and js/window-bar.js: the sidebar
-   toggle's menu row, and live filtering of the list. Loaded before pudl-windows.js, without defer. */
+   it in the engine (DESIGN.md, Appearance), plus the About dialogs.
+   Loaded before pudl-windows.js, without defer. */
 (function () {
     'use strict';
     if (window.yavcDesktop) { return; }
@@ -22,8 +21,7 @@
             if (value === 'standard') { root.removeAttribute('data-palette'); } else { root.setAttribute('data-palette', value); }
             document.dispatchEvent(new CustomEvent('yavc:palette-change', { detail: { palette: value } }));
             return keep({ palette: value });
-        },
-        sidebar: function () { if (layout && window.pudlMd) { window.pudlMd.command(layout, 'toggle'); } }
+        }
     };
     window.yavcAppearance = {
         set: function (name, value) { return commands[name] ? commands[name](value) : Promise.resolve(); },
@@ -101,47 +99,9 @@
         document.querySelectorAll('dialog.about-dialog[open]').forEach(function (d) { openDialog(d, false); });
     }
 
-    /* === The desktop ===================================================== */
-    var layout = document.querySelector('.md-layout');
-    function narrowLayout() { return layout && layout.getBoundingClientRect().width <= 640; }
-    function listHidden() {
-        return narrowLayout() ? layout.dataset.mdPane === 'detail' : layout.hasAttribute('data-md-collapsed');
-    }
-    /* The taskbar's toggle is PUDL's (data-md-action="toggle"), which keeps
-       its aria-expanded; the site keeps the View menu's row in step. */
-    function syncSidebar() {
-        if (!layout) { return; }
-        var hidden = listHidden();
-        document.querySelectorAll('[data-site-command="sidebar"]').forEach(function (c) { c.setAttribute('aria-checked', hidden ? 'true' : 'false'); });
-    }
-
-    /* The list filtered as the reader types. */
-    function initFilter() {
-        var field = document.querySelector('[data-list-filter]');
-        var list = document.querySelector('.md-sidebar .site-list');
-        if (!field || !list) { return; }
-        var none = document.createElement('div');
-        none.className = 'empty-state site-list-none';
-        none.hidden = true;
-        none.innerHTML = '<p class="empty-state-title">Nothing matches</p><p class="empty-state-body">No application or page has those words in its name or description.</p>';
-        list.parentNode.insertBefore(none, list.nextSibling);
-        field.addEventListener('input', function () {
-            var q = field.value.trim().toLowerCase(), shown = 0;
-            list.querySelectorAll('.md-row').forEach(function (row) {
-                row.hidden = !!q && row.textContent.toLowerCase().indexOf(q) < 0;
-                if (!row.hidden) { shown++; }
-            });
-            none.hidden = shown > 0;
-        });
-    }
-
     function start() {
         startDialogs();
         tick();
-        if (!layout) { return; }
-        syncSidebar();
-        initFilter();
-        document.addEventListener('pudl:md-change', syncSidebar);
     }
     if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', start); } else { start(); }
 })();

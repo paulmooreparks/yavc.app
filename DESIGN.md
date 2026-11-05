@@ -82,6 +82,8 @@ Each decision is dated and numbered so that later documents and cards can refer 
 
 41. **Start uses the released PUDL control** (2026-11-05, Paul). PUDL 0.98.0 supplies the catalog, category filtering, search, splitter and keyboard interaction. The host places Start in the desktop taskbar and standalone headers, supplies real application links and maintains its query and category in namespaced URL parameters. The host categorizes installed applications without changing their package manifests. Create, Tools, Barcodes, Learning, Games and Settings may overlap; new unassigned packages appear under Other. Every installed application appears once in All. The host uses the documented `pudlStart` API and preserves current desktop windows when launching an application.
 
+42. **Start replaces the desktop application sidebar** (2026-11-05, Paul). The desktop gives its full working width to windows. Start provides application discovery and search, so the former application list, resize handle, taskbar toggle and View command are removed. Existing window URLs and applet-owned panes keep their behavior. Legacy sidebar scroll snapshots are ignored.
+
 ## Addresses
 
 `yavc.app` serves the desktop, which is windowed only (decision 26). A window's content comes from `/win/{key}`. `yavc.app/{slug}` opens the desktop with that application's window, or draws a site page as a page of its own. `{slug}.yavc.app` serves the same application standalone, and it is the application's page form. The engine answers both from one deployment: a wildcard DNS record points every subdomain at it, and the engine reads the host header to choose the standalone layout for the application whose slug matches. A subdomain whose slug matches no application redirects to the desktop.

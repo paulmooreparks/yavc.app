@@ -175,8 +175,6 @@
         });
         /* A window still on its way keeps the place it had. */
         Object.keys(waiting).forEach(function (key) { if (!out[key]) { out[key] = waiting[key]; } });
-        var list = document.querySelector('.md-sidebar');
-        if (list) { out[' list'] = shown(list) ? { body: list.scrollTop } : before[' list'] || {}; }
         return out;
     }
     function keepScrolls() { write('scroll', scrollers()); }
@@ -224,8 +222,7 @@
         Object.keys(kept).forEach(function (key) {
             var place = kept[key] || {};
             if (key === ' list') {
-                var list = document.querySelector('.md-sidebar');
-                if (list) { putBack(list, place.body, function () { return list.scrollHeight; }); }
+                // Ignore the former application sidebar's saved scroll.
                 return;
             }
             if (place.body || place.frame) { waiting[key] = place; }
