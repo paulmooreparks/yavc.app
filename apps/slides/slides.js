@@ -169,6 +169,7 @@
     function init(root, opts) {
         opts = opts || {};
         var n = ++count, H = window.pudlHost || {};
+        var styledSections = new Set(), styleLifetime = new AbortController();
         var deck = parseDeck(NEW_DECK), path = null, modified = false, at = 0, destroyed = false;
         /* The open decks, one tab each; deck, path, modified and at are the
            front tab's, copied back into it by stash() before a switch. */
@@ -238,10 +239,14 @@
             el.stage.style.setProperty('--deck-scale', String(k));
         }
         function applySlideSettings(section, slide) {
+            styledSections.add(section);
             var s = settingsOf(slide);
             section.setAttribute('data-layout', s.layout || 'content');
             section.setAttribute('data-deck', String(n));
             section.setAttribute('data-slide-index', String(deck.slides.indexOf(slide)));
+            var styleKeys = []; if (deckStyle) { styleKeys.push(deckStyle.state().key); }
+            var ownStyle = slideStyles && slideStyles.get(deck.slides.indexOf(slide)); if (ownStyle) { styleKeys.push(ownStyle.state().key); }
+            if (styleKeys.length) { section.setAttribute('data-md-style', styleKeys.join(' ')); } else { section.removeAttribute('data-md-style'); }
             section.setAttribute('data-theme-name', deck.front.theme || 'plain');
             if (deck.front.lang) { section.setAttribute('lang', deck.front.lang); } else { section.removeAttribute('lang'); }
             section.setAttribute('data-transition', s.transition || deck.front.transition || 'fade');
@@ -483,6 +488,7 @@
             }).join('');
             deck.slides.forEach(function (s, i) { drawThumb(i); });
             fitThumbs();
+            installStyle();
         }
         function drawThumb(i) {
             var b = el.film.querySelector('[data-slide="' + i + '"]');
@@ -521,6 +527,7 @@
             commandsChanged();
             var b = el.film.querySelector('[data-slide="' + at + '"]');
             if (b && b.scrollIntoView) { b.scrollIntoView({ block: 'nearest' }); }
+            await installStyle();
         }
 
         /* === Slides: new, duplicate, delete, move ======================= */
@@ -608,58 +615,55 @@
            stylesheet file, scoped to this deck's slides with @scope, so it
            reaches the canvas, the thumbnails, the show and the exports and
            nothing else on the page. {{style:slide}} is scoped to its slide. */
-        var styleEl = null, sheetText = '', sheetPath = null, sheetLoading = null;
-        var STYLE_RE = /\{\{style(?::([^}]*))?\}\}([\s\S]*?)\{\{\/style\}\}/g;
+        var deckStyle = null, slideStyles = new Map(), styleRevision = 0;
+        var styleNotice = document.createElement('div'); styleNotice.className = 'notice warn'; styleNotice.hidden = true; styleNotice.setAttribute('role', 'status');
+        styleNotice.innerHTML = '<div class="notice-content"><p class="notice-body"></p></div>'; root.insertBefore(styleNotice, el.main);
+        function styleDirectory() { return path && path.indexOf('/') >= 0 ? path.slice(0, path.lastIndexOf('/')) : '~'; }
+        function styleSections(index) {
+            styledSections.forEach(function (section) { if (!root.contains(section)) { styledSections.delete(section); } });
+            return Array.from(styledSections).filter(function (section) { return index == null || section.getAttribute('data-slide-index') === String(index); });
+        }
+        function styleBoundaries(index) { return Array.from(new Set(styleSections(index).map(function (section) { return section.parentElement; }))); }
         function deckCSS() {
-            var scope = '.deck-slide[data-deck="' + n + '"]', parts = [];
-            /* The CSS is nested under :scope, so a selector such as h2 weighs
-               as much as the theme's .deck-body h2 and, installed later,
-               wins; a deck need not out-specify the theme to restyle it. */
-            if (sheetText) { parts.push(scoped(scope, sheetText)); }
-            deck.slides.forEach(function (sl, i) {
-                var m;
-                STYLE_RE.lastIndex = 0;
-                while ((m = STYLE_RE.exec(sl.text))) {
-                    var own = /\bslide\b/.test(m[1] || '');
-                    parts.push(scoped(scope + (own ? '[data-slide-index="' + i + '"]' : ''), m[2]));
-                }
-            });
-            return parts.filter(Boolean).join('\n');
+            var parts = deckStyle ? [deckStyle.state().css] : []; slideStyles.forEach(function (controller) { parts.push(controller.state().css); }); return parts.join('\n');
         }
-        /* A deck's CSS, nested under :scope inside @scope, as the browser
-           itself reads it: the CSS is parsed inside the :scope rule and only
-           that one rule is kept, so CSS that closes it early (as "} }" would)
-           to reach the rest of the page is dropped rather than applied
-           (security review, 2026-11-03). Its serialised text has balanced
-           braces by construction. */
-        function scoped(scope, css) {
-            var rule = null;
+        async function installStyle(reload) {
+            var revision = ++styleRevision, currentDeck = deck;
+            if (!md) { return; }
             try {
-                var sheet = new CSSStyleSheet();
-                sheet.replaceSync(':scope {\n' + String(css) + '\n}');
-                var first = sheet.cssRules[0];
-                if (first && first.selectorText === ':scope') { rule = first.cssText; }
-            } catch (err) { rule = null; }
-            return rule ? '@scope (' + scope + ') {\n' + rule + '\n}' : '';
+                var K = await kit(), D = await K.styles();
+                if (destroyed || revision !== styleRevision || currentDeck !== deck) { return; }
+                if (!deckStyle) { deckStyle = D.attach({ surfaces: function () { return styleSections(); }, boundaries: function () { return styleBoundaries(); },
+                    read: function (p) { return H.fs && H.fs.readText ? H.fs.readText(p) : Promise.resolve(null); } }); }
+                var all = deck.slides.map(function (slide) { return md.styles(slide.text); });
+                var sharedPath = window.yavcStyleTools.resolve(deck.front.stylesheet, styleDirectory());
+                var work = [deckStyle.update({ identity: deck, inline: [].concat.apply([], all.map(function (blocks) { return blocks.filter(function (block) { return !block.slide; }).map(function (block) { return block.css; }); })), stylesheet: sharedPath, reload: reload === true })];
+                slideStyles.forEach(function (controller, i) { if (i >= all.length) { controller.destroy(); slideStyles.delete(i); } });
+                all.forEach(function (blocks, i) {
+                    var controller = slideStyles.get(i);
+                    if (!controller) { controller = D.attach({ surfaces: function () { return styleSections(i); }, boundaries: function () { return styleBoundaries(i); } }); slideStyles.set(i, controller); }
+                    work.push(controller.update({ identity: deck, inline: blocks.filter(function (block) { return block.slide; }).map(function (block) { return block.css; }) }));
+                });
+                await Promise.all(work);
+                if (destroyed || revision !== styleRevision) { return; }
+                var problems = deckStyle.state().problems; slideStyles.forEach(function (controller) { problems = problems.concat(controller.state().problems); });
+                problems = Array.from(new Set(problems)); styleNotice.hidden = !problems.length; styleNotice.querySelector('.notice-body').textContent = problems.join(' ');
+            } catch (err) { if (!destroyed && revision === styleRevision) { say('Styles could not be applied: ' + err.message, true); } }
         }
-        function installStyle() {
-            var css = deckCSS();
-            if (!styleEl) { styleEl = document.createElement('style'); styleEl.setAttribute('data-deck-style', String(n)); document.head.appendChild(styleEl); }
-            if (styleEl.textContent !== css) { styleEl.textContent = css; }
-            if (deck.front.stylesheet && deck.front.stylesheet !== sheetPath) { loadSheet(deck.front.stylesheet); }
-            if (!deck.front.stylesheet && sheetPath) { sheetPath = null; sheetText = ''; installStyle(); }
+        function deckClasses() { var classes = deckStyle ? deckStyle.state().classes : []; slideStyles.forEach(function (controller) { classes = classes.concat(controller.state().classes); }); return Array.from(new Set(classes)).sort(); }
+        var sheetWatch = H.fs && H.fs.onChange ? H.fs.onChange(function () { installStyle(true); }) : null;
+        async function editStyles(shared) {
+            if (pageActive()) { await page.sync(); }
+            var captured = deck, slide = current(), text = slide.text, front = frontTextOf(deck), K = await kit(); await K.styles();
+            function unchanged() { return !destroyed && deck === captured && current() === slide && slide.text === text && frontTextOf(deck) === front; }
+            if (!unchanged()) { return; }
+            try {
+                if (shared) { await window.yavcStyleTools.shared({ path: deck.front.stylesheet, dir: styleDirectory(), current: unchanged, signal: styleLifetime.signal, read: H.fs.readText, write: H.fs.writeText }); }
+                else { await window.yavcStyleTools.document({ title: 'Slide Stylesheet', slide: true, text: text, engine: md, stylesheet: deck.front.stylesheet || '', current: unchanged, signal: styleLifetime.signal,
+                    save: function (next, path) { takeText(next, 'styles'); if (path !== (deck.front.stylesheet || '')) { setFront('stylesheet', path); } } }); }
+                await installStyle(true);
+            } catch (err) { say(err.message, true); }
         }
-        function loadSheet(path) {
-            sheetPath = path;
-            if (!H.fs || !H.fs.readText) { return; }
-            sheetLoading = H.fs.readText(path).then(function (text) {
-                if (destroyed || sheetPath !== path) { return; }
-                if (text == null) { say('There is no stylesheet at ' + path + '.', true); sheetText = ''; } else { sheetText = text; }
-                installStyle();
-            }).catch(function () { });
-        }
-        function deckClasses() { return window.yavcMdEditor ? window.yavcMdEditor.classesOf(deckCSS()) : []; }
-        var sheetWatch = H.fs && H.fs.onChange ? H.fs.onChange(function () { if (sheetPath) { loadSheet(sheetPath); } }) : null;
 
         /* === Tabs: one for each open deck ================================ */
 
@@ -799,6 +803,7 @@
             deck.slides.forEach(function (s, i) {
                 var canvas = document.createElement('div');
                 canvas.className = 'deck-canvas';
+                var size = sizeOf(); canvas.style.width = size[0] + 'px'; canvas.style.height = size[1] + 'px';
                 var section = document.createElement('section');
                 section.className = 'deck-slide';
                 var body = document.createElement('div');
@@ -826,6 +831,7 @@
             showStage.className = 'deck-show';
             buildShow(showStage);
             root.appendChild(showStage);
+            await installStyle();
             root.classList.add('deck-showing');
             channel = channel || channelFor();
             presenting = window.yavcPresent.attach(showStage, {
@@ -906,6 +912,7 @@
                 if (pvNotes.childNodes.length) { q('[data-role="pv-notes"]').replaceChildren(pvNotes); }
                 else { var none = document.createElement('p'); none.className = 'deck-pv-none'; none.textContent = 'No notes for this slide.'; q('[data-role="pv-notes"]').replaceChildren(none); }
                 q('[data-role="pv-count"]').textContent = 'Slide ' + (i + 1) + ' of ' + deck.slides.length + '.';
+                installStyle();
             }
             function tick() {
                 var d = new Date(), e = Math.floor((Date.now() - presenterRole.started) / 1000);
@@ -949,6 +956,7 @@
         /* === Export and print ========================================== */
 
         async function exportPage() {
+            await installStyle();
             await loadScript(HERE + 'present.js' + STAMP);
             var css = await fetch('/applets/md-engine/page.css').then(function (r) { return r.text(); }) + '\n' + await fetch(HERE + 'slides.css' + STAMP).then(function (r) { return r.text(); }) + '\n' + deckCSS();
             var js = await fetch(HERE + 'present.js' + STAMP).then(function (r) { return r.text(); });
@@ -1115,7 +1123,10 @@
                 cmd('deck-stylesheet', 'Stylesheet File…', 'file', function () {
                     askText('The Deck\'s Stylesheet', 'A CSS file of yours, such as ~/themes/mine.css; empty for none', deck.front.stylesheet || '').then(function (v) { if (v != null) { setFront('stylesheet', v.trim()); } });
                 }),
-                cmd('deck-style-block', 'Add a Style Block', 'code', function () { insertMarkdown('{{style}}\n.deck-body h2 { letter-spacing: 0.02em; }\n{{/style}}'); }),
+                cmd('deck-style-block', 'Edit Style Blocks…', 'code', function () { return editStyles(false); }, { shortcut: 'Mod+Shift+F' }),
+                cmd('deck-shared-stylesheet', 'Edit Shared Stylesheet…', 'file', function () { return editStyles(true); }, {
+                    disabled: function () { return !(H.fs && H.fs.writeText && window.yavcStyleTools && /^~\/.+\.css$/i.test(window.yavcStyleTools.resolve(deck.front.stylesheet, styleDirectory()))); },
+                    reason: 'Choose a home-folder CSS file in Stylesheet File first. This host also needs a writable file service.' }),
                 cmd('slide-class', 'Slide Style…', 'tag', function () {
                     askText('This Slide\'s Style Classes', 'Class names from the stylesheet, separated by spaces; empty for none', settingsOf(current())['class'] || '').then(function (v) { if (v != null) { setSlideSetting('class', v.trim()); } });
                 }),
@@ -1175,7 +1186,7 @@
                 { id: 'file', label: 'File', glyph: 'file', items: ['new-deck', 'open', 'import-pptx', 'save', 'save-as', '-', 'edit-whole', '-', 'export-pptx', 'export-pdf', 'export-html', 'print'] },
                 { id: 'slide', label: 'Slide', glyph: 'plus', items: ['slide-new', 'slide-duplicate', 'slide-delete', '-', 'slide-prev', 'slide-next', '-', 'slide-up', 'slide-down', '-', 'layout', 'reveal', 'slide-colours', 'slide-class', 'background-image', 'slide-transition'] },
                 { id: 'format', label: 'Format', glyph: 'paragraph', items: window.yavcMdEditor ? window.yavcMdEditor.MENU.format : [] },
-                { id: 'deck', label: 'Deck', glyph: 'gear', items: ['deck-title', 'theme', 'deck-colours', '-', 'deck-stylesheet', 'deck-style-block', '-', 'size', 'deck-transition'] },
+                { id: 'deck', label: 'Deck', glyph: 'gear', items: ['deck-title', 'theme', 'deck-colours', '-', 'deck-stylesheet', 'deck-style-block', 'deck-shared-stylesheet', '-', 'size', 'deck-transition'] },
                 { id: 'show', label: 'Show', glyph: 'play', items: ['present', 'present-here', 'leave', '-', 'presenter', 'presenter-auto'] }
             ], into: { view: ['view-visual', 'view-text', 'view-split', '-', 'dock', 'toggle-film'].concat(commonToolbar ? ['-', 'common-toolbar-show', 'common-toolbar-customize'] : []), help: ['styles-help'] } };
         }
@@ -1454,8 +1465,10 @@
             destroy: function () {
                 if (commonToolbar) { commonToolbar.destroy(); }
                 destroyed = true;
+                styleLifetime.abort();
                 if (detachLive) { detachLive(); }
-                if (styleEl) { styleEl.remove(); }
+                styleRevision++; if (deckStyle) { deckStyle.destroy(); } slideStyles.forEach(function (controller) { controller.destroy(); });
+                styledSections.clear();
                 if (sheetWatch) { sheetWatch(); }
                 if (presenting) { presenting.destroy(); }
                 if (page) { try { page.enable(false); } catch (err) { } }

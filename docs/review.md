@@ -317,6 +317,18 @@ Independent review caught two containment defects before integration. A styled r
 
 The lifecycle fixtures in `scripts/test-document-styles.cjs` pass Chromium, Firefox and WebKit. They cover private scope isolation, cascade order, class discovery, cached reads, out-of-order completions, invalid URLs, shared containment ownership, restoration, rejected invalid boundaries and disposal before a queued read can start. The corrected source review has no findings, and the full repository checks pass. These remain inactive components while document extraction and host integration are pending.
 
+## Complete document styles batch
+
+Editor and Slides now consume the shared stylesheet controller. The Markdown engine finds complete top-level style blocks with its parser and returns UTF-16 body ranges, excluding front matter, fenced/indented code, quoted examples and incomplete blocks. Stylesheet dialogs retain each block's draft and replace changed bodies in the source. Editor records the result as one change covered by Undo. Shared files resolve through the host's virtual file system, and saves compare the loaded text before writing. The CSS mode uses the existing pinned CodeMirror CSS package, newly exported by the reproducible bundle build.
+
+Editor applies styles in its page views and lists discovered classes in Format, Style. Slides has separate deck and slide scopes and tracks only section elements created by the host. Exports reuse the controller's compiled CSS and scope keys. The HTML export fixture caught canvases without explicit dimensions; buildShow now supplies the deck's logical size before rendering, so contained exports remain visible. The class shortcode and picker accept underscores consistently.
+
+Independent review caught a stylesheet dialog opening after a delayed library load outlived its app, and edits remaining enabled during a slow save. Both hosts now abort the dialog lifetime on disposal, the helper rechecks its guard after loading, and pending saves freeze the captured draft. A failed save restores editing without discarding the draft. The corrected source review has no findings. Screenshots cover 1500, 620 and 360 pixel viewports in Standard light, Bevel dark and Glaze dark.
+
+`scripts/test-editor-styles.cjs` passes Chromium, Firefox and WebKit for inline and shared styles, Unicode source ranges, Undo, named-style discovery, CSS completion, Ctrl+S, shared-file conflicts and write failures, slow-save locking and app disposal. Slides coverage includes slide-specific declarations, thumbnails, navigation, presenting and downloaded HTML rendered as a separate page. The host controller's refusal and containment fixtures remain in `scripts/test-document-styles.cjs`. The tests do not cover Word/PDF fidelity, offline desktop packaging or cross-process conditional writes. Custom macro expansion remains inactive and belongs to the next batch.
+
+The full repository gate passes, including Go race tests, vulnerability checks, server/WebAssembly builds, 43 browser-module tests and repository rules. The pinned language-service rebuild matches its manifest. Shared LSP regressions pass all three browser engines; common-toolbar and Editor save/productivity regressions pass Chromium. The standalone and desktop filmstrip height sweeps pass all three engines with the new containment wrappers. An initial LSP invocation used its default port instead of the disposable server's port; the corrected invocation uses `YAVC_LSP_TEST_PORT=8414` and passes. No production deployment or installed-candidate replacement belongs to this batch.
+
 ## Items for other projects
 
 These problems belong to PUDL or to applets that are maintained elsewhere, so they were reported instead of patched here.

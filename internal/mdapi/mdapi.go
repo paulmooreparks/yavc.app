@@ -59,6 +59,29 @@ func render(text string) ([]preview.Block, []problem) {
 }
 
 var functions = map[string]func(string) (any, error){
+	"styles": func(source string) (any, error) {
+		out := []map[string]any{}
+		position, units := 0, 0
+		count := func(value string) int {
+			n := 0
+			for _, r := range value {
+				n++
+				if r > 0xffff {
+					n++
+				}
+			}
+			return n
+		}
+		for _, block := range shortcodes.StyleBlocks(source) {
+			units += count(source[position:block.From])
+			from := units
+			units += count(source[block.From:block.To])
+			position = block.To
+			out = append(out, map[string]any{"css": block.CSS, "slide": block.Slide,
+				"from": from, "to": units})
+		}
+		return out, nil
+	},
 	"preview": func(text string) (any, error) {
 		blocks, problems := render(text)
 		return map[string]any{"blocks": blocks, "problems": problems}, nil

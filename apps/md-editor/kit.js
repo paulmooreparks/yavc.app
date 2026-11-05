@@ -95,8 +95,16 @@
     var cmReady = null, pvReady = null, mmReady = null;
     function libs() {
         if (window.CM && window.CM.EditorView) { return Promise.resolve(window.CM); }
-        if (!cmReady) { cmReady = loadScript(HERE + 'vendor/codemirror-6.43/codemirror.js?v=5').then(function () { return window.CM; }).catch(function (e) { cmReady = null; throw e; }); }
+        if (!cmReady) { cmReady = loadScript(HERE + 'vendor/codemirror-6.43/codemirror.js?v=6').then(function () { return window.CM; }).catch(function (e) { cmReady = null; throw e; }); }
         return cmReady;
+    }
+    var stylesReady = null;
+    function styles() {
+        if (!stylesReady) {
+            if (!document.querySelector('link[data-md-styles-ui]')) { var css = document.createElement('link'); css.rel = 'stylesheet'; css.href = HERE + 'styles.css' + STAMP; css.setAttribute('data-md-styles-ui', ''); document.head.appendChild(css); }
+            stylesReady = Promise.all([loadScript(HERE + 'document-style.js' + STAMP), loadScript(HERE + 'styles-ui.js' + STAMP)]).then(function () { return window.yavcDocumentStyle; }).catch(function (err) { stylesReady = null; throw err; });
+        }
+        return stylesReady;
     }
     var languageReady = null;
     function languageServices() {
@@ -506,14 +514,14 @@
             list.map(function (c) { return '<button type="button" class="btn md-swatch" data-swatch="' + esc(c) + '">' + esc(c) + '</button>'; }).join('') + '</div></div>' : '';
     }
     function askClass(names) {
-        var id = 'md-dlg-field-' + (dlgCount + 1), own = names || [];
+        var id = 'md-dlg-field-' + (dlgCount + 1), own = (names || []).filter(function (name) { return /^[A-Za-z_][A-Za-z0-9_-]{0,63}$/.test(name); });
         var html = classGroup('The Stylesheet\'s Classes', own) + classGroup('Provided by the Site', STOCK_CLASSES.filter(function (c) { return own.indexOf(c) < 0; })) +
             '<p class="form-help">A {{style}} block defines more, as .callout { … }.</p>' +
             '<div class="form-group"><label class="form-label" for="' + id + '">Any Class</label><input class="form-input" id="' + id + '" autocomplete="off" spellcheck="false" placeholder="callout; empty takes the class off"></div>';
         return dialog('Style the Words', html, [{ id: 'cancel', label: 'Cancel' }, { id: 'ok', label: 'Use This Style', primary: true }], wireSwatches).then(function (r) {
             if (r.value && r.value.indexOf('swatch:') === 0) { return r.value.slice(7); }
             if (r.value !== 'ok') { return null; }
-            return (r.body.querySelector('input') || { value: '' }).value.trim().replace(/[^A-Za-z0-9-]/g, '');
+            return (r.body.querySelector('input') || { value: '' }).value.trim().replace(/[^A-Za-z0-9_-]/g, '');
         });
     }
     /* Several colours at once, by key: { key, label, value, fallback,
@@ -1317,7 +1325,7 @@
     }
 
     window.yavcMdEditor = {
-        here: HERE, stamp: STAMP, placeholder: PLACEHOLDER,
+        here: HERE, stamp: STAMP, placeholder: PLACEHOLDER, styles: styles,
         colourRows: pickerRows, wireColours: wirePickers,
         libs: libs, languageServices: languageServices, codeTheme: codeTheme, codeSearch: codeSearch, findBar: findBar, pageView: pageView, mermaid: mermaid, drawMermaid: drawDiagram, loadScript: loadScript,
         FORMATS: FORMATS, STYLES: STYLES, INSERTS: INSERTS, SHORTCODES: SHORTCODES, MENU: MENU, STOCK_CLASSES: STOCK_CLASSES,

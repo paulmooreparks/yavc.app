@@ -3,7 +3,7 @@
 (function () {
     'use strict';
     var LIMIT = 256 * 1024, sequence = 0, surfaces = new WeakMap();
-    var TOKENS = /^--doc-(font|font-heading|size|leading|ink|muted|accent|rule|page)$/;
+    var TOKENS = /^--(doc-(font|font-heading|size|leading|ink|muted|accent|rule|page)|deck-(bg|ink|heading|muted|accent|rule|code))$/;
     // This first compiler admits typography and layout without resource loads.
     // Containment, positioning and animation remain under host control.
     var PAINT = /^(color|background-color|font-(style|weight|size|family|variant)|text-(align|decoration(-[a-z]+)?|transform|indent)|letter-spacing|word-spacing|line-height|vertical-align|white-space|(max-|min-)?(width|height)|margin(-[a-z]+)?|padding(-[a-z]+)?|border(-(top|right|bottom|left))?(-(color|style|width|radius))?|border-radius|list-style-type|display|opacity|columns?(-[a-z]+)*|gap|aspect-ratio|object-fit|float|clear|break-(before|after|inside))$/;
@@ -135,7 +135,7 @@
             return { applied: true };
         }
         return Object.freeze({ update: update, refresh: refresh,
-            state: function () { return { classes: result.classes.slice(), problems: result.problems.slice() }; },
+            state: function () { return { key: key, css: result.css, classes: result.classes.slice(), problems: result.problems.slice() }; },
             destroy: function () {
                 if (disposed) { return; }
                 disposed = true; revision++; style.remove(); bound.forEach(function (el) { unbind(el, key); }); contained.forEach(function (el) { release(el, key); }); bound.clear(); contained.clear(); shared = null;
