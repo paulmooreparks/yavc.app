@@ -309,6 +309,14 @@ Paul reported continuous filmstrip stuttering at certain heights on a 4K monitor
 
 Presenter Window was disabled because a deck without a saved path cannot be opened in another window. The command now uses PUDL's documented reason to explain the save requirement. `scripts/test-slides-presenter.cjs` checks the unsaved explanation, availability after saving and a user-click popup that loads the saved deck. The checks pass in Firefox and actual Edge launched with InPrivate enabled, using isolated nonpersistent contexts. This does not claim to test every privacy policy or presenter synchronization path. `docs/deploy.md` now records how to verify Docker's boot services and both production container restart policies; no remote host setting was changed.
 
+## Shared document stylesheet lifecycle
+
+The next Editor component owns stylesheet installation and paint containment on host wrappers outside the styled scopes. It clears the previous document while a new shared file loads, retains cached shared CSS for updates to the same document, and ignores late read results after a newer update or disposal. Each read is a host capability over a resolved local `.css` path, with network paths and unresolved parent traversal rejected before the capability is invoked. Scope tokens permit overlapping document and slide ownership. The final owner restores the wrapper's previous containment style; an intervening host change is preserved.
+
+Independent review caught two containment defects before integration. A styled root could use `display: contents` to remove its paint-containment box, and setting `contain: paint` alone dropped existing host guarantees. Containment now lives on qualifying host wrappers outside every styled scope and composes with their effective containment, including stylesheet-defined values. The browser regression verifies a fixed descendant remains clipped and excluded from hit testing outside the wrapper even when the document root becomes `display: contents`.
+
+The lifecycle fixtures in `scripts/test-document-styles.cjs` pass Chromium, Firefox and WebKit. They cover private scope isolation, cascade order, class discovery, cached reads, out-of-order completions, invalid URLs, shared containment ownership, restoration, rejected invalid boundaries and disposal before a queued read can start. The corrected source review has no findings, and the full repository checks pass. These remain inactive components while document extraction and host integration are pending.
+
 ## Items for other projects
 
 These problems belong to PUDL or to applets that are maintained elsewhere, so they were reported instead of patched here.
