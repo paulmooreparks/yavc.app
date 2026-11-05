@@ -6,14 +6,14 @@ export { keymap } from "prosemirror-keymap";
 export { history, undo, redo } from "prosemirror-history";
 export {
   baseKeymap, toggleMark, setBlockType, chainCommands, exitCode, joinUp, joinDown,
-  lift, selectParentNode,
+  lift, selectParentNode, wrapIn,
 } from "prosemirror-commands";
 export { wrapInList, splitListItem, liftListItem, sinkListItem } from "prosemirror-schema-list";
 export {
   tableNodes, tableEditing, columnResizing, goToNextCell, addRowBefore, addRowAfter,
   addColumnBefore, addColumnAfter, deleteRow, deleteColumn, deleteTable, isInTable,
   mergeCells, splitCell, toggleHeaderCell, toggleHeaderRow, toggleHeaderColumn,
-  CellSelection, findTable,
+  CellSelection, findTable, selectedRect,
 } from "prosemirror-tables";
 export { dropCursor } from "prosemirror-dropcursor";
 export { gapCursor } from "prosemirror-gapcursor";

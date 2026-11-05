@@ -59,6 +59,11 @@ func render(text string) ([]preview.Block, []problem) {
 }
 
 var functions = map[string]func(string) (any, error){
+	"outline": func(source string) (any, error) { return outline(source), nil },
+	"outline-state": func(source string) (any, error) {
+		return map[string]any{"entries": outline(source), "revision": sourceRevision(source)}, nil
+	},
+	"section-move": moveSection,
 	"macro-context": func(request string) (any, error) {
 		var r struct{ Op, Text, Definitions, Shared string }
 		if err := json.Unmarshal([]byte(request), &r); err != nil {

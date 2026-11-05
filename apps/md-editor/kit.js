@@ -142,7 +142,7 @@
         ['bold', 'Bold', 'bold', 'Mod-b'], ['italic', 'Italic', 'italic', 'Mod-i'], ['underline', 'Underline', 'underline', 'Mod-u'], ['strike', 'Strike Through', 'strike'],
         ['code', 'Code', 'code', 'Mod-`'], ['highlight', 'Highlight', 'yavc-highlight', 'Mod-Shift-h'],
         ['superscript', 'Superscript', 'yavc-superscript'], ['subscript', 'Subscript', 'yavc-subscript'], ['link', 'Link…', 'link', 'Mod-k'],
-        ['bullets', 'Bulleted List', 'list'], ['numbers', 'Numbered List', 'list-numbered'], ['color', 'Text Colour…', 'colour'], ['class', 'Style…', 'tag']
+        ['bullets', 'Bulleted List', 'list'], ['numbers', 'Numbered List', 'list-numbered'], ['quote', 'Quote', 'quote'], ['color', 'Text Colour…', 'colour'], ['class', 'Style…', 'tag']
     ];
     /* The classes a stylesheet defines, for the Style dialog. */
     function classesOf(css) {
@@ -255,6 +255,16 @@
             return;
         }
         var first = state.doc.lineAt(sel.from), last = state.doc.lineAt(sel.to), changes = [];
+        if (name === 'quote') {
+            if (sel.to > sel.from && sel.to === last.from) { last = state.doc.lineAt(sel.to - 1); }
+            var quoted = true;
+            for (var lineNumber = first.number; lineNumber <= last.number; lineNumber++) { if (!/^ {0,3}>[ \t]?/.test(state.doc.line(lineNumber).text)) { quoted = false; } }
+            for (var number = first.number; number <= last.number; number++) {
+                var quoteLine = state.doc.line(number), marker = /^ {0,3}>[ \t]?/.exec(quoteLine.text);
+                changes.push({ from: quoteLine.from, to: quoteLine.from + (quoted ? marker[0].length : 0), insert: quoted ? '' : '> ' });
+            }
+            view.dispatch({ changes: changes, userEvent: 'input' }); view.focus(); return;
+        }
         var level = /^h([1-6])$/.exec(name), prefix = level ? '#'.repeat(+level[1]) + ' ' : name === 'bullets' ? '- ' : null;
         if (!level && name !== 'bullets' && name !== 'numbers' && name !== 'paragraph') { return; }
         var every = true;
@@ -328,7 +338,7 @@
     function commands(ctx, extra) {
         var out = [];
         FORMATS.forEach(function (f) {
-            out.push({ id: f[0], label: f[1], glyph: f[2], shortcut: window.yavcUtil.shortcut(f[3]), run: function () { apply(f[0], ctx); }, glyphOnly: f[0] !== 'link' && f[0] !== 'color' });
+            out.push({ id: f[0], label: f[1], glyph: f[2], shortcut: window.yavcUtil.shortcut(f[3]), run: function () { apply(f[0], ctx); }, glyphOnly: f[0] !== 'link' && f[0] !== 'color', checked: f[0] === 'quote' ? function () { return quoteState(ctx); } : undefined });
         });
         out.push({ id: 'style', label: 'Paragraph Style', glyph: 'paragraph',
             current: function () { var s = ctx.blockStyle ? ctx.blockStyle() : null, f = STYLES.find(function (x) { return x[0] === s; }); return f ? f[1] : null; },
@@ -354,6 +364,10 @@
         ['row-above', 'Insert Row Above'], ['row-below', 'Insert Row Below'], ['column-before', 'Insert Column Before'], ['column-after', 'Insert Column After'],
         ['delete-row', 'Delete Row'], ['delete-column', 'Delete Column'], ['delete-table', 'Delete Table']
     ];
+    function quoteState(ctx) {
+        var page = ctx.page && ctx.page(); if (page && ctx.onPage && ctx.onPage()) { return !!page.marks().quote; }
+        var view = ctx.text && ctx.text(); return !!view && /^ {0,3}>/.test(view.state.doc.lineAt(view.state.selection.main.from).text);
+    }
     function tableCommand(ctx, opts) {
         var newTable = INSERTS.find(function (i) { return i.id === 'insert-table'; });
         function pageHere() { var p = ctx.page && ctx.page(); return p && ctx.onPage && ctx.onPage() ? p : null; }
@@ -369,6 +383,13 @@
         var items = [row({ id: 'table-new', label: 'Insert Table', run: function () { insertItem(newTable, ctx); } }, false)];
         TABLE_OPS.forEach(function (t) {
             items.push(row({ id: 'table-' + t[0], label: t[1], op: t[0], run: function () { var p = pageHere(); if (p) { p.run(t[0]); } } }, true));
+        });
+        items.push('-');
+        [['default', 'Default Alignment'], ['left', 'Align Column Left'], ['center', 'Center Column'], ['right', 'Align Column Right']].forEach(function (option) {
+            var value = option[0] === 'default' ? '' : option[0];
+            items.push(row({ id: 'table-align-' + option[0], label: option[1], op: 'align-' + option[0],
+                checked: function () { var p = pageHere(); return !!p && p.marks().columnAlign === value; },
+                run: function () { var p = pageHere(); if (p) { p.run('align-' + option[0]); } } }, true));
         });
         return Object.assign({ id: 'table', label: 'Table', glyph: 'table', items: items }, opts || {});
     }
@@ -421,7 +442,7 @@
     }
     /* The ids a toolbar or menu lists, in the kit's order. */
     var MENU = {
-        format: ['style', '-', 'bold', 'italic', 'underline', 'strike', 'code', '-', 'highlight', 'superscript', 'subscript', '-', 'link', 'color', 'class', '-', 'bullets', 'numbers', '-', 'insert', 'table', 'box'],
+        format: ['style', '-', 'bold', 'italic', 'underline', 'strike', 'code', '-', 'highlight', 'superscript', 'subscript', '-', 'link', 'color', 'class', '-', 'bullets', 'numbers', 'quote', '-', 'insert', 'table', 'box'],
         toolbar: ['style', 'bold', 'italic', 'underline', 'strike', 'code', 'link', 'color', 'class', 'bullets', 'numbers', 'insert', 'table', 'box']
     };
 
@@ -1378,7 +1399,7 @@
         colourRows: pickerRows, wireColours: wirePickers,
         libs: libs, languageServices: languageServices, codeTheme: codeTheme, codeSearch: codeSearch, findBar: findBar, pageView: pageView, mermaid: mermaid, drawMermaid: drawDiagram, loadScript: loadScript,
         FORMATS: FORMATS, STYLES: STYLES, INSERTS: INSERTS, SHORTCODES: SHORTCODES, MENU: MENU, STOCK_CLASSES: STOCK_CLASSES,
-        tableCommand: tableCommand, wordCount: wordCount, readingMinutes: readingMinutes,
+        tableCommand: tableCommand, quoteState: quoteState, wordCount: wordCount, readingMinutes: readingMinutes,
         commands: commands, apply: apply, classesOf: classesOf, insertItem: insertItem, inserts: inserts, textFormat: textFormat, textInsert: textInsert,
         askText: askText, askFields: askFields, askChoice: askChoice, askProperties: askProperties, STOCK: STOCK, askColour: askColour, askColours: askColours, askClass: askClass,
         askFigure: askFigure, editBlock: editBlock, drawBlocks: drawBlocks, drawDiagram: drawDiagram, pictureFor: pictureFor, askShortcode: askShortcode, FORMS: FORMS, boxCommand: boxCommand, BOXES: BOXES, loadImages: loadImages, parseFigure: parseFigure, buildFigure: buildFigure, parseShortcode: parseShortcode,

@@ -58,6 +58,10 @@ Three gaps matter most. The Editor does not apply a document's `{{style}}` CSS a
 
 23. **Custom shortcodes keep their invocations as the editable source** (2026-11-05). The document registry discovers complete top-level definitions with the Markdown parser, so examples in code, quotations and front matter remain examples. Shared definitions load before document definitions; a document can override a shared name, but duplicate names within either source are rejected. The registry detects template dependency cycles and enforces eight expansion levels and a cumulative 256 KiB generated-text budget per render request. Declaration bodies share a 256 KiB budget and a limit of 128 definitions. Rendering never writes an expansion back into the document. A custom container whose content slot occupies a whole template line can expose its body as rich blocks; templates with an inline content slot retain source editing. Parameter forms and completions use the same validated registry metadata. Shared definitions use a local Markdown file named by the `shortcodes` front-matter property and resolve relative to the saved document. The existing HTML cleaner remains mandatory after rendering.
 
+24. **Export exclusions are removed before layout** (2026-11-05, Paul reaffirmed Word and PDF export and requested exclusions with no space in the destination). Editor must export editable `.docx` documents and PDFs with selectable text. The built-in `{{no-export}}` shortcode works around an inline range or whole blocks, as decision 19 describes. Shared export preparation removes the excluded content before pagination, page counts, contents generation, asset collection and serialization. A removed block must not leave an empty paragraph, margin, reserved height or page break. Removing an inline range inserts no replacement characters or spacing; whitespace authored outside that range remains. Excluded text is absent from the generated document, including hidden runs, comments, embedded source and attachment payloads. The original Markdown retains the text for editing, so sharing that source still shares it. Export tests must inspect DOCX package contents and PDF text as well as the rendered result, and compare layout against a document with the excluded range deleted. This clarifies the export contract; it does not declare the exporters implemented.
+
+25. **The Editor structure batch preserves source boundaries** (2026-11-05). Outline navigation and section movement use heading ranges supplied by the Markdown engine. Only document-level headings define movable sections; quoted examples, code, front matter and shortcode templates do not. Moving a section carries its subordinate headings through the next heading of the same or lower level, stays among siblings under the same parent, and is one source edit covered by Undo. Text, Visual, Split and Preview use the same source positions. Rich blockquotes and aligned GFM tables retain their original source until edited. Quotes with unsupported children remain source blocks. Edited quotes use explicit quote markers, and table alignment applies to whole columns because GFM has no independent cell alignment. The shared editing kit exposes the same quote and table commands in Editor and Slides. Export and exclusion planning in decision 24 remains a separate implementation batch.
+
 ## What a document looks like
 
 ```markdown
@@ -170,12 +174,16 @@ The first pull request (2026-11-03) added these.
 
 The second pull request (2026-11-03) maps `docs.yavc.app` to the Editor, as decision 17 describes. The engine keeps a short table of alias addresses (`hostAliases` in `internal/web/server.go`); at `docs` it serves the Editor's standalone page titled "Docs" and marks the Editor's mount with `data-editor-start="documents"`, and the Editor then makes each new file as `untitled-N.docs.md`. A Markdown file opens in Visual there. Settings are shared by every address of the site, so the view a Markdown file opens in at `docs.yavc.app` is a setting of its own (`documentView`, beside the Editor's `markdownView`), and a reader who has the Editor open Markdown as text still gets the page at Docs. Document view will take Visual's place when it exists.
 
-The rest of milestone 1 waits for the following reasons.
+The structure batch completes the remaining Outline, quote and table-alignment work from milestone 1.
 
-- Quotes as rich blocks wait because a quote's lazy continuation lines make byte-for-byte writing back the hard part, so they go with their own round-trip tests and a second reader.
+- Rich quotes retain their original source, including lazy continuations, until edited. The engine then writes explicit quote markers. Unsupported children keep the enclosing quote editable as source.
 - The shared application of document styles and the CSS editor are implemented in the styles batch. Broader CSS syntax and resource resolution still need their own validation before the conservative subset expands.
-- The Outline tab remains pending independently of the rebuilt CSS mode.
-- Table column alignment waits because the engine cannot yet represent it: the page view treats a table with any alignment as source, so supporting it means reading and writing GFM's alignment row in `internal/pageview` as well as a cell attribute in the page.
+- Outline shares the Files pane and supports source navigation, sibling section moves, keyboard commands and drag placement. Section moves carry descendants and use one Undo transaction.
+- GFM table alignment is represented on cells, validated per column and changed through shared commands in Editor and Slides.
+
+## Next batch planning
+
+The structure batch implements Outline navigation, rich quote editing and table column alignment. Paul requested Word and PDF export alongside that planning on 2026-11-05. Export and the `no-export` shortcode should be scoped together through the shared preparation path in decisions 18, 19 and 24. PDF work depends on the page layout and print behavior in decisions 6 through 8. Those dependencies and the initial formatting coverage must be explicit before implementation; this request does not promise the later import, footnote or full pagination milestones in the same batch.
 
 ## Open questions
 

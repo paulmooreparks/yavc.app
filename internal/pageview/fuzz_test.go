@@ -12,6 +12,8 @@ import (
 )
 
 var documentSeeds = []string{
+	"> **Quote**\nlazy continuation\n>\n> - First\n> - Second\n",
+	"| Left | Center | Right |\n| :----- | :----: | ----: |\n| A | B | C |\n",
 	"",
 	"# Top\n\n{{tip:For instance}}\nThis is a *tip*.\n\n- one\n- two\n{{/tip}}\n\nAfter.\n",
 	"---\ntitle: A\n---\n\n# H\n\nText with {{kbd:Ctrl+S}}.\n",

@@ -1315,6 +1315,18 @@
         function placed() { return { index: at + 1, count: deck.slides.length }; }
         async function atSlide(i) { i = slideNo(i); if (i !== at) { await goTo(i); } return i; }
         var liveActions = {
+            'table@1': async function (input) {
+                await booted;
+                if (!pageActive() || !page.inTable()) { throw new Error('Select a table cell in Visual or Split view.'); }
+                if (!page.run(input.op)) { throw new Error('The table command is unavailable for this selection.'); }
+                await page.sync(); return { output: { changed: true } };
+            },
+            'format@1': async function (input) {
+                await booted;
+                if (editCtx().onPage()) { if (!page.run(input.op)) { throw new Error('This format is unavailable for the selection.'); } await page.sync(); }
+                else { window.yavcMdEditor.textFormat(cm, input.op, editCtx()); }
+                return { output: { formatted: true } };
+            },
             'define@1': async function () { await booted; if (pageActive()) { await page.sync(); } return { output: (await deckEngine()).macros() }; },
             'deck@1': async function () { await booted; return { output: deckView() }; },
             'slide@1': async function (input) { await booted; var i = slideNo(input.index); return { output: slideView(deck.slides[i], i) }; },

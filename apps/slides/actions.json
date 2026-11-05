@@ -1,25 +1,143 @@
 {
   "id": "yavc.slides",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "apiVersion": 1,
   "title": "Slides",
   "description": "Slide decks as Markdown files: read, build and change a deck, move through it, and present it. The deck a live action works on is the one open in Slides; parse and make work on text alone.",
   "module": "actions.js",
   "actions": [
     {
+      "ref": "yavc.slides/table@1",
+      "title": "Edit Selected Table",
+      "description": "Apply a table operation at the current rich selection in Visual or Split view. Alignment changes every cell in the selected columns.",
+      "live": true,
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "op": {
+            "enum": [
+              "row-above",
+              "row-below",
+              "column-before",
+              "column-after",
+              "delete-row",
+              "delete-column",
+              "delete-table",
+              "align-default",
+              "align-left",
+              "align-center",
+              "align-right"
+            ]
+          }
+        },
+        "required": [
+          "op"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "changed": {
+            "const": true
+          }
+        },
+        "required": [
+          "changed"
+        ]
+      },
+      "capabilities": [
+        "files.write"
+      ],
+      "replay": "once"
+    },
+    {
+      "ref": "yavc.slides/format@1",
+      "title": "Format Selection",
+      "description": "Apply formatting at the current text or rich selection. Quote toggles a block quote while preserving nested content.",
+      "live": true,
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "op": {
+            "enum": [
+              "quote",
+              "bold",
+              "italic",
+              "underline",
+              "strike",
+              "code",
+              "highlight",
+              "superscript",
+              "subscript",
+              "bullets",
+              "numbers",
+              "paragraph",
+              "h1",
+              "h2",
+              "h3",
+              "h4",
+              "h5",
+              "h6"
+            ]
+          }
+        },
+        "required": [
+          "op"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "formatted": {
+            "const": true
+          }
+        },
+        "required": [
+          "formatted"
+        ]
+      },
+      "capabilities": [
+        "files.write"
+      ],
+      "replay": "once"
+    },
+    {
       "ref": "yavc.slides/define@1",
       "title": "Read Custom Shortcode Definitions",
       "description": "Read the deck's validated custom shortcode definitions, shared definitions, parameter metadata, source ranges and problems. Ranges use UTF-16 positions in the whole deck or shared source.",
       "live": true,
-      "inputSchema": { "type": "object", "additionalProperties": false, "properties": {} },
-      "outputSchema": { "type": "object", "required": ["entries"], "properties": { "entries": { "type": "array", "items": { "type": "object" } } } },
-      "capabilities": ["files.read"],
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": [
+          "entries"
+        ],
+        "properties": {
+          "entries": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          }
+        }
+      },
+      "capabilities": [
+        "files.read"
+      ],
       "replay": "pure"
     },
     {
       "ref": "yavc.slides/parse@1",
       "title": "Parse a Deck",
-      "description": "Read a deck's Markdown into its front matter and its slides. Slides are divided by a line of three dashes; a {{slide:…}} line gives a slide's settings; {{notes}} … {{/notes}} is what the speaker says.",
+      "description": "Read a deck's Markdown into its front matter and its slides. Slides are divided by a line of three dashes; a {{slide:\u00e2\u20ac\u00a6}} line gives a slide's settings; {{notes}} \u00e2\u20ac\u00a6 {{/notes}} is what the speaker says.",
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
@@ -636,7 +754,7 @@
     {
       "ref": "yavc.slides/open@1",
       "title": "Open a Deck File",
-      "description": "Open a deck from the person's files (~/…) in a tab of its own, or bring its tab to the front if it is open.",
+      "description": "Open a deck from the person's files (~/\u00e2\u20ac\u00a6) in a tab of its own, or bring its tab to the front if it is open.",
       "live": true,
       "inputSchema": {
         "type": "object",
@@ -765,7 +883,7 @@
     {
       "ref": "yavc.slides/insert@1",
       "title": "Add to a Slide",
-      "description": "Append Markdown to the end of a slide, or of the current one: a paragraph, a list, a picture ({{figure:…}}), a hosted video ({{video:https://youtu.be/ID}}), columns, a note. Words in a colour are {{color:accent}}words{{/color}}, with one of ink, muted, accent, danger, warn, positive or any CSS colour. A {{style}}…{{/style}} block holds CSS for the deck ({{style:slide}} for that slide); {{class:name}}words{{/class}} applies a class the CSS defines.",
+      "description": "Append Markdown to the end of a slide, or of the current one: a paragraph, a list, a picture ({{figure:\u00e2\u20ac\u00a6}}), a hosted video ({{video:https://youtu.be/ID}}), columns, a note. Words in a colour are {{color:accent}}words{{/color}}, with one of ink, muted, accent, danger, warn, positive or any CSS colour. A {{style}}\u00e2\u20ac\u00a6{{/style}} block holds CSS for the deck ({{style:slide}} for that slide); {{class:name}}words{{/class}} applies a class the CSS defines.",
       "live": true,
       "inputSchema": {
         "type": "object",

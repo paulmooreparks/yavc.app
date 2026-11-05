@@ -5,6 +5,7 @@ These editable samples demonstrate Editor, Slides and Diagrams features. Open ea
 | File | Application | What to try |
 | --- | --- | --- |
 | Editor Styles.md | Editor | Document CSS, named styles, rich text and a shared stylesheet |
+| Editor Structure.md | Editor | Outline navigation, section movement, rich quotes and table alignment |
 | Slides Styles.slides.md | Slides | Whole-deck CSS, a slide override, rich editing and HTML export |
 | Diagram Editing.canvas | Diagrams | Alignment, independent fill and outline, connectors and multiple selection |
 | playground.css | Editor | A local stylesheet shared by the document and deck |

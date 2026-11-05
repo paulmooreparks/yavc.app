@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"html"
+	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
@@ -85,10 +86,48 @@ func ParseWithMacros(part string, registry *shortcodes.MacroRegistry) (*Node, er
 		return nil, ErrNotEditable
 	}
 	back, err := Serialize(doc)
-	if err != nil || layout(back) != layout(part) {
+	if err != nil {
 		return nil, ErrNotEditable
 	}
+	if layout(back) != layout(part) {
+		// Quotes may use lazy continuation lines and tables may vary their
+		// delimiter widths. Admit those spellings only when canonical output
+		// parses to the same rich tree, and retain the original source.
+		if len(doc.Content) != 1 || !canonicalSource(doc.Content[0]) {
+			return nil, ErrNotEditable
+		}
+		check := &Node{Type: "doc"}
+		other := parser{src: []byte(back), registry: registry}
+		parsed := engine.Parser().Parse(text.NewReader(other.src))
+		for n := parsed.FirstChild(); n != nil; n = n.NextSibling() {
+			value, err := other.block(n)
+			if err != nil {
+				return nil, ErrNotEditable
+			}
+			check.Content = append(check.Content, value)
+		}
+		if !reflect.DeepEqual(doc, check) {
+			return nil, ErrNotEditable
+		}
+		node := doc.Content[0]
+		if node.Attrs == nil {
+			node.Attrs = map[string]any{}
+		}
+		node.Attrs["canonical"], node.Attrs["src"] = back, part
+	}
 	return doc, nil
+}
+
+func canonicalSource(node *Node) bool {
+	if node.Type == "blockquote" || node.Type == "table" {
+		return true
+	}
+	for _, child := range node.Content {
+		if canonicalSource(child) {
+			return true
+		}
+	}
+	return false
 }
 
 // layout is a part's text without the spaces Markdown does not show: those at
@@ -161,6 +200,19 @@ func (p parser) block(n ast.Node) (*Node, error) {
 		return p.list(node)
 	case *extast.Table:
 		return p.table(node)
+	case *ast.Blockquote:
+		out := &Node{Type: "blockquote"}
+		for child := node.FirstChild(); child != nil; child = child.NextSibling() {
+			block, err := p.block(child)
+			if err != nil {
+				return nil, err
+			}
+			out.Content = append(out.Content, block)
+		}
+		if len(out.Content) == 0 {
+			out.Content = []*Node{{Type: "paragraph"}}
+		}
+		return out, nil
 	}
 	return nil, ErrNotEditable
 }
@@ -176,8 +228,10 @@ func (p parser) atx(h *ast.Heading) bool {
 	for line > 0 && p.src[line-1] != '\n' {
 		line--
 	}
-	return strings.HasPrefix(strings.TrimLeft(string(p.src[line:start]), " "), "#")
+	return atxPrefix.Match(p.src[line:start])
 }
+
+var atxPrefix = regexp.MustCompile(`(?:^|[> \t])#{1,6}[ \t]*$`)
 
 func (p parser) list(l *ast.List) (*Node, error) {
 	if l.IsOrdered() {
@@ -219,15 +273,11 @@ func (p parser) list(l *ast.List) (*Node, error) {
 }
 
 func (p parser) table(t *extast.Table) (*Node, error) {
-	for _, a := range t.Alignments {
-		if a != extast.AlignNone {
-			return nil, ErrNotEditable
-		}
-	}
 	out := &Node{Type: "table"}
 	for row := t.FirstChild(); row != nil; row = row.NextSibling() {
 		_, header := row.(*extast.TableHeader)
 		r := &Node{Type: "table_row"}
+		column := 0
 		for cell := row.FirstChild(); cell != nil; cell = cell.NextSibling() {
 			inline, err := p.inline(cell)
 			if err != nil {
@@ -237,7 +287,19 @@ func (p parser) table(t *extast.Table) (*Node, error) {
 			if header {
 				typ = "table_header"
 			}
-			r.Content = append(r.Content, &Node{Type: typ, Attrs: map[string]any{"colspan": 1, "rowspan": 1, "colwidth": nil}, Content: inline})
+			align := ""
+			if column < len(t.Alignments) {
+				switch t.Alignments[column] {
+				case extast.AlignLeft:
+					align = "left"
+				case extast.AlignCenter:
+					align = "center"
+				case extast.AlignRight:
+					align = "right"
+				}
+			}
+			r.Content = append(r.Content, &Node{Type: typ, Attrs: map[string]any{"colspan": 1, "rowspan": 1, "colwidth": nil, "align": align}, Content: inline})
+			column++
 		}
 		out.Content = append(out.Content, r)
 	}
@@ -516,7 +578,7 @@ func Serialize(doc *Node) (string, error) {
 		if b == nil {
 			continue
 		}
-		s, err := serializeBlock(b, "")
+		s, err := blockText(b)
 		if err != nil {
 			return "", err
 		}
@@ -556,6 +618,24 @@ func serializeBlock(n *Node, indent string) (string, error) {
 		return serializeList(n, indent)
 	case "table":
 		return serializeTable(n)
+	case "blockquote":
+		var blocks []string
+		for _, child := range n.Content {
+			value, err := serializeBlock(child, "")
+			if err != nil {
+				return "", err
+			}
+			blocks = append(blocks, value)
+		}
+		lines := strings.Split(strings.Join(blocks, "\n\n"), "\n")
+		for i, line := range lines {
+			if line == "" {
+				lines[i] = ">"
+			} else {
+				lines[i] = "> " + line
+			}
+		}
+		return strings.Join(lines, "\n"+indent), nil
 	}
 	return "", fmt.Errorf("a %s cannot be written as Markdown here", n.Type)
 }
@@ -622,6 +702,7 @@ func serializeList(n *Node, indent string) (string, error) {
 
 func serializeTable(n *Node) (string, error) {
 	var lines []string
+	var alignment []string
 	for _, row := range n.Content {
 		if row == nil {
 			continue
@@ -633,6 +714,18 @@ func serializeTable(n *Node) (string, error) {
 				continue
 			}
 			cells++
+			if intAttr(cell, "colspan", 1) != 1 || intAttr(cell, "rowspan", 1) != 1 {
+				return "", fmt.Errorf("GFM tables cannot contain merged cells")
+			}
+			align, _ := cell.Attrs["align"].(string)
+			if align != "" && align != "left" && align != "center" && align != "right" {
+				return "", fmt.Errorf("invalid table column alignment %q", align)
+			}
+			if len(lines) == 0 {
+				alignment = append(alignment, align)
+			} else if cells > len(alignment) || alignment[cells-1] != align {
+				return "", fmt.Errorf("table column alignment must agree across rows")
+			}
 			s, err := serializeInline(cell.Content, true)
 			if err != nil {
 				return "", err
@@ -645,10 +738,27 @@ func serializeTable(n *Node) (string, error) {
 			}
 		}
 		line.WriteString("|")
+		if cells != len(alignment) {
+			return "", fmt.Errorf("GFM table rows must have the same number of cells")
+		}
 		first := len(lines) == 0
 		lines = append(lines, line.String())
 		if first {
-			lines = append(lines, strings.Repeat("| --- ", cells)+"|")
+			var rule strings.Builder
+			for _, align := range alignment {
+				value := "---"
+				switch align {
+				case "left":
+					value = ":---"
+				case "center":
+					value = ":---:"
+				case "right":
+					value = "---:"
+				}
+				rule.WriteString("| " + value + " ")
+			}
+			rule.WriteString("|")
+			lines = append(lines, rule.String())
 		}
 	}
 	return strings.Join(lines, "\n"), nil

@@ -120,6 +120,18 @@ Shared Definitions File links a local `.md` file, either under `~/` or relative 
 
 Insert, Glyph shows a searchable list of symbols beside their names. Use Tab or the arrow keys to reach a choice, press Space or Enter to select it, then choose Insert.
 
+## Outline and section movement
+
+View, Outline opens the document's heading tree beside Files. Click a heading to go to it in Text, Visual, Split or Preview. Arrow keys navigate the tree; its disclosure buttons collapse subsections. Ctrl+Alt+O switches the Outline pane, and Back to Document closes navigation on a narrow screen.
+
+Go, Move Section Up or Move Section Down moves the selected heading and all its subordinate sections together. Alt+Shift+Up and Alt+Shift+Down do the same. You can also drag a heading before or after a sibling in Outline. A section can move among headings of the same level under the same parent. One Undo restores the complete move. Headings inside quotes, code and shortcode templates are excluded from the document outline.
+
+## Quotes and table alignment
+
+Format, Quote wraps the selected blocks or removes their enclosing quote. Lists within a quote retain their structure when you remove the quote. Text view adds or removes one explicit quote marker on the selected lines. Quotes containing unsupported rich content remain editable as source.
+
+Select a table cell in Visual or Split view, then use Format, Table to align its column left, center or right, or restore default alignment. A selection spanning several columns changes them together. Alignment is stored in ordinary GFM table delimiters. Unchanged quote and table source keeps its original spelling.
+
 ## Where your files live
 
 Your files are kept in this browser. Settings are shared by every address of the site, but files are kept per address, so a file saved on the desktop is not seen at `editor.yavc.app`, and the other way round. Download a file to keep a copy anywhere else. [Files Help](/help/files) says more about storage and its limits.
