@@ -128,7 +128,8 @@ type Inline struct {
 	Raw string
 	// For a span shortcode, set as its paragraph is drawn: an opener that
 	// found its {{/name}} in the paragraph, and a closer that matched.
-	Matched bool
+	Matched  bool
+	registry *MacroRegistry
 }
 
 var KindInline = ast.NewNodeKind("ShortcodeInline")
@@ -192,6 +193,9 @@ func IsShortcodeParagraph(n ast.Node) bool {
 // its own, such as {{kbd:Ctrl+C}} or {{status:green Done}}, so an editor
 // keeps it as one piece of the line with a form of its own.
 func IsInlineAtom(n *Inline) bool {
+	if d, ok := n.registry.definition(n.Call.Name); ok {
+		return d.Inline && !n.Closing
+	}
 	d := table[n.Call.Name]
 	return d != nil && d.kind == inline && !n.Closing && n.Raw != ""
 }
@@ -199,11 +203,23 @@ func IsInlineAtom(n *Inline) bool {
 // InlineHTML draws one inline shortcode, as written, as the page draws it;
 // a shortcode it cannot draw is the page's marked problem.
 func InlineHTML(raw string) string {
+	return InlineHTMLWithMacros(raw, nil)
+}
+
+// InlineHTMLWithMacros draws a custom atom using its document's registry.
+func InlineHTMLWithMacros(raw string, registry *MacroRegistry) string {
 	m := tagRe.FindStringSubmatch(raw)
 	if m == nil || m[0] != raw || m[1] != "" {
 		return `<code class="sc-problem">` + Esc(raw) + `</code>`
 	}
 	c := NewCall(m[2], m[3])
+	if _, ok := registry.definition(c.Name); ok {
+		out, err := registry.render(c, "", true, &MacroBudget{})
+		if err != nil {
+			return problemHTML(c, err.Error())
+		}
+		return out
+	}
 	d := table[c.Name]
 	if d == nil || d.kind != inline {
 		return problemHTML(c, "There is no shortcode called "+c.Name+" that goes in a line of text.")
@@ -239,7 +255,7 @@ func Span(n *Inline) (name, value string, ok bool) {
 // MatchSpans pairs the span shortcodes in a block with their closers.
 func MatchSpans(block ast.Node) { matchSpans(block) }
 
-type inlineParser struct{}
+type inlineParser struct{ registry *MacroRegistry }
 
 func (p *inlineParser) Trigger() []byte { return []byte{'{'} }
 
@@ -249,13 +265,14 @@ func (p *inlineParser) Parse(parent ast.Node, block text.Reader, pc parser.Conte
 	if m == nil {
 		return nil
 	}
-	node := &Inline{Call: NewCall(string(m[2]), string(m[3])), Closing: len(m[1]) > 0, Raw: string(m[0])}
+	node := &Inline{Call: NewCall(string(m[2]), string(m[3])), Closing: len(m[1]) > 0, Raw: string(m[0]), registry: p.registry}
+	node.SetPos(seg.Start)
 	block.Advance(len(m[0]))
 	_ = seg
 	return node
 }
 
-type blockParser struct{}
+type blockParser struct{ registry *MacroRegistry }
 
 // takeLine consumes a line a block parser has read, up to its newline:
 // goldmark moves past the newline itself, and a parser that takes it too
@@ -294,11 +311,18 @@ func (p *blockParser) Open(parent ast.Node, reader text.Reader, pc parser.Contex
 		return nil, parser.NoChildren
 	}
 	def := table[string(m[1])]
-	if def == nil || def.kind != container {
+	macro, custom := p.registry.definition(string(m[1]))
+	declaration := string(m[1]) == "define"
+	if !declaration && (!custom || !macro.Container) && (def == nil || def.kind != container) {
 		return nil, parser.NoChildren
 	}
 	takeLine(reader, line)
-	return &Block{Call: NewCall(string(m[1]), string(m[2])), BodyStart: seg.Stop, BodyEnd: len(reader.Source())}, parser.HasChildren
+	node := &Block{Call: NewCall(string(m[1]), string(m[2])), BodyStart: seg.Stop, BodyEnd: len(reader.Source())}
+	node.SetPos(seg.Start)
+	if declaration {
+		return node, parser.NoChildren
+	}
+	return node, parser.HasChildren
 }
 
 func (p *blockParser) Continue(node ast.Node, reader text.Reader, pc parser.Context) parser.State {
@@ -328,6 +352,9 @@ func (p *blockParser) Continue(node ast.Node, reader text.Reader, pc parser.Cont
 		blk.BodyEnd = seg.Start
 		pc.Set(closing, blk)
 		return parser.Close
+	}
+	if blk.Call.Name == "define" {
+		return parser.Continue | parser.NoChildren
 	}
 	return parser.Continue | parser.HasChildren
 }
@@ -979,7 +1006,10 @@ func problemSource(source, why string) string {
 
 // === Rendering ============================================================
 
-type htmlRenderer struct{}
+type htmlRenderer struct {
+	registry *MacroRegistry
+	budget   MacroBudget
+}
 
 func (r *htmlRenderer) RegisterFuncs(reg renderer.NodeRendererFuncRegisterer) {
 	reg.Register(KindInline, r.inline)
@@ -1046,6 +1076,16 @@ func (r *htmlRenderer) inline(w util.BufWriter, src []byte, node ast.Node, enter
 		return ast.WalkContinue, nil
 	}
 	n := node.(*Inline)
+	if r.registry != nil && !n.Closing {
+		if _, ok := r.registry.definition(n.Call.Name); ok {
+			out, err := r.registry.render(n.Call, "", true, &r.budget)
+			if err != nil {
+				out = problemHTML(n.Call, err.Error())
+			}
+			_, _ = w.WriteString(out)
+			return ast.WalkContinue, nil
+		}
+	}
 	d := table[n.Call.Name]
 	if isSpan(d) || n.Closing {
 		// Spans pair within the block they sit in, whatever it is: a
@@ -1099,6 +1139,33 @@ func (r *htmlRenderer) inline(w util.BufWriter, src []byte, node ast.Node, enter
 
 func (r *htmlRenderer) block(w util.BufWriter, src []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
 	n := node.(*Block)
+	if n.Call.Name == "define" {
+		if entering {
+			name := strings.TrimSpace(n.Call.Args)
+			if r.registry != nil && r.registry.problems[name] != "" {
+				_, _ = w.WriteString(problemHTML(n.Call, r.registry.problems[name]))
+			}
+		}
+		return ast.WalkSkipChildren, nil
+	}
+	if r.registry != nil {
+		if _, ok := r.registry.definition(n.Call.Name); ok {
+			if entering {
+				out := ""
+				var err error
+				if !n.Closed {
+					err = problem{"This shortcode needs {{/" + n.Call.Name + "}} on its own line."}
+				} else {
+					out, err = r.registry.render(n.Call, string(src[n.BodyStart:n.BodyEnd]), false, &r.budget)
+				}
+				if err != nil {
+					out = problemHTML(n.Call, err.Error())
+				}
+				_, _ = w.WriteString(out)
+			}
+			return ast.WalkSkipChildren, nil
+		}
+	}
 	d := table[n.Call.Name]
 	if d == nil || d.wrap == nil {
 		if entering {
@@ -1129,6 +1196,18 @@ func (r *htmlRenderer) block(w util.BufWriter, src []byte, node ast.Node, enteri
 // other paragraph as goldmark does.
 func (r *htmlRenderer) paragraph(w util.BufWriter, src []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
 	if sc := alone(node, src); sc != nil && !sc.Closing {
+		if r.registry != nil {
+			if d, ok := r.registry.definition(sc.Call.Name); ok && !d.Container {
+				if entering {
+					out, err := r.registry.render(sc.Call, "", false, &r.budget)
+					if err != nil {
+						out = problemHTML(sc.Call, err.Error())
+					}
+					_, _ = w.WriteString(out)
+				}
+				return ast.WalkSkipChildren, nil
+			}
+		}
 		if d := table[sc.Call.Name]; d != nil && d.kind == block {
 			if entering {
 				if parent, ok := node.Parent().(*Block); ok {
@@ -1162,17 +1241,20 @@ func (r *htmlRenderer) paragraph(w util.BufWriter, src []byte, node ast.Node, en
 
 // === The extension ========================================================
 
-type ext struct{}
+type ext struct{ registry *MacroRegistry }
+
+// WithMacros installs a document's registry without changing the built-ins.
+func WithMacros(registry *MacroRegistry) goldmark.Extender { return &ext{registry: registry} }
 
 // Extension adds the shortcodes to a goldmark.
 var Extension goldmark.Extender = &ext{}
 
 func (e *ext) Extend(m goldmark.Markdown) {
 	m.Parser().AddOptions(
-		parser.WithBlockParsers(util.Prioritized(&blockParser{}, 50)),
-		parser.WithInlineParsers(util.Prioritized(&inlineParser{}, 50)),
+		parser.WithBlockParsers(util.Prioritized(&blockParser{registry: e.registry}, 50)),
+		parser.WithInlineParsers(util.Prioritized(&inlineParser{registry: e.registry}, 50)),
 	)
-	m.Renderer().AddOptions(renderer.WithNodeRenderers(util.Prioritized(&htmlRenderer{}, 50)))
+	m.Renderer().AddOptions(renderer.WithNodeRenderers(util.Prioritized(&htmlRenderer{registry: e.registry}, 50)))
 }
 
 // videoOf reads a video shortcode's arguments as a service and an id: a

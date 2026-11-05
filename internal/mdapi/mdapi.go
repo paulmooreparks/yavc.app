@@ -59,6 +59,54 @@ func render(text string) ([]preview.Block, []problem) {
 }
 
 var functions = map[string]func(string) (any, error){
+	"macro-context": func(request string) (any, error) {
+		var r struct{ Op, Text, Definitions, Shared string }
+		if err := json.Unmarshal([]byte(request), &r); err != nil {
+			return nil, err
+		}
+		registry := shortcodes.DiscoverMacros(r.Definitions, r.Shared)
+		if r.Op == "catalog" {
+			for i := range registry.Entries {
+				entry := &registry.Entries[i]
+				source := r.Definitions
+				if entry.Shared {
+					source = r.Shared
+				}
+				entry.From = utf16Length(source[:entry.From])
+				entry.To = utf16Length(source[:entry.To])
+			}
+			return registry, nil
+		}
+		blocks, _ := preview.RenderWithMacros(r.Text, registry)
+		switch r.Op {
+		case "preview":
+			return map[string]any{"blocks": blocks, "problems": []problem{}}, nil
+		case "doc":
+			return pageview.ParseDocumentWithMacros(r.Text, pageview.Units(blocks), registry), nil
+		case "blocks":
+			return pageview.Fresh(pageview.ParseDocumentWithMacros(r.Text, pageview.Units(blocks), registry).Content), nil
+		case "container":
+			c, ok := registry.ContainerOf(r.Text)
+			if !ok {
+				c, ok = shortcodes.ContainerOf(r.Text)
+			}
+			if !ok {
+				return nil, errors.New("not a rich container's opening line")
+			}
+			return map[string]any{"name": c.Name, "args": c.Args, "before": c.Before, "after": c.After, "sep": c.Separator, "open": shortcodes.OpenLine(c.Name, c.Args)}, nil
+		case "inline":
+			return map[string]any{"html": shortcodes.InlineHTMLWithMacros(r.Text, registry)}, nil
+		case "source":
+			var output strings.Builder
+			diagrams := []preview.Diagram{}
+			for _, unit := range pageview.Units(blocks) {
+				output.WriteString(unit.HTML)
+				diagrams = append(diagrams, unit.Diagrams...)
+			}
+			return map[string]any{"html": output.String(), "diagrams": diagrams}, nil
+		}
+		return nil, errors.New("unknown macro context operation")
+	},
 	"styles": func(source string) (any, error) {
 		out := []map[string]any{}
 		position, units := 0, 0
@@ -147,6 +195,17 @@ var functions = map[string]func(string) (any, error){
 		}
 		return map[string]any{"html": html.String(), "diagrams": diagrams}, nil
 	},
+}
+
+func utf16Length(text string) int {
+	n := 0
+	for _, ch := range text {
+		n++
+		if ch > 0xffff {
+			n++
+		}
+	}
+	return n
 }
 
 // Names is the functions Call knows, in order.

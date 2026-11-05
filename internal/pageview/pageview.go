@@ -57,13 +57,22 @@ var md = goldmark.New(goldmark.WithExtensions(extension.GFM, shortcodes.Extensio
 // Parse reads one part of a document as an editor's document. A part that
 // would not be written back exactly as it is returns ErrNotEditable.
 func Parse(part string) (*Node, error) {
+	return ParseWithMacros(part, nil)
+}
+
+// ParseWithMacros retains custom invocations as inline atoms.
+func ParseWithMacros(part string, registry *shortcodes.MacroRegistry) (*Node, error) {
 	part = strings.TrimRight(part, "\n")
 	if strings.TrimSpace(part) == "" || strings.Contains(part, "\r") {
 		return nil, ErrNotEditable
 	}
 	src := []byte(part)
-	root := md.Parser().Parse(text.NewReader(src))
-	p := parser{src: src}
+	engine := md
+	if registry != nil {
+		engine = goldmark.New(goldmark.WithExtensions(extension.GFM, shortcodes.WithMacros(registry)))
+	}
+	root := engine.Parser().Parse(text.NewReader(src))
+	p := parser{src: src, registry: registry}
 	doc := &Node{Type: "doc"}
 	for n := root.FirstChild(); n != nil; n = n.NextSibling() {
 		block, err := p.block(n)
@@ -127,7 +136,8 @@ func tableRow(line string) string {
 }
 
 type parser struct {
-	src []byte
+	src      []byte
+	registry *shortcodes.MacroRegistry
 }
 
 func (p parser) block(n ast.Node) (*Node, error) {
@@ -356,7 +366,7 @@ func (p parser) walk(n ast.Node, marks []Mark, out *[]*Node) error {
 				// status label, is one piece of the line, written back as it
 				// was and changed through its form.
 				if shortcodes.IsInlineAtom(node) {
-					*out = append(*out, &Node{Type: "shortcode", Attrs: map[string]any{"src": node.Raw, "html": shortcodes.InlineHTML(node.Raw)}, Marks: append([]Mark(nil), marks...)})
+					*out = append(*out, &Node{Type: "shortcode", Attrs: map[string]any{"src": node.Raw, "html": shortcodes.InlineHTMLWithMacros(node.Raw, p.registry)}, Marks: append([]Mark(nil), marks...)})
 					continue
 				}
 				return ErrNotEditable

@@ -93,6 +93,12 @@ func frontMatterLines(text string) int {
 // not drawn, but its lines are counted, so every block's lines are lines of
 // the document as the person sees it.
 func Render(markdown string) ([]Block, []Problem) {
+	return RenderWithMacros(markdown, shortcodes.DiscoverMacros(markdown, ""))
+}
+
+// RenderWithMacros keeps source line mapping while rendering invocations
+// against the caller's document registry, including shared definitions.
+func RenderWithMacros(markdown string, registry *shortcodes.MacroRegistry) ([]Block, []Problem) {
 	markdown = strings.ReplaceAll(markdown, "\r\n", "\n")
 	lines := strings.Split(markdown, "\n")
 	// Front matter becomes blank lines, which Markdown ignores, so the
@@ -106,7 +112,7 @@ func Render(markdown string) ([]Block, []Problem) {
 
 	d := &drawer{}
 	md := goldmark.New(
-		goldmark.WithExtensions(extension.GFM, shortcodes.Extension),
+		goldmark.WithExtensions(extension.GFM, shortcodes.WithMacros(registry)),
 		goldmark.WithParserOptions(parser.WithAutoHeadingID()),
 		goldmark.WithRendererOptions(
 			// The document is the person's own, and inline HTML (<u>, a
@@ -241,6 +247,9 @@ func firstOffset(n ast.Node, src []byte) (int, bool) {
 
 // kindOf is the kind of a top-level block.
 func kindOf(n ast.Node) string {
+	if block, ok := n.(*shortcodes.Block); ok && block.Call.Name == "define" {
+		return "definition"
+	}
 	if n.Kind() == shortcodes.KindBlock || shortcodes.IsShortcodeParagraph(n) {
 		return "shortcode"
 	}

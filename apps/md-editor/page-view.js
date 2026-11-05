@@ -246,6 +246,7 @@ var schemaCache = null;
       var ticket = ++loading, text = o.text(), top = o.scroll.scrollTop;
       return Promise.all([loadProseMirror(), o.docOf(text)]).then(function (both) {
         if (ticket !== loading || !on) return;
+        if (o.text() !== text) return load();
         PM = both[0];
         var schema = schemaOf(PM), doc = schema.nodeFromJSON(both[1]);
         var state = PM.EditorState.create({ doc: doc, plugins: plugins(schema) });
@@ -398,11 +399,11 @@ var schemaCache = null;
        an agent, a suggestion taken): the blocks the change touched are
        read again and put in place, or, where that cannot be done safely,
        the whole page is read again. */
-    function textChanged() {
+    function textChanged(force) {
       if (!on) return;
       clearTimeout(reloadTimer);
       reloadTimer = setTimeout(function () {
-        if (on && !dirty && !syncing && o.text() !== shown && !patchFromText(o.text())) load();
+        if (on && !dirty && !syncing && (force === true || o.text() !== shown) && (force === true || !patchFromText(o.text()))) load();
       }, 150);
     }
     /* Reads again only the blocks a change to the text touched, with one
@@ -410,6 +411,8 @@ var schemaCache = null;
        when the page is not exactly the text it was read from, or the
        change reaches the front matter or what follows the last block. */
     function patchFromText(text) {
+      // A definition can change invocations anywhere in the document.
+      if (text.indexOf('{{define:') >= 0 || (shown || '').indexOf('{{define:') >= 0) return false;
       if (!view || shown == null || !pristine) return false;
       var doc = view.state.doc, attrs = doc.attrs, front = attrs.front || '', tail = attrs.tail == null ? '\n' : attrs.tail;
       if (attrs.crlf) return false;
@@ -1055,6 +1058,7 @@ var schemaCache = null;
       function draw(nd) {
         shownNode = nd;
         dom.dataset.kind = nd.attrs.kind;
+        dom.hidden = nd.attrs.kind === 'definition' && !(nd.attrs.html || '').includes('sc-problem');
         var inner = document.createElement('div');
         dom.replaceChildren(inner);
         o.draw(inner, nd.attrs.html || '<pre>' + (nd.attrs.src || '').replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</pre>', nd.attrs.diagrams || []);
@@ -1104,16 +1108,21 @@ var schemaCache = null;
         e.preventDefault();
         /* The host may take the block as a form, a picture's say; its
            answer is the new source, '' to take the block out, or null. */
-        var asked = o.editBlock ? o.editBlock(shownNode.attrs.src || '') : undefined;
-        if (asked === undefined) { edit(); return; }
-        Promise.resolve(asked).then(function (value) {
-          if (value == null) { v.focus(); return; }
+        var original = shownNode, generation = loading;
+        function activeSource() { var at = getPos(); return on && view === v && loading === generation && typeof at === 'number' && v.state.doc.nodeAt(at) && v.state.doc.nodeAt(at).eq(original); }
+        Promise.resolve(sync()).then(function () {
+          if (!activeSource()) return null;
+          var asked = o.editBlock ? o.editBlock(original.attrs.src || '') : undefined;
+          if (asked === undefined) { edit(); return null; }
+          return asked;
+        }).then(function (value) {
+          if (!activeSource() || value == null) return;
           var pos = getPos();
           if (typeof pos !== 'number') return;
           if (value === '') { v.dispatch(v.state.tr.delete(pos, pos + shownNode.nodeSize)); v.focus(); return; }
           take(value);
           v.focus();
-        }).catch(function (err) { o.say(String(err && err.message || err), true); });
+        }).catch(function (err) { if (on && view === v) o.say(String(err && err.message || err), true); });
       });
       draw(node);
       // Inserting a code block opens its Markdown at once, the code selected.
@@ -1155,6 +1164,7 @@ var schemaCache = null;
       bar.className = 'pm-box-bar';
       bar.contentEditable = 'false';
       bar.innerHTML = '<span class="pm-box-kind">' + escText(BOX_NAMES[node.attrs.name] || node.attrs.name) + '</span>' +
+        (o.customName && o.customName(node.attrs.name) ? '<button type="button" class="btn btn-sm" data-box="custom-args">Parameters…</button>' : '') +
         (BOX_TITLED[node.attrs.name] ? '<button type="button" class="btn btn-sm" data-box="args">' + escText(BOX_TITLED[node.attrs.name]) + '…</button>' : '') +
         (isColumns ? '<button type="button" class="btn btn-sm" data-box="column">Add a Column</button>' : '') +
         '<button type="button" class="btn btn-sm" data-box="lift">Remove the Box</button>' +
@@ -1213,19 +1223,23 @@ var schemaCache = null;
       dom.addEventListener('mousedown', function (e) {
         if (e.button !== 0) return;
         e.preventDefault();
-        var asked = o.editBlock ? o.editBlock(current.attrs.src) : undefined;
-        if (asked === undefined) return;
-        Promise.resolve(asked).then(function (value) {
+        var original = current, generation = loading;
+        function activeAtom() { var at = getPos(); return on && view === v && loading === generation && typeof at === 'number' && v.state.doc.nodeAt(at) && v.state.doc.nodeAt(at).eq(original); }
+        Promise.resolve(sync()).then(function () {
+          if (!activeAtom()) return null;
+          return o.editBlock ? o.editBlock(original.attrs.src) : null;
+        }).then(function (value) {
+          if (!activeAtom()) return;
           var pos = getPos();
           if (value == null || typeof pos !== 'number') { v.focus(); return; }
           if (value === '') { v.dispatch(v.state.tr.delete(pos, pos + 1)); v.focus(); return; }
           return Promise.resolve(o.inlineOf ? o.inlineOf(value) : { html: '' }).then(function (r) {
             var at = getPos();
-            if (typeof at !== 'number') return;
+            if (!activeAtom() || typeof at !== 'number') return;
             v.dispatch(v.state.tr.setNodeMarkup(at, null, { src: value, html: r && r.html || '' }));
             v.focus();
           });
-        }).catch(function (err) { o.say(String(err && err.message || err), true); });
+        }).catch(function (err) { if (on && view === v) o.say(String(err && err.message || err), true); });
       });
       return {
         dom: dom,
@@ -1270,6 +1284,30 @@ var schemaCache = null;
     function boxAction(action, node, getPos, v) {
       var pos = getPos(), n = v.state.schema.nodes;
       if (typeof pos !== 'number') return;
+      if (action === 'custom-args') {
+        var generation = loading, sourceText = null;
+        function currentBox() { var at = getPos(); return on && view === v && generation === loading && (sourceText === null || o.text() === sourceText) && typeof at === 'number' && v.state.doc.nodeAt(at) && v.state.doc.nodeAt(at).eq(node); }
+        Promise.resolve(sync()).then(function () {
+          if (!currentBox()) return null;
+          sourceText = o.text();
+          return o.markdownOf({ type: 'doc', attrs: { front: '', tail: '', crlf: false }, content: [node.toJSON()] });
+        }).then(function (text) {
+          if (text == null || !currentBox()) return null;
+          return o.editBlock ? o.editBlock(text.replace(/^\n+|\n+$/g, '')) : null;
+        }).then(function (source) {
+          if (source == null || !currentBox()) return;
+          var at = getPos(), now = typeof at === 'number' && view ? v.state.doc.nodeAt(at) : null;
+          if (!now || !now.eq(node)) { o.say('The box changed while its parameters were open. Try again.', true); return; }
+          if (source === '') { v.dispatch(v.state.tr.delete(at, at + now.nodeSize)); return; }
+          return Promise.resolve(o.blocksOf(source)).then(function (json) {
+            var here = getPos(), latest = typeof here === 'number' && view ? v.state.doc.nodeAt(here) : null;
+            if (!currentBox() || !latest || !latest.eq(node)) return;
+            v.dispatch(v.state.tr.replaceWith(here, here + latest.nodeSize, json.map(function (item) { return v.state.schema.nodeFromJSON(item); })).scrollIntoView());
+            v.focus();
+          });
+        }).catch(function (err) { if (on && view === v) o.say(String(err && err.message || err), true); });
+        return;
+      }
       if (action === 'args') {
         var ask = window.yavcMdEditor && window.yavcMdEditor.askText;
         if (!ask) return;

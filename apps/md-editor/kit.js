@@ -107,6 +107,11 @@
         return stylesReady;
     }
     var languageReady = null;
+    var macrosReady = null;
+    function macros() {
+        if (!macrosReady) { macrosReady = loadScript(HERE + 'macros.js' + STAMP).then(function () { return window.yavcMacroTools; }).catch(function (err) { macrosReady = null; throw err; }); }
+        return macrosReady;
+    }
     function languageServices() {
         if (!languageReady) { languageReady = Promise.all([libs(), safeHTML(), loadScript(HERE + 'language-service/bridge.js' + STAMP)]).then(function () { return window.yavcLanguageServices; }).catch(function (err) { languageReady = null; throw err; }); }
         return languageReady;
@@ -543,20 +548,23 @@
        (it shows its own problem). Resolves to the answer, '' for Remove, or
        null for Cancel. */
     function ownForm(o) {
+        if (o.signal && o.signal.aborted || o.current && !o.current()) { return Promise.resolve(null); }
         var answer, api = null;
+        function abort() { if (api) { api.close('cancel'); } }
         dlgCount++;
         return window.yavcDialog.open({
             title: o.title, className: 'md-editor-dialog ' + (o.className || ''), body: o.body,
             buttons: (o.remove ? [{ id: 'remove', label: 'Remove', danger: true, submit: false }] : []).concat([{ id: 'cancel', label: 'Cancel' }, { id: 'ok', label: o.okLabel || 'OK', primary: true }]),
-            onOpen: function (a) { api = a; if (o.setup) { o.setup(a); } },
+            onOpen: function (a) { api = a; if (o.signal) { o.signal.addEventListener('abort', abort, { once: true }); } if (o.setup) { o.setup(a); } if (o.signal && o.signal.aborted) { abort(); } },
             check: function (v) {
                 if (v !== 'ok') { return null; }
+                if (o.current && !o.current()) { window.yavcUtil.notice(api.body, 'The document changed. Close and reopen this form.', true); return 'kept open'; }
                 var out = o.submit(api);
                 if (out === undefined) { return 'kept open'; }
                 answer = out;
                 return null;
             }
-        }).then(function (r) { return r.value === 'ok' ? answer : r.value === 'remove' ? '' : null; });
+        }).then(function (r) { if (o.current && !o.current()) { return null; } return r.value === 'ok' ? answer : r.value === 'remove' ? '' : null; }).finally(function () { if (o.signal) { o.signal.removeEventListener('abort', abort); } });
     }
 
     /* === Pictures ========================================================
@@ -721,6 +729,10 @@
        Markdown. */
     function editBlock(src, pictures) {
         if (parseFigure(src)) { return askFigure(src, pictures); }
+        if (window.yavcMacroTools && pictures && pictures.macroContext) {
+            var custom = window.yavcMacroTools.editBlock(src, pictures.macroContext(), pictures);
+            if (custom !== undefined) { return custom; }
+        }
         var sc = parseShortcode((src || '').trim());
         if (sc && FORMS[sc.name] && (src || '').trim().indexOf('\n') < 0) { return askShortcode(sc.name, src.trim(), pictures); }
         return undefined;
@@ -810,7 +822,7 @@
                 return '{{kbd:' + keys + '}}';
             } },
         glyph: { title: 'A Glyph', inline: true, fields: [
-            { key: 'name', label: 'Glyph', kind: 'select', options: glyphOptions, help: 'One of the small symbols the site\'s controls use.' }],
+            { key: 'name', label: 'Glyph', kind: 'glyph', options: glyphOptions, help: 'Choose a symbol. Each preview is shown beside its name.' }],
             read: function (sc) { return { name: sc.named.name || sc.positional[0] || '' }; },
             write: function (v) { return plain(v.name) ? '{{glyph:' + plain(v.name) + '}}' : { problem: 'Choose a glyph.', field: 'name' }; } },
         page: { title: 'A Link to a Page', inline: true, fields: [
@@ -837,8 +849,8 @@
        it out, or null for no change. existing is the shortcode being
        changed, or null for a new one. host is where files are, for Browse
        and for the site's pages (as for the picture dialog). */
-    function askShortcode(name, existing, host) {
-        var form = FORMS[name];
+    function askShortcode(name, existing, host, customForm) {
+        var form = customForm || FORMS[name];
         if (!form) { return Promise.resolve(null); }
         var sc = existing ? parseShortcode(existing) : null;
         var values = form.read(sc || { name: name, args: '', positional: [], named: {} });
@@ -846,19 +858,56 @@
         var body = '<div class="md-form-fields">' + form.fields.map(function (f) {
                 var fid = id + f.key, v = values[f.key] == null ? '' : values[f.key], help = f.help ? '<p class="form-help">' + esc(f.help) + '</p>' : '';
                 var control;
-                if (f.kind === 'select') { control = '<span class="form-select-wrap"><select class="form-select" id="' + fid + '" data-key="' + f.key + '" data-value="' + esc(v) + '"><option value="' + esc(v) + '">' + esc(v || 'Loading…') + '</option></select></span>'; }
+                if (f.kind === 'glyph') { control = '<input type="hidden" data-key="' + f.key + '" value="' + esc(v) + '"><input type="search" class="form-input" id="' + fid + '" aria-label="Search Glyphs" aria-describedby="' + id + 'error" data-glyph-search placeholder="Filter by name"><div class="md-glyph-options" role="group" aria-label="Glyph Choices" aria-describedby="' + id + 'error"><p data-glyph-loading>Loading glyphs…</p></div><p class="form-help" data-glyph-empty hidden>No matching glyphs.</p>'; }
+                else if (f.kind === 'select') { control = '<span class="form-select-wrap"><select class="form-select" id="' + fid + '" data-key="' + f.key + '" data-value="' + esc(v) + '"><option value="' + esc(v) + '">' + esc(v || 'Loading…') + '</option></select></span>'; }
                 else if (f.kind === 'number') { control = '<span class="number-field"><input class="form-input" type="number" id="' + fid + '" data-key="' + f.key + '" value="' + esc(v) + '" min="' + f.min + '" max="' + f.max + '" step="1"></span>'; }
                 else { control = '<input class="form-input" id="' + fid + '" data-key="' + f.key + '" value="' + esc(v) + '" autocomplete="off" spellcheck="false"' + (f.placeholder ? ' placeholder="' + esc(f.placeholder) + '"' : '') + '>'; }
                 if (f.browse && host && host.site) { control = '<div class="md-figure-src">' + control + '<button type="button" class="btn" data-act="browse" data-for="' + f.key + '">Browse…</button></div>'; }
                 return '<label class="form-label" for="' + fid + '">' + esc(f.label) + '</label>' + control + help;
-            }).join('') + '<p class="form-error" data-role="error" hidden></p></div>';
+            }).join('') + '<p class="form-error" id="' + id + 'error" data-role="error" role="alert" hidden></p></div>';
         var dlg = null, errorLine = null;
         function field(k) { return dlg.querySelector('[data-key="' + k + '"]'); }
         return ownForm({
+            signal: form.signal, current: form.current,
             title: existing ? 'Change ' + form.title.replace(/^(A|An) /, 'the ') : 'Insert ' + form.title.replace(/^(A|An) /, 'a ').replace(/^a a/, 'an a'),
             className: 'md-form', body: body, remove: !!existing, okLabel: existing ? 'Change' : 'Insert',
             setup: function (api) {
                 dlg = api.dialog; errorLine = dlg.querySelector('[data-role="error"]');
+                if (name === 'glyph') {
+                    var choices = dlg.querySelector('.md-glyph-options'), search = dlg.querySelector('[data-glyph-search]');
+                    glyphOptions().then(function (list) {
+                        if (!dlg.isConnected) { return; }
+                        choices.replaceChildren();
+                        list.forEach(function (option) {
+                            var key = option[0]; if (!/^[a-z][a-z0-9-]*$/.test(key)) { return; }
+                            var button = document.createElement('button'), glyph = document.createElement('span'), label = document.createElement('span');
+                            button.type = 'button'; button.className = 'btn'; button.dataset.glyphChoice = key; button.setAttribute('aria-pressed', String(field('name').value === key));
+                            glyph.className = 'glyph'; glyph.style.setProperty('--glyph', 'var(--glyph-' + key + ')'); glyph.setAttribute('aria-hidden', 'true');
+                            label.textContent = option[1]; button.append(glyph, label); choices.append(button);
+                        });
+                        filterGlyphs();
+                    }).catch(function () { window.yavcUtil.notice(api.body, 'The glyph list could not be loaded. Close and reopen the dialog to retry.', true); });
+                    function filterGlyphs() {
+                        var query = search.value.trim().toLowerCase(), visible = 0;
+                        choices.querySelectorAll('[data-glyph-choice]').forEach(function (button) { button.hidden = button.dataset.glyphChoice.indexOf(query) < 0; if (!button.hidden) { visible++; } });
+                        dlg.querySelector('[data-glyph-empty]').hidden = visible > 0;
+                    }
+                    search.addEventListener('input', filterGlyphs);
+                    choices.addEventListener('click', function (event) {
+                        var button = event.target.closest('[data-glyph-choice]'); if (!button) { return; }
+                        field('name').value = button.dataset.glyphChoice;
+                        choices.querySelectorAll('[data-glyph-choice]').forEach(function (other) { other.setAttribute('aria-pressed', String(other === button)); });
+                        errorLine.hidden = true;
+                    });
+                    choices.addEventListener('keydown', function (event) {
+                        if (!/^(ArrowRight|ArrowLeft|ArrowDown|ArrowUp|Home|End)$/.test(event.key)) { return; }
+                        var buttons = Array.from(choices.querySelectorAll('[data-glyph-choice]')).filter(function (button) { return !button.hidden; });
+                        var at = buttons.indexOf(event.target); if (at < 0 || !buttons.length) { return; }
+                        event.preventDefault();
+                        var next = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1 : (at + (/^(ArrowRight|ArrowDown)$/.test(event.key) ? 1 : buttons.length - 1)) % buttons.length;
+                        buttons[next].focus();
+                    });
+                }
                 /* A choice fills from its list; a value it does not list is kept as a choice of its own. */
                 form.fields.forEach(function (f) {
                     if (f.kind !== 'select') { return; }
@@ -891,7 +940,7 @@
                 var v = {};
                 form.fields.forEach(function (f) { var el = field(f.key); v[f.key] = el ? el.value : ''; });
                 var out = form.write(v);
-                if (typeof out !== 'string') { errorLine.textContent = out.problem; errorLine.hidden = false; var bad = field(out.field); if (bad) { bad.focus(); } return undefined; }
+                if (typeof out !== 'string') { errorLine.textContent = out.problem; errorLine.hidden = false; var bad = name === 'glyph' ? dlg.querySelector('[data-glyph-search]') : field(out.field); if (bad) { bad.focus(); } return undefined; }
                 return out;
             }
         });
@@ -1325,7 +1374,7 @@
     }
 
     window.yavcMdEditor = {
-        here: HERE, stamp: STAMP, placeholder: PLACEHOLDER, styles: styles,
+        here: HERE, stamp: STAMP, placeholder: PLACEHOLDER, styles: styles, macros: macros,
         colourRows: pickerRows, wireColours: wirePickers,
         libs: libs, languageServices: languageServices, codeTheme: codeTheme, codeSearch: codeSearch, findBar: findBar, pageView: pageView, mermaid: mermaid, drawMermaid: drawDiagram, loadScript: loadScript,
         FORMATS: FORMATS, STYLES: STYLES, INSERTS: INSERTS, SHORTCODES: SHORTCODES, MENU: MENU, STOCK_CLASSES: STOCK_CLASSES,

@@ -30,6 +30,11 @@ var richKinds = map[string]bool{"paragraph": true, "heading": true, "list": true
 
 // ParseDocument reads a whole document for the editor.
 func ParseDocument(text string, units []Unit) *Node {
+	return ParseDocumentWithMacros(text, units, shortcodes.DiscoverMacros(text, ""))
+}
+
+// ParseDocumentWithMacros shares a registry across nested rich bodies.
+func ParseDocumentWithMacros(text string, units []Unit, registry *shortcodes.MacroRegistry) *Node {
 	doc := &Node{Type: "doc", Attrs: map[string]any{}}
 	// A document whose every line ends in \r\n is read with \n and written
 	// back with \r\n. One with mixed line ends is read as it is, since
@@ -41,7 +46,7 @@ func ParseDocument(text string, units []Unit) *Node {
 	}
 	front := text[:frontmatter.End(text)]
 	doc.Attrs["front"] = front
-	b := builder{text: text, starts: lineStarts(text)}
+	b := builder{text: text, starts: lineStarts(text), registry: registry}
 	content, tail := b.sequence(units, len(front), len(text))
 	doc.Attrs["tail"] = tail
 	if len(content) == 0 {
@@ -63,9 +68,10 @@ func lineStarts(text string) []int {
 }
 
 type builder struct {
-	text   string
-	starts []int
-	uid    int
+	text     string
+	starts   []int
+	uid      int
+	registry *shortcodes.MacroRegistry
 }
 
 func (b *builder) lineEnd(line int) int {
@@ -116,8 +122,13 @@ func (b *builder) looseText(gap string, out *[]*Node) string {
 func (b *builder) next() int { b.uid++; return b.uid }
 
 func (b *builder) node(u Unit, src string) *Node {
+	// A rendering refusal, including a spent macro budget, must not be
+	// bypassed by rendering the same invocation again as an editable atom.
+	if strings.Contains(u.HTML, "shortcode expansions exceed") || strings.Contains(u.HTML, "shortcode expansion exceeds") {
+		return b.source(u.Kind, src, u.HTML, u.Diagrams)
+	}
 	if richKinds[u.Kind] {
-		if d, err := Parse(src); err == nil && len(d.Content) == 1 {
+		if d, err := ParseWithMacros(src, b.registry); err == nil && len(d.Content) == 1 {
 			n := d.Content[0]
 			if n.Attrs == nil {
 				n.Attrs = map[string]any{}
@@ -163,6 +174,17 @@ func containerParts(src string) (open, body, close string, info shortcodes.Conta
 
 func (b *builder) container(src string) *Node {
 	open, body, close, info, ok := containerParts(src)
+	if !ok && b.registry != nil {
+		nl, last := strings.IndexByte(src, '\n'), strings.LastIndexByte(src, '\n')
+		if nl >= 0 && last > nl {
+			open, close = src[:nl], src[last+1:]
+			info, ok = b.registry.ContainerOf(open)
+			ok = ok && shortcodes.ClosesContainer(close, info.Name)
+			if ok {
+				body = src[nl+1 : last]
+			}
+		}
+	}
 	if !ok {
 		return nil
 	}
@@ -216,8 +238,8 @@ func splitBody(body, sep string) (parts []string, none []bool, seps []string) {
 // body reads a container's body as blocks, with the blank text after the
 // last one. An empty body gives one empty paragraph to type into.
 func (b *builder) body(text string) ([]*Node, string) {
-	blocks, _ := preview.Render(text)
-	inner := builder{text: text, starts: lineStarts(text), uid: b.uid}
+	blocks, _ := preview.RenderWithMacros(text, b.registry)
+	inner := builder{text: text, starts: lineStarts(text), uid: b.uid, registry: b.registry}
 	content, tail := inner.sequence(Units(blocks), 0, len(text))
 	b.uid = inner.uid
 	if len(content) == 0 {

@@ -45,7 +45,7 @@
         try {
             return await window.yavcDialog.open({ title: opts.title, className: 'md-style-dialog',
                 body: (opts.help ? '<p class="form-help">' + esc(opts.help) + '</p>' : '') +
-                    (entries.length > 1 ? '<div class="form-group"><label class="form-label" for="' + id + '-block">Style Block</label><select class="form-input" id="' + id + '-block" data-style-block>' + entries.map(function (e, i) { return '<option value="' + i + '">' + esc(e.label) + '</option>'; }).join('') + '</select></div>' : '') +
+                    (entries.length > 1 ? '<div class="form-group"><label class="form-label" for="' + id + '-block">Style Block</label><span class="form-select-wrap"><select class="form-select" id="' + id + '-block" data-style-block>' + entries.map(function (e, i) { return '<option value="' + i + '">' + esc(e.label) + '</option>'; }).join('') + '</select></span></div>' : '') +
                     (opts.stylesheet != null ? '<div class="form-group"><label class="form-label" for="' + id + '-shared">Shared Stylesheet</label><input class="form-input" id="' + id + '-shared" data-style-shared value="' + esc(opts.stylesheet) + '" placeholder="~/Styles/document.css"><p class="form-help">Optional CSS file, applied before these style blocks.</p></div>' : '') +
                     '<div class="md-style-code" data-style-code></div><div class="notice warn" data-style-warning hidden role="status"><div class="notice-content"><p class="notice-body"></p></div></div>',
                 buttons: [{ id: 'cancel', label: 'Cancel' }, { id: 'apply', label: opts.okLabel || 'Apply Styles', primary: true }],

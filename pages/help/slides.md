@@ -88,6 +88,16 @@ A deck can carry its own CSS for everything the colour dialogs do not reach.
 
 The CSS applies only to the deck's slides and weighs as much as the theme's own rules, so `h2 { … }` restyles headings outright. Format, Style applies a class from the CSS to the selected words, `{{class:name}}` on lines of its own around some blocks applies it to them, and Slide, Slide Style applies it to the slide. [Styling a Deck](/slides-styles), which is also under Help while Slides is in front, lists every token, element and layout a deck's CSS can reach.
 
+## Custom shortcodes
+
+Deck, Custom Shortcodes edits definitions stored on the current slide. Their names are available throughout the deck, including thumbnails, presenting and HTML export. The dialog can also link a local Markdown file through Shared Definitions File; the front matter stores that path as `shortcodes`. Edit the shared file in Editor at the same browser address.
+
+Define a shortcode with `{{define:name}}` and `{{/define}}`. Its template can declare fields with `{{param:title default="A heading" help="Heading text"}}`, insert their literal values with `{{arg:title}}`, and insert an editable body with `{{content}}` on its own line. The Insert menu offers valid custom names and their parameter forms. The source pane completes the custom names and parameters. A rich container's Parameters button changes its arguments while keeping its body.
+
+Definitions follow the same rules and expansion limits as [Editor custom shortcodes](/help/editor). Duplicate definitions on different slides are still duplicates within one deck. A document definition overrides a name from the shared file. The dialog applies declarations to the current slide as an ordinary source edit covered by that slide's Undo history.
+
+Insert, Glyph shows each symbol beside its name and lets you filter the choices by name.
+
 ## Downloading and importing
 
 - File, Download as PowerPoint writes a .pptx with real title and body placeholders, so PowerPoint can edit it. Headings, text, lists, code, quotes, tables, pictures, notes and columns carry over, and a stylesheet does not.

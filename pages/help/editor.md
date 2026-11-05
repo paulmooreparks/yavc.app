@@ -97,6 +97,29 @@ Format, Style lists the document's classes beside the stock classes. Apply one t
 
 The stylesheet editor's Shared Stylesheet field links a local CSS file, such as `~/Styles/document.css` or `../Styles/document.css` relative to the document. Its styles apply before the document's blocks. Format, Edit Shared Stylesheet opens that file for editing; a missing home-folder file can be created there. Shared-file saves take effect in documents using it at this browser address. Each document still has its own style scope. Remote CSS files and resource-loading CSS are not supported. Fonts use those already available on your machine or in the site.
 
+## Custom shortcodes
+
+Format, Custom Shortcodes opens the definitions in this document. Choose New Definition, give it a lowercase name such as `card`, and enter a Markdown template. Each `param` line declares a field; `arg` inserts that field as literal text, and `content` inserts the body of a container shortcode.
+
+```markdown
+{{define:card}}
+{{param:title default="A heading" help="Card heading"}}
+## {{arg:title}}
+
+{{content}}
+{{/define}}
+
+{{card:title="My card"}}
+This body can contain **rich text**.
+{{/card}}
+```
+
+The Insert menu lists the document's valid custom shortcodes and asks for their parameters. The Text view completes their names and parameters. In Visual and Split views, a container with `content` on its own template line has an editable rich body and a Parameters button. A template that puts `content` inside a line stays editable as source. Definitions remain in the Markdown and are hidden in the drawn page. Apply Definitions is one document edit covered by Undo; Cancel keeps the source unchanged.
+
+Shared Definitions File links a local `.md` file, either under `~/` or relative to the document. That file holds ordinary definition blocks and can be edited in Editor. A document's definition overrides a shared definition with the same name. Duplicate names within one file, reserved names and dependency cycles are refused. Expansion stops at eight levels and a cumulative 256 KiB per rendering request. No custom shortcode executes code or reads a remote definitions file.
+
+Insert, Glyph shows a searchable list of symbols beside their names. Use Tab or the arrow keys to reach a choice, press Space or Enter to select it, then choose Insert.
+
 ## Where your files live
 
 Your files are kept in this browser. Settings are shared by every address of the site, but files are kept per address, so a file saved on the desktop is not seen at `editor.yavc.app`, and the other way round. Download a file to keep a copy anywhere else. [Files Help](/help/files) says more about storage and its limits.

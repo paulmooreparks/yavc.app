@@ -1,3 +1,8 @@
 /* Copyright 2026 Paul Parks. SPDX-License-Identifier: Apache-2.0 */
 .md-style-dialog.dialog { width: min(60rem, calc(100vw - 2rem)); max-width: calc(100vw - 2rem); }
 .md-style-code { height: min(45vh, 26rem); min-height: 12rem; min-width: 0; }
+/* Glyph previews keep their descriptions visible as the dialog narrows. */
+.md-glyph-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(10rem, 100%), 1fr)); gap: var(--space-2); max-height: 22rem; overflow-y: auto; padding: var(--space-1); }
+.md-glyph-options .btn { justify-content: flex-start; min-width: 0; text-align: start; }
+.md-glyph-options .btn > span:not(.glyph) { overflow-wrap: anywhere; }
+.md-glyph-options [hidden] { display: none; }
