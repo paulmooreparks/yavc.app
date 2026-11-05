@@ -273,6 +273,12 @@ Independent PUDL review found that a preference rebuild could lose focus from a 
 
 Visual review also found ambiguous D2/Canvas catalog labels. The applet supplies a documented host-only `toolbarLabel` for that distinction while retaining the normal command label and folded caption. Independent source review is clean after these corrections. The full repository gate passed with Go race tests, vet, vulnerability checks, engine/WebAssembly builds, 43 module tests and repository rules. The combined toolbar fixture covers Chromium, Firefox and WebKit; the existing C2 gesture/export fixture passed all three engines, and Editor save/Inspector, diagram chrome/Help and shared LSP lifecycle regressions passed Chromium. No installed-candidate replacement, desktop-webview test or production deployment belongs to this PR.
 
+## Toolbar customization layout review
+
+Paul requested equal-height, top-aligned command lists with central `>` and `<` transfer buttons. The shared form now places search above both lists, keeps ordering controls under Toolbar Commands and uses PUDL buttons and existing arrow glyphs. Grid rows keep the transfer buttons centered on the native listboxes. Explicit accessible names and tooltips describe add/remove direction. Independent rendered review caught clipped command names at 360 pixels; wrapping selected-command captions now preserve the full D2/Canvas distinction. The captions use safe text updates and avoid duplicate announcements of native option names. The final PUDL review has no findings.
+
+`scripts/test-command-toolbar.cjs --dialog-visual chromium firefox webkit` checks list geometry, arrow position, readout updates and keyboard transfers at 360, 620, 1100 and 1700 pixels, using Standard light/dark, Bevel and Glaze. Saved screenshots were visually inspected. The normal Chromium toolbar fixture also covers all three applets' add/remove, ordering, Apply/Cancel, storage failures and preference persistence with the new controls. These changes affect shared host assets and do not require applet manifest changes.
+
 ## Items for other projects
 
 These problems belong to PUDL or to applets that are maintained elsewhere, so they were reported instead of patched here.

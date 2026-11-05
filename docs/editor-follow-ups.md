@@ -1,6 +1,6 @@
 # Editing follow-ups
 
-The installed local release is v0.2.19, including the Canvas Outline, alignment/distribution, pane keyboard access, Editor save corrections and Inspector fixes. The branch `codex/shared-command-toolbar` implements the shared customizable toolbar for Diagrams, Editor/Docs and Slides. Earlier requests below retain their context; completed work is described in the design decisions.
+The installed local release is v0.2.20, including the shared customizable toolbar for Diagrams, Editor/Docs and Slides. The branch `codex/toolbar-dialog-layout` refines its customization form with aligned lists and central transfer arrows. Earlier requests below retain their context; completed work is described in the design decisions.
 
 ## Commands and Inspector
 
@@ -44,7 +44,7 @@ Paul asked for the Inspector control-sizing and broken Theme Default corrections
 
 Desktop packaging, the documented host adapter, desktop-webview acceptance and revision conflict handling remain migration gates. Finishing these browser features does not establish desktop integration readiness by itself.
 
-## Current toolbar round
+## Completed toolbar round
 
 The toolbar controller consumes each applet's existing command table through an optional host capability. It replaces the default toolbar on yavc.app and retains the old toolbar on hosts without the capability. Preferences belong to each app within the reader's session; Editor and Docs use the same key. The toolbar remains visible with the ribbon by default, with visibility controls and a shared editor for command order and separators. `docs/command-toolbar-design.md` records the interface, draft/Apply behavior and validation limits.
 
