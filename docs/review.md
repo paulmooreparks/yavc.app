@@ -279,6 +279,14 @@ Paul requested equal-height, top-aligned command lists with central `>` and `<` 
 
 `scripts/test-command-toolbar.cjs --dialog-visual chromium firefox webkit` checks list geometry, arrow position, readout updates and keyboard transfers at 360, 620, 1100 and 1700 pixels, using Standard light/dark, Bevel and Glaze. Saved screenshots were visually inspected. The normal Chromium toolbar fixture also covers all three applets' add/remove, ordering, Apply/Cancel, storage failures and preference persistence with the new controls. These changes affect shared host assets and do not require applet manifest changes.
 
+## Start control integration
+
+PUDL 0.98.0 is vendored from its published archive, whose SHA-256 matches the release checksum. All 190 distributed files match the archive. Start uses the public control without vendor patches. The server supplies installed applications, category membership, alias search terms and fallback navigation links. The host adapter owns URL restoration and window-preserving destinations.
+
+`internal/web/start_test.go` checks taxonomy coverage, unknown-package placement, query limits, escaping and standalone/desktop destinations. `scripts/test-start.cjs` checks catalog counts, category filtering, Docs alias search, empty-state recovery, reload/history restoration, launching, Escape focus return and responsive bounds in Chromium, Firefox and WebKit. Screenshots cover Standard light, Bevel dark and Glaze dark at 1280, 620 and 360 pixels. The symlink escape test now checks a unique confidential payload rather than the word in its requested filename, which fallback navigation legitimately reflects. It still requires a 404 and verifies that file content stays private.
+
+Independent PUDL review found that the footer's fallback Settings and Help links discarded open windows without enhancement. Both now use the same server-side destination builder as application rows, with regression assertions for retained windows and file state. The remaining source and rendered review had no findings.
+
 ## Items for other projects
 
 These problems belong to PUDL or to applets that are maintained elsewhere, so they were reported instead of patched here.

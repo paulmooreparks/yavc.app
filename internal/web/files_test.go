@@ -163,7 +163,8 @@ func TestAppletDirNoListing(t *testing.T) {
 func TestAppletSymlinkEscape(t *testing.T) {
 	s := newSite(t, testDomain)
 	outside := filepath.Join(t.TempDir(), "secret.txt")
-	os.WriteFile(outside, []byte("secret"), 0o644)
+	const payload = "outside-package-confidential-fixture"
+	os.WriteFile(outside, []byte(payload), 0o644)
 	dice, _ := s.appletByName("dice")
 	if err := os.Symlink(outside, filepath.Join(dice.Dir, "escape.txt")); err != nil {
 		t.Skipf("this system cannot make a link here: %v", err)
@@ -172,7 +173,7 @@ func TestAppletSymlinkEscape(t *testing.T) {
 		t.Skipf("this system cannot make a link to a folder here: %v", err)
 	}
 	for _, path := range []string{"/applets/dice/escape.txt", "/applets/dice/escape-dir/secret.txt"} {
-		if w := req(t, s, "GET", site(path), ""); w.Code != 404 || strings.Contains(w.Body.String(), "secret") {
+		if w := req(t, s, "GET", site(path), ""); w.Code != 404 || strings.Contains(w.Body.String(), payload) {
 			t.Errorf("%s led out of the package: %d", path, w.Code)
 		}
 	}
