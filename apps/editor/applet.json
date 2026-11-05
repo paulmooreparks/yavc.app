@@ -1,7 +1,7 @@
 {
   "name": "editor",
   "title": "Editor",
-  "version": "45.18.0",
+  "version": "45.19.0",
   "description": "Edit text and Markdown files, with a preview, in CodeMirror.",
   "license": "Apache-2.0",
   "src": "editor.js",
@@ -11,6 +11,6 @@
   "window": { "shape": "0.6,0.8" },
   "handles": { "open": { "param": "file", "kinds": ["file", "script", "page"] } },
   "actions": "actions.json",
-  "wants": ["snapshot", "fs", "config"],
+  "wants": ["snapshot", "fs", "config", "commandToolbar"],
   "tags": ["site"]
 }

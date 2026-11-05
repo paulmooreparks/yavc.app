@@ -5,6 +5,19 @@
    desktop of applets needs; the accent and topbar tints are that site's
    too, so the two feel alike. PUDL's tokens do the rest. */
 
+/* Shared command toolbar and its native-list customization form. */
+[data-toolbar-slot]:has(> .yavc-command-toolbar[hidden]) { display: none; }
+.yavc-command-toolbar[hidden] { display: none; }
+.dialog.yavc-toolbar-dialog { width: min(54rem, 94vw); max-width: 94vw; }
+.yavc-toolbar-fields { border: 0; margin: 0; padding: 0; min-width: 0; }
+.yavc-toolbar-columns { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-4); }
+.yavc-toolbar-columns label { display: block; }
+.yavc-toolbar-columns select, .yavc-toolbar-columns input { display: block; width: 100%; margin-block-start: var(--space-1); }
+.yavc-toolbar-columns select { height: auto; min-height: 12rem; }
+.yavc-toolbar-columns .hstack { flex-wrap: wrap; }
+.yavc-toolbar-fields > .check { display: block; margin-block: var(--space-2); }
+@media (max-width: 600px) { .yavc-toolbar-columns { grid-template-columns: minmax(0, 1fr); } }
+
 /* The site's own tints apply only to the Standard skin while no PUDL
    colour theme is chosen: a colour theme sets these tokens itself
    (THEMES.md), and every other skin pairs its own accent with its depth
