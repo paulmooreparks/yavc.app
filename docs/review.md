@@ -293,6 +293,14 @@ Paul requested removal of the desktop application sidebar after installing Start
 
 The toolbar overflow regression previously relied on the sidebar consuming 300 pixels. With the wider desktop, every glyph fit and the fixture correctly found no overflow button. The fixture now sets an explicit narrow viewport before testing overflow focus. Independent source and screenshot review of the sidebar removal has no findings.
 
+## Editor styles and macro foundations
+
+The resumed Editor batch starts with inactive shared components. The document CSS compiler uses a generated scope key, CSSOM parsing and a declaration allowlist, with a 256 KiB input limit. It rejects CSS escapes until a token-aware resource resolver exists. The host must install paint containment before applying compiled styles. `scripts/test-document-styles.cjs` verifies scope isolation, class discovery, scope-escape refusal and resource/containment restrictions in Chromium, Firefox and WebKit.
+
+The macro foundation parses one isolated definition body, ordered parameter metadata and its template, then substitutes declared arguments and optional rich content once. It rejects reserved names, duplicates, unknown parameters, direct self-reference, repeated content slots and oversized output. Parameter punctuation and whitespace use character references. The regression tests cover both Markdown syntax injection and closing a raw HTML attribute, where Markdown backslash escaping alone would be insufficient. Document discovery, indirect cycle checks and the cumulative eight-level expansion gate remain required before enabling this code in the engine. No applet manifest changed because no applet consumes these foundations yet.
+
+Independent source review found no issues within the bounded components. The full repository gate passes with the new Go tests. These results do not cover the pending registry, recursive expansion, stylesheet lifecycle or app integration.
+
 ## Items for other projects
 
 These problems belong to PUDL or to applets that are maintained elsewhere, so they were reported instead of patched here.
