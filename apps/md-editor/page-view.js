@@ -29,7 +29,7 @@
           link.href = BASE + 'vendor/prosemirror-1.42/' + name;
           document.head.appendChild(link);
         });
-        window.yavcUtil.loadScript(BASE + 'vendor/prosemirror-1.42/prosemirror.js').then(function () { resolve(window.PM); },
+        window.yavcUtil.loadScript(BASE + 'vendor/prosemirror-1.42/prosemirror.js?v=2').then(function () { resolve(window.PM); },
           function () { pmReady = null; reject(new Error('The page editor could not be loaded.')); });
       });
     }
@@ -54,7 +54,7 @@
      blocks' HTML; where a block came from in the text (uid, src) does not go
      with it, so a pasted copy is a new block, and a block kept as its
      Markdown keeps that Markdown in a data attribute. */
-  var place = { uid: { default: null }, gap: { default: null }, src: { default: null } };
+  var place = { uid: { default: null }, gap: { default: null }, src: { default: null }, canonical: { default: null } };
   function withPlace(attrs) { return Object.assign({}, place, attrs || {}); }
       /* A colour as the engine writes it in a style: the site's names as
        its tokens, anything else as given, kept to what a colour can be. */
@@ -67,7 +67,10 @@
 var schemaCache = null;
   function schemaOf(PM) {
     if (schemaCache) return schemaCache;
-    var table = PM.tableNodes({ tableGroup: 'block', cellContent: 'inline*' });
+    var table = PM.tableNodes({ tableGroup: 'block', cellContent: 'inline*', cellAttributes: {
+      align: { default: '', getFromDOM: function (dom) { var value = dom.style.textAlign || dom.getAttribute('align') || ''; return /^(left|center|right)$/.test(value) ? value : ''; },
+        setDOMAttr: function (value, attrs) { if (/^(left|center|right)$/.test(value)) attrs.style = (attrs.style || '') + 'text-align:' + value + ';'; } }
+    } });
     table.table.attrs = withPlace(table.table.attrs);
     table.table.toDOM = function () {
       var dom = document.createElement('table'), body = document.createElement('tbody');
@@ -88,6 +91,7 @@ var schemaCache = null;
         paragraph: { group: 'block', content: 'inline*', attrs: withPlace(), parseDOM: [{ tag: 'p' }], toDOM: function () { return ['p', 0]; } },
         heading: { group: 'block', content: 'inline*', defining: true, attrs: withPlace({ level: { default: 1 } }), parseDOM: headings,
           toDOM: function (n) { return ['h' + n.attrs.level, 0]; } },
+        blockquote: { group: 'block', content: 'block+', defining: true, attrs: withPlace(), parseDOM: [{ tag: 'blockquote' }], toDOM: function () { return ['blockquote', 0]; } },
         bullet_list: { group: 'block', content: 'list_item+', attrs: withPlace({ tight: { default: true }, marker: { default: '-' } }), parseDOM: [{ tag: 'ul' }],
           toDOM: function (n) { return ['ul', n.attrs.tight ? { class: 'pm-tight' } : {}, 0]; } },
         ordered_list: { group: 'block', content: 'list_item+', attrs: withPlace({ order: { default: 1 }, tight: { default: true } }),
@@ -101,7 +105,7 @@ var schemaCache = null;
            its box before its blocks, as the preview does. The box is not
            part of the editable text; clicking it ticks the item
            (taskBoxes). A pasted item keeps a box it had. */
-        list_item: { content: 'paragraph (paragraph | bullet_list | ordered_list)*', defining: true, attrs: withPlace({ checked: { default: null } }),
+        list_item: { content: 'paragraph (paragraph | blockquote | bullet_list | ordered_list)*', defining: true, attrs: withPlace({ checked: { default: null } }),
           parseDOM: [{ tag: 'li', contentElement: function (d) { return d.querySelector(':scope > .pm-task-body') || d; },
             getAttrs: function (d) {
               var box = d.querySelector(':scope > input[type="checkbox"], :scope > .pm-check > input[type="checkbox"]');
@@ -218,7 +222,12 @@ var schemaCache = null;
      } */
   function attach(o) {
     var PM = null, view = null, on = false, shown = null, loading = 0;
-    var dirty = false, syncTimer = 0, syncing = null, reloadTimer = 0;
+    var dirty = false, syncTimer = 0, syncing = null, reloadTimer = 0, sourceStale = false;
+    function updating(value) {
+      sourceStale = value;
+      if (view) { view.setProps({ editable: function () { return !sourceStale; } }); view.dom.setAttribute('aria-busy', String(value)); }
+      o.changed();
+    }
     /* The top-level blocks exactly as they were read from the text: the
        same node objects, which ProseMirror keeps for a block nobody
        touched. Such a block's text is its src, so it need not be written
@@ -233,7 +242,7 @@ var schemaCache = null;
       o.page.classList.toggle('page-view', on);
       if (on) return load();
       clearTimeout(reloadTimer);
-      return sync().then(close);
+      return sync().then(close).catch(function (err) { on = true; o.page.classList.add('page-view'); throw err; });
     }
     function close() {
       if (view) { view.destroy(); view = null; }
@@ -243,7 +252,9 @@ var schemaCache = null;
 
     /* Reads the text into a new editor, keeping the place on the page. */
     function load() {
+      if (dirty || syncing) return sync().then(load);
       var ticket = ++loading, text = o.text(), top = o.scroll.scrollTop;
+      updating(true);
       return Promise.all([loadProseMirror(), o.docOf(text)]).then(function (both) {
         if (ticket !== loading || !on) return;
         if (o.text() !== text) return load();
@@ -266,6 +277,7 @@ var schemaCache = null;
         }
         shown = text;
         dirty = false;
+        updating(false);
         pristine = new WeakSet();
         view.state.doc.forEach(function (n) { pristine.add(n); });
         // The suggestions are placed once the page is known to be the text.
@@ -279,11 +291,12 @@ var schemaCache = null;
 
     function dispatch(tr) {
       if (!view) return;
+      if (sourceStale && tr.docChanged && !tr.getMeta('fromText')) return;
       view.updateState(view.state.apply(tr));
       if (tr.docChanged && !tr.getMeta('fromText')) {
         dirty = true;
         clearTimeout(syncTimer);
-        syncTimer = setTimeout(sync, 300);
+        syncTimer = setTimeout(function () { sync().catch(function () { /* sync reports the failure beside the page. */ }); }, 300);
       }
       o.changed();
     }
@@ -370,12 +383,15 @@ var schemaCache = null;
       if (syncing) return syncing.then(sync);
       if (!dirty || !view) return Promise.resolve();
       dirty = false;
+      var original = shown;
       syncing = Promise.resolve(o.markdownOf(syncJSON())).then(function (text) {
+        if (o.text() !== original || shown !== original) throw new Error('The source changed while the page was being saved. The page draft was retained; copy it before reloading.');
         shown = text;
         o.setText(text);
       }).catch(function (err) {
         dirty = true;
         o.say(String(err && err.message || err), true);
+        throw err;
       }).finally(function () { syncing = null; });
       return syncing;
     }
@@ -401,9 +417,12 @@ var schemaCache = null;
        the whole page is read again. */
     function textChanged(force) {
       if (!on) return;
+      if (!dirty && !syncing && (force === true || o.text() !== shown)) updating(true);
       clearTimeout(reloadTimer);
       reloadTimer = setTimeout(function () {
-        if (on && !dirty && !syncing && (force === true || o.text() !== shown) && (force === true || !patchFromText(o.text()))) load();
+        if (on && !dirty && !syncing && (force === true || o.text() !== shown)) {
+          if (force === true || !patchFromText(o.text())) load(); else updating(false);
+        } else if (on && o.text() === shown && sourceStale) updating(false);
       }, 150);
     }
     /* Reads again only the blocks a change to the text touched, with one
@@ -1363,23 +1382,56 @@ var schemaCache = null;
        cells and heading cells outside the first row are what a Markdown
        table cannot hold, so the page does not offer them. */
     var TABLE_COMMANDS = {
-      'row-above': function () { return PM.addRowBefore; },
-      'row-below': function () { return PM.addRowAfter; },
-      'column-before': function () { return PM.addColumnBefore; },
-      'column-after': function () { return PM.addColumnAfter; },
-      'delete-row': function () { return PM.deleteRow; },
-      'delete-column': function () { return PM.deleteColumn; },
+      'row-above': function () { return tableStructure(PM.addRowBefore, true); },
+      'row-below': function () { return tableStructure(PM.addRowAfter, true); },
+      'column-before': function () { return tableStructure(PM.addColumnBefore); },
+      'column-after': function () { return tableStructure(PM.addColumnAfter); },
+      'delete-row': function () { return tableStructure(PM.deleteRow); },
+      'delete-column': function () { return tableStructure(PM.deleteColumn); },
       'delete-table': function () { return PM.deleteTable; }
     };
+    function tableStructure(command, retainColumns) {
+      return function (state, dispatch) {
+        if (!PM.isInTable(state)) return false;
+        var rect = PM.selectedRect(state), alignment = [];
+        rect.table.firstChild.forEach(function (cell) { alignment.push(cell.attrs.align || ''); });
+        return command(state, dispatch && function (tr) {
+          var at = tr.mapping.map(rect.tableStart - 1), table = tr.doc.nodeAt(at);
+          if (table && table.type.spec.tableRole === 'table') {
+            if (!retainColumns) { alignment = []; table.firstChild.forEach(function (cell) { alignment.push(cell.attrs.align || ''); }); }
+            table.forEach(function (row, rowOffset) { row.forEach(function (cell, cellOffset, column) {
+              var value = alignment[column] || '';
+              if (cell.attrs.align !== value) tr.setNodeMarkup(at + 2 + rowOffset + cellOffset, null, Object.assign({}, cell.attrs, { align: value }));
+            }); });
+          }
+          dispatch(tr);
+        });
+      };
+    }
+    function columnAlignment(value) {
+      return function (state, dispatch) {
+        if (!PM.isInTable(state)) return false;
+        var rect = PM.selectedRect(state), valid = true;
+        rect.table.forEach(function (row) { if (row.childCount !== rect.map.width) valid = false; row.forEach(function (cell) { if (cell.attrs.colspan !== 1 || cell.attrs.rowspan !== 1) valid = false; }); });
+        if (!valid) return false;
+        if (dispatch) {
+          var tr = state.tr;
+          rect.table.forEach(function (row, rowOffset) { row.forEach(function (cell, cellOffset, column) { if (column >= rect.left && column < rect.right && cell.attrs.align !== value) tr.setNodeMarkup(rect.tableStart + rowOffset + 1 + cellOffset, null, Object.assign({}, cell.attrs, { align: value })); }); });
+          if (tr.docChanged) dispatch(tr.scrollIntoView());
+        }
+        return true;
+      };
+    }
+    ['', 'left', 'center', 'right'].forEach(function (value) { TABLE_COMMANDS['align-' + (value || 'default')] = function () { return columnAlignment(value); }; });
     function can(name) {
-      if (!view) return false;
+      if (!view || sourceStale) return false;
       var make = TABLE_COMMANDS[name];
       return !!make && PM.isInTable(view.state) && make()(view.state);
     }
 
     /* The Editor's commands, on the page. Each returns true when it acted. */
     function run(name, arg) {
-      if (!view) return false;
+      if (!view || sourceStale) return false;
       var v = view, s = v.state.schema, n = s.nodes, cmd = null;
       function list(type) {
         return function (state, d) {
@@ -1403,9 +1455,20 @@ var schemaCache = null;
         case 'superscript': cmd = PM.toggleMark(s.marks.sup); break;
         case 'subscript': cmd = PM.toggleMark(s.marks.sub); break;
         case 'strike': cmd = PM.toggleMark(s.marks.strike); break;
-        case 'h1': case 'h2': case 'h3': case 'h4': cmd = PM.setBlockType(n.heading, { level: +name.charAt(1) }); break;
+        case 'h1': case 'h2': case 'h3': case 'h4': case 'h5': case 'h6': cmd = PM.setBlockType(n.heading, { level: +name.charAt(1) }); break;
         case 'paragraph': cmd = PM.setBlockType(n.paragraph); break;
-        case 'quote': cmd = n.blockquote ? PM.wrapIn(n.blockquote) : null; break;
+        case 'quote':
+          cmd = function (state, dispatch) {
+            var $from = state.selection.$from;
+            for (var depth = $from.depth; depth > 0; depth--) {
+              if ($from.node(depth).type !== n.blockquote) continue;
+              var node = $from.node(depth), at = $from.before(depth), parent = $from.node(depth - 1), index = $from.index(depth - 1);
+              if (state.selection.to > at + node.nodeSize - 1 || !parent.canReplace(index, index + 1, node.content)) return false;
+              if (dispatch) dispatch(state.tr.replaceWith(at, at + node.nodeSize, node.content).scrollIntoView());
+              return true;
+            }
+            return PM.wrapIn(n.blockquote)(state, dispatch);
+          }; break;
         case 'bullets': cmd = list(n.bullet_list); break;
         case 'numbers': cmd = list(n.ordered_list); break;
         case 'link': linkDialog(); return true;
@@ -1430,9 +1493,9 @@ var schemaCache = null;
           insert(name);
           return true;
       }
-      cmd(v.state, v.dispatch, v);
+      var acted = cmd(v.state, v.dispatch, v);
       v.focus();
-      return true;
+      return acted;
     }
     /* The link for the selection, asked in the site's dialog
        (static/dialogs.js): an address, or none to take the link away. */
@@ -1466,6 +1529,9 @@ var schemaCache = null;
       if (link && !e.ctrlKey) { e.preventDefault(); e.stopPropagation(); }
     }
     o.scroll.addEventListener('click', click, true);
+    function staleInput(event) { if (sourceStale) { event.preventDefault(); event.stopPropagation(); } }
+    o.page.addEventListener('mousedown', staleInput, true);
+    o.page.addEventListener('beforeinput', staleInput, true);
 
     return {
       enable: enable,
@@ -1474,6 +1540,7 @@ var schemaCache = null;
       pending: function () { return dirty || !!syncing; },
       sync: sync,
       textChanged: textChanged,
+      reload: function () { return on ? load() : Promise.resolve(); },
       // The draft's suggestions, to show on the page with Accept and Reject.
       suggest: suggest,
       // The Edit menu's Paste and Select All, on the page.
@@ -1501,6 +1568,20 @@ var schemaCache = null;
         return { type: 'doc', attrs: Object.assign({}, doc.attrs, { front: '', tail: '\n' }), content: picked };
       },
       inTable: function () { return !!view && PM.isInTable(view.state); },
+      outlineIndex: function () {
+        if (!view) return -1;
+        var child = view.state.selection.$from.index(0), index = -1;
+        view.state.doc.forEach(function (node, offset, i) { if (i <= child && (node.type.name === 'heading' || node.type.name === 'source_block' && node.attrs.kind === 'heading')) index++; });
+        return index;
+      },
+      goToHeading: function (index) {
+        if (!view) return false;
+        var found = null, number = -1;
+        view.state.doc.forEach(function (node, offset) { if (node.type.name === 'heading' || node.type.name === 'source_block' && node.attrs.kind === 'heading') { number++; if (number === index) found = { node: node, offset: offset }; } });
+        if (!found) return false;
+        var selection = found.node.type.name === 'heading' ? PM.TextSelection.create(view.state.doc, found.offset + 1) : PM.NodeSelection.create(view.state.doc, found.offset);
+        view.dispatch(view.state.tr.setSelection(selection).scrollIntoView()); view.focus(); return true;
+      },
       // Whether a table command can act where the cursor is.
       can: can,
       // What the cursor is in, for the toolbar's pressed states.
@@ -1516,6 +1597,12 @@ var schemaCache = null;
         out.block = block.type.name === 'heading' ? 'h' + block.attrs.level : block.type.name === 'paragraph' ? 'paragraph' : block.type.name;
         out.list = list;
         out.table = PM.isInTable(st);
+        out.quote = false; for (var depth = $f.depth; depth > 0; depth--) { if ($f.node(depth).type === s.nodes.blockquote) { out.quote = true; break; } }
+        if (out.table) {
+          var rect = PM.selectedRect(st), values = new Set();
+          rect.table.forEach(function (row) { row.forEach(function (cell, offset, column) { if (column >= rect.left && column < rect.right) values.add(cell.attrs.align || ''); }); });
+          out.columnAlign = values.size === 1 ? values.values().next().value : null;
+        }
         return out;
       },
       focus: function () { if (view) view.focus(); },
@@ -1525,6 +1612,8 @@ var schemaCache = null;
         clearTimeout(syncTimer);
         clearTimeout(reloadTimer);
         o.scroll.removeEventListener('click', click, true);
+        o.page.removeEventListener('mousedown', staleInput, true);
+        o.page.removeEventListener('beforeinput', staleInput, true);
         if (view) { view.destroy(); view = null; }
       }
     };

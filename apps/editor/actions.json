@@ -1,18 +1,288 @@
 {
   "id": "yavc.editor",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "apiVersion": 1,
   "title": "Editor",
   "description": "The text and Markdown editor: the documents it has open, their text, and everything its commands do to them.",
   "actions": [
     {
+      "ref": "yavc.editor/outline@1",
+      "title": "Read Document Outline",
+      "description": "Read the current Markdown document headings and their section ranges. Positions use UTF-16. Parent, previous and next are zero-based entry indexes, or -1. The revision is required when moving a section.",
+      "live": true,
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {},
+        "required": []
+      },
+      "outputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "entries": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "entries",
+          "revision"
+        ]
+      },
+      "capabilities": [
+        "files.read"
+      ],
+      "replay": "pure"
+    },
+    {
+      "ref": "yavc.editor/move-section@1",
+      "title": "Move Document Section",
+      "description": "Move a heading and its descendants among same-level siblings under the same parent. Read outline first and supply its revision. The complete move is one Undo operation.",
+      "live": true,
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "from": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "revision": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "direction": {
+            "enum": [
+              "up",
+              "down"
+            ]
+          },
+          "before": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "after": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "from",
+          "revision"
+        ],
+        "oneOf": [
+          {
+            "required": [
+              "direction"
+            ],
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "before"
+                  ]
+                },
+                {
+                  "required": [
+                    "after"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "required": [
+              "before"
+            ],
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "direction"
+                  ]
+                },
+                {
+                  "required": [
+                    "after"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "required": [
+              "after"
+            ],
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "direction"
+                  ]
+                },
+                {
+                  "required": [
+                    "before"
+                  ]
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "moved": {
+            "type": "boolean"
+          },
+          "from": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "moved",
+          "from"
+        ]
+      },
+      "capabilities": [
+        "files.write"
+      ],
+      "replay": "once"
+    },
+    {
+      "ref": "yavc.editor/table@1",
+      "title": "Edit Selected Table",
+      "description": "Apply a table operation at the current rich selection in Visual or Split view. Alignment changes every cell in the selected columns.",
+      "live": true,
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "op": {
+            "enum": [
+              "row-above",
+              "row-below",
+              "column-before",
+              "column-after",
+              "delete-row",
+              "delete-column",
+              "delete-table",
+              "align-default",
+              "align-left",
+              "align-center",
+              "align-right"
+            ]
+          }
+        },
+        "required": [
+          "op"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "changed": {
+            "const": true
+          }
+        },
+        "required": [
+          "changed"
+        ]
+      },
+      "capabilities": [
+        "files.write"
+      ],
+      "replay": "once"
+    },
+    {
+      "ref": "yavc.editor/format@1",
+      "title": "Format Selection",
+      "description": "Apply formatting at the current text or rich selection. Quote toggles a block quote while preserving nested content.",
+      "live": true,
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "op": {
+            "enum": [
+              "quote",
+              "bold",
+              "italic",
+              "underline",
+              "strike",
+              "code",
+              "highlight",
+              "superscript",
+              "subscript",
+              "bullets",
+              "numbers",
+              "paragraph",
+              "h1",
+              "h2",
+              "h3",
+              "h4",
+              "h5",
+              "h6"
+            ]
+          }
+        },
+        "required": [
+          "op"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "formatted": {
+            "const": true
+          }
+        },
+        "required": [
+          "formatted"
+        ]
+      },
+      "capabilities": [
+        "files.write"
+      ],
+      "replay": "once"
+    },
+    {
       "ref": "yavc.editor/define@1",
       "title": "Read Custom Shortcode Definitions",
       "description": "Read this document's validated custom shortcode definitions, shared definitions, parameter metadata, source ranges and problems. Ranges use UTF-16 positions in the corresponding source.",
       "live": true,
-      "inputSchema": { "type": "object", "additionalProperties": false, "properties": {} },
-      "outputSchema": { "type": "object", "required": ["entries"], "properties": { "entries": { "type": "array", "items": { "type": "object" } } } },
-      "capabilities": ["files.read"],
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": [
+          "entries"
+        ],
+        "properties": {
+          "entries": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          }
+        }
+      },
+      "capabilities": [
+        "files.read"
+      ],
       "replay": "pure"
     },
     {
@@ -194,7 +464,7 @@
     {
       "ref": "yavc.editor/open-file@1",
       "title": "Open a File",
-      "description": "Open one of the person's files (~/…) or a page of the site in the Editor, and make it current. A file already open comes to the front.",
+      "description": "Open one of the person's files (~/\u00e2\u20ac\u00a6) or a page of the site in the Editor, and make it current. A file already open comes to the front.",
       "live": true,
       "inputSchema": {
         "type": "object",

@@ -26,7 +26,7 @@ import (
 // change. Front matter is kept on the document and is not shown.
 
 // richKinds are the parts that may be rich text.
-var richKinds = map[string]bool{"paragraph": true, "heading": true, "list": true, "tasklist": true, "table": true}
+var richKinds = map[string]bool{"paragraph": true, "heading": true, "list": true, "tasklist": true, "table": true, "quote": true}
 
 // ParseDocument reads a whole document for the editor.
 func ParseDocument(text string, units []Unit) *Node {
@@ -350,6 +350,9 @@ func blockText(n *Node) (string, error) {
 	// A block whose content writes back as the text it was read from keeps
 	// that text, byte for byte.
 	if src, ok := n.Attrs["src"].(string); ok && layout(s) == layout(src) {
+		return src, nil
+	}
+	if src, ok := n.Attrs["src"].(string); ok && n.Attrs["canonical"] == s {
 		return src, nil
 	}
 	return s, nil

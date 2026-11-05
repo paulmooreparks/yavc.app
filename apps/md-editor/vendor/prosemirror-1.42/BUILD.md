@@ -11,6 +11,8 @@ npx esbuild entry.js --bundle --format=iife --global-name=PM --minify \
 
 It was rebuilt on 13 October 2026 from the same package versions with `mergeCells`, `splitCell`, `toggleHeaderCell`, `toggleHeaderRow`, `toggleHeaderColumn`, `CellSelection` and `findTable` added to `entry.js`, for building tables with merged and heading cells on the page.
 
+It was rebuilt on 2026-11-05 from the same pinned package versions with `wrapIn` and `selectedRect` exported for quote editing and whole-column GFM alignment. Dependencies are installed in an external scratch directory, outside the served applet folders. The browser bundle URL now uses `?v=2`.
+
 The main version is `prosemirror-view` 1.42.6. The bundle is about 250 KB.
 
 To upgrade, repeat the build in a scratch directory with the new versions, put the bundle, the three style sheets and a new `LICENSE.txt` in a new directory named for the `prosemirror-view` version, and update the paths in `editor-applet.js`.

@@ -112,6 +112,10 @@ Deck, Edit Style Blocks opens a CSS editor for the current slide's style declara
 
 Set a local CSS file under Deck, Stylesheet File to share styles across decks, then use Deck, Edit Shared Stylesheet to edit a home-folder file. Relative paths resolve beside the saved deck. Shared CSS applies before the deck's style blocks. Thumbnails, presenting and exported HTML use the same compiled styles and slide scopes. Unsupported CSS produces a warning and remains in the source. CSS escapes, at-rules and resource-loading declarations are not supported in this release.
 
+## Quotes and table alignment
+
+Format, Quote wraps selected blocks or removes their enclosing quote while preserving nested lists. In Text view it adds or removes one quote marker on the selected lines. Select table cells in Visual or Split view and use Format, Table to set column alignment to default, left, center or right. A selection spanning columns changes all of those columns in one edit. The shared Editor and Slides controls write ordinary Markdown quotes and GFM alignment delimiters.
+
 ## Where the file lives
 
 Your files are kept in this browser, under the address you made them at. The desktop at yavc.app and the standalone page at slides.yavc.app each keep their own, so download a deck to keep it anywhere else.

@@ -83,7 +83,20 @@
 /* PUDL's handle, standing in the gap between the Explorer and the text. */
 .pc-editor .ed-panes > .ed-split { width: 6px; margin: 0; }
 .pc-editor .ed-split[hidden] { display: none; }
-@media (max-width: 700px) { .pc-editor .ed-explorer, .pc-editor .ed-split { display: none; } }
+.pc-editor .ed-navigation { display: flex; flex-direction: column; min-height: 0; flex: 1; }
+.pc-editor .ed-navigation > .tablist { flex: none; }
+.pc-editor .ed-navigation > [role="tabpanel"] { flex: 1; min-height: 0; padding: 0; }
+.pc-editor .ed-outline-panel { overflow: auto; }
+.pc-editor .ed-outline-tools { display: flex; flex-wrap: wrap; gap: var(--space-1); padding: var(--space-2); }
+.pc-editor .ed-outline-empty { padding: var(--space-3); color: var(--text-muted); }
+.pc-editor .ed-outline-panel .tree { --tree-row-pad-start: var(--space-2); }
+.pc-editor .ed-navigation-back { display: none; }
+@media (max-width: 700px) {
+  .pc-editor .ed-split { display: none; }
+  .pc-editor.ed-navigation-visible .ed-work { display: none; }
+  .pc-editor.ed-navigation-visible .ed-panes > .ed-explorer { width: 100%; flex: 1; }
+  .pc-editor .ed-navigation-back { display: inline-flex; align-self: flex-start; margin: var(--space-2); }
+}
 @media (max-width: 700px) { .pc-editor [data-action="explorer"] { display: none; } }
 
 /* === Filling a window ==================================================== */
