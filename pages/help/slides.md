@@ -116,6 +116,10 @@ Set a local CSS file under Deck, Stylesheet File to share styles across decks, t
 
 Format, Quote wraps selected blocks or removes their enclosing quote while preserving nested lists. In Text view it adds or removes one quote marker on the selected lines. Select table cells in Visual or Split view and use Format, Table to set column alignment to default, left, center or right. A selection spanning columns changes all of those columns in one edit. The shared Editor and Slides controls write ordinary Markdown quotes and GFM alignment delimiters.
 
+## Working text excluded from output
+
+Wrap private working text in `{{no-export}}` and `{{/no-export}}`, inline or around whole blocks. Slides retains it in the editing source and preview. Presenting, printing and HTML, PowerPoint and PDF exports remove it before rendering. Excluded headings cannot become fallback titles, and excluded slide declarations cannot supply an output background or layout. A note to self is also omitted. The original Markdown still contains these words; share an exported file when you need them omitted.
+
 ## Where the file lives
 
 Your files are kept in this browser, under the address you made them at. The desktop at yavc.app and the standalone page at slides.yavc.app each keep their own, so download a deck to keep it anywhere else.

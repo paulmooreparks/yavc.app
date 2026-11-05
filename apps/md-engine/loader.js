@@ -59,6 +59,7 @@
             api.outline = call('outline'); api.outlineState = call('outline-state'); api.moveSection = call('section-move');
             api.withMacros = function (definitions, shared) {
                 var context = Object.create(api), run = call('macro-context');
+                context.exportPreview = function (text) { return call('export-preview')({ text: text, definitions: definitions || '', shared: shared || '' }); };
                 ['preview', 'doc', 'blocks', 'source', 'inline', 'container'].forEach(function (op) {
                     context[op] = function (text) { return run({ op: op, text: text, definitions: definitions || '', shared: shared || '' }); };
                 });

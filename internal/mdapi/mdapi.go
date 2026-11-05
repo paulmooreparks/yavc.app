@@ -64,6 +64,26 @@ var functions = map[string]func(string) (any, error){
 		return map[string]any{"entries": outline(source), "revision": sourceRevision(source)}, nil
 	},
 	"section-move": moveSection,
+	"export-preview": func(request string) (any, error) {
+		var r struct{ Text, Definitions, Shared string }
+		if err := json.Unmarshal([]byte(request), &r); err != nil {
+			return nil, err
+		}
+		registry := shortcodes.DiscoverMacros(r.Definitions, r.Shared)
+		blocks, problems, err := preview.RenderExport(r.Text, registry)
+		if err != nil {
+			return nil, err
+		}
+		calls, err := shortcodes.ExportCalls(r.Text, registry, "slide")
+		settings := map[string]string{}
+		if len(calls) > 0 {
+			settings = calls[0].Named
+		}
+		if blocks == nil {
+			blocks = []preview.Block{}
+		}
+		return map[string]any{"blocks": blocks, "problems": problems, "slideSettings": settings}, err
+	},
 	"macro-context": func(request string) (any, error) {
 		var r struct{ Op, Text, Definitions, Shared string }
 		if err := json.Unmarshal([]byte(request), &r); err != nil {

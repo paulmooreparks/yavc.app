@@ -72,6 +72,7 @@ These are the shortcodes of version 1, in the order the Insert menu lists them. 
 | `columns` | container | Content side by side, divided by {{column}} lines; the columns stack on a narrow screen. |
 | `column` | block | Inside {{columns}}, starts the next column. |
 | `draft-note` | container | A note while writing, shown in the editor and never on a published page. |
+| `no-export` | container | Working text around words in a line or blocks on their own lines. It remains in the Markdown source and editing preview, and is removed before export layout and asset discovery. |
 | `slide` | block | A slide's layout, background and reveal, on the first line of the slide in a deck. |
 | `notes` | container | Notes for the presenter, shown in the presenter view and not on the slide. |
 | `mark` | span | Words highlighted, as with a marker. Markdown works inside it. |

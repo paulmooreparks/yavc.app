@@ -633,6 +633,26 @@
         }
 
         var download = window.yavcUtil.download;
+        async function exportDocument(format) {
+            var tab = current(); if (!tab || tab.lang !== 'markdown') { throw new Error('Choose a Markdown document to export.'); }
+            if (pageActive()) { await visual.api.sync(); }
+            if (destroyed || current() !== tab) { throw new Error('The document changed during export.'); }
+            var text = view.state.doc.toString(), directory = styleDirectory(), pictures = picturesHost(); pictures.dir = function () { return directory; };
+            function unchanged() { return !destroyed && current() === tab && view.state.doc.toString() === text; }
+            var enginePromise = documentEngine(text), K = await loadKit(), m = await enginePromise, E = await K.exports();
+            await K.styles();
+            var front = m.front(text), path = '';
+            (front.entries || []).forEach(function (entry) { if (entry.key === 'stylesheet') { path = entry.value; } });
+            var result = await E.build(format, { text: text, engine: m, stylesheet: window.yavcStyleTools.resolve(path, directory),
+                read: function (path) { if (!unchanged()) { throw new Error('The document changed during export.'); } return window.pudlHost.fs.readText(path); }, pictures: pictures, current: unchanged });
+            result.name = (tab.path ? tab.path.split('/').pop().replace(/(?:\.docs)?\.md$/i, '') : 'document') + '.' + format;
+            return result;
+        }
+        async function downloadDocument(format) {
+            say('Writing the ' + format.toUpperCase() + ' file…');
+            try { var result = await exportDocument(format); download(result.name, result.blob); say('Downloaded ' + result.name + '. ' + result.warnings.join(' ')); }
+            catch (err) { say('The document could not be exported: ' + err.message, true); }
+        }
 
         /* === Dialogs ====================================================== */
 
@@ -1910,6 +1930,8 @@
                 cmd('close-document', 'Close Document', null, function () { COMMANDS['close-document'](); }, { disabled: function () { return !ready || !current(); } }),
                 /* glyphOnly: a glyph every reader knows shows alone on the
                    menu bar's ribbon (PUDL 0.79.0), its words its tooltip. */
+                cmd('export-docx', 'Download as Word', 'download', function () { return downloadDocument('docx'); }, { disabled: function () { return !ready || !tab || tab.lang !== 'markdown'; } }),
+                cmd('export-pdf', 'Download as PDF', 'download', function () { return downloadDocument('pdf'); }, { disabled: function () { return !ready || !tab || tab.lang !== 'markdown'; } }),
                 cmd('undo', 'Undo', 'yavc-undo', function () { CM.undo(view); }, { builtIn: 'Mod-z', glyphOnly: true }),
                 cmd('redo', 'Redo', 'yavc-redo', function () { CM.redo(view); }, { builtIn: 'Mod-y', glyphOnly: true }),
                 cmd('find', 'Find and Replace…', 'search', openFind, { builtIn: 'Mod-f' }),
@@ -2006,7 +2028,7 @@
         function menus() {
             var titles = [
                 { label: 'Editor', glyph: 'document', items: window.pcAppletIdentity(root, ['key-bindings']) },
-                { id: 'file', label: 'File', glyph: 'file', items: ['new', 'open', 'save', 'save-as', '-', 'properties', 'present', '-', 'close-document'] },
+                { id: 'file', label: 'File', glyph: 'file', items: ['new', 'open', 'save', 'save-as', '-', 'export-docx', 'export-pdf', '-', 'properties', 'present', '-', 'close-document'] },
                 { id: 'edit', label: 'Edit', glyph: 'pencil', items: ['undo', 'redo', '-', 'find', '-', 'json-format', 'language-restart'] },
                 { id: 'insert', label: 'Insert', glyph: 'plus', items: ['link', 'insert', 'table', 'box', '-', 'insert-timestamp', 'insert-date', 'stamp-modified'] }
             ];
@@ -2090,6 +2112,10 @@
             markModified(tabs[i]);
         }
         var liveActions = {
+            'export@1': async function (input) {
+                var result = await exportDocument(input.format);
+                return { output: { format: input.format, blocks: result.blocks, warnings: result.warnings }, artifacts: [{ key: input.format, name: result.name, mime: result.blob.type, data: new Uint8Array(await result.blob.arrayBuffer()) }] };
+            },
             'outline@1': async function () {
                 docNo(); var tab = current(); if (tab.lang !== 'markdown') { throw new Error('Outline is available for Markdown files.'); }
                 if (pageActive()) { await visual.api.sync(); }

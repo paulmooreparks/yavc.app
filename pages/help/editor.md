@@ -132,6 +132,14 @@ Format, Quote wraps the selected blocks or removes their enclosing quote. Lists 
 
 Select a table cell in Visual or Split view, then use Format, Table to align its column left, center or right, or restore default alignment. A selection spanning several columns changes them together. Alignment is stored in ordinary GFM table delimiters. Unchanged quote and table source keeps its original spelling.
 
+## Word and PDF exports
+
+File, Download as Word creates an editable `.docx` file. File, Download as PDF creates a PDF with selectable text. Both exports run in your browser and leave the original Markdown unchanged. They support headings, text marks, links, ordinary lists, quotes, rectangular tables, local or embedded raster pictures and explicit `{{page-break}}` markers. Page settings come from the `page`, `orientation` and `margins` properties, which you can set through File, Properties. The page sizes are `a4`, `letter` and `legal`; orientation is `portrait` or `landscape`; margins contain one to four lengths such as `1in` or `20mm`.
+
+The exporters map typography and alignment from accepted document styles. They do not reproduce every browser layout or embed custom fonts. PDF uses Roboto and refuses characters the bundled font cannot display. Export to Word when you need other fonts or characters. Diagrams, embedded applets, SVG pictures, remote pictures, external code listings and complex layouts produce an export error in this first version. Picture files have a 16 MiB input limit, decoded images have a 24-megapixel limit, and exports have a combined picture budget. Markdown exports are limited to 1 MiB.
+
+Wrap working text in the document body in `{{no-export}}` and `{{/no-export}}`, either within a paragraph or on separate lines around whole blocks. The editing preview marks it as Not exported. Export removes it before generating contents, resolving pictures or laying out pages. Removed blocks leave no empty paragraph or page break; spaces you wrote outside an inline exclusion remain subject to normal Markdown whitespace handling. A `{{draft-note}}` block is also excluded. Tags in code examples or YAML properties are literal text. The original `.md` file still contains these words, so sharing or saving the Markdown shares them too.
+
 ## Where your files live
 
 Your files are kept in this browser. Settings are shared by every address of the site, but files are kept per address, so a file saved on the desktop is not seen at `editor.yavc.app`, and the other way round. Download a file to keep a copy anywhere else. [Files Help](/help/files) says more about storage and its limits.

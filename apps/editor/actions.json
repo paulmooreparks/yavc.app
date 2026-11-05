@@ -1,10 +1,61 @@
 {
   "id": "yavc.editor",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "apiVersion": 1,
   "title": "Editor",
   "description": "The text and Markdown editor: the documents it has open, their text, and everything its commands do to them.",
   "actions": [
+    {
+      "ref": "yavc.editor/export@1",
+      "title": "Export Document",
+      "description": "Export the current Markdown document as editable Word DOCX or a PDF with selectable text. Exclusions and draft notes are removed before layout. Returns a file artifact without the Markdown source.",
+      "live": true,
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "format"
+        ],
+        "properties": {
+          "format": {
+            "enum": [
+              "docx",
+              "pdf"
+            ]
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": [
+          "format",
+          "blocks",
+          "warnings"
+        ],
+        "properties": {
+          "format": {
+            "enum": [
+              "docx",
+              "pdf"
+            ]
+          },
+          "blocks": {
+            "type": "integer"
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "capabilities": [
+        "artifact.create",
+        "files.read"
+      ],
+      "replay": "pure"
+    },
     {
       "ref": "yavc.editor/outline@1",
       "title": "Read Document Outline",

@@ -98,6 +98,11 @@
         if (!cmReady) { cmReady = loadScript(HERE + 'vendor/codemirror-6.43/codemirror.js?v=6').then(function () { return window.CM; }).catch(function (e) { cmReady = null; throw e; }); }
         return cmReady;
     }
+    var exportsReady = null;
+    function documentExports() {
+        if (!exportsReady) { exportsReady = loadScript(HERE + 'export.js' + STAMP).then(function () { return window.yavcDocumentExport; }).catch(function (err) { exportsReady = null; throw err; }); }
+        return exportsReady;
+    }
     var stylesReady = null;
     function styles() {
         if (!stylesReady) {
@@ -1395,7 +1400,7 @@
     }
 
     window.yavcMdEditor = {
-        here: HERE, stamp: STAMP, placeholder: PLACEHOLDER, styles: styles, macros: macros,
+        here: HERE, stamp: STAMP, placeholder: PLACEHOLDER, styles: styles, macros: macros, exports: documentExports,
         colourRows: pickerRows, wireColours: wirePickers,
         libs: libs, languageServices: languageServices, codeTheme: codeTheme, codeSearch: codeSearch, findBar: findBar, pageView: pageView, mermaid: mermaid, drawMermaid: drawDiagram, loadScript: loadScript,
         FORMATS: FORMATS, STYLES: STYLES, INSERTS: INSERTS, SHORTCODES: SHORTCODES, MENU: MENU, STOCK_CLASSES: STOCK_CLASSES,
