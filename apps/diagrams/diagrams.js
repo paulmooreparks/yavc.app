@@ -1823,6 +1823,9 @@
            the menus show and PUDL leaves to CodeMirror (bind: false). */
         function cmd(id, label, glyph, run, more) {
             var c = Object.assign({ id: id, label: label, glyph: glyph || undefined, run: run }, more || {});
+            if (/^(cv-|shape-)/.test(id) || id === 'connect') {
+                c.toolbarLabel = function () { return (typeof c.label === 'function' ? c.label.call(c) : c.label) + (/^cv-/.test(id) ? ' (Canvas)' : ' (D2)'); };
+            }
             if (c.builtIn) { c.shortcut = window.yavcUtil.shortcut(c.builtIn); c.bind = false; delete c.builtIn; }
             return c;
         }
@@ -1890,9 +1893,13 @@
             VIEWS.forEach(function (v) {
                 table.push({ id: 'view-' + v[0], label: v[0] === 'preview' ? function () { return isD2() || isCanvas() ? 'Visual' : 'Preview'; } : v[1], choice: 'dg-view', choiceLabel: 'View', value: v[0], checked: function () { return viewOf(current()) === v[0]; }, run: function () { setView(v[0]); } });
             });
-            return table.concat(canvasCommands());
+            return table.concat(canvasCommands(), commonToolbar ? commonToolbar.commands() : [], [
+                cmd('drawing-tool', 'Drawing Tool', 'square', null, { hidden: function () { return !isD2() && !isCanvas(); }, items: ['tool-select'].concat(PALETTE.map(function (k) { return 'tool-' + k[0]; })) }),
+                cmd('view-mode', 'View', 'panel', null, { items: ['view-text', 'view-preview', 'view-split'] })
+            ]);
         }
         function toolbars() {
+            if (commonToolbar) { return []; }
             return [{ label: 'Diagrams', ribbon: 'hide', groups: [
                 { label: 'File', glyph: 'file', priority: 3, items: ['new', 'open', 'save', 'export-svg', 'export-png'] },
                 { label: 'Edit', glyph: 'pencil', priority: 4, items: ['undo', 'redo', 'find', 'format-text', 'copy-embed'] },
@@ -1908,7 +1915,7 @@
                 { id: 'file', label: 'File', glyph: 'file', items: ['new', 'new-mermaid', 'new-canvas', 'open', 'save', 'save-as', '-', 'edit-in-editor', '-', 'export-svg', 'export-png', 'export-source', '-', 'close-diagram'] },
                 { id: 'edit', label: 'Edit', glyph: 'pencil', items: ['undo', 'redo', '-', 'cv-copy', 'cv-paste', 'cv-duplicate', 'cv-delete', 'copy-embed', '-', 'cv-select-all', 'cv-select-items', '-', 'find', '-', 'format-text', 'redraw', 'language-restart'] },
                 { id: 'shape', label: 'Shape', glyph: 'square', items: (isD2() || isCanvas() ? [{ label: 'Drawing Tool', glyph: 'square', items: ['tool-select'].concat(PALETTE.map(function (k) { return 'tool-' + k[0]; })) }, '-'] : []).concat(['shape-add', 'shape-add-inside', 'connect', 'cv-new', 'cv-group', 'cv-connect', 'cv-reconnect-start', 'cv-reconnect-end', 'cv-resize', 'cv-edit-text', '-', { label: 'Align and Distribute', items: ['cv-align-left', 'cv-align-center', 'cv-align-right', 'cv-align-top', 'cv-align-middle', 'cv-align-bottom', '-', 'cv-distribute-horizontal', 'cv-distribute-vertical'] }, '-', 'shape-label', 'shape-rename', 'shape-type', '-', 'shape-move-into', 'shape-move-top', 'cv-left', 'cv-right', 'cv-up', 'cv-down', 'cv-forward', 'cv-back', '-', 'shape-delete']) }
-            ], into: { view: ['view-text', 'view-preview', 'view-split', '-', 'dock', 'fit', 'toggle-inspector', 'toggle-outline', '-', 'cv-pan', 'cv-pan-left', 'cv-pan-right', 'cv-pan-up', 'cv-pan-down', 'cv-zoom-in', 'cv-zoom-out', 'cv-actual'], go: ['go-to-line', 'cv-next', 'cv-previous'] } };
+            ], into: { view: ['view-text', 'view-preview', 'view-split', '-', 'dock', 'fit', 'toggle-inspector', 'toggle-outline'].concat(commonToolbar ? ['-', 'common-toolbar-show', 'common-toolbar-customize'] : [], ['-', 'cv-pan', 'cv-pan-left', 'cv-pan-right', 'cv-pan-up', 'cv-pan-down', 'cv-zoom-in', 'cv-zoom-out', 'cv-actual']), go: ['go-to-line', 'cv-next', 'cv-previous'] } };
         }
         root.addEventListener('pudl:contextmenu', function (e) {
             var t = e.detail.target;
@@ -2131,6 +2138,8 @@
             }
         };
         var detachLive = window.pudlApplets && window.pudlApplets.attach ? window.pudlApplets.attach('yavc.diagrams', liveActions) : null;
+        var commonToolbar = H.commandToolbar ? H.commandToolbar.attach(root, { app: 'diagrams', label: 'Diagrams', table: commandTable,
+            defaults: ['save', '-', 'undo', 'redo', '-', 'drawing-tool', 'shape-add', 'connect', 'cv-new', 'cv-connect', '-', 'fit', 'cv-zoom-in', 'cv-zoom-out', 'view-mode'] }) : null;
 
         return {
             ready: booted,
@@ -2146,6 +2155,7 @@
             },
             commandTable: commandTable, toolbars: toolbars, menus: menus,
             destroy: function () {
+                if (commonToolbar) { commonToolbar.destroy(); }
                 destroyed = true;
                 finishInlineText(false); inspectorSize.disconnect();
                 modeWatch.disconnect();

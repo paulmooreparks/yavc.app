@@ -43,6 +43,8 @@ File, New Diagram starts a D2 diagram in one of eight styles: a flowchart, an ar
 
 ## Editing
 
+View, Customize Toolbar edits the common-command row below the topbar. Add drawing tools or other commands, change their order, and add separators between groups. Apply saves the layout; Cancel discards the draft. Restore Defaults restores the initial choices in the form. Show the Toolbar hides or shows the row, and Keep Visible with the Ribbon keeps it available beside any ribbon tab. Drawing Tool opens the shape picker; individual shape toggles can also be placed directly on the toolbar.
+
 The text pane colours the language as you type, numbers its lines and keeps its own undo history for each open diagram. Edit has Undo, Redo and Find and Replace, and Go, Go to Line moves to a line by its number. In a D2 diagram, typing a dot or a colon after a shape offers what can follow there, such as the shapes after `shape:` and the style names after `style.`, and Ctrl+Space offers them anywhere.
 
 When the text has a mistake in it, the last drawing that worked stays in place, dimmed, and a notice above it says what is wrong and on which line. The line is underlined in the text, and the mark in the margin gives the message too. Edit, Tidy the Text writes a D2 diagram's text as D2's own formatter does, with even spacing and indents, and Undo puts it back.

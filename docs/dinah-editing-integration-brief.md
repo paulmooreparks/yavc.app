@@ -31,6 +31,8 @@ These are working application components, not a released editor SDK. Their globa
 
 Prefer Dinah's documented host interfaces where they already cover these needs. The cousin agent should inventory the gaps with the Team Lead before introducing new interfaces. Do not install yavc.app's browser-local guest filesystem or snapshot store as Dinah's document authority. Existing content, unsupported constructs and native external-storage baselines must remain recoverable.
 
+The shared-toolbar candidate introduces the optional `commandToolbar.attach` host capability described in [the toolbar design](command-toolbar-design.md). It consumes the applet's command table and returns command contributions and disposal. Dinah can provide its own controller and preference service; a host without that capability receives the existing toolbar descriptors. This keeps toolbar customization and storage in the host's adapter inventory.
+
 The save contract needs particular care. A completion acknowledges only the submitted document instance and text revision. Typing during a save remains unsaved; switching documents or closing and reopening one must make stale completions harmless. Conflicts retain the local draft. The earlier proposal specifies these cases in detail.
 
 ## Readiness before replacing a desktop editor

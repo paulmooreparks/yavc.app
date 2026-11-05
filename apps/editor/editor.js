@@ -1681,12 +1681,13 @@
                     /* A view the reader chooses is the tab's from then on. */
                     run: function () { var t = current(); if (t) { t.view = v[0]; } setView(v[0]); } });
             });
-            return table;
+            return table.concat(commonToolbar ? commonToolbar.commands() : [], [{ id: 'view-mode', label: 'View', glyph: 'panel', items: ['view-text', 'view-visual', 'view-split', 'view-preview'] }]);
         }
 
         /* The toolbar: what is used most stays named longest, and the view
            switch and Preview keep to the end of the row. */
         function toolbars() {
+            if (commonToolbar) { return []; }
             /* ribbon: 'hide' (PUDL 0.80.1): every command here is in a
                menu (menus() below), so the ribbon has them while it shows. */
             return [{ label: 'Editor', ribbon: 'hide', groups: [
@@ -1716,7 +1717,7 @@
             ];
             /* Format, where there is formatting to do. */
             if (formatOffered) { titles.push({ id: 'format', label: 'Format', glyph: 'paragraph', items: ['style', '-', 'bold', 'italic', 'underline', 'strike', 'code', '-', 'highlight', 'superscript', 'subscript', '-', 'color', 'class', '-', 'bullets', 'numbers'] }); }
-            return { titles: titles, into: { view: LAYOUT, go: ['go-to-line'] } };
+            return { titles: titles, into: { view: LAYOUT.concat(commonToolbar ? ['-', 'common-toolbar-show', 'common-toolbar-customize'] : []), go: ['go-to-line'] } };
         }
 
         /* === Start ======================================================== */
@@ -1839,6 +1840,8 @@
             }
         };
         var detachLive = window.pudlApplets && window.pudlApplets.attach ? window.pudlApplets.attach('yavc.editor', liveActions) : null;
+        var commonToolbar = window.pudlHost && window.pudlHost.commandToolbar ? window.pudlHost.commandToolbar.attach(root, { app: 'editor', label: forDocuments ? 'Docs' : 'Editor', table: commandTable,
+            defaults: ['save', '-', 'undo', 'redo', '-', 'style', 'bold', 'italic', 'link', 'insert', '-', 'find', 'view-mode'] }) : null;
 
         return {
             state: function () { return stateString() || null; },
@@ -1847,6 +1850,7 @@
             commandTable: commandTable,
             toolbars: toolbars,
             destroy: function () {
+                if (commonToolbar) { commonToolbar.destroy(); }
                 /* The session as the Editor closes, for when it opens again. */
                 if (detachLive) { detachLive(); }
                 keepSession();

@@ -47,11 +47,13 @@ Slides opens with the deck's slides down the left, in the filmstrip, and the cur
 - **Text** edits the slide's Markdown.
 - **Split** shows both. View, Canvas puts the canvas to the left, right, top or bottom of the Markdown, or lets it float over the Markdown as a panel you drag by its bar and resize by its corner.
 
-View, Show the Filmstrip hides and shows the filmstrip. The Format menu and the toolbar work in every view. They offer Bold, Italic, Strike Through, Code, Link, Text Colour, Style, the two kinds of list, Box, and Paragraph Style, which is Paragraph or Heading 1 to 4 (Ctrl+0 to Ctrl+4). On an empty line, typing `/` opens a menu of everything Insert offers, and typing more narrows it.
+View, Show the Filmstrip hides and shows the filmstrip. The Format menu works in every view and offers Bold, Italic, Strike Through, Code, Link, Text Colour, Style, the two kinds of list, Box, and Paragraph Style, which is Paragraph or Heading 1 to 4 (Ctrl+0 to Ctrl+4). Any of these commands can be added to the toolbar. On an empty line, typing `/` opens a menu of everything Insert offers, and typing more narrows it.
+
+View, Customize Toolbar edits the common-command row below the topbar. Add, remove or reorder commands and separators, then Apply to save or Cancel to discard the draft. Restore Defaults restores the initial choices in the form. Show the Toolbar controls visibility; Keep Visible with the Ribbon keeps the row available beside any ribbon tab.
 
 Insert, Picture opens a dialog for a picture. It asks for the picture's address, with Browse for one in your home folder or on the site and Upload for one from your computer, and for what it shows, its largest width and a caption. An uploaded picture goes beside the deck when the deck is saved under `~`, and into `~/Pictures` otherwise. On the canvas, a click on a picture opens the same dialog to change it or remove it.
 
-Page Up and Page Down move between slides, and so do the filmstrip and Slide, Previous Slide and Next Slide. The Slide menu and the toolbar add, duplicate, delete and move slides, and the Slide menu also sets the slide's layout (Content, Title, Section, Two Columns, Picture, Quote or Blank), its colours, its style, a background picture and its transition. Reveal Points One by One marks the slide `reveal=steps`.
+Page Up and Page Down move between slides, and so do the filmstrip and Slide, Previous Slide and Next Slide. The Slide menu adds, duplicates, deletes and moves slides, and sets the slide's layout (Content, Title, Section, Two Columns, Picture, Quote or Blank), its colours, its style, a background picture and its transition. The toolbar starts with common slide commands and can include the others. Reveal Points One by One marks the slide `reveal=steps`.
 
 Open decks sit in tabs across the top once there is more than one. File, New Deck starts a deck, and Save is Ctrl+S; a new deck asks where to go, starting in `~/Documents`. Unsaved changes survive a reload. File, Edit the Whole Deck in the Editor opens the file itself in the Editor.
 

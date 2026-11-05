@@ -96,6 +96,9 @@
     function startIn(F, want) { try { return want && F.resolve(F.home(), want) ? want : '~'; } catch (err) { return '~'; } }
 
     window.pudlHost = kit.host({
+        commandToolbar: {
+            attach: function (root, options) { return window.yavcCommandToolbar.attach(root, Object.assign({}, options, { config: window.pudlHost.config })); }
+        },
         pages: '/', pudl: '/pudl/',
         snapshot: window.pcSnapshot,
         services: {},

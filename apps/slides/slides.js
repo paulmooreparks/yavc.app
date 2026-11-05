@@ -1154,9 +1154,10 @@
             [['visual', 'Visual'], ['text', 'Text'], ['split', 'Split']].forEach(function (v) {
                 table.push({ id: 'view-' + v[0], label: v[1], choice: 'deck-view', choiceLabel: 'View', value: v[0], checked: function () { return mode === v[0]; }, run: function () { setMode(v[0]); } });
             });
-            return table;
+            return table.concat(commonToolbar ? commonToolbar.commands() : [], [{ id: 'view-mode', label: 'View', glyph: 'panel', items: ['view-visual', 'view-text', 'view-split'] }]);
         }
         function toolbars() {
+            if (commonToolbar) { return []; }
             return [{ label: 'Slides', ribbon: 'hide', groups: [
                 { label: 'File', glyph: 'file', priority: 3, items: ['new-deck', 'open', 'save'] },
                 { label: 'Slide', glyph: 'plus', priority: 4, items: ['slide-new', 'slide-duplicate', 'slide-delete', 'slide-up', 'slide-down'] },
@@ -1176,7 +1177,7 @@
                 { id: 'format', label: 'Format', glyph: 'paragraph', items: window.yavcMdEditor ? window.yavcMdEditor.MENU.format : [] },
                 { id: 'deck', label: 'Deck', glyph: 'gear', items: ['deck-title', 'theme', 'deck-colours', '-', 'deck-stylesheet', 'deck-style-block', '-', 'size', 'deck-transition'] },
                 { id: 'show', label: 'Show', glyph: 'play', items: ['present', 'present-here', 'leave', '-', 'presenter', 'presenter-auto'] }
-            ], into: { view: ['view-visual', 'view-text', 'view-split', '-', 'dock', 'toggle-film'], help: ['styles-help'] } };
+            ], into: { view: ['view-visual', 'view-text', 'view-split', '-', 'dock', 'toggle-film'].concat(commonToolbar ? ['-', 'common-toolbar-show', 'common-toolbar-customize'] : []), help: ['styles-help'] } };
         }
         /* Right-clicks (PUDL's pudl:contextmenu): a slide in the filmstrip
            gets the Slide menu, the canvas and the Markdown pane get Format
@@ -1433,6 +1434,8 @@
             }
         };
         var detachLive = window.pudlApplets && window.pudlApplets.attach ? window.pudlApplets.attach('yavc.slides', liveActions) : null;
+        var commonToolbar = H.commandToolbar ? H.commandToolbar.attach(root, { app: 'slides', label: 'Slides', table: commandTable,
+            defaults: ['save', '-', 'slide-new', 'slide-duplicate', 'layout', '-', 'style', 'bold', 'italic', 'link', '-', 'present', 'presenter', 'view-mode'] }) : null;
 
         return {
             ready: booted,
@@ -1449,6 +1452,7 @@
             },
             commandTable: commandTable, toolbars: toolbars, menus: menus,
             destroy: function () {
+                if (commonToolbar) { commonToolbar.destroy(); }
                 destroyed = true;
                 if (detachLive) { detachLive(); }
                 if (styleEl) { styleEl.remove(); }

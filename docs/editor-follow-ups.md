@@ -1,6 +1,6 @@
 # Editing follow-ups
 
-The installed local release is v0.2.18, including the shared LSP, inline shape text, independent colors, Canvas templates and diagram settings. The branch `codex/editor-productivity-batch` assembles the next combined candidate. Earlier requests below retain their context; completed work is described in the design decisions.
+The installed local release is v0.2.19, including the Canvas Outline, alignment/distribution, pane keyboard access, Editor save corrections and Inspector fixes. The branch `codex/shared-command-toolbar` implements the shared customizable toolbar for Diagrams, Editor/Docs and Slides. Earlier requests below retain their context; completed work is described in the design decisions.
 
 ## Commands and Inspector
 
@@ -31,7 +31,7 @@ The implementation should settle the file-extension and interaction contracts to
 
 The shared customizable toolbar is a separate cross-app batch for Diagrams, Slides and Editor/Docs. Its design should consume the existing command tables and host configuration rather than introduce another command registry.
 
-## Current productivity round
+## Completed productivity round
 
 Paul asked for the Inspector control-sizing and broken Theme Default corrections to join the substantive batch on 5 November 2026. This candidate combines the following work before one review and full check cycle:
 
@@ -43,3 +43,12 @@ Paul asked for the Inspector control-sizing and broken Theme Default corrections
 - Theme Default removes the background override and visibly restores the host theme color.
 
 Desktop packaging, the documented host adapter, desktop-webview acceptance and revision conflict handling remain migration gates. Finishing these browser features does not establish desktop integration readiness by itself.
+
+## Current toolbar round
+
+The toolbar controller consumes each applet's existing command table through an optional host capability. It replaces the default toolbar on yavc.app and retains the old toolbar on hosts without the capability. Preferences belong to each app within the reader's session; Editor and Docs use the same key. The toolbar remains visible with the ribbon by default, with visibility controls and a shared editor for command order and separators. `docs/command-toolbar-design.md` records the interface, draft/Apply behavior and validation limits.
+
+## Separate recovery and history work
+
+- Slides has no published Undo/Redo commands. Its current slide-text history and cross-slide behavior need a contract and regression coverage before those buttons can safely be offered. The common toolbar uses its existing commands.
+- The toolbar fixture exposed an Editor recovery case where a fresh named tab restores its draft but the missing file named in the URL also opens an empty tab. The toolbar persistence fixture now saves its named resource before reloading. The separate recovery case needs regression coverage and correction before desktop replacement.

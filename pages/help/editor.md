@@ -8,7 +8,9 @@ At `docs.yavc.app` the same Editor starts for writing documents. File, New there
 
 ## Files and tabs
 
-File, Open opens one of your files or a page of the site, and File, New starts an untitled document. The Files button on the toolbar shows a pane of your files on the left, where a click opens one. Open documents sit in tabs across the top once there is more than one. A tab with unsaved changes says so, and closing it asks first. Save is Ctrl+S, and Save As asks where to put the file, starting in `~/Documents`. Unsaved changes survive a reload of the page.
+File, Open opens one of your files or a page of the site, and File, New starts an untitled document. View, Show Files shows a pane of your files on the left, where a click opens one. Open documents sit in tabs across the top once there is more than one. A tab with unsaved changes says so, and closing it asks first. Save is Ctrl+S, and Save As asks where to put the file, starting in `~/Documents`. Unsaved changes survive a reload of the page.
+
+View, Customize Toolbar changes the common-command row below the topbar. Add or remove commands, move them up or down in the order, and add separators between groups. Apply saves the layout; Cancel discards the draft, and Restore Defaults restores the initial choices in the form. Show the Toolbar controls visibility, and Keep Visible with the Ribbon lets the row remain available beside any ribbon tab. Editor and Docs use the same toolbar preference within your session. A localhost run keeps a separate session for each host.
 
 A file of the site opens read-only, and Save As keeps an editable copy under `~`. A file named `something.slides.md` is a deck, and File, Present the Deck opens it in [Slides](/help/slides).
 
@@ -33,7 +35,7 @@ View, Open Markdown As chooses the view a Markdown file opens in, and each tab r
 
 ## Formatting
 
-The Format menu and the toolbar offer Bold (Ctrl+B), Italic (Ctrl+I), Underline (Ctrl+U), Strike Through, Code, Highlight (Ctrl+Shift+H), Superscript, Subscript, Text Colour, Style, Bulleted List and Numbered List, and Paragraph Style, which is Paragraph (Ctrl+0) or Heading 1 to 6 (Ctrl+1 to Ctrl+6). In Text view a format wraps the selection in its Markdown or takes it off again, and a heading or a list marks each selected line. In Visual view the page is formatted directly.
+The Format menu offers Bold (Ctrl+B), Italic (Ctrl+I), Underline (Ctrl+U), Strike Through, Code, Highlight (Ctrl+Shift+H), Superscript, Subscript, Text Colour, Style, Bulleted List and Numbered List, and Paragraph Style, which is Paragraph (Ctrl+0) or Heading 1 to 6 (Ctrl+1 to Ctrl+6). Any of these commands can be added to the toolbar. In Text view a format wraps the selection in its Markdown or takes it off again, and a heading or a list marks each selected line. In Visual view the page is formatted directly.
 
 Underline is written `<u>…</u>`, and Highlight, Superscript and Subscript are written `{{mark}}…{{/mark}}`, `{{sup}}…{{/sup}}` and `{{sub}}…{{/sub}}`. Superscript and Subscript replace each other, since words are raised or lowered and never both.
 
