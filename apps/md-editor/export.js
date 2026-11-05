@@ -38,8 +38,10 @@
     function rgb(value) {
         var canvas = document.createElement('canvas'); canvas.width = canvas.height = 1;
         var context = canvas.getContext('2d', { colorSpace: 'srgb' });
-        context.fillStyle = '#ffffff'; context.fillRect(0, 0, 1, 1); context.fillStyle = value || '#202124'; context.fillRect(0, 0, 1, 1);
-        return Array.from(context.getImageData(0, 0, 1, 1).data).slice(0, 3).map(function (n) { return n.toString(16).padStart(2, '0'); }).join('');
+        context.fillStyle = value || '#202124'; context.fillRect(0, 0, 1, 1);
+        var rgba = context.getImageData(0, 0, 1, 1).data;
+        if (rgba[3] !== 255) { throw new Error('Export paper and text colors must be opaque. Use a solid color.'); }
+        return Array.from(rgba).slice(0, 3).map(function (n) { return n.toString(16).padStart(2, '0'); }).join('');
     }
     function typography(element) {
         var s = getComputedStyle(element), decoration = s.textDecorationLine;
@@ -102,14 +104,16 @@
         var boundary = document.createElement('div'), surface = document.createElement('div');
         boundary.style.cssText = 'position:fixed;left:-100000px;top:0;contain:paint;pointer-events:none;width:' + (page.width - page.margins[0] - page.margins[2]) / 0.75 + 'px;';
         boundary.setAttribute('aria-hidden', 'true'); boundary.inert = true;
-        surface.className = 'doc-page'; surface.style.cssText = 'padding:0;min-height:0;min-width:0;--doc-size:11pt;--doc-ink:#202124;--doc-muted:#555555;--doc-accent:#2355a0;--doc-page:#ffffff;';
+        surface.className = 'doc-page'; surface.style.cssText = 'padding:0;min-height:0;min-width:0;';
         surface.append(fragment); boundary.append(surface); document.body.append(boundary);
         var controller;
         try {
             var D = await K.styles();
-            controller = D.attach({ surfaces: [surface], boundaries: [boundary], read: options.read });
+            controller = D.attach({ surfaces: [surface], boundaries: [boundary], read: options.read,
+                base: '--doc-size:11pt;--doc-ink:#202124;--doc-muted:#555555;--doc-accent:#2355a0;--doc-page:#ffffff;' });
             await controller.update({ identity: source, inline: engine.styles(source).map(function (b) { return b.css; }), stylesheet: options.stylesheet || '' });
             if (controller.state().problems.length) { throw new Error(controller.state().problems.join(' ')); }
+            page.background = rgb(getComputedStyle(surface).backgroundColor);
             [surface].concat(Array.from(surface.querySelectorAll('*'))).forEach(function (element) {
                 var css = getComputedStyle(element);
                 if (css.display === 'none') { return; }
@@ -199,7 +203,7 @@
             });
         }
         var children = write(model.blocks, 0), p = model.properties, m = model.page.margins;
-        return new D.Document({ title: p.title || '', creator: p.author || '', subject: p.subject || '', keywords: p.keywords || '', description: '', numbering: { config: numbering },
+        return new D.Document({ title: p.title || '', creator: p.author || '', subject: p.subject || '', keywords: p.keywords || '', description: '', background: { color: model.page.background || 'ffffff' }, numbering: { config: numbering },
             sections: [{ properties: { page: { size: { width: Math.round(model.page.width * 20), height: Math.round(model.page.height * 20) }, margin: { left: m[0] * 20, top: m[1] * 20, right: m[2] * 20, bottom: m[3] * 20 } } }, children: children.length ? children : [new D.Paragraph({})] }] });
     }
     function pdfDefinition(model) {
@@ -217,7 +221,9 @@
             if (b.kind === 'rule') { return { canvas: [{ type: 'line', x1: 0, y1: 0, x2: model.page.width - model.page.margins[0] - model.page.margins[2], y2: 0, lineWidth: 0.5 }], margin: [0, 8, 0, 8] }; }
             throw new Error('Unsupported export block.');
         }); }
-        return { content: write(model.blocks), pageSize: { width: model.page.width, height: model.page.height }, pageMargins: model.page.margins, defaultStyle: { font: 'Roboto', fontSize: 11, color: '#202124' },
+        return { content: write(model.blocks), pageSize: { width: model.page.width, height: model.page.height }, pageMargins: model.page.margins,
+            background: { canvas: [{ type: 'rect', x: 0, y: 0, w: model.page.width, h: model.page.height, color: '#' + (model.page.background || 'ffffff') }] },
+            defaultStyle: { font: 'Roboto', fontSize: 11, color: '#202124' },
             info: { title: model.properties.title || '', author: model.properties.author || '', subject: model.properties.subject || '', keywords: model.properties.keywords || '' } };
     }
     async function build(format, options) {
