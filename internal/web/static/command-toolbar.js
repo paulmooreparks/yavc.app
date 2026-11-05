@@ -118,7 +118,10 @@
                 buttons();
             }
             function buttons() {
-                var i = ui.body.querySelector('[data-selected]').selectedIndex, count = draft.items.length, has = !!ui.body.querySelector('[data-available]').value;
+                var available = ui.body.querySelector('[data-available]'), selected = ui.body.querySelector('[data-selected]');
+                var i = selected.selectedIndex, count = draft.items.length, has = !!available.value;
+                ui.body.querySelector('[data-available-caption]').textContent = available.options[available.selectedIndex] ? available.options[available.selectedIndex].text : 'No available commands';
+                ui.body.querySelector('[data-selected-caption]').textContent = selected.options[i] ? selected.options[i].text : 'Toolbar is empty';
                 ['add', 'separator', 'remove', 'up', 'down'].forEach(function (op) {
                     ui.body.querySelector('[data-edit="' + op + '"]').disabled = busy || (op === 'add' ? !has || count >= LIMIT : op === 'separator' ? count >= LIMIT : i < 0 || (op === 'up' ? i === 0 : op === 'down' ? i === count - 1 : false));
                 });
@@ -136,8 +139,15 @@
                 });
             }
             opening = global.yavcDialog.open({ title: 'Customize ' + options.label + ' Toolbar', className: 'yavc-toolbar-dialog',
-                body: '<fieldset class="yavc-toolbar-fields"><div class="yavc-toolbar-columns"><div class="form-group"><label class="form-label" for="' + prefix + 'search">Search Commands</label><input class="form-input" id="' + prefix + 'search" type="search" data-search><label class="form-label" for="' + prefix + 'available">Available Commands</label><select class="form-input" id="' + prefix + 'available" size="9" data-available></select><div class="hstack"><button type="button" class="btn btn-sm" data-edit="add">Add</button></div></div>' +
-                    '<div class="form-group"><label class="form-label" for="' + prefix + 'selected">Toolbar Commands</label><select class="form-input" id="' + prefix + 'selected" size="11" data-selected></select><div class="hstack"><button type="button" class="btn btn-sm" data-edit="up">Move Up</button><button type="button" class="btn btn-sm" data-edit="down">Move Down</button><button type="button" class="btn btn-sm" data-edit="remove">Remove</button><button type="button" class="btn btn-sm" data-edit="separator">Add Separator</button></div></div></div>' +
+                body: '<fieldset class="yavc-toolbar-fields"><div class="form-group"><label class="form-label" for="' + prefix + 'search">Search Available Commands</label><input class="form-input" id="' + prefix + 'search" type="search" data-search></div>' +
+                    '<div class="yavc-toolbar-columns"><label class="form-label yavc-toolbar-available-label" for="' + prefix + 'available">Available Commands</label><label class="form-label yavc-toolbar-selected-label" for="' + prefix + 'selected">Toolbar Commands</label>' +
+                    '<select class="form-input" id="' + prefix + 'available" size="10" data-available></select>' +
+                    '<div class="yavc-toolbar-transfer" role="group" aria-label="Transfer Commands"><button type="button" class="btn" data-edit="add" aria-label="Add to Toolbar" title="Add the selected available command to the toolbar">&gt;</button>' +
+                    '<button type="button" class="btn" data-edit="remove" aria-label="Remove from Toolbar" title="Remove the selected toolbar command">&lt;</button></div>' +
+                    '<select class="form-input" id="' + prefix + 'selected" size="10" data-selected></select>' +
+                    '<p class="form-help yavc-toolbar-caption" data-available-caption aria-hidden="true"></p><p class="form-help yavc-toolbar-caption" data-selected-caption aria-hidden="true"></p>' +
+                    '<div class="hstack yavc-toolbar-order" role="group" aria-label="Toolbar Order"><button type="button" class="btn btn-sm" data-edit="up"><span class="glyph" style="--glyph:var(--glyph-arrow-up)" aria-hidden="true"></span>Move Up</button>' +
+                    '<button type="button" class="btn btn-sm" data-edit="down"><span class="glyph" style="--glyph:var(--glyph-arrow-down)" aria-hidden="true"></span>Move Down</button><button type="button" class="btn btn-sm" data-edit="separator">Add Separator</button></div></div>' +
                     '<label class="check"><input type="checkbox" data-visible' + (draft.visible ? ' checked' : '') + '> Show the Toolbar</label><label class="check"><input type="checkbox" data-ribbon' + (draft.inRibbon ? ' checked' : '') + '> Keep Visible with the Ribbon</label><button type="button" class="btn btn-sm" data-edit="reset">Restore Defaults</button></fieldset><p class="form-error" data-error role="alert" hidden></p>',
                 buttons: [{ id: 'cancel', label: 'Cancel' }, { id: 'apply', label: 'Apply', primary: true }],
                 check: function (value) { if (value === 'apply') { apply(); return true; } },

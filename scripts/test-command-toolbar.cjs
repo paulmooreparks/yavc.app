@@ -14,9 +14,9 @@ async function docsAlias(context, engine) {
         await docs.waitForFunction(() => { const b = document.querySelector('.yavc-command-toolbar [data-command="common-toolbar-customize"]'); return b && !b.disabled; });
         await docs.locator('.yavc-command-toolbar [data-command="common-toolbar-customize"]').click();
         const dialog = docs.getByRole('dialog', { name: 'Customize Docs Toolbar', exact: true });
-        await dialog.getByLabel('Search Commands', { exact: true }).fill('Files');
+        await dialog.getByLabel('Search Available Commands', { exact: true }).fill('Files');
         await dialog.getByLabel('Available Commands', { exact: true }).selectOption('toggle-files');
-        await dialog.getByRole('button', { name: 'Add', exact: true }).click(); await dialog.getByRole('button', { name: 'Apply', exact: true }).click();
+        await dialog.getByRole('button', { name: 'Add to Toolbar', exact: true }).click(); await dialog.getByRole('button', { name: 'Apply', exact: true }).click();
         await dialog.waitFor({ state: 'hidden' });
         // The local server intentionally uses host-only cookies. Give the
         // second synthetic origin the same session to exercise the shared
@@ -30,10 +30,53 @@ async function docsAlias(context, engine) {
         console.log(engine + ': Docs toolbar label and same-session Editor preferences across origins passed');
     } finally { await docs.close(); await editor.close(); }
 }
+async function dialogReview(context, engine) {
+    const page = await context.newPage(); page.setDefaultTimeout(15000);
+    try {
+        await page.goto(`http://diagrams.localhost:${port}/`);
+        await page.locator('.cm-editor').waitFor();
+        await page.evaluate(() => pudlActions.run('yavc.diagrams/new@1', { kind: 'canvas', style: 'basic' }, { grant: 'all' }));
+        await page.locator('.yavc-command-toolbar [data-command="common-toolbar-customize"]').click();
+        const dialog = page.getByRole('dialog', { name: 'Customize Diagrams Toolbar', exact: true });
+        for (const state of [
+            { width: 1700, height: 1050, theme: 'light', skin: 'standard' },
+            { width: 1100, height: 900, theme: 'dark', skin: 'standard' },
+            { width: 620, height: 900, theme: 'light', skin: 'bevel' },
+            { width: 360, height: 850, theme: 'dark', skin: 'glaze' }
+        ]) {
+            await page.setViewportSize({ width: state.width, height: state.height });
+            assert.equal(await page.evaluate(state => { pudlSetTheme(state.theme); return pudlSkins.select(state.skin); }, state), true);
+            await page.evaluate(() => document.fonts.ready);
+            await page.waitForFunction(() => {
+                const a = document.querySelector('[data-available]').getBoundingClientRect(), t = document.querySelector('[data-selected]').getBoundingClientRect(), arrows = document.querySelector('.yavc-toolbar-transfer').getBoundingClientRect();
+                return Math.abs(a.top - t.top) <= 1 && Math.abs(a.height - t.height) <= 1 && arrows.left >= a.right && arrows.right <= t.left && Math.abs((arrows.top + arrows.bottom) / 2 - (a.top + a.bottom) / 2) <= 1;
+            });
+            assert.ok(await dialog.evaluate(e => e.scrollWidth <= e.clientWidth + 1));
+            assert.equal(await dialog.locator('[data-available-caption]').innerText(), await dialog.locator('[data-available]').evaluate(e => e.options[e.selectedIndex].text));
+            assert.equal(await dialog.locator('[data-selected-caption]').innerText(), await dialog.locator('[data-selected]').evaluate(e => e.options[e.selectedIndex].text));
+            const order = dialog.getByRole('group', { name: 'Toolbar Order', exact: true });
+            assert.ok((await order.boundingBox()).y >= (await dialog.locator('[data-selected]').boundingBox()).y + (await dialog.locator('[data-selected]').boundingBox()).height);
+            await dialog.screenshot({ path: path.join(evidence, engine + '-dialog-' + state.width + '-' + state.theme + '-' + state.skin + '.png') });
+        }
+        const selected = dialog.getByLabel('Toolbar Commands', { exact: true }), before = await selected.locator('option').count();
+        await dialog.getByLabel('Available Commands', { exact: true }).focus(); await page.keyboard.press('ArrowDown');
+        assert.equal(await dialog.locator('[data-available-caption]').innerText(), await dialog.locator('[data-available]').evaluate(e => e.options[e.selectedIndex].text));
+        await dialog.getByLabel('Search Available Commands', { exact: true }).fill('Split');
+        await dialog.getByLabel('Available Commands', { exact: true }).selectOption('view-split');
+        await dialog.getByRole('button', { name: 'Add to Toolbar', exact: true }).focus(); await page.keyboard.press('Space');
+        assert.equal(await selected.locator('option').count(), before + 1);
+        assert.equal(await dialog.locator('[data-selected-caption]').innerText(), 'Split');
+        await dialog.getByRole('button', { name: 'Remove from Toolbar', exact: true }).focus(); await page.keyboard.press('Space');
+        assert.equal(await selected.locator('option').count(), before);
+        await page.keyboard.press('Escape'); await dialog.waitFor({ state: 'hidden' });
+        console.log(engine + ': top-aligned lists, centered transfer arrows and keyboard transfers passed in light/dark, Standard/Bevel/Glaze at 360 to 1700 pixels');
+    } finally { await page.close(); }
+}
 async function run(engine) {
     const browser = await playwright[engine].launch(), context = await browser.newContext({ viewport: { width: 1700, height: 1050 } });
     let page, phase = 'startup';
     try {
+        if (process.argv.includes('--dialog-visual')) { await dialogReview(context, engine); return; }
         if (process.argv.includes('--docs-only')) { await docsAlias(context, engine); return; }
         for (const app of ['diagrams', 'editor', 'slides']) {
             page = await context.newPage(); const errors = [];
@@ -58,18 +101,26 @@ async function run(engine) {
             await page.keyboard.press('End'); assert.equal(await page.evaluate(() => document.activeElement.dataset.command), 'common-toolbar-customize');
             phase = app + ' cancel'; await customize().click();
             const dialog = page.getByRole('dialog', { name: /^Customize .* Toolbar$/ });
+            const availableList = dialog.getByLabel('Available Commands', { exact: true }), toolbarList = dialog.getByLabel('Toolbar Commands', { exact: true });
+            const availableBox = await availableList.boundingBox(), toolbarBox = await toolbarList.boundingBox();
+            assert.ok(Math.abs(availableBox.y - toolbarBox.y) <= 1); assert.ok(Math.abs(availableBox.height - toolbarBox.height) <= 1);
+            const transfer = dialog.getByRole('group', { name: 'Transfer Commands', exact: true });
+            const addArrow = transfer.getByRole('button', { name: 'Add to Toolbar', exact: true }), removeArrow = transfer.getByRole('button', { name: 'Remove from Toolbar', exact: true });
+            assert.equal(await addArrow.innerText(), '>'); assert.equal(await removeArrow.innerText(), '<');
+            const arrows = await transfer.boundingBox(); assert.ok(arrows.x > availableBox.x + availableBox.width && arrows.x + arrows.width < toolbarBox.x);
+            assert.equal(await dialog.getByRole('button', { name: 'Add', exact: true }).count(), 0); assert.equal(await dialog.getByRole('button', { name: 'Remove', exact: true }).count(), 0);
             if (app === 'diagrams') {
                 const labels = await dialog.getByLabel('Toolbar Commands', { exact: true }).locator('option').allTextContents();
                 assert.ok(labels.includes('Add Shape (D2)')); assert.ok(labels.includes('Add Shape (Canvas)'));
             }
-            const addSplit = async () => { await dialog.getByLabel('Search Commands', { exact: true }).fill('Split'); await dialog.getByLabel('Available Commands', { exact: true }).selectOption('view-split'); await dialog.getByRole('button', { name: 'Add', exact: true }).click(); };
+            const addSplit = async () => { await dialog.getByLabel('Search Available Commands', { exact: true }).fill('Split'); await dialog.getByLabel('Available Commands', { exact: true }).selectOption('view-split'); await addArrow.click(); };
             await addSplit(); await dialog.screenshot({ path: path.join(evidence, engine + '-' + app + '-customize.png') });
             await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
             assert.deepEqual(await ids(), original);
             phase = app + ' apply'; await customize().click(); await addSplit();
-            await dialog.getByRole('button', { name: 'Add Separator', exact: true }).click(); await dialog.getByRole('button', { name: 'Remove', exact: true }).click();
+            await dialog.getByRole('button', { name: 'Add Separator', exact: true }).click(); await removeArrow.click();
             if (app === 'diagrams') {
-                await dialog.getByLabel('Search Commands', { exact: true }).fill('Oval'); await dialog.getByLabel('Available Commands', { exact: true }).selectOption('tool-oval'); await dialog.getByRole('button', { name: 'Add', exact: true }).click();
+                await dialog.getByLabel('Search Available Commands', { exact: true }).fill('Oval'); await dialog.getByLabel('Available Commands', { exact: true }).selectOption('tool-oval'); await addArrow.click();
             }
             await dialog.getByRole('button', { name: 'Move Down', exact: true }).click();
             await dialog.getByLabel('Keep Visible with the Ribbon', { exact: true }).uncheck();
