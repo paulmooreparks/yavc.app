@@ -1,11 +1,21 @@
 {
   "id": "yavc.slides",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "apiVersion": 1,
   "title": "Slides",
   "description": "Slide decks as Markdown files: read, build and change a deck, move through it, and present it. The deck a live action works on is the one open in Slides; parse and make work on text alone.",
   "module": "actions.js",
   "actions": [
+    {
+      "ref": "yavc.slides/define@1",
+      "title": "Read Custom Shortcode Definitions",
+      "description": "Read the deck's validated custom shortcode definitions, shared definitions, parameter metadata, source ranges and problems. Ranges use UTF-16 positions in the whole deck or shared source.",
+      "live": true,
+      "inputSchema": { "type": "object", "additionalProperties": false, "properties": {} },
+      "outputSchema": { "type": "object", "required": ["entries"], "properties": { "entries": { "type": "array", "items": { "type": "object" } } } },
+      "capabilities": ["files.read"],
+      "replay": "pure"
+    },
     {
       "ref": "yavc.slides/parse@1",
       "title": "Parse a Deck",

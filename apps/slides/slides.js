@@ -266,7 +266,7 @@
            applets undrawn. */
         function drawInto(target, text, quiet) {
             var p;
-            try { p = md.preview(text); } catch (err) { target.innerHTML = '<p class="deck-problem">' + esc(err.message) + '</p>'; return; }
+            try { p = currentMacroEngine().preview(text); } catch (err) { target.innerHTML = '<p class="deck-problem">' + esc(err.message) + '</p>'; return; }
             window.yavcMdEditor.drawBlocks(target, p.blocks, quiet ? { pictures: picturesHost(), diagrams: false, applets: false } : { pictures: picturesHost() });
         }
         /* The public site's address, from the page's meta tag. A window
@@ -297,24 +297,27 @@
             return {
                 site: function () { return H.fs && H.fs.site ? H.fs.site() : Promise.reject(new Error('there is no file service here')); },
                 root: root, say: say,
+                macroContext: currentMacroEngine,
+                signal: styleLifetime.signal, identity: function () { return deck; }, text: fullText,
                 dir: function () { return path ? (path.replace(/\/[^\/]*$/, '') || '~') : null; }
             };
         }
         function pageHost() {
             return {
                 root: root, page: el.body, scroll: el.stagebox,
+                customName: function (name) { return window.yavcMacroTools && window.yavcMacroTools.metadata(currentMacroEngine()).some(function (item) { return item.name === name; }); },
                 text: function () { return current().text; },
                 setText: function (text) { fromPage = true; try { takeText(text, 'page'); } finally { fromPage = false; } },
-                docOf: function (text) { return engine().then(function (m) { return m.doc(text); }); },
+                docOf: function (text) { return deckEngine().then(function (m) { return m.doc(text); }); },
                 /* The / menu on the canvas offers the Insert menu's items. */
-                inserts: function () { return window.yavcMdEditor ? window.yavcMdEditor.inserts(DECK_INSERTS, picturesHost) : []; },
+                inserts: function () { return window.yavcMdEditor ? window.yavcMdEditor.inserts(DECK_INSERTS.concat(customInserts()), picturesHost) : []; },
                 /* A picture pressed on the canvas opens the picture dialog. */
                 editBlock: function (src) { return window.yavcMdEditor ? window.yavcMdEditor.editBlock(src, picturesHost()) : undefined; },
                 markdownOf: function (doc) { return engine().then(function (m) { return m.markdown(doc); }); },
-                sourceOf: function (src) { return engine().then(function (m) { return m.source(src); }); },
-                wrapOf: function (line) { return engine().then(function (m) { return m.container(line); }); },
-                inlineOf: function (src) { return engine().then(function (m) { return m.inline(src); }); },
-                blocksOf: function (text) { return engine().then(function (m) { return m.blocks(text); }); },
+                sourceOf: function (src) { return deckEngine().then(function (m) { return m.source(src); }); },
+                wrapOf: function (line) { return deckEngine().then(function (m) { return m.container(line); }); },
+                inlineOf: function (src) { return deckEngine().then(function (m) { return m.inline(src); }); },
+                blocksOf: function (text) { return deckEngine().then(function (m) { return m.blocks(text); }); },
                 draw: function (target, html, diagrams) {
                     window.yavcMdEditor.drawBlocks(target, [{ line: 0, html: html, diagrams: diagrams }], { pictures: picturesHost() });
                 },
@@ -369,12 +372,13 @@
         }
         function makeCM() {
             if (cmReady) { return cmReady; }
-            cmReady = codeMirror().then(function (CM) {
+            cmReady = kit().then(function (K) { return K.macros(); }).then(codeMirror).then(function (CM) {
                 if (destroyed) { return null; }
                 var ext = [CM.history(), CM.drawSelection(), CM.highlightActiveLine(), CM.keymap.of([].concat(CM.defaultKeymap, CM.historyKeymap, [CM.indentWithTab])),
                     CM.EditorView.lineWrapping, CM.EditorView.contentAttributes.of({ 'aria-label': 'The Slide\'s Markdown' }),
                     CM.EditorView.updateListener.of(function (u) { if (u.docChanged && !fromPage) { takeText(u.state.doc.toString(), 'text'); } })];
                 if (CM.markdown) { try { ext.push(CM.markdown()); } catch (err) { } }
+                ext.push(window.yavcMacroTools.completions(CM, currentMacroEngine));
                 if (CM.EditorView.theme) { ext.push(CM.EditorView.theme({ '&': { height: '100%', fontSize: 'var(--text-sm)' }, '.cm-scroller': { fontFamily: 'var(--mono)' }, '.cm-content': { caretColor: 'var(--text)' } })); }
                 cm = new CM.EditorView({ state: CM.EditorState.create({ doc: current().text, extensions: ext }), parent: el.text });
                 return cm;
@@ -610,6 +614,37 @@
         /* === Files ===================================================== */
 
         function fullText() { return serializeDeck(deck); }
+        var macroShared = '', macroIdentity = null, macroRevision = 0;
+        function currentMacroEngine() { return md && md.withMacros(fullText(), macroIdentity === deck ? macroShared : ''); }
+        async function deckEngine() {
+            var captured = deck, text = fullText(), host = picturesHost(), directory = host.dir(), revision = ++macroRevision;
+            host.dir = function () { return directory; };
+            var K = await kit(), M = await K.macros(), prepared = await M.prepare(md, text, host);
+            if (!destroyed && revision === macroRevision && deck === captured && fullText() === text) { macroIdentity = deck; macroShared = prepared.shared; }
+            return revision === macroRevision ? prepared.engine : md.withMacros(text, macroIdentity === captured ? macroShared : '');
+        }
+        function customInserts() {
+            if (!window.yavcMacroTools || !md) { return []; }
+            return window.yavcMacroTools.metadata(currentMacroEngine()).map(function (item) { return { id: 'insert-custom-' + item.name, label: item.name, words: item.name,
+                run: async function () {
+                    var captured = deck, slide = current(), text = fullText(), context = await deckEngine();
+                    if (destroyed || styleLifetime.signal.aborted || deck !== captured || current() !== slide || fullText() !== text) { return; }
+                    var source = await window.yavcMacroTools.ask(context, item.name, null, picturesHost());
+                    if (!source || deck !== captured || current() !== slide || fullText() !== text) { return; }
+                    if (pageActive()) { if (item.kind === 'inline') { page.insertInline(source); } else { page.insertMarkdown(source); } }
+                    else if (cm) { if (item.kind === 'inline') { var selection = cm.state.selection.main; cm.dispatch({ changes: { from: selection.from, to: selection.to, insert: source } }); } else { window.yavcMdEditor.textInsert(cm, source); } }
+                } }; });
+        }
+        async function editDefinitions() {
+            if (pageActive()) { await page.sync(); }
+            var captured = deck, slide = current(), front = frontTextOf(deck), text = front + slide.text, K = await kit(), M = await K.macros();
+            function unchanged() { return !destroyed && deck === captured && current() === slide && frontTextOf(deck) + slide.text === text; }
+            if (!unchanged()) { return; }
+            try { await M.manage({ engine: md, text: text, host: picturesHost(), current: unchanged, signal: styleLifetime.signal,
+                help: 'These definitions are stored on this slide and are available throughout the deck.',
+                save: function (next) { var parsed = parseDeck(next); takeFront(deck, parsed.frontText); takeText(parsed.slides[0].text, 'definitions'); commandsChanged(); } }); }
+            catch (err) { say(err.message, true); }
+        }
         /* === The deck's stylesheet (docs/slides-design.md, decision 17) ===
            CSS from every {{style}} block, and from the front matter's
            stylesheet file, scoped to this deck's slides with @scope, so it
@@ -646,6 +681,13 @@
                 });
                 await Promise.all(work);
                 if (destroyed || revision !== styleRevision) { return; }
+                var oldShared = macroIdentity === deck ? macroShared : ''; await deckEngine();
+                if (destroyed || revision !== styleRevision || currentDeck !== deck) { return; }
+                if (oldShared !== macroShared) {
+                    deck.slides.forEach(function (_, index) { drawThumb(index); });
+                    if (pageActive()) { page.textChanged(true); } else { drawSlide(); } drawNotes();
+                }
+                commandsChanged();
                 var problems = deckStyle.state().problems; slideStyles.forEach(function (controller) { problems = problems.concat(controller.state().problems); });
                 problems = Array.from(new Set(problems)); styleNotice.hidden = !problems.length; styleNotice.querySelector('.notice-body').textContent = problems.join(' ');
             } catch (err) { if (!destroyed && revision === styleRevision) { say('Styles could not be applied: ' + err.message, true); } }
@@ -1124,6 +1166,7 @@
                     askText('The Deck\'s Stylesheet', 'A CSS file of yours, such as ~/themes/mine.css; empty for none', deck.front.stylesheet || '').then(function (v) { if (v != null) { setFront('stylesheet', v.trim()); } });
                 }),
                 cmd('deck-style-block', 'Edit Style Blocks…', 'code', function () { return editStyles(false); }, { shortcut: 'Mod+Shift+F' }),
+                cmd('custom-shortcodes', 'Custom Shortcodes…', 'code', editDefinitions),
                 cmd('deck-shared-stylesheet', 'Edit Shared Stylesheet…', 'file', function () { return editStyles(true); }, {
                     disabled: function () { return !(H.fs && H.fs.writeText && window.yavcStyleTools && /^~\/.+\.css$/i.test(window.yavcStyleTools.resolve(deck.front.stylesheet, styleDirectory()))); },
                     reason: 'Choose a home-folder CSS file in Stylesheet File first. This host also needs a writable file service.' }),
@@ -1161,7 +1204,7 @@
                 { id: 'dock', label: 'Canvas', glyph: 'dock', current: function () { var d = DOCKS.find(function (x) { return x[0] === settings.dock; }); return d ? d[1] : null; },
                     items: DOCKS.map(function (d) { return { id: 'dock-' + d[0], label: d[1], choice: 'deck-dock', value: d[0], checked: function () { return settings.dock === d[0]; }, run: function () { setDock(d[0]); } }; }) }
             ];
-            if (window.yavcMdEditor) { table = table.concat(window.yavcMdEditor.commands(editCtx(), DECK_INSERTS)); }
+            if (window.yavcMdEditor) { table = table.concat(window.yavcMdEditor.commands(editCtx(), DECK_INSERTS.concat(customInserts()))); }
             [['visual', 'Visual'], ['text', 'Text'], ['split', 'Split']].forEach(function (v) {
                 table.push({ id: 'view-' + v[0], label: v[1], choice: 'deck-view', choiceLabel: 'View', value: v[0], checked: function () { return mode === v[0]; }, run: function () { setMode(v[0]); } });
             });
@@ -1186,7 +1229,7 @@
                 { id: 'file', label: 'File', glyph: 'file', items: ['new-deck', 'open', 'import-pptx', 'save', 'save-as', '-', 'edit-whole', '-', 'export-pptx', 'export-pdf', 'export-html', 'print'] },
                 { id: 'slide', label: 'Slide', glyph: 'plus', items: ['slide-new', 'slide-duplicate', 'slide-delete', '-', 'slide-prev', 'slide-next', '-', 'slide-up', 'slide-down', '-', 'layout', 'reveal', 'slide-colours', 'slide-class', 'background-image', 'slide-transition'] },
                 { id: 'format', label: 'Format', glyph: 'paragraph', items: window.yavcMdEditor ? window.yavcMdEditor.MENU.format : [] },
-                { id: 'deck', label: 'Deck', glyph: 'gear', items: ['deck-title', 'theme', 'deck-colours', '-', 'deck-stylesheet', 'deck-style-block', 'deck-shared-stylesheet', '-', 'size', 'deck-transition'] },
+                { id: 'deck', label: 'Deck', glyph: 'gear', items: ['deck-title', 'theme', 'deck-colours', '-', 'deck-stylesheet', 'deck-style-block', 'deck-shared-stylesheet', 'custom-shortcodes', '-', 'size', 'deck-transition'] },
                 { id: 'show', label: 'Show', glyph: 'play', items: ['present', 'present-here', 'leave', '-', 'presenter', 'presenter-auto'] }
             ], into: { view: ['view-visual', 'view-text', 'view-split', '-', 'dock', 'toggle-film'].concat(commonToolbar ? ['-', 'common-toolbar-show', 'common-toolbar-customize'] : []), help: ['styles-help'] } };
         }
@@ -1272,6 +1315,7 @@
         function placed() { return { index: at + 1, count: deck.slides.length }; }
         async function atSlide(i) { i = slideNo(i); if (i !== at) { await goTo(i); } return i; }
         var liveActions = {
+            'define@1': async function () { await booted; if (pageActive()) { await page.sync(); } return { output: (await deckEngine()).macros() }; },
             'deck@1': async function () { await booted; return { output: deckView() }; },
             'slide@1': async function (input) { await booted; var i = slideNo(input.index); return { output: slideView(deck.slides[i], i) }; },
             'text@1': async function () { await booted; return { output: { path: path, text: fullText() } }; },

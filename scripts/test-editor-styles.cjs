@@ -25,6 +25,7 @@ async function cssText(dialog, text) { await dialog.locator('.cm-editor').evalua
             await color(page.locator('[data-ed-page] .custom').first(), 'rgb(10, 30, 50)');
             await command(page, 'stylesheet'); let dialog = page.getByRole('dialog', { name: 'Document Stylesheet', exact: true });
             await dialog.waitFor();
+            assert.equal(await dialog.getByLabel('Style Block', { exact: true }).evaluate(element => element.classList.contains('form-select') && element.parentElement.classList.contains('form-select-wrap')), true);
             await cssText(dialog, 'p { col'); await dialog.locator('.cm-editor').evaluate(e => { const v = CM.EditorView.findFromDOM(e); v.dispatch({ selection: { anchor: v.state.doc.length } }); v.focus(); CM.startCompletion(v); });
             await page.waitForFunction(() => { const v = CM.EditorView.findFromDOM(document.querySelector('.md-style-dialog .cm-editor')); return CM.currentCompletions(v.state).some(c => c.label === 'color'); });
             await page.keyboard.press('Escape'); await cssText(dialog, '.custom { color: rgb(10, 30, 50); }');

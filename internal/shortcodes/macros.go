@@ -6,22 +6,29 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+
+	"github.com/yuin/goldmark"
+	"github.com/yuin/goldmark/ast"
+	"github.com/yuin/goldmark/text"
 )
 
 const MacroLimit = 256 * 1024
 
 // MacroParameter is declarative form metadata. Values remain literal text.
 type MacroParameter struct {
-	Name, Default, Help string
+	Name    string `json:"name"`
+	Default string `json:"default"`
+	Help    string `json:"help"`
 }
 
 // MacroDefinition is a validated template. Source discovery and recursive
 // expansion belong to the document registry, which is a separate layer.
 type MacroDefinition struct {
-	Name       string
-	Template   string
-	Parameters []MacroParameter
-	Container  bool
+	Name       string           `json:"name"`
+	Template   string           `json:"template"`
+	Parameters []MacroParameter `json:"parameters"`
+	Container  bool             `json:"container"`
+	Inline     bool             `json:"inline"`
 }
 
 var macroName = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
@@ -94,8 +101,17 @@ func ParseMacroDefinition(name, body string) (MacroDefinition, error) {
 		return d, fmt.Errorf("a shortcode may use content at most once")
 	}
 	d.Container = content == 1
-	self := regexp.MustCompile(`\{\{` + regexp.QuoteMeta(name) + `(?::|\}\})`)
-	if self.MatchString(d.Template) {
+	self := false
+	parsed := goldmark.New(goldmark.WithExtensions(Extension)).Parser().Parse(text.NewReader([]byte(d.Template)))
+	ast.Walk(parsed, func(node ast.Node, entering bool) (ast.WalkStatus, error) {
+		if entering {
+			if call, ok := node.(*Inline); ok && !call.Closing && call.Call.Name == name {
+				self = true
+			}
+		}
+		return ast.WalkContinue, nil
+	})
+	if self {
 		return d, fmt.Errorf("shortcode %q refers to itself", name)
 	}
 	return d, nil

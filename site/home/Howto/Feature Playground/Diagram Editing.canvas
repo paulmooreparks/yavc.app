@@ -1,0 +1,88 @@
+{
+  "nodes": [
+    {
+      "id": "instructions",
+      "type": "text",
+      "x": 0,
+      "y": 0,
+      "width": 680,
+      "height": 210,
+      "text": "## Diagram editing playground\n\nClick a shape to see its Inspector properties. Try the alignment segments, line style and independent fill and outline colors. Double-click a shape to edit its text.\n\nCtrl-click several shapes, then drag them together. Click the background to inspect diagram settings. Try a background color, then Theme Default.\n\nSelect a connector and drag either tip to a new shape, into a shape's center for automatic anchoring, or onto empty space. Move the attached shape and watch the connector follow.",
+      "yavc": { "shape": "text" }
+    },
+    {
+      "id": "start",
+      "type": "text",
+      "x": 30,
+      "y": 270,
+      "width": 150,
+      "height": 80,
+      "text": "Start\nCentered by default",
+      "color": "4",
+      "yavc": { "shape": "oval" }
+    },
+    {
+      "id": "process",
+      "type": "text",
+      "x": 250,
+      "y": 270,
+      "width": 180,
+      "height": 80,
+      "text": "Process\nExplicitly centered",
+      "color": "5",
+      "yavc": { "shape": "rounded", "textAlign": "center", "textVerticalAlign": "middle" }
+    },
+    {
+      "id": "decision",
+      "type": "text",
+      "x": 490,
+      "y": 250,
+      "width": 180,
+      "height": 120,
+      "text": "Ready?",
+      "color": "3",
+      "yavc": { "shape": "diamond" }
+    },
+    {
+      "id": "store",
+      "type": "text",
+      "x": 490,
+      "y": 460,
+      "width": 180,
+      "height": 110,
+      "text": "Saved result\nSeparate fill and outline",
+      "color": "4",
+      "yavc": { "shape": "cylinder", "fillColor": "#d4eeee", "strokeColor": "#167d9a", "lineWidth": 3 }
+    },
+    {
+      "id": "revise",
+      "type": "text",
+      "x": 250,
+      "y": 470,
+      "width": 180,
+      "height": 80,
+      "text": "Revise\nTop-left by default",
+      "color": "1",
+      "yavc": { "shape": "rectangle", "line": "dashed" }
+    },
+    {
+      "id": "try-alignment",
+      "type": "text",
+      "x": 30,
+      "y": 470,
+      "width": 150,
+      "height": 100,
+      "text": "Try changing\nmy alignment",
+      "color": "6",
+      "yavc": { "shape": "rectangle", "textAlign": "right", "textVerticalAlign": "bottom", "line": "dotted" }
+    }
+  ],
+  "edges": [
+    { "id": "start-process", "fromNode": "start", "fromSide": "right", "toNode": "process", "toSide": "left", "toEnd": "arrow", "yavc": { "route": "straight" } },
+    { "id": "process-decision", "fromNode": "process", "fromSide": "right", "toNode": "decision", "toSide": "left", "toEnd": "arrow", "yavc": { "route": "straight" } },
+    { "id": "decision-store", "fromNode": "decision", "fromSide": "bottom", "toNode": "store", "toSide": "top", "toEnd": "arrow", "label": "Yes", "yavc": { "route": "elbow" } },
+    { "id": "decision-revise", "fromNode": "decision", "fromSide": "left", "toNode": "revise", "toSide": "right", "toEnd": "arrow", "label": "No", "yavc": { "route": "curve", "line": "dashed" } },
+    { "id": "revise-process", "fromNode": "revise", "fromSide": "top", "toNode": "process", "toSide": "bottom", "toEnd": "arrow", "yavc": { "route": "elbow" } }
+  ],
+  "yavc": { "version": 1, "grid": true, "snap": true }
+}

@@ -1,0 +1,9 @@
+/* Editor and Slides both read this local stylesheet. */
+.shared-accent {
+    color: #167d9a;
+    font-weight: 700;
+}
+.shared-panel {
+    border-left: 4px solid #167d9a;
+    padding: 0.75rem;
+}
