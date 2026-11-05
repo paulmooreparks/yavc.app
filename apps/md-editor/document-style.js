@@ -97,6 +97,7 @@
         }
         function install(layers, problems) {
             if (disposed) { return; }
+            if (opts.base) { layers = [String(opts.base)].concat(layers); }
             var size = layers.reduce(function (n, css) { return n + new TextEncoder().encode(css).length; }, 0);
             if (size > LIMIT || layers.length > 128) { layers = []; problems.push('Combined document styles exceed the supported size.'); }
             var parts = layers.map(function (css) { return compile(key, css); });

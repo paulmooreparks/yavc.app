@@ -363,6 +363,14 @@ The new browser fixtures pass Chromium, Firefox and WebKit for downloads, artifa
 
 `scripts/test-editor-export.cjs`, `scripts/test-slides-exclusions.cjs` and `scripts/test-editor-export-files.py` retain their evidence in `%TEMP%/yavc-editor-export-evidence`. The Python artifact check needs PyMuPDF 1.26.7. The export candidate has not replaced installed v0.2.28. Complex layout, custom PDF fonts, diagrams, SVG, embedded apps and external listings remain explicit refusals in this version; full document pagination, headers/footers, footnotes and desktop packaging remain later work.
 
+## Explicit export paper colors (2026-11-05)
+
+The exact bundled Editor Export playground was regenerated from installed v0.2.29 after a report of black paper in Word. Its DOCX contained no explicit background, shading or black highlight; only the intended yellow highlight appeared. The actual downloaded file and native Word rendering were not available, so this does not establish the precise cause of the reported black rectangle. The earlier fixture used a smaller document and did not test Word's display behavior.
+
+The investigation confirmed two export defects. The writers omitted the prepared paper color, and inline export defaults overrode document-level paper/ink tokens. The shared style controller now accepts a contained, validated base layer before shared and inline CSS. Preparation snapshots opaque paper colors, DOCX writes its background explicitly and PDF paints the same paper color on each page. Review caught alpha colors being composited against white even on authored dark paper; nonopaque paper and text are now refused instead of flattened incorrectly.
+
+`scripts/test-export-paper.cjs` covers the exact playground under light/dark app themes, default white paper, authored colors, shared stylesheet colors, inline overrides and alpha refusals in Chromium, Firefox and WebKit. It also checks the actual editor preview paper/ink colors. `scripts/test-export-paper-files.py` verifies the intended background in DOCX XML and absence of black shading. Existing export and stylesheet fixtures pass Chromium. The repository gate passes with 44 browser-module tests, Go race tests, vulnerability checks and server/WebAssembly builds. Independent review is clean after the alpha correction. Isolated LibreOffice renders show white default paper and the authored cream paper over the full page, both visually inspected. Native Word confirmation remains a separate manual check; no claim is made that the original Word screenshot has been reproduced.
+
 ## Items for other projects
 
 These problems belong to PUDL or to applets that are maintained elsewhere, so they were reported instead of patched here.

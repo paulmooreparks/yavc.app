@@ -97,6 +97,17 @@ Format, Style lists the document's classes beside the stock classes. Apply one t
 
 The stylesheet editor's Shared Stylesheet field links a local CSS file, such as `~/Styles/document.css` or `../Styles/document.css` relative to the document. Its styles apply before the document's blocks. Format, Edit Shared Stylesheet opens that file for editing; a missing home-folder file can be created there. Shared-file saves take effect in documents using it at this browser address. Each document still has its own style scope. Remote CSS files and resource-loading CSS are not supported. Fonts use those already available on your machine or in the site.
 
+To set document paper and ink colors, put the variables directly at the top level of Format, Document Stylesheet, or use a style block in the source:
+
+```markdown
+{{style}}
+--doc-page: #ffffff;
+--doc-ink: #202124;
+{{/style}}
+```
+
+These are document colors, independent of the surrounding application theme. Exports retain the resolved paper color. Word/PDF export currently requires opaque paper and text colors.
+
 ## Custom shortcodes
 
 Format, Custom Shortcodes opens the definitions in this document. Choose New Definition, give it a lowercase name such as `card`, and enter a Markdown template. Each `param` line declares a field; `arg` inserts that field as literal text, and `content` inserts the body of a container shortcode.

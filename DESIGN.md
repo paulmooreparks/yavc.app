@@ -90,6 +90,8 @@ Each decision is dated and numbered so that later documents and cards can refer 
 
 45. **Office exports prepare one shared document before writing files** (2026-11-05). Editor downloads editable DOCX and selectable-text PDF through browser-local writers. Both consume the same prepared document, after exclusion pruning and before asset discovery or pagination. Slides uses the same engine pruning for audience output, Office/HTML exports and synchronized printing. `docs/docs-design.md`, decision 26, records the initial formatting coverage, bundled fonts and explicit refusals. Source Markdown stays private to the browser and is not embedded in the artifacts.
 
+46. **Exports carry explicit document paper colors** (2026-11-05). Export preparation starts with white paper and neutral dark ink, independently of the app theme. Shared and inline document styles override those defaults in the established order. Both writers serialize the resolved paper color instead of relying on the reader's default. `docs/docs-design.md`, decision 27, records the color boundary and regression evidence.
+
 ## Addresses
 
 `yavc.app` serves the desktop, which is windowed only (decision 26). A window's content comes from `/win/{key}`. `yavc.app/{slug}` opens the desktop with that application's window, or draws a site page as a page of its own. `{slug}.yavc.app` serves the same application standalone, and it is the application's page form. The engine answers both from one deployment: a wildcard DNS record points every subdomain at it, and the engine reads the host header to choose the standalone layout for the application whose slug matches. A subdomain whose slug matches no application redirects to the desktop.
