@@ -207,7 +207,7 @@
             var s = deck.slides[i], st = ctx.settingsOf(s), layout = st.layout || 'content';
             var box = document.createElement('div');
             box.className = 'deck-body doc-page';
-            try { ctx.drawInto(box, s.text); } catch (err) { box.textContent = s.text; }
+            ctx.drawInto(box, s.text);
             var items = itemsOf(box);
             var notesText = (ctx.notesOf ? ctx.notesOf(s.text) : '');
             var heading = null, rest = [];

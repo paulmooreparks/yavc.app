@@ -773,6 +773,15 @@ func init() {
 		render: func(c Call, doc ast.Node, src []byte) (string, error) {
 			return "", problem{"column divides {{columns}} … {{/columns}}; it means nothing outside one."}
 		}})
+	add(&def{name: "no-export", kind: container, title: "Not Exported", what: "Private working text retained in the Markdown source and removed before export layout. It can wrap words or whole blocks.",
+		example: "{{no-export}}Working note{{/no-export}}",
+		wrap: func(c Call) (string, string, error) {
+			return `<div class="sc-no-export" data-export="omit" title="Not exported" role="note" aria-label="Not exported"><div class="sc-no-export-label"><span class="glyph" style="--glyph:var(--glyph-eye-off)" aria-hidden="true"></span>Not exported</div>`, `</div>`, nil
+		},
+		spanWrap: func(c Call) (string, string, error) {
+			return `<span class="sc-no-export" data-export="omit" title="Not exported" role="note" aria-label="Not exported">`, `</span>`, nil
+		},
+	})
 	add(&def{name: "draft-note", kind: container, title: "Note to Self", what: "A note while writing, shown in the editor and never on a published page.",
 		example: "{{draft-note}}\nCheck this date.\n{{/draft-note}}",
 		wrap: func(c Call) (string, string, error) {
@@ -845,7 +854,7 @@ func init() {
 		wrap: func(c Call) (string, string, error) {
 			return `<div class="sc-caption">`, `</div>`, nil
 		}})
-	for _, name := range []string{"expand", "status", "toc", "anchor", "page", "figure", "applet", "video", "code", "color", "class", "style", "kbd", "glyph", "columns", "column", "draft-note", "slide", "notes", "mark", "sup", "sub", "page-break", "caption"} {
+	for _, name := range []string{"expand", "status", "toc", "anchor", "page", "figure", "applet", "video", "code", "color", "class", "style", "kbd", "glyph", "columns", "column", "no-export", "draft-note", "slide", "notes", "mark", "sup", "sub", "page-break", "caption"} {
 		order = append(order, name)
 	}
 }
@@ -1007,8 +1016,9 @@ func problemSource(source, why string) string {
 // === Rendering ============================================================
 
 type htmlRenderer struct {
-	registry *MacroRegistry
-	budget   MacroBudget
+	exporting bool
+	registry  *MacroRegistry
+	budget    MacroBudget
 }
 
 func (r *htmlRenderer) RegisterFuncs(reg renderer.NodeRendererFuncRegisterer) {
@@ -1078,7 +1088,7 @@ func (r *htmlRenderer) inline(w util.BufWriter, src []byte, node ast.Node, enter
 	n := node.(*Inline)
 	if r.registry != nil && !n.Closing {
 		if _, ok := r.registry.definition(n.Call.Name); ok {
-			out, err := r.registry.render(n.Call, "", true, &r.budget)
+			out, err := r.registry.render(n.Call, "", true, &r.budget, r.exporting)
 			if err != nil {
 				out = problemHTML(n.Call, err.Error())
 			}
@@ -1156,7 +1166,7 @@ func (r *htmlRenderer) block(w util.BufWriter, src []byte, node ast.Node, enteri
 				if !n.Closed {
 					err = problem{"This shortcode needs {{/" + n.Call.Name + "}} on its own line."}
 				} else {
-					out, err = r.registry.render(n.Call, string(src[n.BodyStart:n.BodyEnd]), false, &r.budget)
+					out, err = r.registry.render(n.Call, string(src[n.BodyStart:n.BodyEnd]), false, &r.budget, r.exporting)
 				}
 				if err != nil {
 					out = problemHTML(n.Call, err.Error())
@@ -1199,7 +1209,7 @@ func (r *htmlRenderer) paragraph(w util.BufWriter, src []byte, node ast.Node, en
 		if r.registry != nil {
 			if d, ok := r.registry.definition(sc.Call.Name); ok && !d.Container {
 				if entering {
-					out, err := r.registry.render(sc.Call, "", false, &r.budget)
+					out, err := r.registry.render(sc.Call, "", false, &r.budget, r.exporting)
 					if err != nil {
 						out = problemHTML(sc.Call, err.Error())
 					}
@@ -1241,10 +1251,18 @@ func (r *htmlRenderer) paragraph(w util.BufWriter, src []byte, node ast.Node, en
 
 // === The extension ========================================================
 
-type ext struct{ registry *MacroRegistry }
+type ext struct {
+	registry  *MacroRegistry
+	exporting bool
+}
 
 // WithMacros installs a document's registry without changing the built-ins.
 func WithMacros(registry *MacroRegistry) goldmark.Extender { return &ext{registry: registry} }
+
+// WithExportMacros also removes exclusions inside generated macro content.
+func WithExportMacros(registry *MacroRegistry) goldmark.Extender {
+	return &ext{registry: registry, exporting: true}
+}
 
 // Extension adds the shortcodes to a goldmark.
 var Extension goldmark.Extender = &ext{}
@@ -1254,7 +1272,7 @@ func (e *ext) Extend(m goldmark.Markdown) {
 		parser.WithBlockParsers(util.Prioritized(&blockParser{registry: e.registry}, 50)),
 		parser.WithInlineParsers(util.Prioritized(&inlineParser{registry: e.registry}, 50)),
 	)
-	m.Renderer().AddOptions(renderer.WithNodeRenderers(util.Prioritized(&htmlRenderer{registry: e.registry}, 50)))
+	m.Renderer().AddOptions(renderer.WithNodeRenderers(util.Prioritized(&htmlRenderer{registry: e.registry, exporting: e.exporting}, 50)))
 }
 
 // videoOf reads a video shortcode's arguments as a service and an id: a

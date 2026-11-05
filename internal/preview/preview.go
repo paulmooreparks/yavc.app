@@ -99,6 +99,16 @@ func Render(markdown string) ([]Block, []Problem) {
 // RenderWithMacros keeps source line mapping while rendering invocations
 // against the caller's document registry, including shared definitions.
 func RenderWithMacros(markdown string, registry *shortcodes.MacroRegistry) ([]Block, []Problem) {
+	blocks, problems, _ := renderDocument(markdown, registry, false)
+	return blocks, problems
+}
+
+// RenderExport excludes private working content before the document is drawn.
+func RenderExport(markdown string, registry *shortcodes.MacroRegistry) ([]Block, []Problem, error) {
+	return renderDocument(markdown, registry, true)
+}
+
+func renderDocument(markdown string, registry *shortcodes.MacroRegistry, exporting bool) ([]Block, []Problem, error) {
 	markdown = strings.ReplaceAll(markdown, "\r\n", "\n")
 	lines := strings.Split(markdown, "\n")
 	// Front matter becomes blank lines, which Markdown ignores, so the
@@ -111,8 +121,12 @@ func RenderWithMacros(markdown string, registry *shortcodes.MacroRegistry) ([]Bl
 	starts := lineStarts(src)
 
 	d := &drawer{}
+	shortcodeExtension := shortcodes.WithMacros(registry)
+	if exporting {
+		shortcodeExtension = shortcodes.WithExportMacros(registry)
+	}
 	md := goldmark.New(
-		goldmark.WithExtensions(extension.GFM, shortcodes.WithMacros(registry)),
+		goldmark.WithExtensions(extension.GFM, shortcodeExtension),
 		goldmark.WithParserOptions(parser.WithAutoHeadingID()),
 		goldmark.WithRendererOptions(
 			// The document is the person's own, and inline HTML (<u>, a
@@ -122,6 +136,11 @@ func RenderWithMacros(markdown string, registry *shortcodes.MacroRegistry) ([]Bl
 		),
 	)
 	doc := md.Parser().Parse(text.NewReader(src))
+	if exporting {
+		if err := shortcodes.PruneExport(doc); err != nil {
+			return nil, nil, err
+		}
+	}
 
 	var problems []Problem
 	var blocks []Block
@@ -145,7 +164,7 @@ func RenderWithMacros(markdown string, registry *shortcodes.MacroRegistry) ([]Bl
 			Diagrams: append([]Diagram(nil), d.diagrams[first:]...),
 		})
 	}
-	return blocks, problems
+	return blocks, problems, nil
 }
 
 // unit is one top-level block with its first and last source line (1-based)

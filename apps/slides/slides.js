@@ -238,9 +238,9 @@
             el.canvas.style.transform = 'translate(-50%, -50%) scale(' + k + ')';
             el.stage.style.setProperty('--deck-scale', String(k));
         }
-        function applySlideSettings(section, slide) {
+        function applySlideSettings(section, slide, exportSettings) {
             styledSections.add(section);
-            var s = settingsOf(slide);
+            var s = exportSettings || settingsOf(slide);
             section.setAttribute('data-layout', s.layout || 'content');
             section.setAttribute('data-deck', String(n));
             section.setAttribute('data-slide-index', String(deck.slides.indexOf(slide)));
@@ -264,9 +264,13 @@
            (apps/md-editor/kit.js drawBlocks), as the Editor's preview draws
            them; quiet, for a thumbnail or the notes, leaves diagrams and
            applets undrawn. */
-        function drawInto(target, text, quiet) {
+        function drawInto(target, text, quiet, exporting) {
             var p;
-            try { p = currentMacroEngine().preview(text); } catch (err) { target.innerHTML = '<p class="deck-problem">' + esc(err.message) + '</p>'; return; }
+            try { p = exporting ? currentMacroEngine().exportPreview(text) : currentMacroEngine().preview(text); } catch (err) { if (exporting) { throw err; } target.innerHTML = '<p class="deck-problem">' + esc(err.message) + '</p>'; return; }
+            if (exporting) {
+                var checked = window.yavcHTML.fragment(p.blocks.map(function (block) { return block.html; }).join(''));
+                if (checked.querySelector('.sc-problem')) { throw new Error('Fix the invalid shortcode before exporting or presenting.'); }
+            }
             window.yavcMdEditor.drawBlocks(target, p.blocks, quiet ? { pictures: picturesHost(), diagrams: false, applets: false } : { pictures: picturesHost() });
         }
         /* The public site's address, from the page's meta tag. A window
@@ -282,7 +286,8 @@
            2026-11-03). */
         function notesNodes(target) {
             var out = document.createDocumentFragment();
-            target.querySelectorAll('.sc-notes').forEach(function (a) {
+            target.querySelectorAll('.sc-notes,.sc-no-export,.sc-draft-note').forEach(function (a) {
+                if (!target.contains(a)) { return; }
                 var l = a.querySelector('.sc-notes-label'); if (l) { l.remove(); }
                 while (a.firstChild) { out.appendChild(a.firstChild); }
             });
@@ -853,8 +858,8 @@
                 section.appendChild(body);
                 canvas.appendChild(section);
                 stage.appendChild(canvas);
-                applySlideSettings(section, s);
-                drawInto(body, s.text);
+                applySlideSettings(section, s, currentMacroEngine().exportPreview(s.text).slideSettings);
+                drawInto(body, s.text, false, true);
                 section.querySelectorAll('.sc-notes').forEach(function (a) { a.remove(); });
             });
             stage.setAttribute('data-theme-name', deck.front.theme || 'plain');
@@ -997,7 +1002,15 @@
 
         /* === Export and print ========================================== */
 
+        async function captureExport() {
+            if (pageActive()) { await page.sync(); }
+            var captured = deck, text = fullText();
+            function unchanged() { if (destroyed || deck !== captured || fullText() !== text) { throw new Error('The deck changed during export. Export it again.'); } }
+            await deckEngine(); await installStyle(); unchanged(); return unchanged;
+        }
+
         async function exportPage() {
+            var unchanged = await captureExport();
             await installStyle();
             await loadScript(HERE + 'present.js' + STAMP);
             var css = await fetch('/applets/md-engine/page.css').then(function (r) { return r.text(); }) + '\n' + await fetch(HERE + 'slides.css' + STAMP).then(function (r) { return r.text(); }) + '\n' + deckCSS();
@@ -1010,7 +1023,7 @@
             pudlCSS = pudlCSS.replace(/url\((['"]?)(?!data:|https?:|\/\/)([^'")]+)\1\)/g, function (m, qu, u) { return 'url("' + new URL(u, pudlHref).href + '")'; });
             var stage = document.createElement('div');
             stage.className = 'deck-show deck-export-stage';
-            buildShow(stage);
+            unchanged(); buildShow(stage);
             var theme = document.documentElement.getAttribute('data-theme') || 'dark';
             /* No "<" reaches the page's <style> as itself, so nothing in a
                deck's CSS, a string included, can close it and open markup;
@@ -1031,19 +1044,24 @@
         /* === PowerPoint and PDF (export-pptx.js, export-pdf.js, import-pptx.js) === */
 
         function officeContext() {
-            return { deck: deck, settingsOf: settingsOf, titleOf: titleOf, notesOf: notesOf, drawInto: drawIntoQuiet, buildShow: buildShow, sizeOf: sizeOf, loadScript: loadScript, here: HERE, stamp: STAMP, deckCSS: deckCSS };
+            return { deck: deck, settingsOf: function (slide) { return currentMacroEngine().exportPreview(slide.text).slideSettings; }, titleOf: function (slide, i) { return 'Slide ' + (i + 1); }, notesOf: function (text) {
+                var box = document.createElement('div'); box.append(window.yavcHTML.fragment(currentMacroEngine().exportPreview(text).blocks.map(function (b) { return b.html; }).join('')));
+                return Array.from(box.querySelectorAll('.sc-notes')).map(function (n) { var label = n.querySelector('.sc-notes-label'); if (label) { label.remove(); } return n.textContent; }).join('\n');
+            }, drawInto: function (target, text) { drawInto(target, text, true, true); }, buildShow: buildShow, sizeOf: sizeOf, loadScript: loadScript, here: HERE, stamp: STAMP, deckCSS: deckCSS };
         }
         function fileStem() { return (deck.front.title || 'deck').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'deck'; }
         function download(name, blob) { window.yavcUtil.download(name, blob); say('Downloaded ' + name + '.'); }
         async function pptxBlob() {
+            var unchanged = await captureExport();
             await loadScript(HERE + 'export-pptx.js' + STAMP);
-            return window.yavcSlidesPptx.build(officeContext());
+            unchanged(); var blob = await window.yavcSlidesPptx.build(officeContext()); unchanged(); return blob;
         }
         async function pdfBytes(progress) {
+            var unchanged = await captureExport();
             await loadScript(HERE + 'export-pdf.js' + STAMP);
             var ctx = officeContext();
             ctx.pageCSS = await fetch('/applets/md-engine/page.css' + (window.yavcStaticVersion ? '?v=' + encodeURIComponent(window.yavcStaticVersion) : '')).then(function (r) { return r.text(); }).catch(function () { return ''; });
-            return window.yavcSlidesPdf.build(ctx, progress);
+            unchanged(); var bytes = await window.yavcSlidesPdf.build(ctx, progress); unchanged(); return bytes;
         }
         async function exportPPTX() {
             say('Writing the PowerPoint file…');
@@ -1078,7 +1096,9 @@
             });
             input.click();
         }
-        function printDeck() {
+        async function printDeck() {
+            var unchanged;
+            try { unchanged = await captureExport(); } catch (err) { say('The deck could not be printed: ' + err.message, 'problem'); return; }
             var box = document.createElement('div');
             box.className = 'deck-print';
             buildShow(box);
@@ -1086,7 +1106,7 @@
             document.body.classList.add('deck-printing');
             function done() { box.remove(); document.body.classList.remove('deck-printing'); window.removeEventListener('afterprint', done); }
             window.addEventListener('afterprint', done);
-            setTimeout(function () { window.print(); setTimeout(done, 1000); }, 300);
+            setTimeout(function () { try { unchanged(); window.print(); } catch (err) { say('The deck could not be printed: ' + err.message, 'problem'); } finally { setTimeout(done, 1000); } }, 300);
         }
 
         /* === Snapshots and continuity =================================== */

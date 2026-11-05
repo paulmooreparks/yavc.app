@@ -39,6 +39,9 @@
 .doc-page pre { padding: 8px 10px; overflow-x: auto; border: 1px solid var(--dinah-content-border); border-radius: 3px; background-color: var(--dinah-content-code-surface); }
 .doc-page code { font-family: var(--mono); font-size: 0.92em; }
 .doc-page blockquote { margin: 0.6em 0; padding: 0 0 0 12px; border-left: 3px solid var(--dinah-content-border); color: var(--dinah-muted-ink); }
+.doc-page .sc-no-export { outline: 1px dashed var(--doc-muted); outline-offset: 2px; }
+.doc-page span.sc-no-export { outline: 0; text-decoration: underline dashed var(--doc-muted); }
+.doc-page .sc-no-export-label { display: flex; align-items: center; gap: var(--space-1); color: var(--doc-muted); font-size: 0.8em; }
 .doc-page hr { border: 0; border-top: 1px solid var(--dinah-content-border); margin: 1.2em 0; }
 .doc-page li > input[type="checkbox"] { margin: 0 0.4em 0 0; vertical-align: middle; }
 .doc-page li:has(> input[type="checkbox"]) { list-style: none; }

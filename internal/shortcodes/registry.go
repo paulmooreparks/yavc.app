@@ -369,14 +369,20 @@ func (r *MacroRegistry) ContainerOf(line string) (Container, bool) {
 	return Container{Name: c.Name, Args: c.Args, Before: parts[0], After: parts[1]}, true
 }
 
-func (r *MacroRegistry) render(call Call, body string, inline bool, budget *MacroBudget) (string, error) {
+func (r *MacroRegistry) render(call Call, body string, inline bool, budget *MacroBudget, exporting ...bool) (string, error) {
 	expanded, err := r.expand(call, body, 0, budget)
 	if err != nil {
 		return "", err
 	}
 	md := goldmark.New(goldmark.WithExtensions(extension.GFM, Extension), goldmark.WithRendererOptions(html.WithUnsafe()))
 	var out bytes.Buffer
-	if err := md.Convert([]byte(expanded), &out); err != nil {
+	parsed := md.Parser().Parse(text.NewReader([]byte(expanded)))
+	if len(exporting) > 0 && exporting[0] {
+		if err := PruneExport(parsed); err != nil {
+			return "", err
+		}
+	}
+	if err := md.Renderer().Render(&out, []byte(expanded), parsed); err != nil {
 		return "", err
 	}
 	result := out.String()
