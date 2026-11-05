@@ -141,8 +141,9 @@ func (n *Inline) Dump(src []byte, level int) {
 // Block is a container shortcode and the Markdown inside it.
 type Block struct {
 	ast.BaseBlock
-	Call   Call
-	Closed bool
+	Call               Call
+	Closed             bool
+	BodyStart, BodyEnd int
 }
 
 var KindBlock = ast.NewNodeKind("ShortcodeBlock")
@@ -275,7 +276,7 @@ func (p *blockParser) Trigger() []byte { return []byte{'{'} }
 var closing = parser.NewContextKey()
 
 func (p *blockParser) Open(parent ast.Node, reader text.Reader, pc parser.Context) (ast.Node, parser.State) {
-	line, _ := reader.PeekLine()
+	line, seg := reader.PeekLine()
 	ending, _ := pc.Get(closing).(*Block)
 	pc.Set(closing, nil)
 	// The closing line of an open container: goldmark asks the open
@@ -297,7 +298,7 @@ func (p *blockParser) Open(parent ast.Node, reader text.Reader, pc parser.Contex
 		return nil, parser.NoChildren
 	}
 	takeLine(reader, line)
-	return &Block{Call: NewCall(string(m[1]), string(m[2]))}, parser.HasChildren
+	return &Block{Call: NewCall(string(m[1]), string(m[2])), BodyStart: seg.Stop, BodyEnd: len(reader.Source())}, parser.HasChildren
 }
 
 func (p *blockParser) Continue(node ast.Node, reader text.Reader, pc parser.Context) parser.State {
@@ -305,7 +306,7 @@ func (p *blockParser) Continue(node ast.Node, reader text.Reader, pc parser.Cont
 	if _, ok := node.(*Closer); ok {
 		return parser.Close
 	}
-	line, _ := reader.PeekLine()
+	line, seg := reader.PeekLine()
 	// The container's own closing line ends it; the line itself is left
 	// for Open to take, in the parent, which closes the blocks open inside.
 	// A container of the same name open inside this one is closed first,
@@ -324,6 +325,7 @@ func (p *blockParser) Continue(node ast.Node, reader text.Reader, pc parser.Cont
 			}
 		}
 		blk.Closed = true
+		blk.BodyEnd = seg.Start
 		pc.Set(closing, blk)
 		return parser.Close
 	}
@@ -1232,7 +1234,7 @@ var (
 	colourFunc = regexp.MustCompile(`^(?:rgb|rgba|hsl|hsla|oklch|oklab)\([0-9a-zA-Z%.,/ -]{1,60}\)$`)
 )
 
-var classRe = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9-]{0,63}$`)
+var classRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_-]{0,63}$`)
 
 // className reads a class shortcode's name, which must be safe in a class
 // attribute and in a selector.

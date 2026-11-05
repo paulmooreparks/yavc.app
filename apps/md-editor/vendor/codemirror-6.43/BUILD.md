@@ -2,6 +2,8 @@
 
 `codemirror.js` is CodeMirror 6 (MIT), bundled once from npm and vendored unmodified. It defines the global `CM` with the exports listed in `entry.js`. The editor applet (`js/editor.js`) loads it only when the editor opens.
 
+On 2026-11-05 the shared stylesheet editor added the `css` export from pinned `@codemirror/lang-css` 6.3.1, which was already an indirect dependency of Markdown's HTML support. The reproducible build is now `apps/md-editor/language-service/build.mjs` with its adjacent lockfile and output manifest. Build dependencies stay outside `apps`, as that folder's README describes. The kit loads this bundle with `?v=6`. No dependency version changed in this rebuild.
+
 Built on 2026-09-29 with esbuild 0.28.2:
 
 ```

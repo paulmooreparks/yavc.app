@@ -119,6 +119,7 @@
                    bar sits over it (openFind). */
                 '<div class="ed-page" data-role="page-box" hidden>' +
                   '<div class="ed-find-place" data-role="find-place" hidden></div>' +
+                  '<div class="notice warn" data-role="style-problems" hidden role="status"><div class="notice-content"><p class="notice-body"></p></div></div>' +
                   '<div class="ed-scroll" data-role="scroll" tabindex="0"><div class="doc-page" data-role="page" data-ed-page></div></div>' +
                 '</div>' +
               '</div>' +
@@ -145,7 +146,7 @@
         var wrapOn = true, viewsOffered = false, formatOffered = false, sourceOffered = false, siteUrl = null;
         function commandsChanged() { if (opts.commandsChanged) { opts.commandsChanged(); } }
 
-        var CM = null, F = null, view = null, destroyed = false, unsubscribe = null;
+        var CM = null, F = null, view = null, destroyed = false, unsubscribe = null, styleLifetime = new AbortController();
         var tabs = [], active = -1, untitled = 0;
         var wrapComp = null, langComp = null, lintComp = null, roComp = null, keyComp = null, lspComp = null, lsp = null;
         var startFile = fileFrom(opts.state) || (opts.ownsUrl ? fileFrom(location.search) : null);
@@ -183,10 +184,11 @@
             var p = String(path || '');
             if (/\.(md|markdown)$/i.test(p)) { return 'markdown'; }
             if (/\.(json|canvas)$/i.test(p)) { return 'json'; }
+            if (/\.css$/i.test(p)) { return 'css'; }
             if (/^~\/bin\/|^\/bin\/|\.sh$/i.test(p)) { return 'script'; }
             return 'text';
         }
-        var LANG_NAMES = { markdown: 'Markdown', json: 'JSON', script: 'Script', text: 'Plain Text' };
+        var LANG_NAMES = { markdown: 'Markdown', json: 'JSON', css: 'CSS', script: 'Script', text: 'Plain Text' };
         /* === Shortcodes in the text =========================================
            A {{shortcode}} is marked as one, its name and its arguments in
            their own colours; {{ offers the shortcodes' names and, inside a
@@ -272,6 +274,7 @@
         function langExtension(lang) {
             if (lang === 'markdown') { return [CM.markdown(), shortcodeExtensions()]; }
             if (lang === 'json') { return CM.json(); }
+            if (lang === 'css') { return CM.css(); }
             if (lang === 'script') { return CM.StreamLanguage.define(CM.shell); }
             return [];
         }
@@ -310,7 +313,7 @@
                     roComp.of([CM.EditorState.readOnly.of(!!tab.readOnly), CM.EditorView.editable.of(!tab.readOnly)]),
                     CM.EditorView.contentAttributes.of({ 'aria-label': 'Text of ' + tab.name }),
                     CM.EditorView.updateListener.of(function (u) {
-                        if (u.docChanged && tabs[active] === tab) { markModified(tab); }
+                        if (u.docChanged && tabs[active] === tab) { markModified(tab); scheduleStyles(); }
                         /* In Split, the page follows the text. */
                         if (u.docChanged && tabs[active] === tab && !visual.fromVisual) { textChangedForPage(); }
                         /* The paragraph style shows the line the cursor is on. */
@@ -412,8 +415,9 @@
             if (switching && viewMode !== 'text') { setView('text'); }
             active = i;
             var t = current();
-            if (!t) { view.setState(CM.EditorState.create({ doc: '' })); renderTabs(); announce(); return; }
+            if (!t) { view.setState(CM.EditorState.create({ doc: '' })); refreshStyles(); renderTabs(); announce(); return; }
             view.setState(t.state);
+            refreshStyles();
             /* A tab kept from before the key bindings last changed takes
                the bindings as they are now. */
             view.dispatch({ effects: [keyComp.reconfigure(keyBindings()), lspComp.reconfigure(languageAssistance(t))] });
@@ -586,6 +590,7 @@
                     roComp.reconfigure([CM.EditorState.readOnly.of(false), CM.EditorView.editable.of(true)])];
                 if (current() === t) { effects.push(lspComp.reconfigure(languageAssistance(t))); view.dispatch({ effects: effects }); }
                 else { t.state = t.state.update({ effects: effects }).state; }
+                if (current() === t) { refreshStyles(true); }
             }
             renderTabs();
             announce();
@@ -908,6 +913,44 @@
         }
 
         /* === Preview ===================================================== */
+        var documentStyles = null, styledIdentity = null, currentSharedStyle = '', styleRevision = 0, styleTimer = 0;
+        function styleDirectory() { var t = current(); return t && t.path && F ? F.splitPath(t.path).dir : '~'; }
+        function scheduleStyles() { clearTimeout(styleTimer); styleTimer = setTimeout(refreshStyles, 150); }
+        async function refreshStyles(reload) {
+            var revision = ++styleRevision, t = current(), text = t && view ? view.state.doc.toString() : '';
+            if (styledIdentity !== t) { if (documentStyles) { documentStyles.destroy(); documentStyles = null; } styledIdentity = t; currentSharedStyle = ''; }
+            if (!t || t.lang !== 'markdown') { if (documentStyles) { documentStyles.destroy(); documentStyles = null; } return; }
+            try {
+                var K = await loadKit(), m = await mdEngine(), D = await K.styles();
+                if (destroyed || revision !== styleRevision || t !== current()) { return; }
+                if (!documentStyles) { documentStyles = D.attach({ surfaces: function () { return [el.page]; }, boundaries: function () { return [el.scroll]; },
+                    read: function (path) { return window.pudlHost.fs.readText(path); }, onProblems: function (problems) {
+                        var notice = root.querySelector('[data-role="style-problems"]'); notice.hidden = !problems.length; notice.querySelector('.notice-body').textContent = problems.join(' ');
+                    } }); }
+                var front = m.front(text), path = ''; (front.entries || []).forEach(function (entry) { if (entry.key === 'stylesheet') { path = entry.value; } });
+                currentSharedStyle = window.yavcStyleTools.resolve(path, styleDirectory());
+                await documentStyles.update({ identity: t, inline: m.styles(text).map(function (block) { return block.css; }), stylesheet: currentSharedStyle, reload: reload === true });
+                if (!destroyed && revision === styleRevision) { commandsChanged(); }
+            } catch (err) { if (!destroyed && revision === styleRevision) { say('Styles could not be applied: ' + err.message, true); } }
+        }
+        async function editStyles(shared) {
+            var t = current(); if (!t || t.readOnly) { return; }
+            if (pageActive() && visual.api.sync) { await visual.api.sync(); }
+            var text = view.state.doc.toString(), m = await mdEngine(), K = await loadKit(); await K.styles();
+            function unchanged() { return !destroyed && current() === t && view.state.doc.toString() === text; }
+            if (!unchanged()) { return; }
+            try {
+                if (shared) {
+                    var path = ''; (m.front(text).entries || []).forEach(function (entry) { if (entry.key === 'stylesheet') { path = entry.value; } });
+                    await window.yavcStyleTools.shared({ path: path, dir: styleDirectory(), current: unchanged, signal: styleLifetime.signal, read: window.pudlHost.fs.readText, write: window.pudlHost.fs.writeText });
+                } else {
+                    await window.yavcStyleTools.document({ text: text, engine: m, current: unchanged, signal: styleLifetime.signal, save: function (next) {
+                        takeVisualText(next); textChangedForPage(); refreshStyles();
+                    } });
+                }
+                refreshStyles(true);
+            } catch (err) { say(err.message, true); }
+        }
         function schedulePreview() {
             clearTimeout(visual.timer);
             visual.timer = setTimeout(function () { drawPreview().catch(function (err) { say('The preview could not be drawn: ' + (err && err.message || err), true); }); }, 250);
@@ -935,7 +978,7 @@
                 page: function () { return visual.api; }, text: function () { return view; },
                 onPage: function () { return formatsThePage(); },
                 readOnly: function () { var t = current(); return !t || !!t.readOnly; },
-                blockStyle: blockStyle, say: say, pictures: picturesHost
+                blockStyle: blockStyle, classes: function () { return documentStyles ? documentStyles.state().classes : []; }, say: say, pictures: picturesHost
             };
         }
         function insertBlock(item) { window.yavcMdEditor.insertItem(item, editCtx()); }
@@ -1134,6 +1177,7 @@
            with no unsaved changes takes the new text; one with changes is
            told, and keeps the reader's version. */
         function onFsChange() {
+            refreshStyles(true);
             tabs.forEach(function (t, i) {
                 if (!t.path || t.readOnly) { return; }
                 var node = F.resolve(F.home(), t.path);
@@ -1667,6 +1711,10 @@
             table.push(cmd('properties', 'Properties…', 'tag', editProperties, {
                 hidden: function () { var t = current(); return !(t && t.lang === 'markdown'); },
                 disabled: function () { var t = current(); return !ready || !t || !!t.readOnly; } }));
+            table.push(cmd('stylesheet', 'Document Stylesheet…', 'code', function () { return editStyles(false); }, { shortcut: 'Mod+Shift+F', hidden: unformatted, disabled: noEdit }));
+            table.push(cmd('shared-stylesheet', 'Edit Shared Stylesheet…', 'file', function () { return editStyles(true); }, { hidden: unformatted,
+                disabled: function () { return noEdit() || !/^~\/.+\.css$/i.test(currentSharedStyle) || !(window.pudlHost && window.pudlHost.fs && window.pudlHost.fs.writeText); },
+                reason: 'Choose a home-folder CSS file in Document Stylesheet first. This host also needs a writable file service.' }));
             table.push({ id: 'md-default', label: 'Open Markdown As', hidden: function () { return !viewsOffered; },
                 current: function () { var f = MARKDOWN_VIEWS.find(function (x) { return x[0] === markdownDefault(); }); return f ? f[1] : null; },
                 items: MARKDOWN_VIEWS.map(function (v) {
@@ -1716,7 +1764,7 @@
                 { id: 'insert', label: 'Insert', glyph: 'plus', items: ['link', 'insert', 'table', 'box', '-', 'insert-timestamp', 'insert-date', 'stamp-modified'] }
             ];
             /* Format, where there is formatting to do. */
-            if (formatOffered) { titles.push({ id: 'format', label: 'Format', glyph: 'paragraph', items: ['style', '-', 'bold', 'italic', 'underline', 'strike', 'code', '-', 'highlight', 'superscript', 'subscript', '-', 'color', 'class', '-', 'bullets', 'numbers'] }); }
+            if (formatOffered) { titles.push({ id: 'format', label: 'Format', glyph: 'paragraph', items: ['style', '-', 'bold', 'italic', 'underline', 'strike', 'code', '-', 'highlight', 'superscript', 'subscript', '-', 'color', 'class', '-', 'bullets', 'numbers', '-', 'stylesheet', 'shared-stylesheet'] }); }
             return { titles: titles, into: { view: LAYOUT.concat(commonToolbar ? ['-', 'common-toolbar-show', 'common-toolbar-customize'] : []), go: ['go-to-line'] } };
         }
 
@@ -1855,6 +1903,8 @@
                 if (detachLive) { detachLive(); }
                 keepSession();
                 destroyed = true;
+                styleLifetime.abort();
+                styleRevision++; clearTimeout(styleTimer); if (documentStyles) { documentStyles.destroy(); }
                 if (snap) { snap.leave(); }
                 if (unsubscribe) { unsubscribe(); }
                 if (unConfig) { unConfig(); }

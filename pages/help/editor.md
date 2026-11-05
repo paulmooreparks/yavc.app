@@ -81,6 +81,22 @@ A right-click on the text or the page gives Undo, Redo, Find and the Format menu
 
 Editor, Key Bindings opens `~/.config/editor.json`, where each key is bound to a command by its name. A key set to null does nothing, and saved changes apply at once. The file lists the commands you can bind.
 
+## Document styles
+
+Format, Document Stylesheet opens the CSS editor for this document. Ctrl+Shift+F opens it too. Choose an existing style block or New Style Block, edit its CSS, then Apply Styles or press Ctrl+S. The change enters the document's Undo history. Cancel leaves the source unchanged. A warning explains CSS that the preview cannot apply; the source keeps what you wrote.
+
+For example, a style block can define a class:
+
+```markdown
+{{style}}
+.callout { border-left: 4px solid var(--doc-accent); padding: 0.75rem; }
+{{/style}}
+```
+
+Format, Style lists the document's classes beside the stock classes. Apply one to selected words or use `{{class:callout}}` around blocks. Names may contain letters, digits, underscores and hyphens and start with a letter or underscore.
+
+The stylesheet editor's Shared Stylesheet field links a local CSS file, such as `~/Styles/document.css` or `../Styles/document.css` relative to the document. Its styles apply before the document's blocks. Format, Edit Shared Stylesheet opens that file for editing; a missing home-folder file can be created there. Shared-file saves take effect in documents using it at this browser address. Each document still has its own style scope. Remote CSS files and resource-loading CSS are not supported. Fonts use those already available on your machine or in the site.
+
 ## Where your files live
 
 Your files are kept in this browser. Settings are shared by every address of the site, but files are kept per address, so a file saved on the desktop is not seen at `editor.yavc.app`, and the other way round. Download a file to keep a copy anywhere else. [Files Help](/help/files) says more about storage and its limits.

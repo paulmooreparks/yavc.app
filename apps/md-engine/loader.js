@@ -55,7 +55,7 @@
                     return out;
                 };
             }
-            return { preview: call('preview'), doc: call('doc'), markdown: call('markdown'), blocks: call('blocks'), source: call('source'), container: call('container'), inline: call('inline'), glyphs: call('glyphs'), front: call('front'), frontset: call('frontset') };
+            return { preview: call('preview'), doc: call('doc'), markdown: call('markdown'), blocks: call('blocks'), source: call('source'), container: call('container'), inline: call('inline'), glyphs: call('glyphs'), front: call('front'), frontset: call('frontset'), styles: call('styles') };
         })();
         ready.catch(function () { ready = null; });
         return ready;

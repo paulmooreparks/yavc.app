@@ -96,6 +96,12 @@ The CSS applies only to the deck's slides and weighs as much as the theme's own 
 - File, Print goes through the browser's print dialog, with one slide on each page.
 - File, Import from PowerPoint reads a .pptx into a new deck, keeping titles, text with its levels and emphasis, tables, two bodies as columns, notes and video links. Pictures are noted by name and left out, since a deck is a text file.
 
+## Editing styles
+
+Deck, Edit Style Blocks opens a CSS editor for the current slide's style declarations. Ctrl+Shift+F opens it too. Choose an existing declaration or add a new block for the whole deck or just this slide. Apply Styles or Ctrl+S writes the result back to the Markdown. Format, Style lists classes from accepted CSS.
+
+Set a local CSS file under Deck, Stylesheet File to share styles across decks, then use Deck, Edit Shared Stylesheet to edit a home-folder file. Relative paths resolve beside the saved deck. Shared CSS applies before the deck's style blocks. Thumbnails, presenting and exported HTML use the same compiled styles and slide scopes. Unsupported CSS produces a warning and remains in the source. CSS escapes, at-rules and resource-loading declarations are not supported in this release.
+
 ## Where the file lives
 
 Your files are kept in this browser, under the address you made them at. The desktop at yavc.app and the standalone page at slides.yavc.app each keep their own, so download a deck to keep it anywhere else.
