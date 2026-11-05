@@ -6,6 +6,8 @@
    too, so the two feel alike. PUDL's tokens do the rest. */
 
 /* Shared command toolbar and its native-list customization form. */
+.site-start .start-item > img { width: 20px; height: 20px; object-fit: contain; flex: none; }
+@media (min-width: 651px) { body:not(.desktop) .site-start { inset: 4rem auto auto var(--space-3); } }
 [data-toolbar-slot]:has(> .yavc-command-toolbar[hidden]) { display: none; }
 .yavc-command-toolbar[hidden] { display: none; }
 .dialog.yavc-toolbar-dialog { width: min(54rem, 94vw); max-width: 94vw; }

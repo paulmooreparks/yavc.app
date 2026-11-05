@@ -595,7 +595,8 @@ func (s *Server) pageData(r *http.Request, title string) map[string]any {
 		"State": state, "Config": config,
 		"Applets": s.appletEntries(r), "Dialog": "", "PUDLVersion": s.pudlVersion, "Retention": s.retention(), "StaticVersion": s.staticVersion, "SiteOrigin": strings.TrimSuffix(s.siteURL(r), "/"),
 		"Agents": agentCount(sess), "Registry": "/applets/registry.js?v=" + s.catalogDigest(),
-		"Help": s.helpEntries(),
+		"Help":  s.helpEntries(),
+		"Start": s.startCatalog(r),
 	}
 }
 

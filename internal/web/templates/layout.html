@@ -64,6 +64,8 @@
   <script src="{{asset "/pudl/pudl-tree.js"}}" defer></script>
   <script src="{{asset "/pudl/pudl-fields.js"}}" defer></script>
   <script src="{{asset "/pudl/pudl-split.js"}}" defer></script>
+  <script src="{{asset "/pudl/pudl-start.js"}}" defer></script>
+  <script src="{{asset "/static/start.js"}}" defer></script>
   <script src="{{asset "/pudl/pudl-date.js"}}" defer></script>
   <script src="{{asset "/pudl/pudl-combo.js"}}" defer></script>
   <script src="{{asset "/pudl/pudl-code.js"}}" defer></script>
@@ -75,6 +77,7 @@
      On the desktop a link opens a window; on a page it goes to the page.
      The site navigation file in XferLang replaces this in milestone 2. */}}
 {{define "menubar"}}
+      {{if not .Desktop}}{{template "start" .}}{{end}}
       <nav class="site-menubar" data-menubar data-menubar-ribbon aria-label="{{.Site}}">
         <ul data-menubar-source hidden>
           <li data-menubar-id="site"><img src="{{asset "/static/icon.svg"}}" alt=""> {{.Site}}<ul>
@@ -171,6 +174,7 @@
       </div>
     </div>
     <div class="win-bar">
+      {{template "start" .}}
       <button class="icon-btn sidebar-toggle" type="button" data-md-action="toggle" aria-label="Show or Hide the List" data-tooltip="Show or Hide the List">
         <span class="glyph" style="--glyph: var(--glyph-panel)" aria-hidden="true"></span>
       </button>
@@ -211,6 +215,7 @@
 <body class="standalone">
   <header class="site-header">
     <div class="topbar">
+      {{template "start" .}}
       <nav class="site-menubar" data-menubar data-menubar-ribbon aria-label="{{.Title}}">
         <ul data-menubar-source hidden>
           <li data-menubar-id="site"><img src="{{asset "/static/icon.svg"}}" alt=""> {{.Site}}<ul>
