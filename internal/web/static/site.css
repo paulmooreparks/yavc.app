@@ -71,9 +71,10 @@ body.standalone { height: 100dvh; min-height: 0; overflow: hidden; }
 .standalone-main:has(> [data-applet-flush]) { padding: 0; }
 
 /* === The desktop ========================================================== */
-body.desktop { height: 100dvh; }
-body.desktop .md-layout { --md-sidebar-w: 300px; }
-.reader-stage { padding: 0; overflow: hidden; }
+body.desktop { height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
+.desktop-shell { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.desktop-space { flex: 1; min-height: 0; display: flex; }
+.reader-stage { flex: 1; min-width: 0; padding: 0; overflow: hidden; }
 .reader-col { display: flex; flex-direction: column; height: 100%; }
 .reader-col .win-host { flex: 1; min-height: 0; position: relative; }
 .reader-empty { height: 100%; overflow-y: auto; padding: 32px; }
@@ -81,7 +82,6 @@ body.desktop .md-layout { --md-sidebar-w: 300px; }
 .welcome-card h1 { margin: 0 0 var(--space-2); font-size: var(--text-md); font-weight: 700; }
 .welcome-card p { margin: 0 0 var(--space-3); font-size: var(--text-sm); color: var(--text-muted); }
 .welcome-card p:last-child { margin-bottom: 0; }
-.site-list-icon { width: 20px; height: 20px; vertical-align: -5px; margin-inline-end: var(--space-2); object-fit: contain; }
 
 /* A window's content: the applet, filling the window when it says so.
    An applet that fills (data-applet-fit="fill", which PUDL sets on a
@@ -107,8 +107,6 @@ body.desktop .md-layout { --md-sidebar-w: 300px; }
 .win-body:has(> .win-content > [data-applet-flush]) { padding: 0; }
 
 
-
-/* The Classic view's list of applications. */
 
 /* The About dialogs. */
 .about-dialog { max-width: 36rem; }

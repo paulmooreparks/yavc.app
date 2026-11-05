@@ -13,6 +13,11 @@ const evidence = path.join(os.tmpdir(), 'yavc-start-review'); fs.mkdirSync(evide
             const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
             page.setDefaultTimeout(15000);
             await page.goto(`http://localhost:${port}/?open=dice&top=dice`);
+            assert.equal(await page.locator('.md-sidebar, .md-resize, [data-site-command="sidebar"], [data-md-action="toggle"]').count(), 0);
+            await page.waitForFunction(() => {
+                const space = document.querySelector('.win-host').getBoundingClientRect(), bar = document.querySelector('.win-bar').getBoundingClientRect();
+                return Math.abs(space.left) <= 1 && Math.abs(space.width - innerWidth) <= 1 && Math.abs(space.bottom - bar.top) <= 1 && Math.abs(bar.bottom - innerHeight) <= 1;
+            });
             await page.locator('#site-start-button').click();
             const root = page.locator('#site-start');
             await root.waitFor({ state: 'visible' });
@@ -46,6 +51,7 @@ const evidence = path.join(os.tmpdir(), 'yavc-start-review'); fs.mkdirSync(evide
                 assert.ok(box.x >= 0 && box.x + box.width <= state.width + 1);
                 assert.ok(box.y >= 0 && box.y + box.height <= state.height + 1);
                 assert.ok(await root.evaluate(e => e.scrollWidth <= e.clientWidth + 1));
+                assert.ok(await page.evaluate(() => Math.abs(document.querySelector('.win-host').getBoundingClientRect().width - innerWidth) <= 1));
                 await page.screenshot({ path: path.join(evidence, engine + '-' + state.width + '.png') });
             }
             await page.keyboard.press('Escape');

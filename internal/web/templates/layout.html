@@ -92,8 +92,6 @@
             {{end}}{{end}}
           </ul></li>
           <li data-menubar-id="view">View<ul>
-            {{if .Desktop}}<li><button type="button" data-site-command="sidebar" aria-checked="false">Hide the List</button></li>
-            <li>-</li>{{end}}
             <li>Mode<ul data-menu-radio>
               <li><button type="button" data-site-command="mode" data-args="light" {{checked .Appearance.Mode "light"}}>Light</button></li>
               <li><button type="button" data-site-command="mode" data-args="dark" {{checked .Appearance.Mode "dark"}}>Dark</button></li>
@@ -133,9 +131,7 @@
      contract): at the right of the top bar. */}}
 {{define "ribbon-slot"}}<div class="ribbon-slot" data-menubar-ribbon-slot></div>{{end}}
 
-{{/* The desktop: parkscomputing.com's shell, after PUDL's article reader.
-     The list of applications at the left, the windows as the detail pane,
-     and the taskbar along the foot. */}}
+{{/* The desktop hosts windows above its taskbar. Start lists applications. */}}
 {{define "desktop"}}{{template "head" .}}
 <body class="desktop">
   <header class="site-header">
@@ -143,27 +139,14 @@
       {{template "menubar" .}}
     </div>
   </header>
-  <div class="md-layout" data-md-persistent data-md-peek data-md-default-width="300" data-md-min="40">
-    <div class="md-body">
-      <nav class="md-sidebar" aria-label="Applications">
-        <div class="md-sidebar-head">
-          <input class="md-filter" type="search" placeholder="Filter the List…" aria-label="Filter the List" data-list-filter>
-        </div>
-        <div class="site-list">
-          <div class="md-section-label">Applications</div>
-          {{range .Applets}}<div class="md-row" id="row-{{.Name}}">
-            <a class="md-item" href="{{$.SiteURL}}?open={{.Name}}&amp;top={{.Name}}" data-win-open="{{.Name}}" title="{{.Description}}">{{if .Icon}}<img class="site-list-icon" src="{{.Icon}}" alt="">{{end}}{{.Title}}<span class="md-meta md-desc">{{.Description}}</span></a>
-          </div>
-          {{end}}
-        </div>
-      </nav>
-      <div class="md-resize" role="separator" tabindex="0" aria-orientation="vertical" aria-label="Application List"></div>
-      <div class="md-detail reader-stage" tabindex="0">
+  <div class="desktop-shell">
+    <div class="desktop-space">
+      <div class="reader-stage" tabindex="0">
         <div class="reader-col">
           <main class="win-host">
             <div class="reader-empty"><div class="card welcome-card">
               <h1>Welcome to {{.Site}}</h1>
-              <p>Pick an application from the list and it opens as a floating window. Drag it by its title bar, resize it from any edge, snap it against the sides, or maximize it; open several and switch between them from the taskbar below.</p>
+              <p>Choose an application from Start and it opens as a floating window. Drag it by its title bar, resize it from any edge, snap it against the sides, or maximize it; open several and switch between them from the taskbar below.</p>
               <p>Every application also runs on its own, at its own address, with the same game or document you left on the desktop. The Open as a Page button <span class="glyph" style="--glyph: var(--glyph-new-window)" aria-hidden="true"></span> in a window's title bar takes you there.</p>
               <p>The arrangement of windows lives in the page address, so it can be bookmarked and shared, and Back undoes the last thing you did.</p>
               <p>This desktop is built with <a href="https://github.com/paulmooreparks/pudl" target="_blank" rel="noopener">PUDL</a>, the Pleasantly Usable Design Language. Skins and colours are in the View menu.</p>
@@ -175,9 +158,6 @@
     </div>
     <div class="win-bar">
       {{template "start" .}}
-      <button class="icon-btn sidebar-toggle" type="button" data-md-action="toggle" aria-label="Show or Hide the List" data-tooltip="Show or Hide the List">
-        <span class="glyph" style="--glyph: var(--glyph-panel)" aria-hidden="true"></span>
-      </button>
       <nav class="win-dock" data-win-dock aria-label="Open Windows"></nav>
       <a class="icon-btn" data-win-back href="{{.Bar.Back}}"{{if .Bar.NoneShown}} aria-disabled="true"{{end}} aria-label="Minimize All Windows" data-tooltip="Minimize All Windows"></a>
       <a class="icon-btn" data-win-restore href="{{.Bar.Restore}}"{{if .Bar.NoneMinimized}} aria-disabled="true"{{end}} aria-label="Restore All Windows" data-tooltip="Restore All Windows"></a>

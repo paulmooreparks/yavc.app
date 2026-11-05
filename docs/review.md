@@ -287,6 +287,12 @@ PUDL 0.98.0 is vendored from its published archive, whose SHA-256 matches the re
 
 Independent PUDL review found that the footer's fallback Settings and Help links discarded open windows without enhancement. Both now use the same server-side destination builder as application rows, with regression assertions for retained windows and file state. The remaining source and rendered review had no findings.
 
+## Start replaces the application sidebar
+
+Paul requested removal of the desktop application sidebar after installing Start. The desktop now uses a full-width window area above the taskbar. The sidebar filter, splitter, taskbar toggle and View command have been removed, along with their host handlers and scroll snapshot writer. Old sidebar scroll entries are ignored. Applet-owned navigation panes remain independent. The Start server test rejects the obsolete sidebar and commands, and the browser fixture checks full-width window bounds and the taskbar's viewport position.
+
+The toolbar overflow regression previously relied on the sidebar consuming 300 pixels. With the wider desktop, every glyph fit and the fixture correctly found no overflow button. The fixture now sets an explicit narrow viewport before testing overflow focus. Independent source and screenshot review of the sidebar removal has no findings.
+
 ## Items for other projects
 
 These problems belong to PUDL or to applets that are maintained elsewhere, so they were reported instead of patched here.
