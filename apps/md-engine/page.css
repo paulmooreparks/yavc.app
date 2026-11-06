@@ -33,6 +33,7 @@
   color: var(--dinah-ink); background-color: var(--dinah-page-surface); color-scheme: inherit;
 }
 .doc-page a { color: var(--dinah-link-on-surface); }
+.doc-page p { margin-bottom: var(--doc-paragraph-spacing, 1em); }
 .doc-page h1, .doc-page h2, .doc-page h3, .doc-page h4, .doc-page h5, .doc-page h6 { font-family: var(--doc-font-heading); line-height: 1.25; margin: 1.1em 0 0.5em 0; color: var(--dinah-ink); }
 .doc-page h1 { margin-top: 0.75em; }
 .doc-page > :first-child, .doc-page > .ProseMirror > :first-child { margin-top: 0; }
@@ -137,6 +138,7 @@
 .doc-page .no-break { break-inside: avoid; }
 /* Document view retains a single editable flow. Page gaps are decorations. */
 .doc-page.doc-paginated {
+  position: relative;
   width: var(--sheet-width) !important; max-width: none !important; min-width: var(--sheet-width);
   padding: var(--sheet-top) var(--sheet-right) var(--sheet-bottom) var(--sheet-left) !important;
   background-image: repeating-linear-gradient(to bottom, transparent 0, transparent var(--sheet-height), var(--surface-alt) var(--sheet-height), var(--surface-alt) calc(var(--sheet-height) + var(--sheet-gap)));
@@ -147,6 +149,10 @@
 .doc-paginated > :is(.ProseMirror, .doc-page-flow) > .doc-page-gap { display: block; padding: 0; margin: 0; border: 0; pointer-events: none; }
 .doc-paginated > .doc-page-flow > .doc-block { display: flow-root; }
 .doc-paginated > .doc-page-flow > .doc-block > :first-child { margin-top: 0; }
+.doc-furniture { position: absolute; inset: 0; pointer-events: none; font-size: 9pt; line-height: 1.25; color: var(--doc-muted); }
+.doc-header, .doc-footer { position: absolute; left: var(--sheet-left); right: var(--sheet-right); display: flex; gap: 6pt; }
+.doc-furniture-cell { flex: 1 1 0; min-width: 0; white-space: nowrap; }
+.doc-furniture a { pointer-events: auto; }
 @media print {
   .doc-page .sc-page-break { margin: 0; border: 0; height: 0; }
   .doc-page .sc-page-break::after { content: none; }

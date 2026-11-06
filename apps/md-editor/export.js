@@ -32,7 +32,7 @@
             bold: +s.fontWeight >= 600 || s.fontWeight === 'bold', italic: s.fontStyle === 'italic',
             underline: decoration.includes('underline') || !!element.closest('u'), strike: decoration.includes('line-through') || !!element.closest('del,s'),
             sup: !!element.closest('sup'), sub: !!element.closest('sub'), mark: !!element.closest('mark'),
-            font: s.fontFamily.split(',')[0].replace(/["']/g, ''), align: /^(left|right|center|justify)$/.test(s.textAlign) ? s.textAlign : 'left' };
+            font: s.fontFamily.split(',')[0].replace(/["']/g, ''), leading: parseFloat(s.lineHeight) / parseFloat(s.fontSize) || 1.5, after: parseFloat(s.marginBottom) * .75 || 0, align: /^(left|right|center|justify)$/.test(s.textAlign) ? s.textAlign : 'left' };
     }
     function inline(element) {
         var out = [];
@@ -41,7 +41,7 @@
                 if (!node.textContent) { return; }
                 var parent = node.parentElement, link = parent.closest('a[href]'), whiteSpace = getComputedStyle(parent).whiteSpace, collapse = /^(normal|nowrap)$/.test(whiteSpace), text = node.textContent;
                 if (collapse) { text = text.replace(/[\t\n\r\f ]+/g, ' '); if (!out.length || out[out.length - 1].text === '\n' || out[out.length - 1].collapse && / $/.test(out[out.length - 1].text)) { text = text.replace(/^ /, ''); } }
-                if (text) { out.push(Object.assign({ text: text, collapse: collapse, link: link ? link.getAttribute('href') : null }, typography(parent))); } return;
+                if (text) { out.push(Object.assign({ text: text, collapse: collapse, field: parent.dataset.docField, link: link ? link.getAttribute('href') : null }, typography(parent))); } return;
             }
             if (node.nodeType !== 1) { return; }
             if (node.matches('br')) { if (out.length && out[out.length - 1].collapse) { out[out.length - 1].text = out[out.length - 1].text.replace(/ $/, ''); } out.push({ text: '\n' }); return; }
@@ -77,7 +77,8 @@
         var front = engine.front(source), props = {};
         if (front.problem) { throw new Error(front.problem); }
         (front.entries || []).forEach(function (entry) { if (entry.kind !== 'complex') { props[entry.key] = entry.value; } });
-        var page = settings(window.yavcDocumentPages.properties(front)), rendered = engine.exportPreview(source), fragment = window.yavcHTML.fragment(rendered.blocks.map(function (b) { return b.html; }).join(''));
+        var S = window.yavcDocumentSettings, values = S.properties(front), page = settings(values), rendered = engine.exportPreview(source), fragment = window.yavcHTML.fragment(rendered.blocks.map(function (b) { return b.html; }).join(''));
+        page.furniture = S.furniture(values, await window.yavcMdEngine()); S.check(page);
         if ((rendered.problems || []).length) { throw new Error('Fix the document warnings before exporting.'); }
         // The HTML cleaner uses an inert template, so omitted assets have not loaded.
         fragment.querySelectorAll('[data-export="omit"],.sc-draft-note').forEach(function (node) { node.remove(); });
@@ -93,7 +94,7 @@
         try {
             var D = await K.styles();
             controller = D.attach({ surfaces: [surface], boundaries: [boundary], read: options.read,
-                base: window.yavcDocumentPages.paper });
+                base: window.yavcDocumentPages.paper + ';' + S.typeCSS(values) });
             await controller.update({ identity: source, inline: engine.styles(source).map(function (b) { return b.css; }), stylesheet: options.stylesheet || '' });
             if (controller.state().problems.length) { throw new Error(controller.state().problems.join(' ')); }
             page.background = rgb(getComputedStyle(surface).backgroundColor);
@@ -112,6 +113,13 @@
                 picture.width *= 0.75; picture.height *= 0.75;
                 picture.alt = pair[0].alt || ''; images.set(pair[0], picture);
             }
+            var running = {}, layer = document.createElement('div'); layer.className = 'doc-furniture'; layer.style.position = 'static'; surface.append(layer);
+            try {
+                ['header', 'footer'].forEach(function (kind) {
+                    var row = S.row(page, kind, 9999, 9999); row.style.position = 'static'; layer.append(row); S.checkRows(layer);
+                    running[kind] = Array.from(row.children).map(function (cell) { return { align: cell.style.textAlign, runs: inline(cell) }; }); row.remove();
+                });
+            } finally { layer.remove(); }
             if (options.renderPages) {
                 images.forEach(function (picture, node) { node.src = picture.data; node.style.width = picture.width / .75 + 'px'; node.style.height = picture.height / .75 + 'px'; });
                 await Promise.all(Array.from(surface.querySelectorAll('img')).map(function (node) { return node.decode(); }));
@@ -153,7 +161,7 @@
                 children(node, target);
             }
             children(surface, blocks);
-            return { blocks: blocks, page: page, properties: props, warnings: ['PDF uses Roboto instead of the document font.'] };
+            return { blocks: blocks, page: page, furniture: running, properties: props, warnings: ['PDF uses Roboto instead of the document font.'] };
         } finally { if (controller) { controller.destroy(); } boundary.remove(); }
     }
     function docxDocument(model, D) {
@@ -162,6 +170,7 @@
         function runs(items) {
             return items.flatMap(function (r) {
                 var options = { bold: r.bold, italics: r.italic, underline: r.underline ? {} : undefined, strike: r.strike, superScript: r.sup, subScript: r.sub, highlight: r.mark ? 'yellow' : undefined, size: (r.size || 11) * 2, color: r.color || '202124', font: r.font || 'Arial' };
+                if (r.field) { return [new D.TextRun(Object.assign({}, options, { children: [r.field === 'page' ? D.PageNumber.CURRENT : D.PageNumber.TOTAL_PAGES] }))]; }
                 var children = String(r.text).split('\n').map(function (text, i) { return new D.TextRun(Object.assign({}, options, { text: text, break: i ? 1 : undefined })); });
                 if (r.link && r.link[0] === '#') { return [new D.InternalHyperlink({ anchor: bookmark(r.link.slice(1)), children: children })]; }
                 if (r.link) { return [new D.ExternalHyperlink({ link: new URL(r.link, location.href).href, children: children })]; }
@@ -175,7 +184,7 @@
                     if (b.id) { content = [new D.Bookmark({ id: bookmark(b.id), children: content })]; }
                     return [new D.Paragraph({ children: content, heading: b.level ? D.HeadingLevel['HEADING_' + b.level] : undefined, alignment: style.align,
                         numbering: list && index === 0 ? { reference: list, level: 0 } : undefined,
-                        indent: depth ? { left: depth * 360 } : undefined, spacing: { after: 120 }, keepNext: !!b.level })];
+                        indent: depth ? { left: depth * 360 } : undefined, spacing: { after: Math.round((style.after || 0) * 20), line: Math.round((style.leading || 1.5) * 240) }, keepNext: !!b.level })];
                 }
                 if (b.kind === 'list') {
                     var reference = 'list-' + (++listCount);
@@ -191,8 +200,13 @@
             });
         }
         var children = write(model.blocks, 0), p = model.properties, m = model.page.margins;
+        function running(kind, empty) {
+            var cells = empty ? [] : (model.furniture || {})[kind] || [];
+            var content = cells.length ? [new D.Table({ width: { size: 100, type: D.WidthType.PERCENTAGE }, borders: Object.fromEntries(['top','bottom','left','right','insideHorizontal','insideVertical'].map(function (key) { return [key, { style: D.BorderStyle.NONE, size: 0 }]; })), rows: [new D.TableRow({ children: cells.map(function (cell) { return new D.TableCell({ children: [new D.Paragraph({ children: runs(cell.runs), alignment: cell.align })] }); }) })] })] : [new D.Paragraph({})];
+            return kind === 'header' ? new D.Header({ children: content }) : new D.Footer({ children: content });
+        }
         return new D.Document({ title: p.title || '', creator: p.author || '', subject: p.subject || '', keywords: p.keywords || '', description: '', background: { color: model.page.background || 'ffffff' }, numbering: { config: numbering },
-            sections: [{ properties: { page: { size: { width: Math.round(model.page.width * 20), height: Math.round(model.page.height * 20) }, margin: { left: m[0] * 20, top: m[1] * 20, right: m[2] * 20, bottom: m[3] * 20 } } }, children: children.length ? children : [new D.Paragraph({})] }] });
+            sections: [{ headers: { default: running('header'), first: running('header', !model.page.furniture.first) }, footers: { default: running('footer'), first: running('footer') }, properties: { titlePage: !model.page.furniture.first, page: { size: { width: Math.round(model.page.width * 20), height: Math.round(model.page.height * 20) }, margin: { header: Math.max(0, m[1] / 2 - 6) * 20, footer: Math.max(0, m[3] / 2 - 6) * 20, left: m[0] * 20, top: m[1] * 20, right: m[2] * 20, bottom: m[3] * 20 } } }, children: children.length ? children : [new D.Paragraph({})] }] });
     }
     function pdfDefinition(model) {
         function runs(items) { return items.map(function (r) { return { text: r.text, bold: r.bold, italics: r.italic, color: '#' + (r.color || '202124'), fontSize: r.size || 11,
@@ -200,7 +214,7 @@
             link: r.link && r.link[0] !== '#' ? new URL(r.link, location.href).href : undefined, linkToDestination: r.link && r.link[0] === '#' ? r.link.slice(1) : undefined,
             sup: r.sup, sub: r.sub }; }); }
         function write(blocks) { return blocks.map(function (b) {
-            if (b.kind === 'paragraph') { return { text: runs(b.runs), alignment: (b.style || {}).align, margin: [0, b.level ? 8 : 0, 0, 6], id: b.id, preserveLeadingSpaces: !!b.code }; }
+            if (b.kind === 'paragraph') { return { text: runs(b.runs), alignment: (b.style || {}).align, lineHeight: (b.style || {}).leading, margin: [0, b.level ? 8 : 0, 0, (b.style || {}).after || 0], id: b.id, preserveLeadingSpaces: !!b.code }; }
             if (b.kind === 'list') { var list = {}; list[b.ordered ? 'ol' : 'ul'] = b.items.map(function (item) { return { stack: write(item) }; }); list.start = b.start; list.margin = [0, 0, 0, 6]; return list; }
             if (b.kind === 'quote') { return { stack: write(b.blocks), margin: [12, 0, 0, 6] }; }
             if (b.kind === 'table') { return { table: { headerRows: 1, widths: b.rows[0].map(function () { return '*'; }), body: b.rows.map(function (row) { return row.map(function (cell) { return { text: runs(cell.runs), alignment: cell.style.align, margin: [3, 3, 3, 3] }; }); }) }, margin: [0, 3, 0, 8] }; }
@@ -209,7 +223,11 @@
             if (b.kind === 'rule') { return { canvas: [{ type: 'line', x1: 0, y1: 0, x2: model.page.width - model.page.margins[0] - model.page.margins[2], y2: 0, lineWidth: 0.5 }], margin: [0, 8, 0, 8] }; }
             throw new Error('Unsupported export block.');
         }); }
-        return { content: write(model.blocks), pageSize: { width: model.page.width, height: model.page.height }, pageMargins: model.page.margins,
+        function running(kind) { return function (number, total) {
+            if (kind === 'header' && number === 1 && !model.page.furniture.first) { return ''; }
+            return { columns: ((model.furniture || {})[kind] || []).map(function (cell) { return { text: runs(cell.runs.map(function (r) { return r.field ? Object.assign({}, r, { text: String(r.field === 'page' ? number : total) }) : r; })), alignment: cell.align }; }), margin: [model.page.margins[0], Math.max(0, model.page.margins[kind === 'header' ? 1 : 3] / 2 - 6), model.page.margins[2], 0] };
+        }; }
+        return { content: write(model.blocks), pageSize: { width: model.page.width, height: model.page.height }, pageMargins: model.page.margins, header: running('header'), footer: running('footer'),
             background: { canvas: [{ type: 'rect', x: 0, y: 0, w: model.page.width, h: model.page.height, color: '#' + (model.page.background || 'ffffff') }] },
             defaultStyle: { font: 'Roboto', fontSize: 11, color: '#202124' },
             info: { title: model.properties.title || '', author: model.properties.author || '', subject: model.properties.subject || '', keywords: model.properties.keywords || '' } };
@@ -224,7 +242,7 @@
             await K.loadScript(K.here + 'vendor/docx-9.15.2/index.js' + K.stamp);
             blob = await window.docx.Packer.toBlob(docxDocument(model, window.docx));
         } else {
-            checkGlyphs(model.blocks, await pdfFont(K));
+            checkGlyphs(model.blocks.concat([].concat(model.furniture.header, model.furniture.footer)), await pdfFont(K));
             await K.loadScript(K.here + 'vendor/pdfmake-0.2.23/pdfmake.min.js' + K.stamp);
             await K.loadScript(K.here + 'vendor/pdfmake-0.2.23/vfs_fonts.js' + K.stamp);
             blob = await new Promise(function (resolve, reject) { var timer = setTimeout(function () { reject(new Error('PDF generation did not finish. Try a smaller document.')); }, 30000); try { window.pdfMake.createPdf(pdfDefinition(model)).getBlob(function (value) { clearTimeout(timer); resolve(value); }); } catch (err) { clearTimeout(timer); reject(err); } });

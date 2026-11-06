@@ -32,7 +32,7 @@
     /* The Editor's settings are its own toolbar's Wrap lines and Explorer
        controls, which remember themselves in ~/.config/editor.json
        (js/config.js), so they follow the reader wherever ~ does. */
-    var SETTINGS = { wrap: true, explorer: null, explorerWidth: null, keys: null, markdownView: 'document', documentView: 'document', navigation: 'files' };
+    var SETTINGS = { wrap: true, explorer: null, explorerWidth: null, keys: null, markdownView: 'document', documentView: 'document', documentZoom: '100', navigation: 'files' };
     var navigationCount = 0;
     var MARKDOWN_VIEWS = [['document', 'Document'], ['visual', 'Visual'], ['text', 'Text'], ['split', 'Split'], ['preview', 'Preview']];
     function supportsView(tab, mode) { return !!tab && (mode === 'text' || (tab.lang === 'markdown' && MARKDOWN_VIEWS.some(function (entry) { return entry[0] === mode; }))); }
@@ -895,6 +895,7 @@
         var settings = Object.assign({}, SETTINGS), unConfig = null;
         function applySettings(s) {
             settings = Object.assign({}, SETTINGS, s);
+            documentZoom = /^(width|page)$/.test(String(settings.documentZoom)) || Number(settings.documentZoom) >= 25 && Number(settings.documentZoom) <= 400 ? String(settings.documentZoom) : '100'; applyDocumentZoom();
             if (wrapOn !== !!settings.wrap) { setWrap(!!settings.wrap, false); }
             if (explorer && typeof settings.explorer === 'boolean' && el.explorer.hidden === settings.explorer) { showExplorer(settings.explorer); }
             if (explorerSplit) { explorerSplit.set(typeof settings.explorerWidth === 'number' ? settings.explorerWidth : null); }
@@ -971,7 +972,21 @@
            the page as it is on the site (openOnSite). */
         var viewMode = 'text';
         var visual = { api: null, front: null, fromVisual: false, timer: 0, loading: null, gen: 0 };
-        var pageSettings = null, printFrame = null, previewPages = null;
+        var pageSettings = null, printFrame = null, previewPages = null, documentZoom = '100';
+        function applyDocumentZoom() {
+            var scale = 1;
+            if (pagedView(viewMode) && pageSettings) {
+                var css = getComputedStyle(el.scroll), width = el.scroll.clientWidth - parseFloat(css.paddingLeft) - parseFloat(css.paddingRight), height = el.scroll.clientHeight - parseFloat(css.paddingTop) - parseFloat(css.paddingBottom);
+                scale = documentZoom === 'width' ? width / (pageSettings.width / .75) : documentZoom === 'page' ? Math.min(width / (pageSettings.width / .75), height / (pageSettings.height / .75)) : Number(documentZoom) / 100;
+                scale = Math.max(.1, Math.min(4, scale || 1));
+            }
+            el.page.style.zoom = String(scale);
+        }
+        var zoomObserver = new ResizeObserver(applyDocumentZoom); zoomObserver.observe(el.scroll);
+        function setDocumentZoom(value) {
+            if (!/^(width|page)$/.test(String(value)) && (!Number.isFinite(Number(value)) || Number(value) < 25 || Number(value) > 400)) { throw new Error('Zoom must be 25 to 400 percent, Fit Width or Fit Page.'); }
+            documentZoom = String(value); saveSetting({ documentZoom: documentZoom }); applyDocumentZoom(); commandsChanged();
+        }
         function readsAsPreview() { var t = current(); return viewMode === 'preview' || !!(t && t.readOnly && viewMode !== 'text'); }
         function pagedView(mode) { return mode === 'document'; }
         function pageLayout(layout) {
@@ -983,6 +998,7 @@
             notice.hidden = !message; notice.querySelector('.notice-body').textContent = message;
         }
         function clearPages() {
+            el.page.querySelectorAll(':scope > .doc-furniture').forEach(function (node) { node.remove(); }); el.page.style.zoom = '1';
             el.pages.textContent = ''; pageSettings = null; pageNotice('');
             el.page.classList.remove('doc-paginated'); el.page.style.minHeight = '';
             el.page.removeAttribute('data-page-count');
@@ -991,7 +1007,7 @@
         async function configurePages() {
             var t = current(), text = view.state.doc.toString(), K = await loadKit(), P = await K.pages(), m = await mdEngine();
             if (destroyed || current() !== t || !pagedView(viewMode) || text !== view.state.doc.toString()) { return; }
-            try { pageSettings = P.settings(P.properties(m.front(text))); P.surface(el.page, pageSettings); pageNotice(''); }
+            try { var S = window.yavcDocumentSettings, props = S.properties(m.front(text)); pageSettings = P.settings(props); pageSettings.furniture = S.furniture(props, m); P.surface(el.page, pageSettings); applyDocumentZoom(); pageNotice(''); }
             catch (err) { clearPages(); pageNotice(err.message); }
         }
         async function editPageSetup() {
@@ -1003,6 +1019,17 @@
             try { await UI.open({ properties: P.properties(m.front(text)), current: unchanged, signal: styleLifetime.signal, save: function (values) {
                 var next = m.frontset({ text: text, set: values, order: ['page', 'orientation', 'margins'] }).text;
                 takeVisualText(next); textChangedForPage(); refreshStyles();
+            } }); } catch (err) { say(err.message, true); }
+        }
+        async function editDocumentOptions(kind) {
+            var t = current(); if (!t || t.readOnly || t.lang !== 'markdown') { return; }
+            if (pageActive()) { await visual.api.sync(); }
+            var text = view.state.doc.toString(), K = await loadKit(), P = await K.pages(), m = await mdEngine(), S = window.yavcDocumentSettings;
+            function unchanged() { return !destroyed && current() === t && view.state.doc.toString() === text; }
+            if (!unchanged()) { return; }
+            try { await S.open(kind, { properties: S.properties(m.front(text)), engine: m, current: unchanged, signal: styleLifetime.signal, save: function (set, mappings) {
+                var order = Object.keys(set).concat(Object.keys(mappings));
+                takeVisualText(m.frontset({ text: text, set: set, mappings: mappings, order: order }).text); textChangedForPage(); refreshStyles();
             } }); } catch (err) { say(err.message, true); }
         }
         async function printDocument() {
@@ -1030,6 +1057,9 @@
                         for (var i = 0; i < starts.length - 1; i++) {
                             var sheet = surface.cloneNode(false); sheet.classList.add('doc-print-sheet'); var body = doc.createElement('div'); body.className = 'doc-page-flow'; sheet.append(body);
                             for (at = starts[i]; at < starts[i + 1]; at++) { body.append(blocks[at].node.cloneNode(true)); }
+                            var layer = doc.createElement('div'); layer.className = 'doc-furniture';
+                            var header = window.yavcDocumentSettings.row(page, 'header', i + 1, starts.length - 1, doc), footer = window.yavcDocumentSettings.row(page, 'footer', i + 1, starts.length - 1, doc);
+                            header.style.top = (page.margins[1] / 1.5 - 8) + 'px'; footer.style.top = ((page.height - page.margins[3] / 2) / .75 - 8) + 'px'; layer.append(header, footer); sheet.append(layer);
                             doc.body.append(sheet);
                         }
                         await Promise.all(Array.from(doc.querySelectorAll('link[rel="stylesheet"]')).map(function (link) { return link.sheet ? Promise.resolve() : new Promise(function (resolve, reject) { link.onload = resolve; link.onerror = function () { reject(new Error('A print stylesheet could not load.')); }; }); }));
@@ -1226,7 +1256,7 @@
         }
 
         /* === Preview ===================================================== */
-        var documentStyles = null, styledIdentity = null, styledMode = '', currentSharedStyle = '', styleRevision = 0, styleTimer = 0;
+        var documentStyles = null, styledIdentity = null, styledMode = '', styledTypography = '', currentSharedStyle = '', styleRevision = 0, styleTimer = 0;
         function styleDirectory() { var t = current(); return t && t.path && F ? F.splitPath(t.path).dir : '~'; }
         function scheduleStyles() { clearTimeout(styleTimer); styleTimer = setTimeout(refreshStyles, 150); }
         async function refreshStyles(reload) {
@@ -1236,8 +1266,11 @@
             try {
                 var K = await loadKit(), m = await mdEngine(), D = await K.styles(), P = await K.pages();
                 if (destroyed || revision !== styleRevision || t !== current()) { return; }
+                var typeCSS = window.yavcDocumentSettings.typeCSS(window.yavcDocumentSettings.properties(m.front(text)));
+                if (documentStyles && styledTypography !== typeCSS) { documentStyles.destroy(); documentStyles = null; }
+                styledTypography = typeCSS;
                 if (!documentStyles) { documentStyles = D.attach({ surfaces: function () { return [el.page]; }, boundaries: function () { return [el.scroll]; },
-                    base: pagedView(viewMode) ? P.paper : '',
+                    base: (pagedView(viewMode) ? P.paper : '') + ';' + typeCSS,
                     read: function (path) { return window.pudlHost.fs.readText(path); }, onProblems: function (problems) {
                         var notice = root.querySelector('[data-role="style-problems"]'); notice.hidden = !problems.length; notice.querySelector('.notice-body').textContent = problems.join(' ');
                     } }); }
@@ -2072,6 +2105,14 @@
                 hidden: function () { var t = current(); return !(t && t.lang === 'markdown'); },
                 disabled: function () { var t = current(); return !ready || !t || !!t.readOnly; } }));
             table.push(cmd('page-setup', 'Page Setup…', 'file', editPageSetup, { hidden: unformatted, disabled: noEdit }));
+            table.push(cmd('header-footer', 'Header and Footer…', 'file', function () { return editDocumentOptions('furniture'); }, { hidden: unformatted, disabled: noEdit }));
+            table.push(cmd('typography', 'Typography…', 'paragraph', function () { return editDocumentOptions('typography'); }, { hidden: unformatted, disabled: noEdit }));
+            table.push(cmd('document-zoom', 'Document Zoom', 'search', null, { hidden: function () { return viewMode !== 'document'; }, items: [
+                cmd('document-fit-width', 'Fit Width', null, function () { setDocumentZoom('width'); }),
+                cmd('document-fit-page', 'Fit Page', null, function () { setDocumentZoom('page'); }),
+                cmd('document-zoom-custom', 'Zoom…', null, async function () { var value = await window.yavcMdEditor.askText('Document Zoom', 'Percent', /^\d/.test(documentZoom) ? documentZoom : '100', { validate: function (text) { return !Number.isFinite(Number(text)) || Number(text) < 25 || Number(text) > 400 ? 'Enter 25 to 400.' : null; } }); if (value != null) { setDocumentZoom(value); } }),
+                cmd('document-zoom-reset', '100%', null, function () { setDocumentZoom('100'); })
+            ] }));
             table.push(cmd('print-document', 'Print…', 'yavc-print', printDocument, { hidden: unformatted, disabled: function () { return !ready || !tab || tab.lang !== 'markdown'; } }));
             table.push(cmd('stylesheet', 'Document Stylesheet…', 'code', function () { return editStyles(false); }, { shortcut: 'Mod+Shift+F', hidden: unformatted, disabled: noEdit }));
             table.push(cmd('custom-shortcodes', 'Custom Shortcodes…', 'code', editDefinitions, { hidden: unformatted, disabled: noEdit }));
@@ -2118,11 +2159,11 @@
            views, which the site's View menu lists again where a reader of
            the menus looks for them. Headings and separators start the
            ribbon's groups. */
-        var LAYOUT = ['toggle-files', 'toggle-outline', 'hide-navigation', 'toggle-wrap', '-', 'view-document', 'view-visual', 'view-text', 'view-split', 'view-preview', 'md-default', '-', 'source', 'preview'];
+        var LAYOUT = ['toggle-files', 'toggle-outline', 'hide-navigation', 'toggle-wrap', '-', 'view-document', 'view-visual', 'view-text', 'view-split', 'view-preview', 'document-zoom', 'md-default', '-', 'source', 'preview'];
         function menus() {
             var titles = [
                 { label: 'Editor', glyph: 'document', items: window.pcAppletIdentity(root, ['key-bindings']) },
-                { id: 'file', label: 'File', glyph: 'file', items: ['new', 'open', 'save', 'save-as', '-', 'export-docx', 'export-pdf', 'print-document', '-', 'page-setup', 'properties', 'present', '-', 'close-document'] },
+                { id: 'file', label: 'File', glyph: 'file', items: ['new', 'open', 'save', 'save-as', '-', 'export-docx', 'export-pdf', 'print-document', '-', 'page-setup', 'header-footer', 'typography', 'properties', 'present', '-', 'close-document'] },
                 { id: 'edit', label: 'Edit', glyph: 'pencil', items: ['undo', 'redo', '-', 'find', '-', 'json-format', 'language-restart'] },
                 { id: 'insert', label: 'Insert', glyph: 'plus', items: ['link', 'insert', 'table', 'box', '-', 'insert-timestamp', 'insert-date', 'stamp-modified'] }
             ];
@@ -2148,6 +2189,7 @@
             var config = await loadConfig().catch(function () { return null; });
             if (config) {
                 settings = Object.assign({}, SETTINGS, await config.load('editor', SETTINGS).catch(function () { return SETTINGS; }));
+                documentZoom = /^(width|page)$/.test(String(settings.documentZoom)) || Number(settings.documentZoom) >= 25 && Number(settings.documentZoom) <= 400 ? String(settings.documentZoom) : '100';
                 unConfig = config.onChange('editor', applySettings);
             }
             if (destroyed) { return; }
@@ -2205,7 +2247,26 @@
             view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: String(text) }, userEvent: 'input' });
             markModified(tabs[i]);
         }
+        async function updateDocumentOptions(input, running) {
+            docNo(); var tab = current(); if (tab.readOnly || tab.lang !== 'markdown') { throw new Error('Choose an editable Markdown document.'); }
+            if (pageActive()) { await visual.api.sync(); }
+            var text = view.state.doc.toString(), K = await loadKit(), P = await K.pages(), m = await mdEngine(), S = window.yavcDocumentSettings;
+            if (destroyed || current() !== tab || view.state.doc.toString() !== text) { throw new Error('The document changed. Try again.'); }
+            var set = {}, mappings = {}, allowed = running ? ['header', 'footer', 'header-first'] : ['font', 'heading-font', 'size', 'spacing', 'paragraph-spacing'];
+            Object.keys(input).forEach(function (key) {
+                if (allowed.indexOf(key) < 0) { throw new Error('Unsupported document setting.'); }
+                if (running && /^(header|footer)$/.test(key) && input[key] && typeof input[key] === 'object' && !Array.isArray(input[key])) { mappings[key] = input[key]; }
+                else { if (input[key] !== null && typeof input[key] !== 'string') { throw new Error('Document settings must be text.'); } set[key] = input[key]; }
+            });
+            var props = Object.assign({}, S.properties(m.front(text)), set, mappings);
+            S.typography(props); var page = P.settings(props); page.furniture = S.furniture(props, m); S.check(page);
+            takeVisualText(m.frontset({ text: text, set: set, mappings: mappings, order: Object.keys(set).concat(Object.keys(mappings)) }).text); textChangedForPage(); refreshStyles();
+            return { output: { changed: true } };
+        }
         var liveActions = {
+            'header-footer@1': async function (input) { return updateDocumentOptions(input, true); },
+            'typography@1': async function (input) { return updateDocumentOptions(input, false); },
+            'document-zoom@1': async function (input) { docNo(); if (viewMode !== 'document') { throw new Error('Choose Document view before setting document zoom.'); } setDocumentZoom(input.value); return { output: { value: documentZoom } }; },
             'page-setup@1': async function (input) {
                 docNo(); var tab = current(); if (tab.readOnly || tab.lang !== 'markdown') { throw new Error('Choose an editable Markdown document.'); }
                 if (pageActive()) { await visual.api.sync(); }
@@ -2306,6 +2367,7 @@
             commandTable: commandTable,
             toolbars: toolbars,
             destroy: function () {
+                zoomObserver.disconnect();
                 if (printFrame) { printFrame.remove(); }
                 if (previewPages) { previewPages.destroy(); }
                 var finalSync = Promise.resolve().then(function () { if (visual.api) { return visual.api.sync(); } });

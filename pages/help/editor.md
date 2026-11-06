@@ -163,6 +163,10 @@ Your home folder has a sample document, `~/Howto/Editor.md`, which uses many of 
 
 ## Document pages
 
+File, Header and Footer sets left, center and right running text. Use `{page}` and `{pages}` for page numbers, or `{title}`, `{author}` and `{date}` for document properties. You can hide the first page's header. Each position accepts a short line of text with emphasis, code or a link. Headers and footers appear in Document, printing, Word and PDF, and need at least 30pt in the relevant page margin. Shorten any text that exceeds its alignment slot.
+
+File, Typography changes the body font, heading font, size, line spacing and paragraph spacing. Empty fields restore stylesheet defaults. Fonts come from your computer; PDF uses its bundled font and reports that substitution. View, Document Zoom offers Fit Width, Fit Page, 100% and a custom percentage. Zoom changes your viewing preference without changing the document or exported pages.
+
 Document view displays physical pages. Visual, Split and Preview wrap to the pane width for both `.docs.md` and ordinary Markdown files. Text shows the Markdown source. Switching back to Document restores the saved paper size and margins without reopening the file. Document is the default unless you have chosen another view. Narrow windows scroll horizontally across physical pages. Page gaps never enter your source, and you can edit, select and undo across them.
 
 File, Page Setup changes the paper, orientation and margins as one undoable edit. Search the grouped standard sizes, or choose Custom Size and enter Width and Height. Editing either dimension also selects Custom Size. Units can be inches, millimeters, centimeters or points, and changing units preserves the measurements. Choose a margin preset, enter a single margin with Use the Same Margin on All Sides, or turn that off and edit Top, Bottom, Left and Right separately. These settings also apply to Word and PDF exports. The source still accepts one to four margin lengths in top, right, bottom, left order, including `px` lengths.

@@ -197,14 +197,15 @@ var functions = map[string]func(string) (any, error){
 	},
 	"frontset": func(req string) (any, error) {
 		var r struct {
-			Text  string             `json:"text"`
-			Set   map[string]*string `json:"set"`
-			Order []string           `json:"order"`
+			Text     string                       `json:"text"`
+			Set      map[string]*string           `json:"set"`
+			Order    []string                     `json:"order"`
+			Mappings map[string]map[string]string `json:"mappings"`
 		}
 		if err := json.Unmarshal([]byte(req), &r); err != nil {
 			return nil, err
 		}
-		text, err := frontmatter.Set(strings.ReplaceAll(r.Text, "\r\n", "\n"), r.Set, r.Order)
+		text, err := frontmatter.SetWithMappings(strings.ReplaceAll(r.Text, "\r\n", "\n"), r.Set, r.Mappings, r.Order)
 		if err != nil {
 			return nil, err
 		}
