@@ -3,22 +3,28 @@
 (function () {
     'use strict';
     var GAP = 24, LIMIT = 1000;
+    function paper(value) {
+        var name = String(value || 'a4').toLowerCase();
+        if (name === 'ledger') { name = 'tabloid'; }
+        return window.yavcPaperSizes.find(function (item) { return item.id === name || item.pwg === name; });
+    }
     function length(value) {
         var m = /^(\d+(?:\.\d+)?)\s*(pt|in|cm|mm|px)?$/.exec(String(value).trim());
         if (!m) { throw new Error('Page lengths use pt, in, cm, mm or px.'); }
         return +m[1] * ({ pt: 1, in: 72, cm: 72 / 2.54, mm: 72 / 25.4, px: 0.75 }[m[2] || 'pt']);
     }
     function settings(front) {
-        var sizes = { a4: [595.28, 841.89], letter: [612, 792], legal: [612, 1008] }, size = sizes[String(front.page || 'a4').toLowerCase()];
+        var stock = paper(front.page), size = stock ? [length(stock.width + stock.unit), length(stock.height + stock.unit)] : null;
         if (!size) {
             var custom = /^(\d+(?:\.\d+)?\s*(?:pt|in|cm|mm|px))\s*[x×]\s*(\d+(?:\.\d+)?\s*(?:pt|in|cm|mm|px))$/i.exec(String(front.page || ''));
-            if (!custom) { throw new Error('Page size is a4, letter, legal or two lengths such as 210mm x 297mm.'); }
+            if (!custom) { throw new Error('Choose a standard paper size or two lengths such as 210mm x 297mm.'); }
             size = [length(custom[1]), length(custom[2])];
         }
         size = size.slice();
         if (front.orientation && !/^(portrait|landscape)$/.test(front.orientation)) { throw Object.assign(new Error('Page orientation is portrait or landscape.'), { field: 'orientation' }); }
-        if (front.orientation === 'landscape') { size.reverse(); }
-        if (Math.min.apply(null, size) < 144 || Math.max.apply(null, size) > 2880) { throw new Error('Page dimensions must be between 2 and 40 inches.'); }
+        var landscape = front.orientation ? front.orientation === 'landscape' : size[0] > size[1];
+        size.sort(function (a, b) { return a - b; }); if (landscape) { size.reverse(); }
+        if (Math.min.apply(null, size) < 72 || Math.max.apply(null, size) > 8640) { throw new Error('Page dimensions must be between 1 and 120 inches.'); }
         var values;
         try { values = String(front.margins || '1in').trim().split(/\s+/).map(length); }
         catch (err) { err.field = 'margins'; throw err; }
@@ -80,6 +86,30 @@
         var node = document.createElement('div'); node.className = 'doc-page-gap'; node.style.height = height + 'px';
         node.setAttribute('aria-hidden', 'true'); node.contentEditable = 'false'; return node;
     }
+    function preview(o) {
+        var alive = true, raf = 0, signature = '';
+        function schedule() {
+            if (!alive || raf) { return; }
+            raf = requestAnimationFrame(function () {
+                raf = 0; var page = o.settings();
+                if (!alive || !page || !o.flow.isConnected || !o.flow.getBoundingClientRect().width) { return; }
+                try {
+                    // Preview source wrappers do not participate in physical layout.
+                    Array.from(o.flow.querySelectorAll('.dinah-src[data-start]')).reverse().forEach(function (node) { node.replaceWith.apply(node, Array.from(node.childNodes)); });
+                    var blocks = blocksOf(o.flow), layout = plan(blocks, page), next = JSON.stringify([page, layout.gaps, layout.count, layout.oversized]);
+                    var d = surface(o.host, page); o.host.style.minHeight = (layout.count * (d.height + GAP) - GAP) + 'px'; o.host.setAttribute('data-page-count', layout.count);
+                    o.changed(layout);
+                    if (next !== signature) {
+                        signature = next; o.flow.querySelectorAll(':scope > .doc-page-gap').forEach(function (node) { node.remove(); });
+                        layout.gaps.forEach(function (gap) { o.flow.insertBefore(spacer(gap.height), blocks[gap.index].node); });
+                    }
+                } catch (err) { o.problem(err.message); }
+            });
+        }
+        var ro = new ResizeObserver(schedule); ro.observe(o.flow);
+        o.flow.addEventListener('load', schedule, true); document.fonts.addEventListener('loadingdone', schedule); schedule();
+        return { refresh: function () { signature = ''; schedule(); }, destroy: function () { alive = false; cancelAnimationFrame(raf); ro.disconnect(); o.flow.removeEventListener('load', schedule, true); document.fonts.removeEventListener('loadingdone', schedule); } };
+    }
     function plugin(PM, o) {
         var key = new PM.PluginKey('document-pages'), signature = '', raf = 0, alive = true;
         function schedule(v) {
@@ -118,5 +148,5 @@
             }
         });
     }
-    window.yavcDocumentPages = { paper: '--doc-size:11pt;--doc-ink:#202124;--doc-muted:#555555;--doc-accent:#2355a0;--doc-page:#ffffff;', settings: settings, properties: properties, dimensions: dimensions, surface: surface, plan: plan, blocks: blocksOf, spacer: spacer, plugin: plugin };
+    window.yavcDocumentPages = { paper: '--doc-size:11pt;--doc-ink:#202124;--doc-muted:#555555;--doc-accent:#2355a0;--doc-page:#ffffff;', lookup: paper, length: length, settings: settings, properties: properties, dimensions: dimensions, surface: surface, plan: plan, blocks: blocksOf, spacer: spacer, preview: preview, plugin: plugin };
 })();

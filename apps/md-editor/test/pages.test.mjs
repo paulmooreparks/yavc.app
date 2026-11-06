@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 const context = vm.createContext({ window: {} });
+vm.runInContext(readFileSync(new URL('../paper-sizes.js', import.meta.url), 'utf8'), context);
 vm.runInContext(readFileSync(new URL('../pages.js', import.meta.url), 'utf8'), context);
 const P = context.window.yavcDocumentPages;
 
@@ -12,8 +13,20 @@ test('physical page settings share unit conversion, margin expansion and bounded
     assert.equal(letter.width,792); assert.equal(letter.height,612);
     assert.deepEqual(Array.from(letter.margins),[6,72,72 / 2.54 * 2,12]);
     assert.ok(Math.abs(P.settings({page:'180mm x 240mm'}).width - 180*72/25.4) < 1e-9);
-    for (const props of [{page:'unknown'},{page:'1in x 9in'},{page:'41in x 9in'},{margins:'99in'},{margins:'-1in'},{margins:'1 2 3 4 5'},{orientation:'diagonal'}]) { assert.throws(() => P.settings(props)); }
+    assert.ok(P.settings({page:'300mm x 200mm',orientation:'landscape'}).width > P.settings({page:'300mm x 200mm',orientation:'landscape'}).height);
+    assert.ok(P.settings({page:'300mm x 200mm',orientation:'portrait'}).width < P.settings({page:'300mm x 200mm',orientation:'portrait'}).height);
+    for (const props of [{page:'unknown'},{page:'0.5in x 9in'},{page:'121in x 9in'},{margins:'99in'},{margins:'-1in'},{margins:'1 2 3 4 5'},{orientation:'diagonal'}]) { assert.throws(() => P.settings(props)); }
     assert.throws(() => P.properties({entries:[{key:'page',kind:'complex'}]}),/plain values/);
+});
+test('every registered fixed paper size and existing aliases resolve without fetching', () => {
+    assert.equal(context.window.yavcPaperSizes.length,256);
+    for (const item of context.window.yavcPaperSizes) {
+        const page = P.settings({page:item.pwg,margins:'0'}), alias = P.settings({page:item.id,margins:'0'});
+        assert.equal(page.width,alias.width); assert.equal(page.height,alias.height);
+        assert.ok(Math.abs(page.width - P.length(item.width+item.unit)) < 1e-8);
+    }
+    assert.equal(P.lookup('ledger').id,'tabloid');
+    assert.ok(Math.abs(P.settings({page:'a3',margins:'0'}).width - 297*72/25.4) < 1e-8);
 });
 test('page planning keeps blocks whole, preserves explicit breaks and reports oversized blocks', () => {
     const page = P.settings({page:'letter',margins:'1in'}), d = P.dimensions(page);

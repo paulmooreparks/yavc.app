@@ -7,13 +7,14 @@ const source = '---\ntitle: Document pages\npage: letter\nmargins: 1in\n---\n\n#
 const action = (page, name, input = {}) => page.evaluate(({name,input}) => pudlActions.run('yavc.editor/' + name + '@1', input, {grant:'all'}), {name,input});
 const command = (page, id) => page.evaluate(id => { pudlCommands.run(id, null, document.querySelector('[data-applet]')); }, id);
 const text = page => action(page, 'document').then(r => r.text);
+const margin = page => page.locator('[data-measure="all"]').locator('..').getByRole('spinbutton');
 (async () => {
     for (const engine of process.argv.slice(2).length ? process.argv.slice(2) : ['chromium','firefox','webkit']) {
         const browser = await playwright[engine].launch({headless:true});
         const page = await browser.newPage({viewport:{width:1500,height:1000}}); page.setDefaultTimeout(15000);
         const errors = []; page.on('pageerror', err => errors.push(err.message));
         try {
-            await page.goto(`http://editor.localhost:${port}/`); await page.locator('.cm-editor').waitFor();
+            await page.goto(`http://editor.localhost:${port}/`,{waitUntil:'domcontentloaded'}); await page.locator('.cm-editor').waitFor();
             await action(page, 'new', {path:'~/pages.docs.md',text:source});
             await page.waitForFunction(() => +document.querySelector('[data-page-count]')?.dataset.pageCount > 1);
             assert.equal(await text(page), source);
@@ -25,26 +26,30 @@ const text = page => action(page, 'document').then(r => r.text);
             await page.waitForTimeout(500);
             assert.equal(await page.locator('[data-page-count]').getAttribute('data-page-count'), String(state.count));
             await page.screenshot({path:path.join(evidence,engine+'-document.png')});
-            await command(page,'page-setup'); await page.locator('[data-page-setting="margins"]').fill('99in');
+            await command(page,'page-setup'); await margin(page).fill('99');
             await page.getByRole('button',{name:'Apply',exact:true}).click();
-            await page.waitForFunction(() => document.activeElement?.getAttribute('data-page-setting') === 'margins');
-            assert.equal(await page.locator('[data-page-setting="margins"]').getAttribute('aria-invalid'),'true');
-            assert.ok(await page.locator('[data-page-setting="margins"]').evaluate(node => !!document.getElementById(node.getAttribute('aria-describedby'))));
-            await page.locator('[data-page-setting="margins"]').fill('bad-units');
+            await page.waitForFunction(() => /All Sides/.test(document.activeElement?.getAttribute('aria-label') || ''));
+            assert.equal(await margin(page).getAttribute('aria-invalid'),'true');
+            assert.ok(await margin(page).evaluate(node => !!document.getElementById(node.getAttribute('aria-describedby'))));
+            await margin(page).fill('');
             await page.getByRole('button',{name:'Apply',exact:true}).click();
-            assert.equal(await page.locator('[data-page-setting="margins"]').evaluate(node => node === document.activeElement),true);
+            assert.equal(await margin(page).evaluate(node => node === document.activeElement),true);
             await page.getByRole('button',{name:'Cancel',exact:true}).click(); assert.equal(await text(page),source);
             await page.locator('.ProseMirror p').first().click(); await page.keyboard.press('Home'); await page.keyboard.type('Edited ');
             await page.waitForFunction(() => CM.EditorView.findFromDOM(document.querySelector('.cm-editor')).state.doc.toString().includes('Edited '));
             await command(page,'undo'); await page.waitForFunction(source => CM.EditorView.findFromDOM(document.querySelector('.cm-editor')).state.doc.toString() === source,source);
-            await command(page,'page-setup'); await page.locator('[data-page-setting="page"]').fill('a4');
-            await page.locator('[data-page-setting="orientation"]').selectOption('landscape');
+            await command(page,'page-setup'); await page.locator('[data-choice="paper"]').selectOption('a4');
+            await page.locator('[data-choice="orientation"]').selectOption('landscape');
             await page.getByRole('button',{name:'Apply',exact:true}).click();
             await page.waitForFunction(() => document.querySelector('.doc-paginated')?.getBoundingClientRect().width > 1100);
             assert.match(await text(page),/orientation: landscape/);
             await command(page,'undo'); await page.waitForFunction(source => CM.EditorView.findFromDOM(document.querySelector('.cm-editor')).state.doc.toString() === source,source);
             await page.waitForFunction(() => document.querySelector('.doc-paginated')?.getBoundingClientRect().width === 816);
-            await action(page,'view',{mode:'visual'}); await page.waitForFunction(() => !document.querySelector('.doc-paginated') && !document.querySelector('.doc-page-gap'));
+            for (const mode of ['text','preview','visual','split']) {
+                await action(page,'view',{mode});
+                if(mode==='text') { assert.equal(await page.locator('.doc-paginated').count(),0); }
+                else { await page.waitForFunction(() => +document.querySelector('[data-page-count]')?.dataset.pageCount > 1); }
+            }
             await action(page,'view',{mode:'document'}); await page.waitForFunction(() => +document.querySelector('[data-page-count]')?.dataset.pageCount > 1);
             await command(page,'hide-navigation');
             await page.setViewportSize({width:600,height:800}); await page.waitForTimeout(250);

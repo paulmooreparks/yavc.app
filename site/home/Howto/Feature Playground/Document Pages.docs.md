@@ -12,9 +12,11 @@ This document opens as physical sheets. Click into a paragraph and edit it. You 
 
 ## Try page setup
 
-Choose **File, Page Setup**. Change Letter to A4, change the orientation to Landscape, or try margins of `25mm 20mm`. Apply the change, then use Undo to restore these settings.
+Choose **File, Page Setup**. Search for A4, select it, then change the orientation to Landscape. Change Units to Millimeters, turn off **Use the Same Margin on All Sides**, and enter a separate value for each side. Apply the change, then use Undo to restore these settings.
 
-Document view keeps the physical page width. Resize the window to see horizontal scrolling, or choose **View, Visual** when you want text to wrap to the pane.
+Choose **Custom Size** to enter your own Width and Height. The margin presets provide common starting points, and the linked **All Sides** field sets one margin everywhere.
+
+Document, Visual, Split and Preview keep this document's physical page width. Try Text, Preview and Visual in sequence; the paper layout returns after Text. Ordinary `.md` files wrap to the pane in their rendered views.
 
 ## Text, lists and tables
 

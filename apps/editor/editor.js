@@ -967,7 +967,12 @@
            the page as it is on the site (openOnSite). */
         var viewMode = 'text';
         var visual = { api: null, front: null, fromVisual: false, timer: 0, loading: null, gen: 0 };
-        var pageSettings = null, printFrame = null;
+        var pageSettings = null, printFrame = null, previewPages = null;
+        function pagedView(mode) { var t = current(); return mode !== 'text' && (mode === 'document' || !!(t && /\.docs\.md$/i.test(t.path || t.name || ''))); }
+        function pageLayout(layout) {
+            el.pages.textContent = layout.count + (layout.count === 1 ? ' page' : ' pages');
+            pageNotice(layout.oversized ? 'A block is taller than the page. Shorten it or enlarge the page before printing. Line-level pagination is not available yet.' : '');
+        }
         function pageNotice(message) {
             var notice = root.querySelector('[data-role="page-problems"]');
             notice.hidden = !message; notice.querySelector('.notice-body').textContent = message;
@@ -980,43 +985,20 @@
         }
         async function configurePages() {
             var t = current(), text = view.state.doc.toString(), K = await loadKit(), P = await K.pages(), m = await mdEngine();
-            if (destroyed || current() !== t || viewMode !== 'document' || text !== view.state.doc.toString()) { return; }
+            if (destroyed || current() !== t || !pagedView(viewMode) || text !== view.state.doc.toString()) { return; }
             try { pageSettings = P.settings(P.properties(m.front(text))); P.surface(el.page, pageSettings); pageNotice(''); }
             catch (err) { clearPages(); pageNotice(err.message); }
         }
         async function editPageSetup() {
             var t = current(); if (!t || t.readOnly || !view) { return; }
             if (pageActive()) { await visual.api.sync(); }
-            var text = view.state.doc.toString(), m = await mdEngine(), K = await loadKit(), P = await K.pages(), props;
-            try { props = P.properties(m.front(text)); }
-            catch (err) { say(err.message, true); return; }
-            if (destroyed || current() !== t || view.state.doc.toString() !== text) { return; }
-            var esc = window.yavcUtil.esc, dialog = null;
-            function aborted() { if (dialog) { dialog.close('cancel'); } }
-            function input(key, label, value, help) { return '<div class="form-group"><label class="form-label" for="ed-page-' + key + '">' + label + '</label><input class="form-input" id="ed-page-' + key + '" data-page-setting="' + key + '" value="' + esc(value) + '"><p class="form-help">' + help + '</p></div>'; }
-            function select(key, label, options, value) { return '<div class="form-group"><label class="form-label" for="ed-page-' + key + '">' + label + '</label><span class="form-select-wrap"><select class="form-select" id="ed-page-' + key + '" data-page-setting="' + key + '">' + options.map(function (item) { return '<option value="' + item[0] + '"' + (item[0] === value ? ' selected' : '') + '>' + item[1] + '</option>'; }).join('') + '</select></span></div>'; }
-            try { await window.yavcDialog.open({ title: 'Page Setup', body:
-                input('page', 'Page Size', props.page || 'a4', 'Use a4, letter, legal or dimensions such as 210mm x 297mm.') +
-                select('orientation', 'Orientation', [['portrait', 'Portrait'], ['landscape', 'Landscape']], props.orientation || 'portrait') +
-                input('margins', 'Margins', props.margins || '1in', 'One to four lengths, in top, right, bottom, left order. For example, 25mm 20mm.'),
-                buttons: [{ id: 'cancel', label: 'Cancel' }, { id: 'apply', label: 'Apply', primary: true }],
-                onOpen: function (api) { dialog = api; styleLifetime.signal.addEventListener('abort', aborted, { once: true }); },
-                check: function () {
-                    dialog.body.querySelectorAll('[data-page-setting]').forEach(function (node) { node.removeAttribute('aria-invalid'); node.removeAttribute('aria-describedby'); });
-                    try {
-                        if (destroyed || current() !== t || view.state.doc.toString() !== text) { throw new Error('The document changed. Close and reopen Page Setup.'); }
-                        var values = {}; dialog.body.querySelectorAll('[data-page-setting]').forEach(function (node) { values[node.dataset.pageSetting] = node.value.trim(); });
-                        P.settings(values);
-                        var next = m.frontset({ text: text, set: values, order: ['page', 'orientation', 'margins'] }).text;
-                        takeVisualText(next); textChangedForPage(); refreshStyles(); return false;
-                    } catch (err) {
-                        var notice = window.yavcUtil.notice(dialog.body, err.message, true);
-                        var field = dialog.body.querySelector('[data-page-setting="' + (err.field || 'page') + '"]');
-                        if (notice) { notice.id = 'ed-page-validation'; field.setAttribute('aria-describedby', notice.id); }
-                        field.setAttribute('aria-invalid', 'true'); field.focus(); return true;
-                    }
-                }
-            }); } finally { styleLifetime.signal.removeEventListener('abort', aborted); }
+            var text = view.state.doc.toString(), m = await mdEngine(), K = await loadKit(), P = await K.pages(), UI = await K.pageSetup();
+            function unchanged() { return !destroyed && current() === t && view.state.doc.toString() === text; }
+            if (!unchanged()) { return; }
+            try { await UI.open({ properties: P.properties(m.front(text)), current: unchanged, signal: styleLifetime.signal, save: function (values) {
+                var next = m.frontset({ text: text, set: values, order: ['page', 'orientation', 'margins'] }).text;
+                takeVisualText(next); textChangedForPage(); refreshStyles();
+            } }); } catch (err) { say(err.message, true); }
         }
         async function printDocument() {
             var t = current(); if (!t || t.lang !== 'markdown') { return; }
@@ -1137,11 +1119,8 @@
                 /* A picture pressed on the page opens the picture dialog. */
                 editBlock: function (src) { return window.yavcMdEditor.editBlock(src, picturesHost()); },
                 root: root, page: el.page, scroll: el.scroll,
-                pagination: function () { return viewMode === 'document' ? pageSettings : null; },
-                paginated: function (layout) {
-                    el.pages.textContent = layout.count + (layout.count === 1 ? ' page' : ' pages');
-                    pageNotice(layout.oversized ? 'A block is taller than the page. Shorten it or enlarge the page before printing. Line-level pagination is not available yet.' : '');
-                },
+                pagination: function () { return pagedView(viewMode) ? pageSettings : null; },
+                paginated: pageLayout,
                 paginationProblem: pageNotice,
                 customName: function (name) { return customShortcodes().some(function (item) { return item.name === name; }); },
                 text: function () { return view.state.doc.toString(); },
@@ -1188,8 +1167,9 @@
             commandsChanged();
             root.classList.toggle('ed-previewing', mode !== 'text');
             root.classList.toggle('ed-visual-only', mode === 'visual' || mode === 'preview' || mode === 'document');
-            root.classList.toggle('ed-document', mode === 'document');
-            if (mode !== 'document') { clearPages(); }
+            root.classList.toggle('ed-document', pagedView(mode));
+            if (previewPages) { previewPages.destroy(); previewPages = null; }
+            if (!pagedView(mode)) { clearPages(); }
             root.classList.toggle('ed-reading', mode === 'preview');
             showFormat(mode);
             el.pageBox.hidden = mode === 'text';
@@ -1199,6 +1179,7 @@
             if (mode === 'text') {
                 closePageFind(false);
                 if (visual.api) { await visual.api.enable(false); }
+                if (gen !== visual.gen || destroyed) { return; }
                 el.page.replaceChildren();
                 say('');
                 keep();
@@ -1206,7 +1187,7 @@
             }
             try {
                 await mdEngine();
-                if (mode === 'document') { await configurePages(); }
+                if (pagedView(mode)) { await configurePages(); }
                 if (gen !== visual.gen) { return; }
                 if (mode === 'preview') {
                     if (visual.api) { await visual.api.enable(false); }
@@ -1250,7 +1231,7 @@
                 var K = await loadKit(), m = await mdEngine(), D = await K.styles(), P = await K.pages();
                 if (destroyed || revision !== styleRevision || t !== current()) { return; }
                 if (!documentStyles) { documentStyles = D.attach({ surfaces: function () { return [el.page]; }, boundaries: function () { return [el.scroll]; },
-                    base: viewMode === 'document' ? P.paper : '',
+                    base: pagedView(viewMode) ? P.paper : '',
                     read: function (path) { return window.pudlHost.fs.readText(path); }, onProblems: function (problems) {
                         var notice = root.querySelector('[data-role="style-problems"]'); notice.hidden = !problems.length; notice.querySelector('.notice-body').textContent = problems.join(' ');
                     } }); }
@@ -1261,7 +1242,7 @@
                 if (!destroyed && revision === styleRevision && oldShared !== sharedMacros) {
                     if (pageActive()) { visual.api.textChanged(true); } else if (viewMode === 'preview') { schedulePreview(); }
                 }
-                if (!destroyed && revision === styleRevision) { if (viewMode === 'document') { await configurePages(); if (visual.api) { visual.api.repaginate(); } } commandsChanged(); }
+                if (!destroyed && revision === styleRevision) { if (pagedView(viewMode)) { await configurePages(); if (visual.api) { visual.api.repaginate(); } if (previewPages) { previewPages.refresh(); } } commandsChanged(); }
             } catch (err) { if (!destroyed && revision === styleRevision) { say('Styles could not be applied: ' + err.message, true); } }
         }
         async function editStyles(shared) {
@@ -1290,7 +1271,13 @@
             var gen = visual.gen, t = current(), source = view.state.doc.toString(), m = await documentEngine(source);
             if (gen !== visual.gen || !view || viewMode !== 'preview' || current() !== t || view.state.doc.toString() !== source) { return; }
             var p = m.preview(source), top = el.scroll.scrollTop;
-            drawBlocks(el.page, p.blocks);
+            if (pagedView(viewMode)) {
+                var flow = el.page.querySelector(':scope > .doc-page-flow');
+                if (!flow) { el.page.replaceChildren(); flow = document.createElement('div'); flow.className = 'doc-page-flow'; el.page.append(flow); }
+                drawBlocks(flow, p.blocks);
+                if (!previewPages) { previewPages = window.yavcDocumentPages.preview({ host: el.page, flow: flow, settings: function () { return pageSettings; }, changed: pageLayout, problem: pageNotice }); }
+                previewPages.refresh();
+            } else { drawBlocks(el.page, p.blocks); }
             el.scroll.scrollTop = top;
             var problems = p.problems || [];
             if (problems.length) {
@@ -2314,6 +2301,7 @@
             toolbars: toolbars,
             destroy: function () {
                 if (printFrame) { printFrame.remove(); }
+                if (previewPages) { previewPages.destroy(); }
                 var finalSync = Promise.resolve().then(function () { if (visual.api) { return visual.api.sync(); } });
                 outlineRevision++; clearTimeout(outlineTimer); if (navigationObserver) { navigationObserver.disconnect(); }
                 window.removeEventListener('popstate', locationChanged);

@@ -100,8 +100,13 @@
     }
     var pagesReady = null;
     function pages() {
-        if (!pagesReady) { pagesReady = loadScript(HERE + 'pages.js' + STAMP).then(function () { return window.yavcDocumentPages; }).catch(function (err) { pagesReady = null; throw err; }); }
+        if (!pagesReady) { pagesReady = loadScript(HERE + 'paper-sizes.js' + STAMP).then(function () { return loadScript(HERE + 'pages.js' + STAMP); }).then(function () { return window.yavcDocumentPages; }).catch(function (err) { pagesReady = null; throw err; }); }
         return pagesReady;
+    }
+    var pageSetupReady = null;
+    function pageSetup() {
+        if (!pageSetupReady) { pageSetupReady = Promise.all([pages(), styles()]).then(function () { return loadScript(HERE + 'page-setup.js' + STAMP); }).then(function () { return window.yavcPageSetup; }).catch(function (err) { pageSetupReady = null; throw err; }); }
+        return pageSetupReady;
     }
     var exportsReady = null;
     function documentExports() {
@@ -1405,7 +1410,7 @@
     }
 
     window.yavcMdEditor = {
-        here: HERE, stamp: STAMP, placeholder: PLACEHOLDER, pages: pages, styles: styles, macros: macros, exports: documentExports,
+        here: HERE, stamp: STAMP, placeholder: PLACEHOLDER, pages: pages, pageSetup: pageSetup, styles: styles, macros: macros, exports: documentExports,
         colourRows: pickerRows, wireColours: wirePickers,
         libs: libs, languageServices: languageServices, codeTheme: codeTheme, codeSearch: codeSearch, findBar: findBar, pageView: pageView, mermaid: mermaid, drawMermaid: drawDiagram, loadScript: loadScript,
         FORMATS: FORMATS, STYLES: STYLES, INSERTS: INSERTS, SHORTCODES: SHORTCODES, MENU: MENU, STOCK_CLASSES: STOCK_CLASSES,
