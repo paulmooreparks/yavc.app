@@ -1,4 +1,19 @@
 /* Copyright 2026 Paul Parks. SPDX-License-Identifier: Apache-2.0 */
+.md-typography-dialog.dialog { width: min(44rem, calc(100vw - 2rem)); max-width: calc(100vw - 2rem); }
+.md-typography-dialog .dialog-body { max-height: 72svh; overflow: auto; }
+.md-type-layout { display: block; }
+.md-type-controls fieldset { min-width: 0; margin-bottom: var(--space-3); display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: var(--space-4); }
+.md-type-controls fieldset:first-child { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 11rem; }
+.md-type-label { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); margin-bottom: var(--space-1); }
+.md-type-label .form-label { margin: 0; }
+.md-type-measure { display: flex; align-items: center; gap: var(--space-2); }
+.md-type-measure .number-field { width: 10rem; max-width: calc(100% - 2rem); }
+.md-type-preview-boundary { contain: paint; border: 1px solid var(--border); border-radius: var(--radius-sm); max-height: 12rem; overflow: auto; }
+.md-type-preview.doc-page { padding: var(--space-4); min-width: 0; min-height: 0; }
+.md-type-preview p { overflow-wrap: anywhere; }
+.md-type-defaults { margin-top: var(--space-2); }
+@media (max-width: 620px) { .md-type-controls fieldset:first-child { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 480px) { .md-type-controls fieldset, .md-type-controls fieldset:first-child { grid-template-columns: minmax(0, 1fr); } }
 .md-document-dialog { width: min(38rem, calc(100vw - 2rem)); }
 .md-document-dialog .dialog-body { max-height: 72svh; overflow: auto; }
 .md-document-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }

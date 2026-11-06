@@ -20,9 +20,9 @@ paragraph-spacing: 8pt
 
 # Document tools
 
-Choose File, Header and Footer to edit the running text. This first page hides its header but retains its footer. Change the author, title or date through File, Properties and see the running text follow them.
+Choose Format, Header and Footer to edit the running text. This first page hides its header but retains its footer. Change the author, title or date through File, Properties and see the running text follow them.
 
-File, Typography controls the body and heading fonts, size, line spacing and paragraph spacing. Clear a field to restore the stylesheet default. Each Apply is one Undo step.
+Format, Typography controls the body and heading fonts, size, line spacing and paragraph spacing. Clear a field to restore the stylesheet default. Each Apply is one Undo step.
 
 Choose View, Document Zoom, then Fit Width or Fit Page. Resize the window. Zoom changes the view without changing the source or physical page breaks.
 

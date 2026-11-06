@@ -35,11 +35,11 @@ View, Open Markdown As chooses the view a Markdown file opens in, and each tab r
 
 ## Formatting
 
-The Format menu offers Bold (Ctrl+B), Italic (Ctrl+I), Underline (Ctrl+U), Strike Through, Code, Highlight (Ctrl+Shift+H), Superscript, Subscript, Text Colour, Style, Bulleted List and Numbered List, and Paragraph Style, which is Paragraph (Ctrl+0) or Heading 1 to 6 (Ctrl+1 to Ctrl+6). Any of these commands can be added to the toolbar. In Text view a format wraps the selection in its Markdown or takes it off again, and a heading or a list marks each selected line. In Visual view the page is formatted directly.
+The Format menu offers Bold (Ctrl+B), Italic (Ctrl+I), Underline (Ctrl+U), Strike Through, Code, Highlight (Ctrl+Shift+H), Superscript, Subscript, Text Color, Style, Bulleted List and Numbered List, and Paragraph Style, which is Paragraph (Ctrl+0) or Heading 1 to 6 (Ctrl+1 to Ctrl+6). Any of these commands can be added to the toolbar. In Text view a format wraps the selection in its Markdown or takes it off again, and a heading or a list marks each selected line. In Visual view the page is formatted directly.
 
 Underline is written `<u>…</u>`, and Highlight, Superscript and Subscript are written `{{mark}}…{{/mark}}`, `{{sup}}…{{/sup}}` and `{{sub}}…{{/sub}}`. Superscript and Subscript replace each other, since words are raised or lowered and never both.
 
-Text Colour wraps the selected words in `{{color:…}}…{{/color}}` with one of the site's colours (ink, muted, accent, danger, warn or positive) or any CSS colour. Style wraps them in `{{class:…}}…{{/class}}` with a class: one of those the site provides for every document (`center`, `right`, `justify`, `indent`, `small`, `lead` and `no-break`), one from a `{{style}}` block in the document, or any name. Both stay editable as rich text in Visual view.
+Text Color wraps the selected words in `{{color:…}}…{{/color}}` with one of the site's colours (ink, muted, accent, danger, warn or positive) or any CSS color. Style wraps them in `{{class:…}}…{{/class}}` with a class: one of those the site provides for every document (`center`, `right`, `justify`, `indent`, `small`, `lead` and `no-break`), one from a `{{style}}` block in the document, or any name. Both stay editable as rich text in Visual view.
 
 ## Tables
 
@@ -163,9 +163,9 @@ Your home folder has a sample document, `~/Howto/Editor.md`, which uses many of 
 
 ## Document pages
 
-File, Header and Footer sets left, center and right running text. Use `{page}` and `{pages}` for page numbers, or `{title}`, `{author}` and `{date}` for document properties. You can hide the first page's header. Each position accepts a short line of text with emphasis, code or a link. Headers and footers appear in Document, printing, Word and PDF, and need at least 30pt in the relevant page margin. Shorten any text that exceeds its alignment slot.
+Format, Header and Footer sets left, center and right running text. Use `{page}` and `{pages}` for page numbers, or `{title}`, `{author}` and `{date}` for document properties. You can hide the first page's header. Each position accepts a short line of text with emphasis, code or a link. Headers and footers appear in Document, printing, Word and PDF, and need at least 30pt in the relevant page margin. Shorten any text that exceeds its alignment slot.
 
-File, Typography changes the body font, heading font, size, line spacing and paragraph spacing. Empty fields restore stylesheet defaults. Fonts come from your computer; PDF uses its bundled font and reports that substitution. View, Document Zoom offers Fit Width, Fit Page, 100% and a custom percentage. Zoom changes your viewing preference without changing the document or exported pages.
+Format, Typography changes the body font, heading font, size, line spacing and paragraph spacing. Default beside a field restores its stylesheet value; Use Stylesheet Defaults resets the whole dialog. Font and spacing choices appear in the preview before Apply. Fonts come from your computer; PDF uses its bundled font and reports that substitution. View, Document Zoom offers Fit Width, Fit Page, 100% and a custom percentage. Zoom changes your viewing preference without changing the document or exported pages.
 
 Document view displays physical pages. Visual, Split and Preview wrap to the pane width for both `.docs.md` and ordinary Markdown files. Text shows the Markdown source. Switching back to Document restores the saved paper size and margins without reopening the file. Document is the default unless you have chosen another view. Narrow windows scroll horizontally across physical pages. Page gaps never enter your source, and you can edit, select and undo across them.
 

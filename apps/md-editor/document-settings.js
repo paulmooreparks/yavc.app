@@ -105,35 +105,33 @@
         try { checkRows(layer); } catch (err) { layer.hidden = true; throw err; }
     }
     async function open(kind, opts) {
-        var esc = window.yavcUtil.esc, api, fields, props = opts.properties, mappings = kind === 'furniture';
-        fields = mappings ? ['header-left', 'header-center', 'header-right', 'footer-left', 'footer-center', 'footer-right'] : ['font', 'heading-font', 'size', 'spacing', 'paragraph-spacing'];
-        var labels = { font: 'Body Font', 'heading-font': 'Heading Font', size: 'Font Size', spacing: 'Line Spacing', 'paragraph-spacing': 'Paragraph Spacing' };
+        if (kind === 'typography') { var K = window.yavcMdEditor; await K.loadScript(K.here + 'typography-ui.js' + K.stamp); return window.yavcTypography.open(opts); }
+        if (kind !== 'furniture') { throw new Error('Unknown document settings dialog.'); }
+        var esc = window.yavcUtil.esc, api, props = opts.properties;
+        var fields = ['header-left', 'header-center', 'header-right', 'footer-left', 'footer-center', 'footer-right'];
         var id = 'doc-options-' + (++count);
-        var body = '<p>' + (mappings ? 'Use {page}, {pages}, {title}, {author} and {date}. Text, emphasis and links are supported.' : 'Leave a field empty to use the stylesheet default. Sizes and paragraph spacing accept points, such as 11pt and 6pt. Line spacing is a multiplier from 1 to 3. Font names refer to fonts installed on this computer; PDF uses its bundled font.') + '</p><div class="md-document-options">';
-        if (mappings) { body = body.replace('<div class="md-document-options">', ''); }
+        var body = '<p>Use {page}, {pages}, {title}, {author} and {date}. Text, emphasis and links are supported.</p>';
         fields.forEach(function (key, index) {
-            if (mappings && index % 3 === 0) { body += '<fieldset class="md-furniture-fields"><legend>' + (index ? 'Footer' : 'Header') + '</legend><div class="md-document-options">'; }
+            if (index % 3 === 0) { body += '<fieldset class="md-furniture-fields"><legend>' + (index ? 'Footer' : 'Header') + '</legend><div class="md-document-options">'; }
             var value, label;
-            if (mappings) { var parts = key.split('-'), existing = props[parts[0]] || ''; value = typeof existing === 'string' ? parts[1] === 'center' ? existing : '' : existing[parts[1]] || ''; label = parts.map(function (s) { return s[0].toUpperCase() + s.slice(1); }).join(' '); }
-            else { value = props[key] || ''; label = labels[key]; }
-            body += '<div class="form-group"><label class="form-label" for="' + id + '-' + key + '">' + label + '</label><input class="form-input" id="' + id + '-' + key + '" data-doc-option="' + key + '" value="' + esc(value) + '" maxlength="' + (mappings ? 256 : 80) + '"></div>';
-            if (mappings && index % 3 === 2) { body += '</div></fieldset>'; }
-        }); if (!mappings) { body += '</div>'; }
-        if (mappings) { body += '<label class="check"><input type="checkbox" data-first-header' + (props['header-first'] === 'none' ? '' : ' checked') + '> Show Header on First Page</label>'; }
+            var parts = key.split('-'), existing = props[parts[0]] || ''; value = typeof existing === 'string' ? parts[1] === 'center' ? existing : '' : existing[parts[1]] || ''; label = parts.map(function (s) { return s[0].toUpperCase() + s.slice(1); }).join(' ');
+            body += '<div class="form-group"><label class="form-label" for="' + id + '-' + key + '">' + label + '</label><input class="form-input" id="' + id + '-' + key + '" data-doc-option="' + key + '" value="' + esc(value) + '" maxlength="256"></div>';
+            if (index % 3 === 2) { body += '</div></fieldset>'; }
+        });
+        body += '<label class="check"><input type="checkbox" data-first-header' + (props['header-first'] === 'none' ? '' : ' checked') + '> Show Header on First Page</label>';
         body += '<div data-doc-options-error-ref></div>';
         function abort() { if (api) { api.close('cancel'); } }
         if (opts.signal.aborted || !opts.current()) { return; }
         opts.signal.addEventListener('abort', abort);
-        try { await window.yavcDialog.open({ title: mappings ? 'Header and Footer' : 'Typography', className: 'md-document-dialog', body: body,
+        try { await window.yavcDialog.open({ title: 'Header and Footer', className: 'md-document-dialog', body: body,
             buttons: [{ id: 'cancel', label: 'Cancel' }, { id: 'apply', label: 'Apply', primary: true }],
             onOpen: function (value) { api = value; }, check: function () {
                 try {
                     api.body.querySelectorAll('[data-doc-option]').forEach(function (node) { node.removeAttribute('aria-invalid'); node.removeAttribute('aria-describedby'); });
                     if (!opts.current()) { throw new Error('The document changed. Close and reopen this dialog.'); }
                     var set = {}, maps = {};
-                    fields.forEach(function (key) { var value = api.body.querySelector('[data-doc-option="' + key + '"]').value.trim(); if (mappings) { var parts = key.split('-'); (maps[parts[0]] || (maps[parts[0]] = {}))[parts[1]] = value; } else { set[key] = value || null; } });
-                    if (mappings) { set['header-first'] = api.body.querySelector('[data-first-header]').checked ? 'show' : 'none'; var values = Object.assign({}, props, set, maps), page = window.yavcDocumentPages.settings(values); page.furniture = furniture(values, opts.engine); check(page); }
-                    else { typography(set); }
+                    fields.forEach(function (key) { var value = api.body.querySelector('[data-doc-option="' + key + '"]').value.trim(), parts = key.split('-'); (maps[parts[0]] || (maps[parts[0]] = {}))[parts[1]] = value; });
+                    set['header-first'] = api.body.querySelector('[data-first-header]').checked ? 'show' : 'none'; var values = Object.assign({}, props, set, maps), page = window.yavcDocumentPages.settings(values); page.furniture = furniture(values, opts.engine); check(page);
                     opts.save(set, maps); return false;
                 } catch (err) { var notice = window.yavcUtil.notice(api.body.querySelector('[data-doc-options-error-ref]'), err.message, true), field = fields.indexOf(err.field) >= 0 ? err.field : fields[0], node = api.body.querySelector('[data-doc-option="' + field + '"]'); notice.id = id + '-error'; node.setAttribute('aria-invalid', 'true'); node.setAttribute('aria-describedby', notice.id); node.focus(); return true; }
             } }); } finally { opts.signal.removeEventListener('abort', abort); }
