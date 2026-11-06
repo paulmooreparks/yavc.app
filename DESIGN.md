@@ -94,6 +94,8 @@ Each decision is dated and numbered so that later documents and cards can refer 
 
 47. **Editor gains a paginated Document view** (2026-11-06). Documents remain Markdown with one editing history. Physical page settings are shared by the editable page layout, printing and Office exports. The first stage breaks between whole blocks and refuses printing of oversized blocks; finer pagination and document furniture remain later work. Decisions 28 and 29 in `docs/docs-design.md` define the implementation boundaries.
 
+48. **Document files retain physical layout across rendered views** (2026-11-06, Paul). A `.docs.md` file keeps its paper size and margins in Visual, Split and Preview after visiting Text. Ordinary Markdown keeps its fluid Visual view, with Document available explicitly. Page Setup uses a bundled registry of standard paper sizes, editable custom dimensions and individual or linked margins. Decisions 30 and 31 in `docs/docs-design.md` record the file representation and validation.
+
 ## Addresses
 
 `yavc.app` serves the desktop, which is windowed only (decision 26). A window's content comes from `/win/{key}`. `yavc.app/{slug}` opens the desktop with that application's window, or draws a site page as a page of its own. `{slug}.yavc.app` serves the same application standalone, and it is the application's page form. The engine answers both from one deployment: a wildcard DNS record points every subdomain at it, and the engine reads the host header to choose the standalone layout for the application whose slug matches. A subdomain whose slug matches no application redirects to the desktop.

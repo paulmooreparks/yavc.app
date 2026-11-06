@@ -2,7 +2,11 @@
 
 Paul confirmed after the workstation restart that DOCX export now looks correct. The Word appearance investigation is closed by that user confirmation; no additional exporter change was required.
 
-The next batch is implemented on `codex/document-pages` in `%TEMP%/yavc-document-pages`, with a disposable server on port 8421 and evidence under `%TEMP%/yavc-document-pages-evidence`. It adds whole-block Document view, page setup, page counts, printing and a page-setup action. Headers/footers, document zoom, typography, themes and templates remain next. The installed v0.2.30 candidate has not been replaced. The root checkout's unrelated edits remain untouched.
+PR #37 is merged at `d7da053` and installed locally as v0.2.31 on port 8401, with Editor 45.24.0. The existing candidate data volume was backed up and reused, with an old-container rollback retained. The backup path is in `%TEMP%/yavc-v0.2.31-backup-path.txt`. Installed Chromium pagination, page setup, Undo and printing checks passed using DOM readiness plus explicit editor checks. An initial full-load navigation timeout is retained in that backup; its cause remains unconfirmed.
+
+Paul then requested a complete Page Setup dialog and reported losing physical layout after switching through Text, Preview and Visual. This batch is implemented on `codex/page-setup` in `%TEMP%/yavc-page-setup`, with a disposable server on port 8422 and evidence under `%TEMP%/yavc-page-setup-evidence`. It adds a searchable offline paper catalog, custom dimensions, four margin fields, presets and linked margins, and keeps `.docs.md` files paginated in every rendered view. The installed v0.2.31 candidate does not yet include this batch. Headers/footers, document zoom, typography, themes and templates remain next.
+
+The YAVCHN hosting handoff is in `C:\Users\paul\source\repos\yavchn\docs\HOSTING-HANDOFF.md`, with a pointer in that checkout's ignored CARRYOVER.md. It records Linode production, retained Windows beta, cache and routing settings, data preservation and remaining operations work. It is local and uncommitted. The root yavc.app checkout's unrelated edits remain preserved.
 
 The older handoff below records the preceding work and investigation.
 
