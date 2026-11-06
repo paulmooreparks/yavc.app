@@ -58,3 +58,5 @@ The review establishes the current UI baseline; it does not declare Editor compl
 ## Cross-application sequence and consistency
 
 Paul set the order as Editor, then Slides, then Diagrams. Shared operations should use the same names, glyphs, dialog layout, keyboard contracts, validation and toolbar behavior. Differences must follow the content model: document pages and running text, slide/deck presentation, and diagram shape/connector tools each need their own controls. A shared helper or command should be preferred for common behavior; app-specific commands should not be forced into another application's arrangement. The later reviews must record each necessary difference and reuse the verified common patterns.
+
+On 2026-11-07 Paul directed the cleanup to continue into Slides and Diagrams while the remaining Editor findings stay recorded. Page Setup now joins Typography and Header and Footer in Format. The continuation and its remaining work are tracked in [the content UI review](content-ui-review.md).

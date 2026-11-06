@@ -1,5 +1,17 @@
 # Stem-to-stern review, November 2026
 
+## Content UI cleanup, 2026-11-07
+
+Page Setup moves from File into Editor's Format menu. Slides gains separate Edit and Insert menus, visible text Undo/Redo, Save As and Print glyphs, and American English Color labels. Slides and Diagrams reuse Editor's removable segmented View toolbar control and keep long locations on one status line, with slide position and diagram state visible independently.
+
+Independent source review caught two defects in the first draft. Slides recorded navigation replacements in one CodeMirror history, allowing Undo to copy a previous slide into the current slide. Source editor states now belong to individual slide objects, and a saved state is reused only if its source still matches. The regression edits both slides, navigates between them and verifies independent Undo. Undo/Redo also now use documented PUDL shortcut metadata rather than an untranslated local property. Source re-review has no remaining findings.
+
+Split view tracks the last focused editing pane so a menu's focus cannot change the target of Undo. The fixture clicks the actual Edit menu for source Undo/Redo. An expanded test initially attempted rich editing while a source-triggered redraw was still busy; its failed run and screenshot were retained. The corrected fixture waits for the rich editor's explicit ready state and verifies that the inserted marker exists before checking history.
+
+The new `scripts/test-content-ui-cleanup.cjs` passes in Chromium, Firefox and WebKit. It exercises menus, rendered glyphs, common dialog labels/cancellation, rich and source history, separate slide histories, view switching, D2/Mermaid/Canvas rendered-mode labels and drawings, narrow status bars and ribbon screenshots. Existing shared toolbar and Editor UI fixtures pass in Chromium, including customization, persistence, desktop isolation, modal focus, draft recovery and read-only behavior. The existing productivity fixture passes in Chromium for Canvas Inspector controls, background reset/history, Outline, arrangement and save lifecycle.
+
+Screenshots were inspected for light dialogs, ribbons and narrow dark layouts. Headless WebKit displays its native color input as a small text field; this review does not claim native color-picker UI testing. Presenter/full-screen modes and manual assistive technology remain outside this batch. `docs/content-ui-review.md` records the remaining clipboard/search, history availability, deck-wide history and dialog lifecycle work.
+
 This document records the review of yavc.app that began on 2026-11-02: what was found, what was changed, and which check now stops each problem from coming back. Paul asked for the review with security first, then duplication, shared libraries, data structures and algorithms, performance, PUDL compliance and sensible UI. Six reviewers covered the server, the browser, duplication, performance, robustness and tests, and PUDL and the UI.
 
 Any change to the repository should leave `scripts/check.sh` passing. A fix that has no check guarding it is recorded below with the reason a check was not practical.

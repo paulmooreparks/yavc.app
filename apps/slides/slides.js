@@ -175,6 +175,8 @@
            front tab's, copied back into it by stash() before a switch. */
         var tabs = [], active = -1;
         var settings = Object.assign({}, SETTINGS), mode = 'visual', md = null, page = null, cm = null, cmReady = null;
+        var cmSlide = null, cmStates = new WeakMap(), cmExtensions = null, cmLibs = null;
+        var historyPane = 'visual';
         var presenting = null, channel = null, presenterRole = null, fromPage = false, redrawTimer = 0;
         /* On a page of its own the deck and the presenter view come from the
            address; in a window, from the state the host kept. */
@@ -197,9 +199,13 @@
                 '<div class="deck-text split-pane code-surface" data-role="text"></div>' +
               '</div>' +
             '</div>' +
-            '<div class="deck-status" data-role="status"><span data-role="where"></span><span class="deck-message" data-role="message" role="status" aria-live="polite"></span></div>' +
+            '<div class="deck-status" data-role="status"><span data-role="where"></span><span data-role="position"></span><span class="deck-message" data-role="message" role="status" aria-live="polite"></span></div>' +
             '<div class="deck-presenter" data-role="presenter" hidden></div>';
         var q = function (sel) { return root.querySelector(sel); };
+        root.addEventListener('focusin', function (e) {
+            if (e.target.closest('.cm-editor')) { historyPane = 'text'; }
+            else if (e.target.closest('.ProseMirror')) { historyPane = 'visual'; }
+        });
         var el = { film: q('[data-role="film"]'), work: q('[data-role="work"]'), stagebox: q('[data-role="stagebox"]'), stage: q('[data-role="stage"]'), canvas: q('[data-role="canvas"]'), slide: q('[data-role="slide"]'),
             body: q('[data-role="body"]'), notesView: q('[data-role="notes-view"]'), split: q('[data-role="split"]'), text: q('[data-role="text"]'), tabsEl: q('[data-role="tabs"]'), floatBar: q('[data-role="float-bar"]'), main: q('[data-role="main"]'), where: q('[data-role="where"]'), message: q('[data-role="message"]'), presenter: q('[data-role="presenter"]'), main: q('[data-role="main"]') };
 
@@ -354,7 +360,12 @@
             applySlideSettings(el.slide, current());
             drawInto(el.body, current().text);
             drawNotes();
-            el.where.textContent = (path || 'Not saved yet') + ' · slide ' + (at + 1) + ' of ' + deck.slides.length;
+            updateLocation();
+        }
+        function updateLocation() {
+            el.where.textContent = path || 'Not saved yet';
+            el.where.title = el.where.textContent;
+            q('[data-role="position"]').textContent = 'Slide ' + (at + 1) + ' of ' + deck.slides.length;
         }
         function drawNotes() {
             var tmp = document.createElement('div');
@@ -371,7 +382,15 @@
         /* === The text pane (CodeMirror, as the Editor's) ================ */
 
         function setCM(text) {
-            if (!cm || cm.state.doc.toString() === text) { return; }
+            if (!cm) { return; }
+            if (cmSlide !== current()) {
+                if (cmSlide) { cmStates.set(cmSlide, cm.state); }
+                cmSlide = current();
+                var state = cmStates.get(cmSlide);
+                cm.setState(state && state.doc.toString() === text ? state : cmLibs.EditorState.create({ doc: text, extensions: cmExtensions }));
+                return;
+            }
+            if (cm.state.doc.toString() === text) { return; }
             fromPage = true;
             try { cm.dispatch({ changes: { from: 0, to: cm.state.doc.length, insert: text } }); } finally { fromPage = false; }
         }
@@ -385,6 +404,7 @@
                 if (CM.markdown) { try { ext.push(CM.markdown()); } catch (err) { } }
                 ext.push(window.yavcMacroTools.completions(CM, currentMacroEngine));
                 if (CM.EditorView.theme) { ext.push(CM.EditorView.theme({ '&': { height: '100%', fontSize: 'var(--text-sm)' }, '.cm-scroller': { fontFamily: 'var(--mono)' }, '.cm-content': { caretColor: 'var(--text)' } })); }
+                cmLibs = CM; cmExtensions = ext; cmSlide = current();
                 cm = new CM.EditorView({ state: CM.EditorState.create({ doc: current().text, extensions: ext }), parent: el.text });
                 return cm;
             });
@@ -531,7 +551,7 @@
                 if (page) { try { await page.enable(true); } catch (err) { drawSlide(); } } else { drawSlide(); }
             }
             drawNotes();
-            el.where.textContent = (path || 'Not saved yet') + ' · slide ' + (at + 1) + ' of ' + deck.slides.length;
+            updateLocation();
             announce();
             commandsChanged();
             var b = el.film.querySelector('[data-slide="' + at + '"]');
@@ -597,20 +617,20 @@
         function askChoice(title, body, buttons) { return window.yavcDialog.askChoice(title, body, buttons); }
         function deckColours() {
             var f = deck.front;
-            window.yavcMdEditor.askColours('The Deck\'s Colours', [
-                { key: 'ink', label: 'Text', value: f.ink, fallback: '#1a1a1a', help: 'Paragraphs, lists and tables; headings too unless they have a colour of their own. Empty is the theme\'s own.' },
+            window.yavcMdEditor.askColours('Deck Colors', [
+                { key: 'ink', label: 'Text', value: f.ink, fallback: '#1a1a1a', help: 'Paragraphs, lists and tables; headings too unless they have a color of their own. Empty is the theme\'s own.' },
                 { key: 'heading', label: 'Headings', value: f.heading, fallback: '#1a1a1a', help: 'Every heading, including a title slide\'s title.' },
                 { key: 'muted', label: 'Secondary Text', value: f.muted, fallback: '#5c6470', help: 'A title slide\'s subtitle, captions and the speaker notes.' },
-                { key: 'accent', label: 'Accent', value: f.accent, fallback: '#1f5fbf', help: 'The rule under a heading, links, and words coloured "accent".' },
+                { key: 'accent', label: 'Accent', value: f.accent, fallback: '#1f5fbf', help: 'The rule under a heading, links, and words colored "accent".' },
                 { key: 'background', label: 'Background', value: f.background, fallback: '#ffffff', help: 'Every slide, unless the slide sets its own.' }
             ]).then(function (v) { if (!v) { return; } Object.keys(v).forEach(function (k) { setFront(k, v[k]); }); });
         }
         function slideColours() {
             var st = settingsOf(current());
-            window.yavcMdEditor.askColours('This Slide\'s Colours', [
+            window.yavcMdEditor.askColours('Slide Colors', [
                 { key: 'color', label: 'Text', value: st.color, fallback: '#1a1a1a', placeholder: 'The deck\'s own', help: 'Paragraphs, lists and tables on this slide.' },
                 { key: 'heading', label: 'Headings', value: st.heading, fallback: '#1a1a1a', placeholder: 'The deck\'s own', help: 'This slide\'s headings.' },
-                { key: 'accent', label: 'Accent', value: st.accent, fallback: '#1f5fbf', placeholder: 'The deck\'s own', help: 'The rule under the heading, links, and words coloured "accent".' },
+                { key: 'accent', label: 'Accent', value: st.accent, fallback: '#1f5fbf', placeholder: 'The deck\'s own', help: 'The rule under the heading, links, and words colored "accent".' },
                 { key: 'background', label: 'Background', value: st.background, fallback: '#ffffff', placeholder: 'The deck\'s own', help: 'This slide alone.' }
             ]).then(function (v) { if (!v) { return; } Object.keys(v).forEach(function (k) { setSlideSetting(k, v[k]); }); });
         }
@@ -1157,19 +1177,31 @@
         function cmd(id, label, glyph, run, more) {
             return Object.assign({ id: id, label: label, glyph: glyph || undefined, run: run }, more || {});
         }
+        async function editHistory(name) {
+            var slide = current(), rich = pageActive() && (mode === 'visual' || (mode === 'split' && historyPane !== 'text'));
+            if (rich) {
+                await page.sync();
+                if (!destroyed && current() === slide) { page.run(name); await page.sync(); }
+            } else {
+                var libs = await codeMirror();
+                if (!destroyed && current() === slide && cm) { libs[name](cm); cm.focus(); }
+            }
+        }
         function commandTable() {
             var ready = !!md, s = current(), st = settingsOf(s);
             var table = [
                 cmd('new-deck', 'New Deck', 'file', newDeck),
                 cmd('open', 'Open…', 'folder', open, { shortcut: 'Mod+O' }),
                 cmd('save', 'Save', 'yavc-save', save, { shortcut: 'Mod+S', disabled: function () { return !ready; } }),
-                cmd('save-as', 'Save As…', null, saveAs),
+                cmd('save-as', 'Save As…', 'yavc-save-as', saveAs),
+                cmd('undo', 'Undo', 'yavc-undo', function () { return editHistory('undo'); }, { shortcut: window.yavcUtil.shortcut('Mod-z'), bind: false, disabled: function () { return !ready; } }),
+                cmd('redo', 'Redo', 'yavc-redo', function () { return editHistory('redo'); }, { shortcut: window.yavcUtil.shortcut('Mod-y'), bind: false, disabled: function () { return !ready; } }),
                 cmd('edit-whole', 'Edit the Whole Deck in the Editor', 'pencil', editWhole, { disabled: function () { return !path; } }),
                 cmd('export-html', 'Download as a Page', 'download', exportHTML),
                 cmd('export-pptx', 'Download as PowerPoint', 'download', exportPPTX, { disabled: function () { return !ready; } }),
                 cmd('export-pdf', 'Download as PDF', 'download', exportPDF, { disabled: function () { return !ready; } }),
                 cmd('import-pptx', 'Import from PowerPoint…', 'upload', importPPTX, { disabled: function () { return !ready; } }),
-                cmd('print', 'Print…', null, printDeck),
+                cmd('print', 'Print…', 'yavc-print', printDeck),
                 cmd('slide-new', 'New Slide', 'plus', null, { items: LAYOUTS.map(function (l) { return { id: 'slide-new-' + l[0], label: l[1], run: function () { addSlide(l[0]); } }; }) }),
                 cmd('slide-duplicate', 'Duplicate Slide', 'copy', duplicateSlide),
                 cmd('slide-delete', 'Delete Slide', null, deleteSlide, { danger: true, disabled: function () { return deck.slides.length <= 1; } }),
@@ -1180,8 +1212,8 @@
                 { id: 'layout', label: 'Layout', glyph: 'board', current: function () { var f = LAYOUTS.find(function (x) { return x[0] === (st.layout || 'content'); }); return f ? f[1] : null; },
                     items: LAYOUTS.map(function (l) { return { id: 'layout-' + l[0], label: l[1], choice: 'deck-layout', value: l[0], checked: function () { return (settingsOf(current()).layout || 'content') === l[0]; }, run: function () { setSlideSetting('layout', l[0]); } }; }) },
                 cmd('reveal', 'Reveal Points One by One', 'list', function () { setSlideSetting('reveal', settingsOf(current()).reveal === 'steps' ? null : 'steps'); }, { checked: function () { return settingsOf(current()).reveal === 'steps'; } }),
-                cmd('slide-colours', 'Slide Colours…', 'colour', slideColours),
-                cmd('deck-colours', 'Colours…', 'colour', deckColours),
+                cmd('slide-colours', 'Slide Colors…', 'colour', slideColours),
+                cmd('deck-colours', 'Deck Colors…', 'colour', deckColours),
                 cmd('deck-stylesheet', 'Stylesheet File…', 'file', function () {
                     askText('The Deck\'s Stylesheet', 'A CSS file of yours, such as ~/themes/mine.css; empty for none', deck.front.stylesheet || '').then(function (v) { if (v != null) { setFront('stylesheet', v.trim()); } });
                 }),
@@ -1202,7 +1234,7 @@
                     var front = deck.frontProblem ? { problem: deck.frontProblem } : ENGINE.front(deck.frontText || '');
                     kit().then(function (k) {
                         return k.askProperties(front, { title: 'Deck Properties', hidden: DECK_KEYS, hiddenWhere: 'in the Deck menu',
-                            hiddenNote: 'The theme, slide size, transition, colours and stylesheet are set from the Deck menu.' });
+                            hiddenNote: 'The theme, slide size, transition, colors and stylesheet are set from the Deck menu.' });
                     }).then(function (r) {
                         if (!r || !r.order.length) { return; }
                         var res;
@@ -1228,7 +1260,7 @@
             [['visual', 'Visual'], ['text', 'Text'], ['split', 'Split']].forEach(function (v) {
                 table.push({ id: 'view-' + v[0], label: v[1], choice: 'deck-view', choiceLabel: 'View', value: v[0], checked: function () { return mode === v[0]; }, run: function () { setMode(v[0]); } });
             });
-            return table.concat(commonToolbar ? commonToolbar.commands() : [], [{ id: 'view-mode', label: 'View', glyph: 'panel', items: ['view-visual', 'view-text', 'view-split'] }]);
+            return table.concat(commonToolbar ? commonToolbar.commands() : [], [{ id: 'view-mode', label: 'View', glyph: 'panel', toolbarChoice: 'deck-view', toolbarPriority: 50, items: ['view-visual', 'view-text', 'view-split'] }]);
         }
         function toolbars() {
             if (commonToolbar) { return []; }
@@ -1247,8 +1279,10 @@
             return { titles: [
                 { label: 'Slides', glyph: 'document', items: H.identity ? H.identity(root, []) : [] },
                 { id: 'file', label: 'File', glyph: 'file', items: ['new-deck', 'open', 'import-pptx', 'save', 'save-as', '-', 'edit-whole', '-', 'export-pptx', 'export-pdf', 'export-html', 'print'] },
+                { id: 'edit', label: 'Edit', glyph: 'pencil', items: ['undo', 'redo'] },
                 { id: 'slide', label: 'Slide', glyph: 'plus', items: ['slide-new', 'slide-duplicate', 'slide-delete', '-', 'slide-prev', 'slide-next', '-', 'slide-up', 'slide-down', '-', 'layout', 'reveal', 'slide-colours', 'slide-class', 'background-image', 'slide-transition'] },
-                { id: 'format', label: 'Format', glyph: 'paragraph', items: window.yavcMdEditor ? window.yavcMdEditor.MENU.format : [] },
+                { id: 'insert', label: 'Insert', glyph: 'plus', items: ['link', 'insert', 'table', 'box'] },
+                { id: 'format', label: 'Format', glyph: 'paragraph', items: window.yavcMdEditor ? window.yavcMdEditor.MENU.format.filter(function (id) { return ['link', 'insert', 'table', 'box'].indexOf(id) < 0; }).filter(function (id, i, ids) { return id !== '-' || (i > 0 && i < ids.length - 1 && ids[i - 1] !== '-'); }) : [] },
                 { id: 'deck', label: 'Deck', glyph: 'gear', items: ['deck-title', 'theme', 'deck-colours', '-', 'deck-stylesheet', 'deck-style-block', 'deck-shared-stylesheet', 'custom-shortcodes', '-', 'size', 'deck-transition'] },
                 { id: 'show', label: 'Show', glyph: 'play', items: ['present', 'present-here', 'leave', '-', 'presenter', 'presenter-auto'] }
             ], into: { view: ['view-visual', 'view-text', 'view-split', '-', 'dock', 'toggle-film'].concat(commonToolbar ? ['-', 'common-toolbar-show', 'common-toolbar-customize'] : []), help: ['styles-help'] } };
@@ -1522,7 +1556,7 @@
         };
         var detachLive = window.pudlApplets && window.pudlApplets.attach ? window.pudlApplets.attach('yavc.slides', liveActions) : null;
         var commonToolbar = H.commandToolbar ? H.commandToolbar.attach(root, { app: 'slides', label: 'Slides', table: commandTable,
-            defaults: ['save', '-', 'slide-new', 'slide-duplicate', 'layout', '-', 'style', 'bold', 'italic', 'link', '-', 'present', 'presenter', 'view-mode'] }) : null;
+            defaults: ['save', '-', 'undo', 'redo', '-', 'slide-new', 'slide-duplicate', 'layout', '-', 'style', 'bold', 'italic', 'link', '-', 'present', 'presenter', 'view-mode'] }) : null;
 
         return {
             ready: booted,

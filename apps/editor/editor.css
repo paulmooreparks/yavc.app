@@ -3,7 +3,6 @@
    raised, the editing surface is sunken like any input, and the status
    line is flat, for reading. CodeMirror's colours come from PUDL's syntax
    tokens in js/editor.js, so both themes apply. */
-:root { --glyph-yavc-print: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'%3E%3Cpath d='M6 9V3h12v6M6 17H3V9h18v8h-3M6 14h12v7H6z'/%3E%3C/svg%3E"); }
 
 .pc-editor {
   display: flex; flex-direction: column; gap: 6px;
