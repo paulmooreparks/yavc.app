@@ -1,5 +1,9 @@
 # Current work, 2026-11-06
 
+PR #38 is merged at `8b85e46f7b5fc9151eb98cabe2a863ac7e93c9c0` and installed locally as v0.2.32 on port 8401, with Editor 45.25.0. The existing data volume was backed up and reused. The stopped v0.2.31 container remains available for rollback, and `%TEMP%/yavc-v0.2.32-backup-path.txt` identifies the retained installation receipt and backups.
+
+The next batch is on `codex/editor-view-toolbar` in `%TEMP%/yavc-editor-view-toolbar`, with a disposable server on port 8423. Editor 45.26.0 adds the standard removable view selector and supported-mode defaults. It also fixes Page Setup closing when a dropdown is clicked by restricting the shared dialog action listener to buttons. Actual dropdown-click, view-default, read-only navigation and complete Page Setup checks pass Chromium, Firefox and WebKit. The full repository gate passes, and independent source review has no remaining findings. This batch still needs merge approval and installation. Headers/footers, document zoom, typography, themes and templates remain next.
+
 Paul confirmed after the workstation restart that DOCX export now looks correct. The Word appearance investigation is closed by that user confirmation; no additional exporter change was required.
 
 PR #37 is merged at `d7da053` and installed locally as v0.2.31 on port 8401, with Editor 45.24.0. The existing candidate data volume was backed up and reused, with an old-container rollback retained. The backup path is in `%TEMP%/yavc-v0.2.31-backup-path.txt`. Installed Chromium pagination, page setup, Undo and printing checks passed using DOM readiness plus explicit editor checks. An initial full-load navigation timeout is retained in that backup; its cause remains unconfirmed.

@@ -61,7 +61,7 @@
                 resolve({ value: value, body: body });
                 setTimeout(function () { dlg.remove(); if (opener && opener.isConnected && opener.focus && !document.querySelector('dialog[open]')) { try { opener.focus({ preventScroll: true }); } catch (err) { } } }, 0);
             }
-            dlg.addEventListener('click', function (e) { var b = e.target.closest('[data-choice]'); if (b && dlg.contains(b)) { finish(b.getAttribute('data-choice')); } });
+            dlg.addEventListener('click', function (e) { var b = e.target.closest('button[data-choice]'); if (b && dlg.contains(b)) { finish(b.getAttribute('data-choice')); } });
             form.addEventListener('submit', function (e) {
                 e.preventDefault();
                 var v = e.submitter ? e.submitter.value : (form.querySelector('[type="submit"]') || {}).value;

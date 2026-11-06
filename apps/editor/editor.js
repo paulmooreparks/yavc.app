@@ -32,9 +32,14 @@
     /* The Editor's settings are its own toolbar's Wrap lines and Explorer
        controls, which remember themselves in ~/.config/editor.json
        (js/config.js), so they follow the reader wherever ~ does. */
-    var SETTINGS = { wrap: true, explorer: null, explorerWidth: null, keys: null, markdownView: 'visual', documentView: 'document', navigation: 'files' };
+    var SETTINGS = { wrap: true, explorer: null, explorerWidth: null, keys: null, markdownView: 'document', documentView: 'document', navigation: 'files' };
     var navigationCount = 0;
-    var MARKDOWN_VIEWS = [['visual', 'Visual'], ['text', 'Text'], ['split', 'Split'], ['document', 'Document']];
+    var MARKDOWN_VIEWS = [['document', 'Document'], ['visual', 'Visual'], ['text', 'Text'], ['split', 'Split'], ['preview', 'Preview']];
+    function supportsView(tab, mode) { return !!tab && (mode === 'text' || (tab.lang === 'markdown' && MARKDOWN_VIEWS.some(function (entry) { return entry[0] === mode; }))); }
+    function resolvedView(tab, preferred) {
+        if (supportsView(tab, preferred)) { return preferred; }
+        return ['document', 'visual', 'text'].find(function (mode) { return supportsView(tab, mode); }) || 'text';
+    }
 
     /* === Key bindings ===================================================
        The Editor's commands have names, and a key is bound to a command by
@@ -441,7 +446,7 @@
             announce();
             /* Each tab keeps its view: the one it had, or for a Markdown
                file the one the settings open Markdown in. */
-            var want = t.view || (t.lang === 'markdown' ? (/\.docs\.md$/i.test(t.path || t.name || '') ? 'document' : markdownDefault()) : 'text');
+            var want = resolvedView(t, t.view || markdownDefault());
             if (want !== 'text' && t.lang === 'markdown' && want !== viewMode) { setView(want); }
             markExplorer();
             say(t.external ? 'This file was changed somewhere else since you opened it.' : '', !!t.external);
@@ -840,7 +845,7 @@
             if (destroyed || current() !== tab || view.state.doc.toString() !== outlineText) { return; }
             view.dispatch({ selection: { anchor: entry.from }, effects: CM.EditorView.scrollIntoView(entry.from, { y: 'center' }) });
             if (pageActive() && visual.api.goToHeading) { visual.api.goToHeading(index); }
-            else if (viewMode === 'preview') { var block = el.page.querySelector('[data-line="' + entry.line + '"]'); if (block) { block.scrollIntoView({ block: 'center' }); } }
+            else if (readsAsPreview()) { var block = el.page.querySelector('[data-line="' + entry.line + '"]'); if (block) { block.scrollIntoView({ block: 'center' }); } }
             else { view.focus(); }
             tab.navigationLine = entry.line; outlineTarget = index; markOutline(); announce(true);
             if (window.matchMedia('(max-width: 700px)').matches) { showExplorer(false); }
@@ -930,16 +935,15 @@
         }
         /* Wrap lines, as the toolbar, the View menu or a key switches it,
            kept with the settings when the reader changes it. */
-        /* Settings are shared by every address of the site, so the view a
-           Markdown file opens in at docs.yavc.app is a setting of its own,
-           which starts at Visual whatever the Editor's is. */
-        var viewKey = forDocuments ? 'documentView' : 'markdownView';
+        /* A saved preference overrides capability defaults. Document files
+           and the Docs host share the document-view preference. */
+        function viewKey() { var t = current(); return forDocuments || (t && /\.docs\.md$/i.test(t.path || t.name || '')) ? 'documentView' : 'markdownView'; }
         function markdownDefault() {
-            return MARKDOWN_VIEWS.some(function (v) { return v[0] === settings[viewKey]; }) ? settings[viewKey] : 'visual';
+            return MARKDOWN_VIEWS.some(function (v) { return v[0] === settings[viewKey()]; }) ? settings[viewKey()] : 'document';
         }
         function setMarkdownDefault(v) {
             var change = {};
-            change[viewKey] = v;
+            change[viewKey()] = v;
             saveSetting(change);
             commandsChanged();
         }
@@ -968,6 +972,7 @@
         var viewMode = 'text';
         var visual = { api: null, front: null, fromVisual: false, timer: 0, loading: null, gen: 0 };
         var pageSettings = null, printFrame = null, previewPages = null;
+        function readsAsPreview() { var t = current(); return viewMode === 'preview' || !!(t && t.readOnly && viewMode !== 'text'); }
         function pagedView(mode) { var t = current(); return mode !== 'text' && (mode === 'document' || !!(t && /\.docs\.md$/i.test(t.path || t.name || ''))); }
         function pageLayout(layout) {
             el.pages.textContent = layout.count + (layout.count === 1 ? ' page' : ' pages');
@@ -1135,7 +1140,7 @@
                 keys: pageKeys,
                 say: say,
                 changed: function () { commandsChanged(); markOutline(); if (visualFind && !el.findPlace.hidden) { visualFind.refresh(); } },
-                failed: function (text) { say(text, true); setView(viewMode === 'visual' ? 'preview' : 'text'); }
+                failed: function (text) { setView(viewMode === 'document' ? 'visual' : 'text').then(function () { say(text, true); }); }
             };
         }
         /* The Editor's keys on the page, in ProseMirror's spelling, which is
@@ -1153,16 +1158,14 @@
         }
         function textChangedForPage() {
             if (pageActive()) { visual.api.textChanged(); }
-            if (viewMode === 'preview') { schedulePreview(); }
+            if (readsAsPreview()) { schedulePreview(); }
         }
 
         /* Shows the document as asked. Visual and Split need a Markdown
            file that can be changed; Preview any Markdown file. */
         async function setView(mode) {
             var t = current();
-            if (['visual', 'split', 'preview', 'document'].indexOf(mode) < 0) { mode = 'text'; }
-            if (mode !== 'text' && !(t && t.lang === 'markdown')) { mode = 'text'; }
-            if ((mode === 'visual' || mode === 'split' || mode === 'document') && t && t.readOnly) { mode = 'preview'; }
+            mode = resolvedView(t, mode);
             viewMode = mode;
             commandsChanged();
             root.classList.toggle('ed-previewing', mode !== 'text');
@@ -1170,7 +1173,7 @@
             root.classList.toggle('ed-document', pagedView(mode));
             if (previewPages) { previewPages.destroy(); previewPages = null; }
             if (!pagedView(mode)) { clearPages(); }
-            root.classList.toggle('ed-reading', mode === 'preview');
+            root.classList.toggle('ed-reading', readsAsPreview());
             showFormat(mode);
             el.pageBox.hidden = mode === 'text';
             var gen = ++visual.gen;
@@ -1189,7 +1192,7 @@
                 await mdEngine();
                 if (pagedView(mode)) { await configurePages(); }
                 if (gen !== visual.gen) { return; }
-                if (mode === 'preview') {
+                if (readsAsPreview()) {
                     if (visual.api) { await visual.api.enable(false); }
                     if (gen !== visual.gen) { return; }
                     await drawPreview();
@@ -1210,7 +1213,10 @@
                     if (mode === 'visual' || mode === 'document') { visual.api.focus(); }
                 }
             } catch (err) {
-                say('The page could not be made: ' + (err && err.message || err), true);
+                if (gen !== visual.gen || destroyed) { return; }
+                await setView(mode === 'document' ? 'visual' : 'text');
+                say('The page could not be made. Using ' + viewMode + ' view: ' + (err && err.message || err), true);
+                return;
             }
             keep();
         }
@@ -1240,7 +1246,7 @@
                 await documentStyles.update({ identity: t, inline: m.styles(text).map(function (block) { return block.css; }), stylesheet: currentSharedStyle, reload: reload === true });
                 var oldShared = sharedMacros; await documentEngine();
                 if (!destroyed && revision === styleRevision && oldShared !== sharedMacros) {
-                    if (pageActive()) { visual.api.textChanged(true); } else if (viewMode === 'preview') { schedulePreview(); }
+                    if (pageActive()) { visual.api.textChanged(true); } else if (readsAsPreview()) { schedulePreview(); }
                 }
                 if (!destroyed && revision === styleRevision) { if (pagedView(viewMode)) { await configurePages(); if (visual.api) { visual.api.repaginate(); } if (previewPages) { previewPages.refresh(); } } commandsChanged(); }
             } catch (err) { if (!destroyed && revision === styleRevision) { say('Styles could not be applied: ' + err.message, true); } }
@@ -1269,7 +1275,7 @@
         }
         async function drawPreview() {
             var gen = visual.gen, t = current(), source = view.state.doc.toString(), m = await documentEngine(source);
-            if (gen !== visual.gen || !view || viewMode !== 'preview' || current() !== t || view.state.doc.toString() !== source) { return; }
+            if (gen !== visual.gen || !view || !readsAsPreview() || current() !== t || view.state.doc.toString() !== source) { return; }
             var p = m.preview(source), top = el.scroll.scrollTop;
             if (pagedView(viewMode)) {
                 var flow = el.page.querySelector(':scope > .doc-page-flow');
@@ -1571,7 +1577,7 @@
             view.dispatch({ selection: { anchor: line.from }, effects: CM.EditorView.scrollIntoView(line.from, { y: 'center' }) });
             var index = entries.findIndex(function (heading) { return heading.line === line.number; });
             if (index >= 0 && pageActive()) { visual.api.goToHeading(index); }
-            else if (viewMode === 'preview') { var block = el.page.querySelector('[data-line="' + line.number + '"]'); if (block) { block.scrollIntoView({ block: 'center' }); } }
+            else if (readsAsPreview()) { var block = el.page.querySelector('[data-line="' + line.number + '"]'); if (block) { block.scrollIntoView({ block: 'center' }); } }
             tab.navigationLine = line.number; markOutline(); announce();
         }
         function locationChanged() { if (opts.ownsUrl) { takeFile(location.search); } }
@@ -2078,15 +2084,15 @@
                     return { id: 'md-default-' + v[0], label: v[1], choice: 'ed-md-default', value: v[0],
                         checked: function () { return markdownDefault() === v[0]; }, run: function () { setMarkdownDefault(v[0]); } };
                 }) });
-            [['text', 'Text'], ['visual', 'Visual'], ['split', 'Split'], ['preview', 'Preview'], ['document', 'Document']].forEach(function (v) {
+            MARKDOWN_VIEWS.forEach(function (v) {
                 table.push({ id: 'view-' + v[0], label: v[1], choice: 'ed-view', choiceLabel: 'View', value: v[0],
                     checked: function () { return viewMode === v[0]; },
-                    hidden: function () { return !viewsOffered; },
-                    disabled: function () { return !ready || (v[0] !== 'text' && v[0] !== 'preview' && !editable); },
+                    hidden: function () { return !tab; },
+                    disabled: function () { return !ready || !supportsView(tab, v[0]); },
                     /* A view the reader chooses is the tab's from then on. */
                     run: function () { var t = current(); if (t) { t.view = v[0]; } setView(v[0]); } });
             });
-            return table.concat(commonToolbar ? commonToolbar.commands() : [], [{ id: 'view-mode', label: 'View', glyph: 'panel', items: ['view-text', 'view-visual', 'view-split', 'view-preview', 'view-document'] }]);
+            return table.concat(commonToolbar ? commonToolbar.commands() : [], [{ id: 'view-mode', label: 'View', glyph: 'panel', toolbarChoice: 'ed-view', toolbarPriority: 50, items: ['view-document', 'view-visual', 'view-text', 'view-split', 'view-preview'] }]);
         }
 
         /* The toolbar: what is used most stays named longest, and the view
@@ -2112,7 +2118,7 @@
            views, which the site's View menu lists again where a reader of
            the menus looks for them. Headings and separators start the
            ribbon's groups. */
-        var LAYOUT = ['toggle-files', 'toggle-outline', 'hide-navigation', 'toggle-wrap', '-', 'view-text', 'view-visual', 'view-split', 'view-preview', 'view-document', 'md-default', '-', 'source', 'preview'];
+        var LAYOUT = ['toggle-files', 'toggle-outline', 'hide-navigation', 'toggle-wrap', '-', 'view-document', 'view-visual', 'view-text', 'view-split', 'view-preview', 'md-default', '-', 'source', 'preview'];
         function menus() {
             var titles = [
                 { label: 'Editor', glyph: 'document', items: window.pcAppletIdentity(root, ['key-bindings']) },
@@ -2291,7 +2297,7 @@
         };
         var detachLive = window.pudlApplets && window.pudlApplets.attach ? window.pudlApplets.attach('yavc.editor', liveActions) : null;
         var commonToolbar = window.pudlHost && window.pudlHost.commandToolbar ? window.pudlHost.commandToolbar.attach(root, { app: 'editor', label: forDocuments ? 'Docs' : 'Editor', table: commandTable,
-            defaults: ['save', '-', 'undo', 'redo', '-', 'style', 'bold', 'italic', 'link', 'insert', '-', 'find', 'view-mode'] }) : null;
+            defaults: ['save', '-', 'undo', 'redo', '-', 'style', 'bold', 'italic', 'link', 'insert', '-', 'find', '-', 'view-mode'] }) : null;
 
         return {
             state: function () { return stateString() || null; },
