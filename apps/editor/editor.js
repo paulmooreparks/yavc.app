@@ -32,9 +32,9 @@
     /* The Editor's settings are its own toolbar's Wrap lines and Explorer
        controls, which remember themselves in ~/.config/editor.json
        (js/config.js), so they follow the reader wherever ~ does. */
-    var SETTINGS = { wrap: true, explorer: null, explorerWidth: null, keys: null, markdownView: 'visual', documentView: 'visual', navigation: 'files' };
+    var SETTINGS = { wrap: true, explorer: null, explorerWidth: null, keys: null, markdownView: 'visual', documentView: 'document', navigation: 'files' };
     var navigationCount = 0;
-    var MARKDOWN_VIEWS = [['visual', 'Visual'], ['text', 'Text'], ['split', 'Split']];
+    var MARKDOWN_VIEWS = [['visual', 'Visual'], ['text', 'Text'], ['split', 'Split'], ['document', 'Document']];
 
     /* === Key bindings ===================================================
        The Editor's commands have names, and a key is bound to a command by
@@ -122,13 +122,14 @@
                 '<div class="ed-page" data-role="page-box" hidden>' +
                   '<div class="ed-find-place" data-role="find-place" hidden></div>' +
                   '<div class="notice warn" data-role="style-problems" hidden role="status"><div class="notice-content"><p class="notice-body"></p></div></div>' +
+                  '<div class="notice warn" data-role="page-problems" hidden role="status"><div class="notice-content"><p class="notice-body"></p></div></div>' +
                   '<div class="ed-scroll" data-role="scroll" tabindex="0"><div class="doc-page" data-role="page" data-ed-page></div></div>' +
                 '</div>' +
               '</div>' +
             '</div>' +
             '<div class="ed-status" data-role="status-bar">' +
               '<span class="ed-readonly" data-role="readonly" hidden><span class="glyph" style="--glyph: var(--glyph-pencil-off)" aria-hidden="true"></span>Read-only</span>' +
-              '<span data-role="where"></span><span data-role="lang"></span><span data-role="count"></span><span data-role="pos"></span>' +
+              '<span data-role="where"></span><span data-role="lang"></span><span data-role="count"></span><span data-role="pages"></span><span data-role="pos"></span>' +
               '<span class="ed-message" data-role="message" role="status" aria-live="polite"></span>' +
             '</div>' +
             '';
@@ -137,7 +138,7 @@
         var el = {
             tabs: q('[data-role="tabs"]'), surface: q('[data-role="surface"]'), where: q('[data-role="where"]'),
             panes: q('[data-role="panes"]'), pageBox: q('[data-role="page-box"]'), scroll: q('[data-role="scroll"]'), page: q('[data-role="page"]'), findPlace: q('[data-role="find-place"]'),
-            lang: q('[data-role="lang"]'), count: q('[data-role="count"]'), pos: q('[data-role="pos"]'), message: q('[data-role="message"]'),
+            lang: q('[data-role="lang"]'), count: q('[data-role="count"]'), pages: q('[data-role="pages"]'), pos: q('[data-role="pos"]'), message: q('[data-role="message"]'),
             readonly: q('[data-role="readonly"]'),
             explorer: q('[data-role="explorer"]'), explorerSplit: q('[data-role="explorer-split"]')
         };
@@ -440,7 +441,7 @@
             announce();
             /* Each tab keeps its view: the one it had, or for a Markdown
                file the one the settings open Markdown in. */
-            var want = t.view || (t.lang === 'markdown' ? markdownDefault() : 'text');
+            var want = t.view || (t.lang === 'markdown' ? (/\.docs\.md$/i.test(t.path || t.name || '') ? 'document' : markdownDefault()) : 'text');
             if (want !== 'text' && t.lang === 'markdown' && want !== viewMode) { setView(want); }
             markExplorer();
             say(t.external ? 'This file was changed somewhere else since you opened it.' : '', !!t.external);
@@ -966,6 +967,92 @@
            the page as it is on the site (openOnSite). */
         var viewMode = 'text';
         var visual = { api: null, front: null, fromVisual: false, timer: 0, loading: null, gen: 0 };
+        var pageSettings = null, printFrame = null;
+        function pageNotice(message) {
+            var notice = root.querySelector('[data-role="page-problems"]');
+            notice.hidden = !message; notice.querySelector('.notice-body').textContent = message;
+        }
+        function clearPages() {
+            el.pages.textContent = ''; pageSettings = null; pageNotice('');
+            el.page.classList.remove('doc-paginated'); el.page.style.minHeight = '';
+            el.page.removeAttribute('data-page-count');
+            ['width', 'height', 'left', 'top', 'right', 'bottom', 'gap'].forEach(function (key) { el.page.style.removeProperty('--sheet-' + key); });
+        }
+        async function configurePages() {
+            var t = current(), text = view.state.doc.toString(), K = await loadKit(), P = await K.pages(), m = await mdEngine();
+            if (destroyed || current() !== t || viewMode !== 'document' || text !== view.state.doc.toString()) { return; }
+            try { pageSettings = P.settings(P.properties(m.front(text))); P.surface(el.page, pageSettings); pageNotice(''); }
+            catch (err) { clearPages(); pageNotice(err.message); }
+        }
+        async function editPageSetup() {
+            var t = current(); if (!t || t.readOnly || !view) { return; }
+            if (pageActive()) { await visual.api.sync(); }
+            var text = view.state.doc.toString(), m = await mdEngine(), K = await loadKit(), P = await K.pages(), props;
+            try { props = P.properties(m.front(text)); }
+            catch (err) { say(err.message, true); return; }
+            if (destroyed || current() !== t || view.state.doc.toString() !== text) { return; }
+            var esc = window.yavcUtil.esc, dialog = null;
+            function aborted() { if (dialog) { dialog.close('cancel'); } }
+            function input(key, label, value, help) { return '<div class="form-group"><label class="form-label" for="ed-page-' + key + '">' + label + '</label><input class="form-input" id="ed-page-' + key + '" data-page-setting="' + key + '" value="' + esc(value) + '"><p class="form-help">' + help + '</p></div>'; }
+            function select(key, label, options, value) { return '<div class="form-group"><label class="form-label" for="ed-page-' + key + '">' + label + '</label><span class="form-select-wrap"><select class="form-select" id="ed-page-' + key + '" data-page-setting="' + key + '">' + options.map(function (item) { return '<option value="' + item[0] + '"' + (item[0] === value ? ' selected' : '') + '>' + item[1] + '</option>'; }).join('') + '</select></span></div>'; }
+            try { await window.yavcDialog.open({ title: 'Page Setup', body:
+                input('page', 'Page Size', props.page || 'a4', 'Use a4, letter, legal or dimensions such as 210mm x 297mm.') +
+                select('orientation', 'Orientation', [['portrait', 'Portrait'], ['landscape', 'Landscape']], props.orientation || 'portrait') +
+                input('margins', 'Margins', props.margins || '1in', 'One to four lengths, in top, right, bottom, left order. For example, 25mm 20mm.'),
+                buttons: [{ id: 'cancel', label: 'Cancel' }, { id: 'apply', label: 'Apply', primary: true }],
+                onOpen: function (api) { dialog = api; styleLifetime.signal.addEventListener('abort', aborted, { once: true }); },
+                check: function () {
+                    dialog.body.querySelectorAll('[data-page-setting]').forEach(function (node) { node.removeAttribute('aria-invalid'); node.removeAttribute('aria-describedby'); });
+                    try {
+                        if (destroyed || current() !== t || view.state.doc.toString() !== text) { throw new Error('The document changed. Close and reopen Page Setup.'); }
+                        var values = {}; dialog.body.querySelectorAll('[data-page-setting]').forEach(function (node) { values[node.dataset.pageSetting] = node.value.trim(); });
+                        P.settings(values);
+                        var next = m.frontset({ text: text, set: values, order: ['page', 'orientation', 'margins'] }).text;
+                        takeVisualText(next); textChangedForPage(); refreshStyles(); return false;
+                    } catch (err) {
+                        var notice = window.yavcUtil.notice(dialog.body, err.message, true);
+                        var field = dialog.body.querySelector('[data-page-setting="' + (err.field || 'page') + '"]');
+                        if (notice) { notice.id = 'ed-page-validation'; field.setAttribute('aria-describedby', notice.id); }
+                        field.setAttribute('aria-invalid', 'true'); field.focus(); return true;
+                    }
+                }
+            }); } finally { styleLifetime.signal.removeEventListener('abort', aborted); }
+        }
+        async function printDocument() {
+            var t = current(); if (!t || t.lang !== 'markdown') { return; }
+            try {
+                if (pageActive()) { await visual.api.sync(); }
+                var text = view.state.doc.toString(), K = await loadKit(), E = await K.exports(), P = await K.pages(), m = await documentEngine(text);
+                function unchanged() { return !destroyed && current() === t && view.state.doc.toString() === text; }
+                if (printFrame) { printFrame.remove(); printFrame = null; }
+                await E.prepare({ text: text, engine: m, stylesheet: currentSharedStyle, pictures: picturesHost(), read: window.pudlHost.fs.readText, current: unchanged,
+                    renderPages: async function (surface, page) {
+                        if (!unchanged()) { throw new Error('The document changed during print preparation.'); }
+                        var d = P.surface(surface, page), flow = document.createElement('div'); flow.className = 'doc-page-flow';
+                        Array.from(surface.querySelectorAll('.dinah-src[data-start],.doc-block,.dinah-block')).reverse().forEach(function (node) { node.replaceWith.apply(node, Array.from(node.childNodes)); });
+                        flow.append.apply(flow, Array.from(surface.childNodes)); surface.append(flow);
+                        await document.fonts.ready;
+                        var blocks = P.blocks(flow), layout = P.plan(blocks, page);
+                        if (layout.oversized) { throw new Error('A block is taller than the page. Shorten it or enlarge the page before printing.'); }
+                        var frame = document.createElement('iframe'); frame.className = 'ed-print-frame'; frame.title = 'Document Print'; frame.inert = true; frame.tabIndex = -1; frame.setAttribute('aria-hidden', 'true'); document.body.append(frame); printFrame = frame;
+                        frame.contentWindow.addEventListener('afterprint', function () { frame.remove(); if (printFrame === frame) { printFrame = null; } }, { once: true });
+                        var doc = frame.contentDocument; doc.title = t.name || 'Document';
+                        document.querySelectorAll('head link[rel="stylesheet"], head style').forEach(function (node) { doc.head.append(node.cloneNode(true)); });
+                        var css = doc.createElement('style'); css.textContent = '@page{size:' + page.width + 'pt ' + page.height + 'pt;margin:0}html,body{margin:0;padding:0;background:white} .doc-print-sheet{box-sizing:border-box;break-after:page;break-inside:avoid;margin:0!important;min-height:0!important;height:' + d.height + 'px!important;background-image:none!important;print-color-adjust:exact;-webkit-print-color-adjust:exact} .doc-print-sheet:last-child{break-after:auto} .doc-print-sheet .sc-page-break{display:none}'; doc.head.append(css);
+                        var at = 0, starts = [0].concat(layout.gaps.map(function (gap) { return gap.index; })).concat(blocks.length);
+                        for (var i = 0; i < starts.length - 1; i++) {
+                            var sheet = surface.cloneNode(false); sheet.classList.add('doc-print-sheet'); var body = doc.createElement('div'); body.className = 'doc-page-flow'; sheet.append(body);
+                            for (at = starts[i]; at < starts[i + 1]; at++) { body.append(blocks[at].node.cloneNode(true)); }
+                            doc.body.append(sheet);
+                        }
+                        await Promise.all(Array.from(doc.querySelectorAll('link[rel="stylesheet"]')).map(function (link) { return link.sheet ? Promise.resolve() : new Promise(function (resolve, reject) { link.onload = resolve; link.onerror = function () { reject(new Error('A print stylesheet could not load.')); }; }); }));
+                        await doc.fonts.ready; await Promise.all(Array.from(doc.images).map(function (img) { return img.decode(); }));
+                        if (!unchanged()) { frame.remove(); throw new Error('The document changed during print preparation.'); }
+                        frame.contentWindow.print(); say('Print uses the document page size and margins. Turn off browser headers and footers and select the matching paper size.');
+                    }
+                });
+            } catch (err) { if (printFrame) { printFrame.remove(); printFrame = null; } say('The document could not be printed: ' + err.message, true); }
+        }
 
         /* A call to one of the server's admin APIs, signing in again when the
            session has ended. The token is read at each try, since signing in
@@ -1050,6 +1137,12 @@
                 /* A picture pressed on the page opens the picture dialog. */
                 editBlock: function (src) { return window.yavcMdEditor.editBlock(src, picturesHost()); },
                 root: root, page: el.page, scroll: el.scroll,
+                pagination: function () { return viewMode === 'document' ? pageSettings : null; },
+                paginated: function (layout) {
+                    el.pages.textContent = layout.count + (layout.count === 1 ? ' page' : ' pages');
+                    pageNotice(layout.oversized ? 'A block is taller than the page. Shorten it or enlarge the page before printing. Line-level pagination is not available yet.' : '');
+                },
+                paginationProblem: pageNotice,
                 customName: function (name) { return customShortcodes().some(function (item) { return item.name === name; }); },
                 text: function () { return view.state.doc.toString(); },
                 setText: takeVisualText,
@@ -1088,17 +1181,20 @@
            file that can be changed; Preview any Markdown file. */
         async function setView(mode) {
             var t = current();
-            if (['visual', 'split', 'preview'].indexOf(mode) < 0) { mode = 'text'; }
+            if (['visual', 'split', 'preview', 'document'].indexOf(mode) < 0) { mode = 'text'; }
             if (mode !== 'text' && !(t && t.lang === 'markdown')) { mode = 'text'; }
-            if ((mode === 'visual' || mode === 'split') && t && t.readOnly) { mode = 'preview'; }
+            if ((mode === 'visual' || mode === 'split' || mode === 'document') && t && t.readOnly) { mode = 'preview'; }
             viewMode = mode;
             commandsChanged();
             root.classList.toggle('ed-previewing', mode !== 'text');
-            root.classList.toggle('ed-visual-only', mode === 'visual' || mode === 'preview');
+            root.classList.toggle('ed-visual-only', mode === 'visual' || mode === 'preview' || mode === 'document');
+            root.classList.toggle('ed-document', mode === 'document');
+            if (mode !== 'document') { clearPages(); }
             root.classList.toggle('ed-reading', mode === 'preview');
             showFormat(mode);
             el.pageBox.hidden = mode === 'text';
             var gen = ++visual.gen;
+            refreshStyles();
             clearTimeout(visual.timer);
             if (mode === 'text') {
                 closePageFind(false);
@@ -1110,6 +1206,7 @@
             }
             try {
                 await mdEngine();
+                if (mode === 'document') { await configurePages(); }
                 if (gen !== visual.gen) { return; }
                 if (mode === 'preview') {
                     if (visual.api) { await visual.api.enable(false); }
@@ -1128,7 +1225,8 @@
                     say(mode === 'split'
                         ? 'Edit the text or the page; each follows the other. Click a block drawn from its Markdown to change it.'
                         : 'Edit the page as it will look. Click a block drawn from its Markdown to change it.');
-                    if (mode === 'visual') { visual.api.focus(); }
+                    visual.api.repaginate();
+                    if (mode === 'visual' || mode === 'document') { visual.api.focus(); }
                 }
             } catch (err) {
                 say('The page could not be made: ' + (err && err.message || err), true);
@@ -1141,17 +1239,18 @@
         }
 
         /* === Preview ===================================================== */
-        var documentStyles = null, styledIdentity = null, currentSharedStyle = '', styleRevision = 0, styleTimer = 0;
+        var documentStyles = null, styledIdentity = null, styledMode = '', currentSharedStyle = '', styleRevision = 0, styleTimer = 0;
         function styleDirectory() { var t = current(); return t && t.path && F ? F.splitPath(t.path).dir : '~'; }
         function scheduleStyles() { clearTimeout(styleTimer); styleTimer = setTimeout(refreshStyles, 150); }
         async function refreshStyles(reload) {
             var revision = ++styleRevision, t = current(), text = t && view ? view.state.doc.toString() : '';
-            if (styledIdentity !== t) { if (documentStyles) { documentStyles.destroy(); documentStyles = null; } styledIdentity = t; currentSharedStyle = ''; }
+            if (styledIdentity !== t || styledMode !== viewMode) { if (documentStyles) { documentStyles.destroy(); documentStyles = null; } styledIdentity = t; styledMode = viewMode; currentSharedStyle = ''; }
             if (!t || t.lang !== 'markdown') { if (documentStyles) { documentStyles.destroy(); documentStyles = null; } return; }
             try {
-                var K = await loadKit(), m = await mdEngine(), D = await K.styles();
+                var K = await loadKit(), m = await mdEngine(), D = await K.styles(), P = await K.pages();
                 if (destroyed || revision !== styleRevision || t !== current()) { return; }
                 if (!documentStyles) { documentStyles = D.attach({ surfaces: function () { return [el.page]; }, boundaries: function () { return [el.scroll]; },
+                    base: viewMode === 'document' ? P.paper : '',
                     read: function (path) { return window.pudlHost.fs.readText(path); }, onProblems: function (problems) {
                         var notice = root.querySelector('[data-role="style-problems"]'); notice.hidden = !problems.length; notice.querySelector('.notice-body').textContent = problems.join(' ');
                     } }); }
@@ -1162,7 +1261,7 @@
                 if (!destroyed && revision === styleRevision && oldShared !== sharedMacros) {
                     if (pageActive()) { visual.api.textChanged(true); } else if (viewMode === 'preview') { schedulePreview(); }
                 }
-                if (!destroyed && revision === styleRevision) { commandsChanged(); }
+                if (!destroyed && revision === styleRevision) { if (viewMode === 'document') { await configurePages(); if (visual.api) { visual.api.repaginate(); } } commandsChanged(); }
             } catch (err) { if (!destroyed && revision === styleRevision) { say('Styles could not be applied: ' + err.message, true); } }
         }
         async function editStyles(shared) {
@@ -1358,7 +1457,7 @@
            Preview, and in Split to whichever has the keyboard, the text when
            it does and the page otherwise. A toolbar button keeps the
            keyboard where it was, so Split can still tell. */
-        function formatsThePage() { return pageActive() && (viewMode === 'visual' || (viewMode === 'split' && !(view && view.hasFocus))); }
+        function formatsThePage() { return pageActive() && (viewMode === 'visual' || viewMode === 'document' || (viewMode === 'split' && !(view && view.hasFocus))); }
         function applyFormat(name) { window.yavcMdEditor.apply(name, editCtx()); }
 
         /* The insert menu lists the shortcodes, from the server's table, in
@@ -1979,6 +2078,8 @@
             table.push(cmd('properties', 'Properties…', 'tag', editProperties, {
                 hidden: function () { var t = current(); return !(t && t.lang === 'markdown'); },
                 disabled: function () { var t = current(); return !ready || !t || !!t.readOnly; } }));
+            table.push(cmd('page-setup', 'Page Setup…', 'file', editPageSetup, { hidden: unformatted, disabled: noEdit }));
+            table.push(cmd('print-document', 'Print…', 'yavc-print', printDocument, { hidden: unformatted, disabled: function () { return !ready || !tab || tab.lang !== 'markdown'; } }));
             table.push(cmd('stylesheet', 'Document Stylesheet…', 'code', function () { return editStyles(false); }, { shortcut: 'Mod+Shift+F', hidden: unformatted, disabled: noEdit }));
             table.push(cmd('custom-shortcodes', 'Custom Shortcodes…', 'code', editDefinitions, { hidden: unformatted, disabled: noEdit }));
             table.push(cmd('shared-stylesheet', 'Edit Shared Stylesheet…', 'file', function () { return editStyles(true); }, { hidden: unformatted,
@@ -1990,7 +2091,7 @@
                     return { id: 'md-default-' + v[0], label: v[1], choice: 'ed-md-default', value: v[0],
                         checked: function () { return markdownDefault() === v[0]; }, run: function () { setMarkdownDefault(v[0]); } };
                 }) });
-            [['text', 'Text'], ['visual', 'Visual'], ['split', 'Split'], ['preview', 'Preview']].forEach(function (v) {
+            [['text', 'Text'], ['visual', 'Visual'], ['split', 'Split'], ['preview', 'Preview'], ['document', 'Document']].forEach(function (v) {
                 table.push({ id: 'view-' + v[0], label: v[1], choice: 'ed-view', choiceLabel: 'View', value: v[0],
                     checked: function () { return viewMode === v[0]; },
                     hidden: function () { return !viewsOffered; },
@@ -1998,7 +2099,7 @@
                     /* A view the reader chooses is the tab's from then on. */
                     run: function () { var t = current(); if (t) { t.view = v[0]; } setView(v[0]); } });
             });
-            return table.concat(commonToolbar ? commonToolbar.commands() : [], [{ id: 'view-mode', label: 'View', glyph: 'panel', items: ['view-text', 'view-visual', 'view-split', 'view-preview'] }]);
+            return table.concat(commonToolbar ? commonToolbar.commands() : [], [{ id: 'view-mode', label: 'View', glyph: 'panel', items: ['view-text', 'view-visual', 'view-split', 'view-preview', 'view-document'] }]);
         }
 
         /* The toolbar: what is used most stays named longest, and the view
@@ -2024,11 +2125,11 @@
            views, which the site's View menu lists again where a reader of
            the menus looks for them. Headings and separators start the
            ribbon's groups. */
-        var LAYOUT = ['toggle-files', 'toggle-outline', 'hide-navigation', 'toggle-wrap', '-', 'view-text', 'view-visual', 'view-split', 'view-preview', 'md-default', '-', 'source', 'preview'];
+        var LAYOUT = ['toggle-files', 'toggle-outline', 'hide-navigation', 'toggle-wrap', '-', 'view-text', 'view-visual', 'view-split', 'view-preview', 'view-document', 'md-default', '-', 'source', 'preview'];
         function menus() {
             var titles = [
                 { label: 'Editor', glyph: 'document', items: window.pcAppletIdentity(root, ['key-bindings']) },
-                { id: 'file', label: 'File', glyph: 'file', items: ['new', 'open', 'save', 'save-as', '-', 'export-docx', 'export-pdf', '-', 'properties', 'present', '-', 'close-document'] },
+                { id: 'file', label: 'File', glyph: 'file', items: ['new', 'open', 'save', 'save-as', '-', 'export-docx', 'export-pdf', 'print-document', '-', 'page-setup', 'properties', 'present', '-', 'close-document'] },
                 { id: 'edit', label: 'Edit', glyph: 'pencil', items: ['undo', 'redo', '-', 'find', '-', 'json-format', 'language-restart'] },
                 { id: 'insert', label: 'Insert', glyph: 'plus', items: ['link', 'insert', 'table', 'box', '-', 'insert-timestamp', 'insert-date', 'stamp-modified'] }
             ];
@@ -2112,6 +2213,15 @@
             markModified(tabs[i]);
         }
         var liveActions = {
+            'page-setup@1': async function (input) {
+                docNo(); var tab = current(); if (tab.readOnly || tab.lang !== 'markdown') { throw new Error('Choose an editable Markdown document.'); }
+                if (pageActive()) { await visual.api.sync(); }
+                var text = view.state.doc.toString(), K = await loadKit(), P = await K.pages(), m = await mdEngine();
+                if (destroyed || current() !== tab || view.state.doc.toString() !== text) { throw new Error('The document changed during page setup.'); }
+                var props = P.properties(m.front(text)), values = Object.assign({}, props, input), page = P.settings(values);
+                takeVisualText(m.frontset({ text: text, set: input, order: ['page', 'orientation', 'margins'] }).text); textChangedForPage(); refreshStyles();
+                return { output: { width: page.width, height: page.height, margins: page.margins } };
+            },
             'export@1': async function (input) {
                 var result = await exportDocument(input.format);
                 return { output: { format: input.format, blocks: result.blocks, warnings: result.warnings }, artifacts: [{ key: input.format, name: result.name, mime: result.blob.type, data: new Uint8Array(await result.blob.arrayBuffer()) }] };
@@ -2203,6 +2313,8 @@
             commandTable: commandTable,
             toolbars: toolbars,
             destroy: function () {
+                if (printFrame) { printFrame.remove(); }
+                var finalSync = Promise.resolve().then(function () { if (visual.api) { return visual.api.sync(); } });
                 outlineRevision++; clearTimeout(outlineTimer); if (navigationObserver) { navigationObserver.disconnect(); }
                 window.removeEventListener('popstate', locationChanged);
                 if (commonToolbar) { commonToolbar.destroy(); }
@@ -2212,12 +2324,11 @@
                 destroyed = true;
                 styleLifetime.abort();
                 styleRevision++; clearTimeout(styleTimer); if (documentStyles) { documentStyles.destroy(); }
-                if (snap) { snap.leave(); }
                 if (unsubscribe) { unsubscribe(); }
                 if (unConfig) { unConfig(); }
                 unguard();
                 if (explorer) { explorer.destroy(); }
-                if (view) { view.destroy(); }
+                finalSync.catch(function (err) { say(err.message, true); }).finally(function () { keepSession(); if (snap) { snap.leave(); } if (visual.api) { visual.api.destroy(); } if (view) { view.destroy(); } });
                 if (lsp) { lsp.dispose(); }
             },
             ready: boot

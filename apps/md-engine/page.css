@@ -135,6 +135,16 @@
 .doc-page .small { font-size: 0.85em; }
 .doc-page .lead { font-size: 1.2em; line-height: 1.4; }
 .doc-page .no-break { break-inside: avoid; }
+/* Document view retains a single editable flow. Page gaps are decorations. */
+.doc-page.doc-paginated {
+  width: var(--sheet-width) !important; max-width: none !important; min-width: var(--sheet-width);
+  padding: var(--sheet-top) var(--sheet-right) var(--sheet-bottom) var(--sheet-left) !important;
+  background-image: repeating-linear-gradient(to bottom, transparent 0, transparent var(--sheet-height), var(--surface-alt) var(--sheet-height), var(--surface-alt) calc(var(--sheet-height) + var(--sheet-gap)));
+  background-color: var(--doc-page); color-scheme: light;
+}
+.doc-paginated > :is(.ProseMirror, .doc-page-flow) { display: flow-root; padding: 0; margin: 0; min-height: 0; }
+.doc-paginated > :is(.ProseMirror, .doc-page-flow) > * { margin-top: 0; }
+.doc-paginated > :is(.ProseMirror, .doc-page-flow) > .doc-page-gap { display: block; padding: 0; margin: 0; border: 0; pointer-events: none; }
 @media print {
   .doc-page .sc-page-break { margin: 0; border: 0; height: 0; }
   .doc-page .sc-page-break::after { content: none; }

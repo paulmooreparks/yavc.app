@@ -1,3 +1,11 @@
+# Current work, 2026-11-06
+
+Paul confirmed after the workstation restart that DOCX export now looks correct. The Word appearance investigation is closed by that user confirmation; no additional exporter change was required.
+
+The next batch is implemented on `codex/document-pages` in `%TEMP%/yavc-document-pages`, with a disposable server on port 8421 and evidence under `%TEMP%/yavc-document-pages-evidence`. It adds whole-block Document view, page setup, page counts, printing and a page-setup action. Headers/footers, document zoom, typography, themes and templates remain next. The installed v0.2.30 candidate has not been replaced. The root checkout's unrelated edits remain untouched.
+
+The older handoff below records the preceding work and investigation.
+
 # Handoff: Diagrams and the canvas editor
 
 Updated on 2026-11-05. PR #35 is merged at `a767593`, and `v0.2.29` is installed locally as `yavc-app-candidate` on port 8401, with Editor 45.23.0, Diagrams 0.21.3, Slides 0.26.0 and PUDL 0.98.0. Installed Chromium Editor export, Slides exclusion and artifact-content checks pass. Paul has authorised the local pull, next-version tag/push, Docker build and candidate run process after future merges. Keep his running candidate intact until its replacement is ready. Paul still authorises merges. Conversion, embedding and Obsidian checks remain C4 work.

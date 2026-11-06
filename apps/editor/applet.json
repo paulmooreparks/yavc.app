@@ -1,7 +1,7 @@
 {
   "name": "editor",
   "title": "Editor",
-  "version": "45.23.1",
+  "version": "45.24.0",
   "description": "Edit text and Markdown files, with a preview, in CodeMirror.",
   "license": "Apache-2.0",
   "src": "editor.js",

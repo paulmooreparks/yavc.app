@@ -98,9 +98,14 @@
         if (!cmReady) { cmReady = loadScript(HERE + 'vendor/codemirror-6.43/codemirror.js?v=6').then(function () { return window.CM; }).catch(function (e) { cmReady = null; throw e; }); }
         return cmReady;
     }
+    var pagesReady = null;
+    function pages() {
+        if (!pagesReady) { pagesReady = loadScript(HERE + 'pages.js' + STAMP).then(function () { return window.yavcDocumentPages; }).catch(function (err) { pagesReady = null; throw err; }); }
+        return pagesReady;
+    }
     var exportsReady = null;
     function documentExports() {
-        if (!exportsReady) { exportsReady = loadScript(HERE + 'export.js' + STAMP).then(function () { return window.yavcDocumentExport; }).catch(function (err) { exportsReady = null; throw err; }); }
+        if (!exportsReady) { exportsReady = pages().then(function () { return loadScript(HERE + 'export.js' + STAMP); }).then(function () { return window.yavcDocumentExport; }).catch(function (err) { exportsReady = null; throw err; }); }
         return exportsReady;
     }
     var stylesReady = null;
@@ -123,7 +128,7 @@
     }
     function pageView() {
         if (window.yavcPageView) { return Promise.resolve(window.yavcPageView); }
-        if (!pvReady) { pvReady = loadScript(HERE + 'page-view.js' + STAMP).then(function () { return window.yavcPageView; }).catch(function (e) { pvReady = null; throw e; }); }
+        if (!pvReady) { pvReady = pages().then(function () { return loadScript(HERE + 'page-view.js' + STAMP); }).then(function () { return window.yavcPageView; }).catch(function (e) { pvReady = null; throw e; }); }
         return pvReady;
     }
     /* The HTML cleaner (apps/md-engine/safe-html.js), which a page with the
@@ -1400,7 +1405,7 @@
     }
 
     window.yavcMdEditor = {
-        here: HERE, stamp: STAMP, placeholder: PLACEHOLDER, styles: styles, macros: macros, exports: documentExports,
+        here: HERE, stamp: STAMP, placeholder: PLACEHOLDER, pages: pages, styles: styles, macros: macros, exports: documentExports,
         colourRows: pickerRows, wireColours: wirePickers,
         libs: libs, languageServices: languageServices, codeTheme: codeTheme, codeSearch: codeSearch, findBar: findBar, pageView: pageView, mermaid: mermaid, drawMermaid: drawDiagram, loadScript: loadScript,
         FORMATS: FORMATS, STYLES: STYLES, INSERTS: INSERTS, SHORTCODES: SHORTCODES, MENU: MENU, STOCK_CLASSES: STOCK_CLASSES,

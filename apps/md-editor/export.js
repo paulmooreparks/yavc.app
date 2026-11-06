@@ -17,24 +17,7 @@
             (b.rows || []).forEach(function (row) { row.forEach(function (cell) { checkGlyphs([{ runs: cell.runs }], font); }); });
         });
     }
-    function length(value, fallback) {
-        if (value == null || value === '') { return fallback; }
-        var m = /^(\d+(?:\.\d+)?)\s*(pt|in|cm|mm|px)?$/.exec(String(value).trim());
-        if (!m) { throw new Error('Page lengths use pt, in, cm, mm or px.'); }
-        return +m[1] * ({ pt: 1, in: 72, cm: 72 / 2.54, mm: 72 / 25.4, px: 0.75 }[m[2] || 'pt']);
-    }
-    function settings(front) {
-        var sizes = { a4: [595.28, 841.89], letter: [612, 792], legal: [612, 1008] }, size = sizes[String(front.page || 'a4').toLowerCase()];
-        if (!size) { throw new Error('Export page size is a4, letter or legal.'); }
-        size = size.slice();
-        if (front.orientation && !/^(portrait|landscape)$/.test(front.orientation)) { throw new Error('Page orientation is portrait or landscape.'); }
-        if (front.orientation === 'landscape') { size.reverse(); }
-        var values = String(front.margins || '1in').trim().split(/\s+/).map(function (v) { return length(v); });
-        if (values.length > 4) { throw new Error('Margins contain one to four lengths.'); }
-        var top = values[0], right = values[1] == null ? top : values[1], bottom = values[2] == null ? top : values[2], left = values[3] == null ? right : values[3];
-        if (Math.min(top, right, bottom, left) < 0 || size[0] - left - right < 72 || size[1] - top - bottom < 72) { throw new Error('Page margins leave too little space for content.'); }
-        return { width: size[0], height: size[1], margins: [left, top, right, bottom] };
-    }
+    function settings(front) { return window.yavcDocumentPages.settings(front); }
     function rgb(value) {
         var canvas = document.createElement('canvas'); canvas.width = canvas.height = 1;
         var context = canvas.getContext('2d', { colorSpace: 'srgb' });
@@ -94,7 +77,7 @@
         var front = engine.front(source), props = {};
         if (front.problem) { throw new Error(front.problem); }
         (front.entries || []).forEach(function (entry) { if (entry.kind !== 'complex') { props[entry.key] = entry.value; } });
-        var page = settings(props), rendered = engine.exportPreview(source), fragment = window.yavcHTML.fragment(rendered.blocks.map(function (b) { return b.html; }).join(''));
+        var page = settings(window.yavcDocumentPages.properties(front)), rendered = engine.exportPreview(source), fragment = window.yavcHTML.fragment(rendered.blocks.map(function (b) { return b.html; }).join(''));
         if ((rendered.problems || []).length) { throw new Error('Fix the document warnings before exporting.'); }
         // The HTML cleaner uses an inert template, so omitted assets have not loaded.
         fragment.querySelectorAll('[data-export="omit"],.sc-draft-note').forEach(function (node) { node.remove(); });
@@ -110,7 +93,7 @@
         try {
             var D = await K.styles();
             controller = D.attach({ surfaces: [surface], boundaries: [boundary], read: options.read,
-                base: '--doc-size:11pt;--doc-ink:#202124;--doc-muted:#555555;--doc-accent:#2355a0;--doc-page:#ffffff;' });
+                base: window.yavcDocumentPages.paper });
             await controller.update({ identity: source, inline: engine.styles(source).map(function (b) { return b.css; }), stylesheet: options.stylesheet || '' });
             if (controller.state().problems.length) { throw new Error(controller.state().problems.join(' ')); }
             page.background = rgb(getComputedStyle(surface).backgroundColor);
@@ -128,6 +111,11 @@
                 if (totalImageBytes > 32 * 1024 * 1024) { throw new Error('Export pictures exceed the combined 32 MiB limit.'); }
                 picture.width *= 0.75; picture.height *= 0.75;
                 picture.alt = pair[0].alt || ''; images.set(pair[0], picture);
+            }
+            if (options.renderPages) {
+                images.forEach(function (picture, node) { node.src = picture.data; node.style.width = picture.width / .75 + 'px'; node.style.height = picture.height / .75 + 'px'; });
+                await Promise.all(Array.from(surface.querySelectorAll('img')).map(function (node) { return node.decode(); }));
+                return await options.renderPages(surface, page);
             }
             var blocks = [];
             function children(parent, target) { parent.childNodes.forEach(function (node) { block(node, target); }); }
@@ -191,7 +179,7 @@
                 }
                 if (b.kind === 'list') {
                     var reference = 'list-' + (++listCount);
-                    numbering.push({ reference: reference, levels: [{ level: 0, format: b.ordered ? D.LevelFormat.DECIMAL : D.LevelFormat.BULLET, text: b.ordered ? '%1.' : '•', start: b.start, alignment: D.AlignmentType.LEFT, style: { paragraph: { indent: { left: (depth + 1) * 360, hanging: 180 } } } }] });
+                    numbering.push({ reference: reference, levels: [{ level: 0, format: b.ordered ? D.LevelFormat.DECIMAL : D.LevelFormat.BULLET, text: b.ordered ? '%1.' : '\u2022', start: b.start, alignment: D.AlignmentType.LEFT, style: { paragraph: { indent: { left: (depth + 1) * 360, hanging: 180 } } } }] });
                     return b.items.flatMap(function (item) { return write(item, depth + 1, reference); });
                 }
                 if (b.kind === 'quote') { return write(b.blocks, depth + 1); }

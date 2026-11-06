@@ -1,10 +1,63 @@
 {
   "id": "yavc.editor",
-  "version": "2.3.0",
+  "version": "2.4.0",
   "apiVersion": 1,
   "title": "Editor",
   "description": "The text and Markdown editor: the documents it has open, their text, and everything its commands do to them.",
   "actions": [
+    {
+      "ref": "yavc.editor/page-setup@1",
+      "title": "Set Page Layout",
+      "description": "Change the current Markdown document page size, orientation or margins as one undoable source edit. Dimensions and returned margins are in points, in left, top, right, bottom order.",
+      "live": true,
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "minProperties": 1,
+        "properties": {
+          "page": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "orientation": {
+            "enum": [
+              "portrait",
+              "landscape"
+            ]
+          },
+          "margins": {
+            "type": "string",
+            "maxLength": 128
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": [
+          "width",
+          "height",
+          "margins"
+        ],
+        "properties": {
+          "width": {
+            "type": "number"
+          },
+          "height": {
+            "type": "number"
+          },
+          "margins": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "minItems": 4,
+            "maxItems": 4
+          }
+        }
+      },
+      "capabilities": [],
+      "replay": "once"
+    },
     {
       "ref": "yavc.editor/export@1",
       "title": "Export Document",
@@ -515,7 +568,7 @@
     {
       "ref": "yavc.editor/open-file@1",
       "title": "Open a File",
-      "description": "Open one of the person's files (~/\u00e2\u20ac\u00a6) or a page of the site in the Editor, and make it current. A file already open comes to the front.",
+      "description": "Open one of the person's files (~/â€¦) or a page of the site in the Editor, and make it current. A file already open comes to the front.",
       "live": true,
       "inputSchema": {
         "type": "object",
@@ -917,7 +970,8 @@
               "text",
               "visual",
               "split",
-              "preview"
+              "preview",
+              "document"
             ]
           }
         },
