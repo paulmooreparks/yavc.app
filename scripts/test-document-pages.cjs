@@ -47,8 +47,8 @@ const margin = page => page.locator('[data-measure="all"]').locator('..').getByR
             await page.waitForFunction(() => document.querySelector('.doc-paginated')?.getBoundingClientRect().width === 816);
             for (const mode of ['text','preview','visual','split']) {
                 await action(page,'view',{mode});
-                if(mode==='text') { assert.equal(await page.locator('.doc-paginated').count(),0); }
-                else { await page.waitForFunction(() => +document.querySelector('[data-page-count]')?.dataset.pageCount > 1); }
+                assert.equal(await page.locator('.doc-paginated').count(),0);
+                assert.equal(await text(page),source);
             }
             await action(page,'view',{mode:'document'}); await page.waitForFunction(() => +document.querySelector('[data-page-count]')?.dataset.pageCount > 1);
             await command(page,'hide-navigation');
