@@ -385,6 +385,14 @@ Page Setup now offers standard and custom paper dimensions, units, margin preset
 
 The reported view-switching problem was a mismatch between the separate Document mode and the expected behavior of document files. `.docs.md` files now retain page geometry in Visual, Split and Preview, while ordinary Markdown retains fluid layout. The read-only preview uses the same whole-block planner, with source wrappers excluded from layout and source-position wrappers retained for navigation. The focused tests cover the original Text/Preview/Visual sequence without closing the document, independent and linked margins, custom sizes, unit round trips, presets, filtering, Undo, stale dialogs, validation focus and narrow/dark layouts. The existing pagination and print fixture remains a separate regression check.
 
+## Editor view selector and Page Setup dismissal, 2026-11-06
+
+The default toolbar now includes the removable PUDL view selector. The ordered capability fallback selects Document for Markdown and Text for HTML and source formats, while explicit tab choices and saved preferences remain effective. Read-only Markdown uses the preview renderer for its selected rendered mode. Source review caught Outline and line restoration still targeting hidden CodeMirror in that path; both now navigate the visible rendered document. The regression fixture covers a long read-only document in Document, Visual and Split, including heading links and URL line restoration.
+
+A real click on Paper Size reproduced the reported dialog dismissal in installed v0.2.32. The shared dialog listener accepted every element with `data-choice`, which Page Setup also uses for its dropdowns. Dialog actions now require a button. The regression uses actual clicks on every Page Setup dropdown and a synthetic body select with the same attribute, then verifies that Cancel still closes the dialog. Programmatic option selection alone had missed this failure in the previous batch.
+
+The view-selector, dropdown-click, complete Page Setup and shared-toolbar fixtures pass Chromium, Firefox and WebKit. The shared-toolbar fixture covers Editor, Slides and Diagrams, including customization, ribbon visibility, legacy hosts and disposal. It now targets the separately customized Split button and verifies that every displayed Split control reflects the selected state. The full repository gate passes, and independent PUDL source review has no remaining findings. These checks use disposable headless browser contexts; they do not claim native desktop interaction or a new installation.
+
 ## Items for other projects
 
 These problems belong to PUDL or to applets that are maintained elsewhere, so they were reported instead of patched here.

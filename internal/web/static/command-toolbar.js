@@ -1,7 +1,10 @@
 /* Copyright 2026 Paul Parks. SPDX-License-Identifier: Apache-2.0 */
 /* Optional host capability for applets with PUDL command tables.
    attach(root, { app, label, defaults, table, config }) returns
-   commands() to include in the existing table, and destroy(). */
+   commands() to include in the existing table, and destroy().
+   A command may set toolbarChoice to a PUDL choice-group name and
+   toolbarPriority to its group's folding priority. Preferences still
+   contain that command's ID, so the entire control can be removed. */
 (function (global) {
     'use strict';
     var FILE = 'command-toolbars', SHOW = 'common-toolbar-show', EDIT = 'common-toolbar-customize', LIMIT = 60, serial = 0;
@@ -42,7 +45,11 @@
                     var label, caption;
                     try { caption = String(field(c, 'label') || c.id || ''); label = String(field(c, 'toolbarLabel') || caption); } catch (err) { return; }
                     if (typeof c.id === 'string' && c.id !== SHOW && c.id !== EDIT && !out.has(c.id)) {
-                        out.set(c.id, { id: c.id, label: path ? path + ' / ' + label : label, caption: caption });
+                        var choice, priority;
+                        try { choice = field(c, 'toolbarChoice'); priority = field(c, 'toolbarPriority'); } catch (err) { choice = null; priority = 0; }
+                        out.set(c.id, { id: c.id, label: path ? path + ' / ' + label : label, caption: caption,
+                            choice: typeof choice === 'string' && /^[a-z][a-z0-9-]{0,63}$/.test(choice) ? choice : null,
+                            priority: typeof priority === 'number' && Number.isFinite(priority) ? Math.max(-100, Math.min(100, priority)) : 0 });
                     }
                     try { walk(field(c, 'items'), path ? path + ' / ' + label : label, depth + 1); } catch (err) { /* A not-yet-ready submenu is retried on the next command change. */ }
                 });
@@ -52,7 +59,7 @@
         function render() {
             if (destroyed) { return; }
             var known = catalog(), shown = prefs.items.filter(function (id) { return id === '-' || known.has(id); });
-            var next = JSON.stringify([prefs.visible, prefs.inRibbon, shown]);
+            var next = JSON.stringify([prefs.visible, prefs.inRibbon, shown.map(function (id) { return id === '-' ? id : [id, known.get(id).choice, known.get(id).priority]; })]);
             if (signature === next) { return; } signature = next;
             bar.hidden = !prefs.visible;
             if (prefs.inRibbon) { bar.removeAttribute('data-toolbar-ribbon'); } else { bar.setAttribute('data-toolbar-ribbon', 'hide'); }
@@ -64,7 +71,12 @@
                 if (!group) {
                     group = document.createElement('div'); group.className = 'toolbar-group';
                     group.setAttribute('role', 'group'); group.setAttribute('aria-label', known.get(id).caption); group.setAttribute('data-toolbar-glyph', 'more');
+                    group.setAttribute('data-toolbar-priority', known.get(id).priority);
                     bar.appendChild(group);
+                }
+                group.setAttribute('data-toolbar-priority', Math.max(+group.getAttribute('data-toolbar-priority') || 0, known.get(id).priority));
+                if (known.get(id).choice) {
+                    var segmented = document.createElement('div'); segmented.className = 'seg sm'; segmented.setAttribute('data-command-choice', known.get(id).choice); group.appendChild(segmented); return;
                 }
                 var button = document.createElement('button'); button.type = 'button'; button.setAttribute('data-command', id); group.appendChild(button);
             });

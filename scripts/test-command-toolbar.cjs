@@ -132,8 +132,8 @@ async function run(engine) {
                 await page.getByRole('menuitemcheckbox', { name: 'Oval', exact: true }).click();
                 assert.equal(await oval.getAttribute('aria-pressed'), 'false');
             }
-            await bar.locator('[data-command="view-split"]').click();
-            await page.waitForFunction(() => document.querySelector('.yavc-command-toolbar [data-command="view-split"]').getAttribute('aria-pressed') === 'true');
+            await bar.locator('[data-command="view-split"]:not([data-command-choice] *)').click();
+            await page.waitForFunction(() => Array.from(document.querySelectorAll('.yavc-command-toolbar [data-command="view-split"]')).every(b => b.getAttribute('aria-pressed') === 'true'));
             phase = app + ' ribbon'; await page.getByRole('button', { name: 'Show as ribbon', exact: true }).click();
             assert.equal(await bar.isVisible(), false);
             await page.evaluate(() => { window.toolbarDialog = pudlCommands.run('common-toolbar-customize', null, document.querySelector('[data-applet]')); }); await dialog.waitFor();
