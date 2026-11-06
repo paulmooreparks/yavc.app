@@ -235,3 +235,8 @@
   .dg-cv-ring, .dg-cv-hit:hover, .dg-cv-preview, .dg-cv-guide { stroke: Highlight; forced-color-adjust: none; }
   .dg-cv-line-ring { stroke-opacity: 1; }
 }
+
+/* Keep file locations readable without making the status strip taller. */
+.dg-status { min-width: 0; overflow: hidden; white-space: nowrap; }
+.dg-status [data-role="where"] { flex: 0 1 auto; min-width: 2rem; overflow: hidden; text-overflow: ellipsis; }
+.dg-status [data-role="kind"], .dg-status [data-role="state"] { flex-shrink: 0; }

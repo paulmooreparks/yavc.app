@@ -90,7 +90,7 @@
         ['parallelogram', 'Parallelogram'], ['step', 'Step'], ['cylinder', 'Cylinder'], ['queue', 'Queue'], ['stored_data', 'Stored Data'], ['package', 'Package'],
         ['page', 'Page'], ['document', 'Document'], ['person', 'Person'], ['cloud', 'Cloud'], ['callout', 'Callout'], ['text', 'Text Only']];
     var KIND_NAME = { d2: 'D2', mermaid: 'Mermaid', canvas: 'Canvas' };
-    var VIEWS = [['text', 'Text'], ['preview', 'Preview'], ['split', 'Split']];
+    var VIEWS = [['preview', 'Preview'], ['text', 'Text'], ['split', 'Split']];
     /* Where the drawing sits beside the text, as Slides docks its canvas. */
     var DOCKS = [['left', 'Left'], ['right', 'Right'], ['top', 'Top'], ['bottom', 'Bottom']];
     var SETTINGS = { view: 'split', dock: 'left', fit: true, inspector: true, inspectorSplit: null, inspectorWidth: null, outline: false };
@@ -1550,7 +1550,7 @@
             var t = tabs[i];
             showTab(t);
             el.canvas.replaceChildren(t.place);
-            el.where.textContent = t.path || 'Not saved yet';
+            el.where.textContent = t.path || 'Not saved yet'; el.where.title = el.where.textContent;
             el.kind.textContent = KIND_NAME[t.kind];
             root.setAttribute('data-kind', t.kind);
             q('.dg-keys').textContent = t.kind === 'canvas'
@@ -1674,7 +1674,7 @@
                         t.state = stateFor(t, t.text);
                         if (t === current()) { showTab(t); el.kind.textContent = KIND_NAME[kind]; root.setAttribute('data-kind', kind); drawNow(); }
                     }
-                    if (t === current()) { el.where.textContent = t.path; say('Saved ' + t.path + (t.modified ? '; newer edits are still unsaved.' : '.')); announce(); }
+                    if (t === current()) { el.where.textContent = t.path; el.where.title = el.where.textContent; say('Saved ' + t.path + (t.modified ? '; newer edits are still unsaved.' : '.')); announce(); }
                 } else if (res.download) { window.yavcUtil.download(res.download, blob); say('Downloaded ' + res.download + '.'); }
                 commandsChanged();
                 keep();
@@ -1895,7 +1895,7 @@
             });
             return table.concat(canvasCommands(), commonToolbar ? commonToolbar.commands() : [], [
                 cmd('drawing-tool', 'Drawing Tool', 'square', null, { hidden: function () { return !isD2() && !isCanvas(); }, items: ['tool-select'].concat(PALETTE.map(function (k) { return 'tool-' + k[0]; })) }),
-                cmd('view-mode', 'View', 'panel', null, { items: ['view-text', 'view-preview', 'view-split'] })
+                cmd('view-mode', 'View', 'panel', null, { toolbarChoice: 'dg-view', toolbarPriority: 50, items: ['view-preview', 'view-text', 'view-split'] })
             ]);
         }
         function toolbars() {
@@ -1915,7 +1915,7 @@
                 { id: 'file', label: 'File', glyph: 'file', items: ['new', 'new-mermaid', 'new-canvas', 'open', 'save', 'save-as', '-', 'edit-in-editor', '-', 'export-svg', 'export-png', 'export-source', '-', 'close-diagram'] },
                 { id: 'edit', label: 'Edit', glyph: 'pencil', items: ['undo', 'redo', '-', 'cv-copy', 'cv-paste', 'cv-duplicate', 'cv-delete', 'copy-embed', '-', 'cv-select-all', 'cv-select-items', '-', 'find', '-', 'format-text', 'redraw', 'language-restart'] },
                 { id: 'shape', label: 'Shape', glyph: 'square', items: (isD2() || isCanvas() ? [{ label: 'Drawing Tool', glyph: 'square', items: ['tool-select'].concat(PALETTE.map(function (k) { return 'tool-' + k[0]; })) }, '-'] : []).concat(['shape-add', 'shape-add-inside', 'connect', 'cv-new', 'cv-group', 'cv-connect', 'cv-reconnect-start', 'cv-reconnect-end', 'cv-resize', 'cv-edit-text', '-', { label: 'Align and Distribute', items: ['cv-align-left', 'cv-align-center', 'cv-align-right', 'cv-align-top', 'cv-align-middle', 'cv-align-bottom', '-', 'cv-distribute-horizontal', 'cv-distribute-vertical'] }, '-', 'shape-label', 'shape-rename', 'shape-type', '-', 'shape-move-into', 'shape-move-top', 'cv-left', 'cv-right', 'cv-up', 'cv-down', 'cv-forward', 'cv-back', '-', 'shape-delete']) }
-            ], into: { view: ['view-text', 'view-preview', 'view-split', '-', 'dock', 'fit', 'toggle-inspector', 'toggle-outline'].concat(commonToolbar ? ['-', 'common-toolbar-show', 'common-toolbar-customize'] : [], ['-', 'cv-pan', 'cv-pan-left', 'cv-pan-right', 'cv-pan-up', 'cv-pan-down', 'cv-zoom-in', 'cv-zoom-out', 'cv-actual']), go: ['go-to-line', 'cv-next', 'cv-previous'] } };
+            ], into: { view: ['view-preview', 'view-text', 'view-split', '-', 'dock', 'fit', 'toggle-inspector', 'toggle-outline'].concat(commonToolbar ? ['-', 'common-toolbar-show', 'common-toolbar-customize'] : [], ['-', 'cv-pan', 'cv-pan-left', 'cv-pan-right', 'cv-pan-up', 'cv-pan-down', 'cv-zoom-in', 'cv-zoom-out', 'cv-actual']), go: ['go-to-line', 'cv-next', 'cv-previous'] } };
         }
         root.addEventListener('pudl:contextmenu', function (e) {
             var t = e.detail.target;
@@ -2040,7 +2040,7 @@
                     if (err) { throw new Error('could not save: ' + err); }
                     if (destroyed || tabs.indexOf(t) < 0) { throw new Error('The file was saved after its diagram was closed.'); }
                     saved(t, destination, submitted, ticket, true);
-                    if (t === current()) { el.where.textContent = t.path; say('Saved ' + t.path + (t.modified ? '; newer edits are still unsaved.' : '.')); announce(); }
+                    if (t === current()) { el.where.textContent = t.path; el.where.title = el.where.textContent; say('Saved ' + t.path + (t.modified ? '; newer edits are still unsaved.' : '.')); announce(); }
                     commandsChanged();
                     keep();
                     return { output: summary(t, tabs.indexOf(t)) };

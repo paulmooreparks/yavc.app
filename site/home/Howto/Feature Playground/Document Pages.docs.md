@@ -12,7 +12,7 @@ This document opens as physical sheets. Click into a paragraph and edit it. You 
 
 ## Try page setup
 
-Choose **File, Page Setup**. Search for A4, select it, then change the orientation to Landscape. Change Units to Millimeters, turn off **Use the Same Margin on All Sides**, and enter a separate value for each side. Apply the change, then use Undo to restore these settings.
+Choose **Format, Page Setup**. Search for A4, select it, then change the orientation to Landscape. Change Units to Millimeters, turn off **Use the Same Margin on All Sides**, and enter a separate value for each side. Apply the change, then use Undo to restore these settings.
 
 Choose **Custom Size** to enter your own Width and Height. The margin presets provide common starting points, and the linked **All Sides** field sets one margin everywhere.
 

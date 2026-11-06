@@ -156,3 +156,9 @@
   @page { size: 1280px 720px; margin: 0; }
 }
 .deck-dialog { width: min(32rem, 92vw); }
+
+/* Keep file locations readable without making the status strip taller. */
+.deck-status { min-width: 0; overflow: hidden; white-space: nowrap; }
+.deck-status [data-role="where"] { flex: 0 1 auto; min-width: 2rem; overflow: hidden; text-overflow: ellipsis; }
+.deck-status [data-role="kind"], .deck-status [data-role="state"] { flex-shrink: 0; }
+.deck-status [data-role="position"] { flex-shrink: 0; }

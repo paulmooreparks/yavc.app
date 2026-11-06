@@ -1,4 +1,8 @@
-# Current work, 2026-11-06
+# Current work, 2026-11-07
+
+The installed local candidate is v0.2.36 from PR #42, commit `031b316`, on port 8401. The new cleanup candidate is on `codex/content-ui-cleanup` in `%TEMP%/yavc-content-ui-cleanup`, with a disposable server on port 8427. It moves Page Setup to Format, aligns Slides menus/glyphs/Color labels, isolates source editing history per slide, and supplies shared segmented view selectors and narrow status bars in Slides and Diagrams. See `docs/content-ui-review.md` and DESIGN.md decision 54. Paul explicitly requested continuing into Slides and Diagrams now; the earlier sequencing notes below are historical. This candidate is not merged or installed.
+
+The following entries describe previous candidates and releases.
 
 The local installation is v0.2.35, Editor 45.27.0, from PR #41 at `b338dc6`, on port 8401. It retains the candidate volume and rollback receipt at `%TEMP%/yavc-v0.2.35-backup-path.txt`.
 

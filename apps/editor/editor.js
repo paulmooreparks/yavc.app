@@ -2166,12 +2166,12 @@
         function menus() {
             var titles = [
                 { label: 'Editor', glyph: 'document', items: window.pcAppletIdentity(root, ['key-bindings']) },
-                { id: 'file', label: 'File', glyph: 'file', items: ['new', 'open', 'save', 'save-as', '-', 'export-docx', 'export-pdf', 'print-document', '-', 'page-setup', 'properties', 'present', '-', 'close-document'] },
+                { id: 'file', label: 'File', glyph: 'file', items: ['new', 'open', 'save', 'save-as', '-', 'export-docx', 'export-pdf', 'print-document', '-', 'properties', 'present', '-', 'close-document'] },
                 { id: 'edit', label: 'Edit', glyph: 'pencil', items: ['undo', 'redo', '-', 'find', '-', 'json-format', 'language-restart'] },
                 { id: 'insert', label: 'Insert', glyph: 'plus', items: ['link', 'insert', 'table', 'box', '-', 'insert-timestamp', 'insert-date', 'stamp-modified'] }
             ];
             /* Format, where there is formatting to do. */
-            if (formatOffered) { titles.push({ id: 'format', label: 'Format', glyph: 'paragraph', items: ['style', '-', 'bold', 'italic', 'underline', 'strike', 'code', '-', 'highlight', 'superscript', 'subscript', '-', 'color', 'class', '-', 'bullets', 'numbers', 'quote', 'table', '-', 'typography', 'header-footer', '-', 'stylesheet', 'shared-stylesheet', 'custom-shortcodes'] }); }
+            if (formatOffered) { titles.push({ id: 'format', label: 'Format', glyph: 'paragraph', items: ['style', '-', 'bold', 'italic', 'underline', 'strike', 'code', '-', 'highlight', 'superscript', 'subscript', '-', 'color', 'class', '-', 'bullets', 'numbers', 'quote', 'table', '-', 'page-setup', 'typography', 'header-footer', '-', 'stylesheet', 'shared-stylesheet', 'custom-shortcodes'] }); }
             return { titles: titles, into: { view: LAYOUT.concat(commonToolbar ? ['-', 'common-toolbar-show', 'common-toolbar-customize'] : []), go: ['go-to-line', '-', 'section-up', 'section-down'] } };
         }
 
