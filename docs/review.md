@@ -405,6 +405,12 @@ Source review found alignment depending on mapping-key order and missing slots. 
 
 Chromium, Firefox and WebKit fixtures cover settings dialogs, fields, literal metadata, typography, Undo, zoom, view changes, downloads, print, invalid input, narrow layout, overflow refusal and stale dialogs. Generated DOCX packages retain live PAGE/NUMPAGES fields, first-page header suppression, body fonts and paragraph spacing. PDF checks extract the page fields from every sheet and confirm first-page suppression; a rendered PDF page was visually inspected. Native Word rendering was not automated. Existing Office export, paper-color and shared Slides audience/export/print regressions pass Chromium, and existing pagination/print and Page Setup regressions pass all three engines. PDF retains its documented bundled-font substitution and structural pagination; these are output limitations rather than claims of line-for-line parity.
 
+## Editor UI review and Typography redesign, 2026-11-06
+
+The research and complete review record are in `docs/editor-ui-review.md`. Typography now uses documented PUDL combos, number fields, line-spacing presets, explicit defaults and a scoped sample. The dialog preserves untouched source units and allows invalid source settings to be repaired. Numeric validation remains associated with the visible control and its native backing field, so component refresh cannot clear an application error; repeated Apply cannot accept an invalid draft. Preview updates leave an in-progress numeric draft alone, preventing an inherited computed paragraph margin from replacing a value before blur commits it. Preview controllers are disposed with their dialog and their styles cannot reach host controls. Typography and Header and Footer are grouped in Format.
+
+The full UI fixture found Outline URL reload creating a blank duplicate of an unsaved named draft. Tab activation now precedes disk-existence checks, preserving the restored document. It also exercises close cancellation and read-only behavior. A shared modal keyboard regression now wraps forward and backward Tab at visible enabled controls while honoring handled editor keys. The batch includes American Color/Gray labels, a Save As glyph and narrow status layout with a full-path tooltip. Larger clipboard/history affordances remain recorded findings rather than passing claims.
+
 ## Items for other projects
 
 These problems belong to PUDL or to applets that are maintained elsewhere, so they were reported instead of patched here.

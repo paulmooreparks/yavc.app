@@ -62,6 +62,16 @@
                 setTimeout(function () { dlg.remove(); if (opener && opener.isConnected && opener.focus && !document.querySelector('dialog[open]')) { try { opener.focus({ preventScroll: true }); } catch (err) { } } }, 0);
             }
             dlg.addEventListener('click', function (e) { var b = e.target.closest('button[data-choice]'); if (b && dlg.contains(b)) { finish(b.getAttribute('data-choice')); } });
+            dlg.addEventListener('keydown', function (e) {
+                if (e.key !== 'Tab' || e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) { return; }
+                var stops = Array.from(dlg.querySelectorAll('button,input,select,textarea,a[href],[tabindex],[contenteditable="true"]')).filter(function (node) {
+                    return node.tabIndex >= 0 && !node.disabled && !node.closest('[inert]') && node.getClientRects().length && getComputedStyle(node).visibility !== 'hidden';
+                });
+                if (!stops.length) { e.preventDefault(); dlg.focus(); return; }
+                var first = stops[0], last = stops[stops.length - 1], active = document.activeElement;
+                if (e.shiftKey && active === first) { e.preventDefault(); last.focus(); }
+                else if (!e.shiftKey && active === last) { e.preventDefault(); first.focus(); }
+            });
             form.addEventListener('submit', function (e) {
                 e.preventDefault();
                 var v = e.submitter ? e.submitter.value : (form.querySelector('[type="submit"]') || {}).value;

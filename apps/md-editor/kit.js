@@ -157,7 +157,7 @@
         ['bold', 'Bold', 'bold', 'Mod-b'], ['italic', 'Italic', 'italic', 'Mod-i'], ['underline', 'Underline', 'underline', 'Mod-u'], ['strike', 'Strike Through', 'strike'],
         ['code', 'Code', 'code', 'Mod-`'], ['highlight', 'Highlight', 'yavc-highlight', 'Mod-Shift-h'],
         ['superscript', 'Superscript', 'yavc-superscript'], ['subscript', 'Subscript', 'yavc-subscript'], ['link', 'Link…', 'link', 'Mod-k'],
-        ['bullets', 'Bulleted List', 'list'], ['numbers', 'Numbered List', 'list-numbered'], ['quote', 'Quote', 'quote'], ['color', 'Text Colour…', 'colour'], ['class', 'Style…', 'tag']
+        ['bullets', 'Bulleted List', 'list'], ['numbers', 'Numbered List', 'list-numbered'], ['quote', 'Quote', 'quote'], ['color', 'Text Color…', 'colour'], ['class', 'Style…', 'tag']
     ];
     /* The classes a stylesheet defines, for the Style dialog. */
     function classesOf(css) {
@@ -188,7 +188,7 @@
         ['applet', 'Applet…', null],
         ['diagram', 'Diagram', '```mermaid\ngraph LR; A-->B;\n```'],
         ['code', 'Code Listing from a File…', null],
-        ['color', 'Coloured Words', '{{color:accent}}these words{{/color}}'],
+        ['color', 'Colored Words', '{{color:accent}}these words{{/color}}'],
         ['toc', 'Contents…', null],
         ['status', 'Status Label…', null],
         ['kbd', 'Keys…', null],
@@ -538,10 +538,10 @@
     /* The colour for some words: a swatch, or anything typed; '' takes the
        colour off; null is Cancel. */
     function askColour() {
-        var html = '<div class="form-group"><span class="form-label">The Site\'s Colours</span><div class="md-swatches" role="group" aria-label="The Site\'s Colours">' +
+        var html = '<div class="form-group"><span class="form-label">The Site\'s Colors</span><div class="md-swatches" role="group" aria-label="The Site\'s Colors">' +
             SWATCHES.map(function (s) { return '<button type="button" class="btn md-swatch" data-swatch="' + s[0] + '"><span class="md-swatch-dot" style="background:' + swatchCSS(s[0]) + '" aria-hidden="true"></span>' + s[1] + '</button>'; }).join('') + '</div></div>' +
-            pickerRows([{ key: 'custom', label: 'Any Colour', value: '', fallback: '#c0392b', placeholder: '#c0392b, tomato, hsl(200 60% 40%); empty takes the colour off' }]);
-        return dialog('Colour the Words', html, [{ id: 'cancel', label: 'Cancel' }, { id: 'ok', label: 'Use This Colour', primary: true }],
+            pickerRows([{ key: 'custom', label: 'Any Color', value: '', fallback: '#c0392b', placeholder: '#c0392b, tomato, hsl(200 60% 40%); empty removes the color' }]);
+        return dialog('Color the Words', html, [{ id: 'cancel', label: 'Cancel' }, { id: 'ok', label: 'Use This Color', primary: true }],
             function (api) { wirePickers(api.body); wireSwatches(api); }).then(function (r) {
             if (r.value && r.value.indexOf('swatch:') === 0) { return r.value.slice(7); }
             if (r.value !== 'ok') { return null; }
@@ -781,7 +781,7 @@
        label], or a function of the host giving a promise of one), min, max,
        browse (a picker for a file) }. */
     function plain(v) { return String(v == null ? '' : v).trim().replace(/[{}\n]/g, ''); }
-    var STATUS = [['green', 'Green, Done or Good'], ['blue', 'Blue, Information'], ['yellow', 'Yellow, a Warning'], ['red', 'Red, Failed or Blocked'], ['grey', 'Grey, Neutral']];
+    var STATUS = [['green', 'Green, Done or Good'], ['blue', 'Blue, Information'], ['yellow', 'Yellow, a Warning'], ['red', 'Red, Failed or Blocked'], ['grey', 'Gray, Neutral']];
     function appletOptions() {
         var defs = window.pudlApplets && window.pudlApplets.definitions ? window.pudlApplets.definitions() : {};
         return Promise.resolve(Object.keys(defs).sort().map(function (k) { return [k, (defs[k] && defs[k].title) || k]; }));
@@ -824,7 +824,7 @@
             } },
         code: { title: 'A Code Listing from a File', fields: [
             { key: 'src', label: 'File', placeholder: '~/bin/hello or /applets/dice/dice.js', browse: true, help: 'A file of yours under ~, or one of the site\'s; the page shows it as it is when the page is read.' },
-            { key: 'lang', label: 'Language', placeholder: 'From the file name', help: 'Optional, such as javascript or go, for the colouring.' }],
+            { key: 'lang', label: 'Language', placeholder: 'From the file name', help: 'Optional, such as javascript or go, for syntax coloring.' }],
             read: function (sc) { return { src: sc.named.src || sc.positional[0] || '', lang: sc.named.lang || '' }; },
             write: function (v) {
                 var src = plain(v.src);
@@ -841,7 +841,7 @@
                 return a === 2 && b === 3 ? '{{toc}}' : '{{toc:min=' + a + ' max=' + b + '}}';
             } },
         status: { title: 'A Status Label', inline: true, fields: [
-            { key: 'colour', label: 'Colour', kind: 'select', options: STATUS },
+            { key: 'colour', label: 'Color', kind: 'select', options: STATUS },
             { key: 'label', label: 'Label', placeholder: 'Done' }],
             read: function (sc) { var c = (sc.positional[0] || 'green').toLowerCase(); return { colour: c === 'gray' ? 'grey' : c === 'amber' ? 'yellow' : c, label: sc.args.slice((sc.positional[0] || '').length).trim() }; },
             write: function (v) {

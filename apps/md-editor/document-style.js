@@ -76,7 +76,7 @@
     }
     function attach(opts) {
         opts = opts || {};
-        var key = 'document-' + (++sequence), bound = new Set(), contained = new Set(), disposed = false, revision = 0;
+        var key = 'document-' + (++sequence), bound = new Set(), contained = new Set(), disposed = false, revision = 0, base = String(opts.base || '');
         var identity = null, path = null, shared = null, readToken = null, cached = '', result = { css: '', classes: [], problems: [] };
         var style = document.createElement('style'); style.setAttribute('data-md-style-owner', key); document.head.appendChild(style);
         function refresh() {
@@ -97,7 +97,7 @@
         }
         function install(layers, problems) {
             if (disposed) { return; }
-            if (opts.base) { layers = [String(opts.base)].concat(layers); }
+            if (base) { layers = [base].concat(layers); }
             var size = layers.reduce(function (n, css) { return n + new TextEncoder().encode(css).length; }, 0);
             if (size > LIMIT || layers.length > 128) { layers = []; problems.push('Combined document styles exceed the supported size.'); }
             var parts = layers.map(function (css) { return compile(key, css); });
@@ -111,6 +111,8 @@
         async function update(input) {
             if (disposed) { return { applied: false }; }
             input = input || {};
+            // Hosts can update validated base tokens below authored stylesheet layers.
+            if (Object.prototype.hasOwnProperty.call(input, 'base')) { base = String(input.base || ''); }
             var current = ++revision, nextPath = String(input.stylesheet || ''), layers = (input.inline || []).map(String);
             if (identity !== input.identity || path !== nextPath || input.reload) {
                 identity = input.identity; path = nextPath; shared = null; readToken = null; cached = '';

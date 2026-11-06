@@ -380,6 +380,7 @@
             if (tabRow) { tabRow.render(); }
             var t = current();
             el.where.textContent = t ? (t.path || 'Not saved yet') : '';
+            el.where.title = el.where.textContent;
             el.lang.textContent = t ? LANG_NAMES[t.lang] : '';
             showCount();
             showFormat(viewMode);
@@ -475,10 +476,12 @@
                still finds its file. */
             path = F.upgradePath(path);
             var node = F.resolve(F.home(), path);
+            // A restored named draft is already open even though Save has not created its file.
+            var display = node && !node.children ? F.displayPath(F.realOf(node)) : path;
+            for (var i = 0; i < tabs.length; i++) { if (tabs[i].path === display) { if (i !== active) { activate(i); } view.focus(); return true; } }
             if (!node) { return fail(path + ': no such file'); }
             if (node.children) { return fail(path + ' is a folder'); }
-            var r = F.realOf(node), display = F.displayPath(r);
-            for (var i = 0; i < tabs.length; i++) { if (tabs[i].path === display) { if (i !== active) { activate(i); } view.focus(); return true; } }
+            var r = F.realOf(node);
             if (!F.isText(r)) { return fail(display + ' isn\'t a text file, so the editor can\'t open it.'); }
             var text;
             try { text = await F.read(r); } catch (err) { return fail(err.message); }
@@ -1027,7 +1030,7 @@
             var text = view.state.doc.toString(), K = await loadKit(), P = await K.pages(), m = await mdEngine(), S = window.yavcDocumentSettings;
             function unchanged() { return !destroyed && current() === t && view.state.doc.toString() === text; }
             if (!unchanged()) { return; }
-            try { await S.open(kind, { properties: S.properties(m.front(text)), engine: m, current: unchanged, signal: styleLifetime.signal, save: function (set, mappings) {
+            try { await S.open(kind, { properties: S.properties(m.front(text)), styles: m.styles(text).map(function (block) { return block.css; }), stylesheet: currentSharedStyle, read: window.pudlHost.fs.readText, engine: m, current: unchanged, signal: styleLifetime.signal, save: function (set, mappings) {
                 var order = Object.keys(set).concat(Object.keys(mappings));
                 takeVisualText(m.frontset({ text: text, set: set, mappings: mappings, order: order }).text); textChangedForPage(); refreshStyles();
             } }); } catch (err) { say(err.message, true); }
@@ -2051,7 +2054,7 @@
                 cmd('new', 'New', 'file', function () { newTab(); }),
                 cmd('open', 'Open…', 'folder', function () { openDialog(); }),
                 cmd('save', 'Save', 'yavc-save', function () { save(); }, { disabled: function () { var t = current(); return !ready || !t || t.readOnly; }, reason: 'This file is read-only.' }),
-                cmd('save-as', 'Save As…', null, function () { saveAs(); }, { label: function () { var t = current(); return t && t.readOnly ? 'Save a Copy to ~…' : 'Save As…'; }, disabled: function () { return !ready || !current(); } }),
+                cmd('save-as', 'Save As…', 'yavc-save-as', function () { saveAs(); }, { label: function () { var t = current(); return t && t.readOnly ? 'Save a Copy to ~…' : 'Save As…'; }, disabled: function () { return !ready || !current(); } }),
                 cmd('close-document', 'Close Document', null, function () { COMMANDS['close-document'](); }, { disabled: function () { return !ready || !current(); } }),
                 /* glyphOnly: a glyph every reader knows shows alone on the
                    menu bar's ribbon (PUDL 0.79.0), its words its tooltip. */
@@ -2163,12 +2166,12 @@
         function menus() {
             var titles = [
                 { label: 'Editor', glyph: 'document', items: window.pcAppletIdentity(root, ['key-bindings']) },
-                { id: 'file', label: 'File', glyph: 'file', items: ['new', 'open', 'save', 'save-as', '-', 'export-docx', 'export-pdf', 'print-document', '-', 'page-setup', 'header-footer', 'typography', 'properties', 'present', '-', 'close-document'] },
+                { id: 'file', label: 'File', glyph: 'file', items: ['new', 'open', 'save', 'save-as', '-', 'export-docx', 'export-pdf', 'print-document', '-', 'page-setup', 'properties', 'present', '-', 'close-document'] },
                 { id: 'edit', label: 'Edit', glyph: 'pencil', items: ['undo', 'redo', '-', 'find', '-', 'json-format', 'language-restart'] },
                 { id: 'insert', label: 'Insert', glyph: 'plus', items: ['link', 'insert', 'table', 'box', '-', 'insert-timestamp', 'insert-date', 'stamp-modified'] }
             ];
             /* Format, where there is formatting to do. */
-            if (formatOffered) { titles.push({ id: 'format', label: 'Format', glyph: 'paragraph', items: ['style', '-', 'bold', 'italic', 'underline', 'strike', 'code', '-', 'highlight', 'superscript', 'subscript', '-', 'color', 'class', '-', 'bullets', 'numbers', 'quote', 'table', '-', 'stylesheet', 'shared-stylesheet', 'custom-shortcodes'] }); }
+            if (formatOffered) { titles.push({ id: 'format', label: 'Format', glyph: 'paragraph', items: ['style', '-', 'bold', 'italic', 'underline', 'strike', 'code', '-', 'highlight', 'superscript', 'subscript', '-', 'color', 'class', '-', 'bullets', 'numbers', 'quote', 'table', '-', 'typography', 'header-footer', '-', 'stylesheet', 'shared-stylesheet', 'custom-shortcodes'] }); }
             return { titles: titles, into: { view: LAYOUT.concat(commonToolbar ? ['-', 'common-toolbar-show', 'common-toolbar-customize'] : []), go: ['go-to-line', '-', 'section-up', 'section-down'] } };
         }
 
