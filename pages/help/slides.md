@@ -31,15 +31,19 @@ What I will say here.
 {{/notes}}
 ```
 
-The front matter's keys are `title`, `author`, `subject`, `keywords`, `lang` and `date`; `theme`, which is `plain` (the site's own look), `paper` or `midnight`; `size`, which is `16:9` or `4:3`; `transition`, which is `none`, `fade` or `slide`; the colours `ink`, `heading`, `muted`, `accent` and `background`; and `stylesheet`, a CSS file of yours. Deck, Properties edits the title, author, subject, keywords, language and date, and any property of your own. It changes the front matter line by line and keeps everything else in it as you wrote it.
+The front matter's keys are `title`, `author`, `subject`, `keywords`, `lang` and `date`; `theme`, which is `plain` (the site's own look), `paper` or `midnight`; `size`, which is `16:9` or `4:3`; `transition`, which is `none`, `fade` or `slide`; the colors `ink`, `heading`, `muted`, `accent` and `background`; and `stylesheet`, a CSS file of yours. Deck, Properties edits the title, author, subject, keywords, language and date, and any property of your own. It changes the front matter line by line and keeps everything else in it as you wrote it.
 
-A slide's first line may be `{{slide:…}}` with the slide's settings. They are `layout`, `background` (a colour), `image` (a picture drawn behind the slide), `color`, `heading` and `accent` (the slide's own colours), `reveal=steps` (its top-level points appear one at a time), `transition`, and `class` (classes from the deck's CSS). Anything between `{{notes}}` and `{{/notes}}` is for the speaker and never shows on the slide.
+A slide's first line may be `{{slide:…}}` with the slide's settings. They are `layout`, `background` (a color), `image` (a picture drawn behind the slide), `color`, `heading` and `accent` (the slide's own colors), `reveal=steps` (its top-level points appear one at a time), `transition`, and `class` (classes from the deck's CSS). Anything between `{{notes}}` and `{{/notes}}` is for the speaker and never shows on the slide.
 
 Everything else is Markdown as the [Editor](/help/editor) draws it, shortcodes included, so a slide can hold pictures, columns, tips and notes, tables, code, Mermaid diagrams, a hosted video, an applet, keys and status labels.
 
 ![Slides in Split view](/static/shots/slides.jpg)
 
 ## Editing
+
+Edit offers Undo, Redo, Cut, Copy, Paste and Select All for the text or visual pane you were using. Clipboard access can require browser permission; a refusal leaves the slide intact and shows keyboard guidance. Undo and Redo apply to text editing on the current slide. Deck structure and deck properties do not yet have Undo.
+
+Edit, Find and Replace (Ctrl+F) searches either Current Slide or Whole Deck. It searches Markdown, including notes and shortcode source, and excludes deck front matter. Results open in the text pane; Visual changes to Split. Match Case, Whole Word and Regular Expression refine the query. Replace All changes each matching slide, with Undo available on each affected slide in Text view. If a pending visual edit shifts the selected occurrence, single Replace asks you to review the refreshed matches first.
 
 Slides opens with the deck's slides down the left, in the filmstrip, and the current slide on its canvas. The site's View menu offers three views.
 
@@ -53,11 +57,11 @@ View, Customize Toolbar edits the common-command row below the topbar. Add, remo
 
 Insert, Picture opens a dialog for a picture. It asks for the picture's address, with Browse for one in your home folder or on the site and Upload for one from your computer, and for what it shows, its largest width and a caption. An uploaded picture goes beside the deck when the deck is saved under `~`, and into `~/Pictures` otherwise. On the canvas, a click on a picture opens the same dialog to change it or remove it.
 
-Page Up and Page Down move between slides, and so do the filmstrip and Slide, Previous Slide and Next Slide. The Slide menu adds, duplicates, deletes and moves slides, and sets the slide's layout (Content, Title, Section, Two Columns, Picture, Quote or Blank), its colours, its style, a background picture and its transition. The toolbar starts with common slide commands and can include the others. Reveal Points One by One marks the slide `reveal=steps`.
+Page Up and Page Down move between slides, and so do the filmstrip and Slide, Previous Slide and Next Slide. The Slide menu adds, duplicates, deletes and moves slides, and sets the slide's layout (Content, Title, Section, Two Columns, Picture, Quote or Blank), its colors, its style, a background picture and its transition. The toolbar starts with common slide commands and can include the others. Reveal Points One by One marks the slide `reveal=steps`.
 
 Open decks sit in tabs across the top once there is more than one. File, New Deck starts a deck, and Save is Ctrl+S; a new deck asks where to go, starting in `~/Documents`. Unsaved changes survive a reload. File, Edit the Whole Deck in the Editor opens the file itself in the Editor.
 
-A right-click on a slide in the filmstrip gives the Slide menu for that slide. On the canvas or the Markdown it gives Format, with the slide's layout and colours after it, and on a tab it gives Close and Close the Others. Shift+F10 and the Menu key open the same menus from the keyboard.
+A right-click on a slide in the filmstrip gives the Slide menu for that slide. On the canvas or the Markdown it gives Format, with the slide's layout and colors after it, and on a tab it gives Close and Close the Others. Shift+F10 and the Menu key open the same menus from the keyboard.
 
 ## Presenting
 
@@ -67,21 +71,21 @@ Show, Presenter Window opens a second browser window with the current slide, the
 
 ![The presenter window](/static/shots/slides-presenter.jpg)
 
-## Colours
+## Colors
 
-Colours come in three layers, and each offers presets as well as any colour you type or pick.
+Colors come in three layers, and each offers presets as well as any color you type or pick.
 
-- Deck, Colours sets the deck's text, headings, secondary text, accent and background over the theme's own. Secondary text is a title slide's subtitle, the captions and the notes, and the accent colours the rule under a heading, links and words coloured `accent`. Each field says what it reaches, and an empty field leaves the theme's colour.
-- Slide, Slide Colours does the same for the current slide.
-- Format, Text Colour colours the selected words with one of the site's six colours or any CSS colour. The words become `{{color:…}}…{{/color}}` in the Markdown and stay editable as rich text on the canvas.
+- Deck, Colors sets the deck's text, headings, secondary text, accent and background over the theme's own. Secondary text is a title slide's subtitle, the captions and the notes, and the accent colors the rule under a heading, links and words colored `accent`. Each field says what it reaches, and an empty field leaves the theme's color.
+- Slide, Slide Colors does the same for the current slide.
+- Format, Text Colour colors the selected words with one of the site's six colors or any CSS color. The words become `{{color:…}}…{{/color}}` in the Markdown and stay editable as rich text on the canvas.
 
 Deck, Theme chooses Plain, Paper or Midnight, Deck, Slide Size chooses widescreen or standard, and Deck, Transition for Every Slide sets the deck's transition.
 
-![The Text Colour dialog](/static/shots/slides-colours.jpg)
+![The Text Colour dialog](/static/shots/slides-colors.jpg)
 
 ## Styles
 
-A deck can carry its own CSS for everything the colour dialogs do not reach.
+A deck can carry its own CSS for everything the color dialogs do not reach.
 
 - `{{style}}` and `{{/style}}` anywhere in the deck hold CSS for every slide, and `{{style:slide}}` holds CSS for the slide it is in. Deck, Add a Style Block starts one.
 - `stylesheet: ~/themes/mine.css` in the front matter uses a CSS file of yours, shared across decks. Deck, Stylesheet File sets it.
@@ -126,6 +130,6 @@ Your files are kept in this browser, under the address you made them at. The des
 
 ## Agents
 
-Every command above is also an action an AI agent can call through the site's MCP endpoint, from reading the deck and going to a slide to adding, changing and colouring slides, saving, presenting, exporting and importing. You pair an agent in [Settings](/help/settings) with a token. The agent works on the page you have open, and the page asks you before it does more than you allowed. The page [For Agents](/agents) has the details.
+An AI agent can read and navigate the deck, add or change slides, set colors, save, present, export and import through the site's MCP endpoint. Clipboard and Find commands are browser editing controls. You pair an agent in [Settings](/help/settings) with a token. The agent works on the page you have open, and the page asks you before it does more than you allowed. The page [For Agents](/agents) has the details.
 
 Your home folder has a sample deck, `~/Howto/Slides.slides.md`, which you can open, change and present, and a sample document about decks, `~/Howto/Slides.md`.

@@ -7,7 +7,7 @@ export {
     drawSelection, dropCursor, rectangularSelection, crosshairCursor, highlightSpecialChars,
     placeholder, Decoration, ViewPlugin, MatchDecorator, WidgetType, hoverTooltip
 } from '@codemirror/view';
-export { defaultKeymap, history, historyField, historyKeymap, indentWithTab, undo, redo } from '@codemirror/commands';
+export { defaultKeymap, history, historyField, historyKeymap, indentWithTab, undo, redo, undoDepth, redoDepth, isolateHistory } from '@codemirror/commands';
 export {
     searchKeymap, highlightSelectionMatches, openSearchPanel, search,
     searchPanelOpen, getSearchQuery, setSearchQuery, SearchQuery,

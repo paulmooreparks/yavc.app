@@ -95,7 +95,7 @@
     var cmReady = null, pvReady = null, mmReady = null;
     function libs() {
         if (window.CM && window.CM.EditorView) { return Promise.resolve(window.CM); }
-        if (!cmReady) { cmReady = loadScript(HERE + 'vendor/codemirror-6.43/codemirror.js?v=6').then(function () { return window.CM; }).catch(function (e) { cmReady = null; throw e; }); }
+        if (!cmReady) { cmReady = loadScript(HERE + 'vendor/codemirror-6.43/codemirror.js?v=7').then(function () { return window.CM; }).catch(function (e) { cmReady = null; throw e; }); }
         return cmReady;
     }
     var pagesReady = null;
@@ -456,6 +456,98 @@
         view.focus();
     }
     /* The ids a toolbar or menu lists, in the kit's order. */
+    /* Commands retain an editor selection while browser clipboard permission
+       is pending. No mutation may cross a document or selection change. */
+    function editing(ctx) {
+        function target() {
+            var identity = ctx.identity(), preview = ctx.preview && ctx.preview();
+            var rich = ctx.rich(), page = ctx.page(), source = ctx.source();
+            function owns() { return ctx.alive() && ctx.identity() === identity; }
+            if (preview) {
+                var selected = window.getSelection(), text = selected && preview.contains(selected.anchorNode) && preview.contains(selected.focusNode) ? selected.toString() : '';
+                return { text: text, empty: !text, current: owns, select: function () { var range = document.createRange(); range.selectNodeContents(preview); var sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(range); } };
+            }
+            if (rich && page) {
+                var selection = page.clipboardSelection();
+                if (!selection) return null;
+                return Object.assign({}, selection, { current: function () { return owns() && ctx.rich() && ctx.page() === page && selection.current(); },
+                    select: function () { page.selectAll(); }, paste: function (data) { return page.paste(data); } });
+            }
+            if (!source) return null;
+            var doc = source.state.doc, sel = source.state.selection;
+            function current() { return owns() && ctx.source() === source && source.state.doc === doc && source.state.selection.eq(sel); }
+            return { text: sel.ranges.map(function (r) { return doc.sliceString(r.from, r.to); }).join('\n'), empty: sel.ranges.every(function (r) { return r.empty; }), current: current,
+                remove: function () { if (current()) source.dispatch(Object.assign(source.state.replaceSelection(''), { userEvent: 'delete.cut', annotations: window.CM.isolateHistory.of('full'), scrollIntoView: true })); },
+                select: function () { source.dispatch({ selection: { anchor: 0, head: doc.length } }); source.focus(); },
+                paste: function (data) { source.dispatch(Object.assign(source.state.replaceSelection(data.text || ''), { userEvent: 'input.paste', annotations: window.CM.isolateHistory.of('full'), scrollIntoView: true })); source.focus(); } };
+        }
+        async function clipboard(name) {
+            var t = target();
+            if (!t || ((name === 'cut' || name === 'paste') && ctx.readOnly())) return;
+            try {
+                if (name === 'select-all') { t.select(); ctx.changed(); return; }
+                var api = navigator.clipboard;
+                if (!api) throw new Error('Clipboard access is unavailable. Use the keyboard shortcut.');
+                if (name === 'paste') {
+                    var data = { text: '' };
+                    async function clipboardText(item, type) {
+                        var blob = await item.getType(type);
+                        if (blob.size > (type === 'text/html' ? 4194304 : 1048576)) throw new Error('The clipboard content is too large to paste.');
+                        return blob.text();
+                    }
+                    if (ctx.rich() && api.read) {
+                        var items = await api.read();
+                        for (var i = 0; i < items.length; i++) {
+                            if (items[i].types.indexOf('text/html') >= 0) data.html = await clipboardText(items[i], 'text/html');
+                            if (items[i].types.indexOf('text/plain') >= 0) data.text = await clipboardText(items[i], 'text/plain');
+                            if (data.html || data.text) break;
+                        }
+                    } else { data.text = await api.readText(); }
+                    if (data.text.length > 262144 || (data.html || '').length > 1048576) throw new Error('The clipboard content is too large to paste.');
+                    if (!t.current()) throw new Error('The document or selection changed. Paste again.');
+                    if (!data.text && !data.html) return;
+                    await t.paste(data);
+                } else {
+                    if (t.empty) return;
+                    if (t.text.length > 262144 || (t.html || '').length > 1048576) throw new Error('The selected content is too large to copy.');
+                    if (t.html && api.write && window.ClipboardItem) {
+                        await api.write([new ClipboardItem({ 'text/plain': new Blob([t.text], { type: 'text/plain' }), 'text/html': new Blob([t.html], { type: 'text/html' }) })]);
+                    } else { await api.writeText(t.text); }
+                    if (name === 'cut') { if (!t.current() || ctx.readOnly()) throw new Error('The document or selection changed. The text was copied but was not removed.'); t.remove(); }
+                }
+                ctx.changed();
+            } catch (err) { if (ctx.alive()) ctx.say((err && err.name === 'NotAllowedError' ? 'Clipboard access was denied. Use the keyboard shortcut or allow clipboard access in the browser.' : err.message || String(err)), true); }
+        }
+        function available(name) {
+            if (!ctx.alive() || (name !== 'copy' && name !== 'select-all' && ctx.readOnly())) return false;
+            var t = target(); return !!t && (name === 'paste' || name === 'select-all' || !t.empty);
+        }
+        function canHistory(name) {
+            if (!ctx.alive() || (ctx.historyReadOnly ? ctx.historyReadOnly() : ctx.readOnly())) return false;
+            var page = ctx.page(), source = ctx.source();
+            if (ctx.unified) {
+                if (page && page.active() && page.pending()) return name === 'undo';
+            } else if (ctx.rich() && page) return page.historyAvailable(name);
+            return !!(source && window.CM && window.CM[name + 'Depth'](source.state));
+        }
+        async function history(name) {
+            if (!canHistory(name)) return;
+            var identity = ctx.identity(), page = ctx.page(), source = ctx.source(), rich = ctx.rich();
+            try {
+                if (page && page.active()) await page.sync();
+                if (!ctx.alive() || (ctx.historyReadOnly ? ctx.historyReadOnly() : ctx.readOnly()) || ctx.identity() !== identity || ctx.source() !== source) return;
+                if (!ctx.unified && rich) { if (ctx.page() === page && page.active()) { page.run(name); await page.sync(); } }
+                else window.CM[name](source);
+                ctx.changed();
+            } catch (err) { if (ctx.alive()) ctx.say(err.message || String(err), true); }
+        }
+        return { clipboard: clipboard, available: available, history: history, canHistory: canHistory,
+            commands: function () { return [['cut', 'Cut', 'Mod-x'], ['copy', 'Copy', 'Mod-c'], ['paste', 'Paste', 'Mod-v'], ['select-all', 'Select All', 'Mod-a']].map(function (item) {
+                return { id: item[0], label: item[1], glyph: item[0] === 'copy' ? 'copy' : undefined, shortcut: window.yavcUtil.shortcut(item[2]), bind: false,
+                    disabled: function () { return !available(item[0]); }, run: function () { return clipboard(item[0]); } };
+            }); } };
+    }
+
     var MENU = {
         format: ['style', '-', 'bold', 'italic', 'underline', 'strike', 'code', '-', 'highlight', 'superscript', 'subscript', '-', 'link', 'color', 'class', '-', 'bullets', 'numbers', 'quote', '-', 'insert', 'table', 'box'],
         toolbar: ['style', 'bold', 'italic', 'underline', 'strike', 'code', 'link', 'color', 'class', 'bullets', 'numbers', 'insert', 'table', 'box']
@@ -567,14 +659,14 @@
     }
     /* Several colours at once, by key: { key, label, value, fallback,
        placeholder }; resolves to the values by key, or null. */
-    function askColours(title, fields) {
-        return dialog(title, pickerRows(fields), [{ id: 'cancel', label: 'Cancel' }, { id: 'ok', label: 'OK', primary: true }],
-            function (api) { wirePickers(api.body); }).then(function (r) {
-            if (r.value !== 'ok') { return null; }
-            var out = {};
-            r.body.querySelectorAll('[data-key]').forEach(function (i) { out[i.getAttribute('data-key')] = i.value.trim(); });
-            return out;
-        });
+    function askColours(title, fields, opts) {
+        opts = opts || {};
+        return ownForm({ title: title, body: pickerRows(fields), signal: opts.signal, current: opts.current,
+            setup: function (api) { wirePickers(api.body); }, submit: function (api) {
+                var out = {};
+                api.body.querySelectorAll('[data-key]').forEach(function (i) { out[i.getAttribute('data-key')] = i.value.trim(); });
+                return out;
+            } });
     }
 
     /* A form in the site's dialog: the kit's own fields as the body, a
@@ -1357,7 +1449,7 @@
         var dlg = null, list = null, errorLine = null;
         function problem(text, focus) { errorLine.textContent = text; errorLine.hidden = false; if (focus) { focus.focus(); } }
         return ownForm({
-            title: opts.title || 'Properties', className: 'md-props', body: html,
+            title: opts.title || 'Properties', className: 'md-props', body: html, signal: opts.signal, current: opts.current,
             setup: function (api) {
                 dlg = api.dialog; list = dlg.querySelector('[data-role="custom"]'); errorLine = dlg.querySelector('[data-role="error"]');
                 api.body.addEventListener('click', function (e) {
@@ -1415,7 +1507,7 @@
         libs: libs, languageServices: languageServices, codeTheme: codeTheme, codeSearch: codeSearch, findBar: findBar, pageView: pageView, mermaid: mermaid, drawMermaid: drawDiagram, loadScript: loadScript,
         FORMATS: FORMATS, STYLES: STYLES, INSERTS: INSERTS, SHORTCODES: SHORTCODES, MENU: MENU, STOCK_CLASSES: STOCK_CLASSES,
         tableCommand: tableCommand, quoteState: quoteState, wordCount: wordCount, readingMinutes: readingMinutes,
-        commands: commands, apply: apply, classesOf: classesOf, insertItem: insertItem, inserts: inserts, textFormat: textFormat, textInsert: textInsert,
+        commands: commands, editing: editing, apply: apply, classesOf: classesOf, insertItem: insertItem, inserts: inserts, textFormat: textFormat, textInsert: textInsert,
         askText: askText, askFields: askFields, askChoice: askChoice, askProperties: askProperties, STOCK: STOCK, askColour: askColour, askColours: askColours, askClass: askClass,
         askFigure: askFigure, editBlock: editBlock, drawBlocks: drawBlocks, drawDiagram: drawDiagram, pictureFor: pictureFor, askShortcode: askShortcode, FORMS: FORMS, boxCommand: boxCommand, BOXES: BOXES, loadImages: loadImages, parseFigure: parseFigure, buildFigure: buildFigure, parseShortcode: parseShortcode,
         _page: null

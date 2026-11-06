@@ -49,11 +49,11 @@ Evidence is retained under `%TEMP%/yavc-editor-ui-review` and `%TEMP%/yavc-typog
 
 | Priority | Finding | Next action |
 | --- | --- | --- |
-| P2 | Edit has no explicit Cut, Copy, Paste or Select All commands. The existing keyboard paths do not provide menu discovery. | Define shared selection/clipboard operations for source and rich editing, including browser permission failures and read-only Copy, then add the commands and shortcuts. |
-| P2 | Undo and Redo availability follows Editor readiness rather than actual history. | Expose documented history availability and account for pending rich-to-source synchronization before changing enabled states. |
+| Completed | Explicit clipboard commands were missing. | The shared adapter now covers source/rich selections, permission failures, stale operations and read-only Copy/Select All. |
+| Completed | History availability followed readiness. | Documented history queries now include pending rich edits, shared source history, keyboard focus and writable Preview. |
 | Planned feature | Word-processor gaps include finer pagination, themes/templates, import and review features. | Keep them in the document roadmap; they are not represented as existing controls that passed this review. |
 
-The review establishes the current UI baseline; it does not declare Editor complete while these findings remain. Clipboard/history affordances are the next Editor UI batch. Recovery beyond the exercised snapshot and existing save-lifecycle tests, native Word rendering, arbitrary third-party styles and assistive-technology user testing remain separate acceptance work.
+The clipboard/history follow-up is implemented and verified in [the editing command review](editing-commands.md). Recovery beyond the exercised snapshot and existing save-lifecycle tests, native Word rendering, arbitrary third-party styles and assistive-technology user testing remain separate acceptance work.
 
 ## Cross-application sequence and consistency
 

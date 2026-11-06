@@ -331,7 +331,7 @@
                         /* In Split, the page follows the text. */
                         if (u.docChanged && tabs[active] === tab && !visual.fromVisual) { textChangedForPage(); }
                         /* The paragraph style shows the line the cursor is on. */
-                        if (u.selectionSet || u.docChanged) { showPos(); showCount(); if (tab.lang === 'markdown') { commandsChanged(); } }
+                        if (u.selectionSet || u.docChanged) { showPos(); showCount(); commandsChanged(); }
                         if (tabs[active] === tab && (u.selectionSet || u.docChanged ||
                             CM.searchPanelOpen(u.state) !== CM.searchPanelOpen(u.startState))) { keep(); }
                     })
@@ -1180,6 +1180,9 @@
            CodeMirror's: the formatting, the styles, Save and Find. */
         function pageKeys() {
             var keys = [];
+            [['Mod-z', 'undo'], ['Mod-y', 'redo'], ['Mod-Shift-z', 'redo']].forEach(function (item) {
+                keys.push({ key: item[0], run: function () { editing().history(item[1]); return true; } });
+            });
             FORMATS.forEach(function (f) { if (f[3]) { keys.push({ key: f[3], run: function () { applyFormat(f[0]); return true; } }); } });
             STYLES.forEach(function (st) { keys.push({ key: st[2], run: function () { applyFormat(st[0]); return true; } }); });
             keys.push({ key: 'Mod-s', run: function () { save(); return true; } });
@@ -1486,7 +1489,24 @@
            Preview, and in Split to whichever has the keyboard, the text when
            it does and the page otherwise. A toolbar button keeps the
            keyboard where it was, so Split can still tell. */
-        function formatsThePage() { return pageActive() && (viewMode === 'visual' || viewMode === 'document' || (viewMode === 'split' && !(view && view.hasFocus))); }
+        var editingCommands = null, editingPane = 'visual';
+        root.addEventListener('focusin', function (e) {
+            if (e.target.closest('.cm-editor')) editingPane = 'text';
+            else if (e.target.closest('.ProseMirror')) editingPane = 'visual';
+            commandsChanged();
+        });
+        document.addEventListener('selectionchange', function () { if (readsAsPreview()) commandsChanged(); }, { signal: styleLifetime.signal });
+        function formatsThePage() { return pageActive() && (viewMode === 'visual' || viewMode === 'document' || (viewMode === 'split' && editingPane !== 'text')); }
+        function editing() {
+            if (!editingCommands && window.yavcMdEditor) editingCommands = window.yavcMdEditor.editing({
+                source: function () { return view; }, page: function () { return visual.api; }, rich: formatsThePage,
+                preview: function () { return readsAsPreview() ? el.page : null; }, unified: true,
+                identity: current, alive: function () { return !destroyed && !!view && !!current(); },
+                historyReadOnly: function () { var t = current(); return !t || !!t.readOnly; },
+                readOnly: function () { var t = current(); return !t || !!t.readOnly || readsAsPreview(); }, say: say, changed: commandsChanged
+            });
+            return editingCommands;
+        }
         function applyFormat(name) { window.yavcMdEditor.apply(name, editCtx()); }
 
         /* The insert menu lists the shortcodes, from the server's table, in
@@ -1907,8 +1927,8 @@
             'save': save,
             'save-as': saveAs,
             'close-document': function () { if (current()) { closeTab(active); } },
-            'undo': function () { CM.undo(view); },
-            'redo': function () { CM.redo(view); },
+            'undo': function () { return editing().history('undo'); },
+            'redo': function () { return editing().history('redo'); },
             'find': openFind,
             'go-to-line': goToLine,
             'toggle-files': toggleExplorer,
@@ -2060,8 +2080,8 @@
                    menu bar's ribbon (PUDL 0.79.0), its words its tooltip. */
                 cmd('export-docx', 'Download as Word', 'download', function () { return downloadDocument('docx'); }, { disabled: function () { return !ready || !tab || tab.lang !== 'markdown'; } }),
                 cmd('export-pdf', 'Download as PDF', 'download', function () { return downloadDocument('pdf'); }, { disabled: function () { return !ready || !tab || tab.lang !== 'markdown'; } }),
-                cmd('undo', 'Undo', 'yavc-undo', function () { CM.undo(view); }, { builtIn: 'Mod-z', glyphOnly: true }),
-                cmd('redo', 'Redo', 'yavc-redo', function () { CM.redo(view); }, { builtIn: 'Mod-y', glyphOnly: true }),
+                cmd('undo', 'Undo', 'yavc-undo', function () { return editing().history('undo'); }, { builtIn: 'Mod-z', glyphOnly: true, disabled: function () { return !editing() || !editing().canHistory('undo'); } }),
+                cmd('redo', 'Redo', 'yavc-redo', function () { return editing().history('redo'); }, { builtIn: 'Mod-y', glyphOnly: true, disabled: function () { return !editing() || !editing().canHistory('redo'); } }),
                 cmd('find', 'Find and Replace…', 'search', openFind, { builtIn: 'Mod-f' }),
                 cmd('json-format', 'Format JSON', 'code', function () { if (lsp) { lsp.format(view); } }, { shortcut: 'Shift+Alt+F', hidden: function () { return !tab || tab.lang !== 'json'; }, disabled: function () { return !editable || !lsp; } }),
                 cmd('language-restart', 'Restart Language Assistance', 'reload', function () { if (lsp) { lsp.restart(); view.dispatch({ effects: lspComp.reconfigure(languageAssistance(current())) }); } }, { hidden: function () { return !tab || tab.lang !== 'json'; }, disabled: function () { return !ready || !lsp; } }),
@@ -2136,7 +2156,7 @@
                     /* A view the reader chooses is the tab's from then on. */
                     run: function () { var t = current(); if (t) { t.view = v[0]; } setView(v[0]); } });
             });
-            return table.concat(commonToolbar ? commonToolbar.commands() : [], [{ id: 'view-mode', label: 'View', glyph: 'panel', toolbarChoice: 'ed-view', toolbarPriority: 50, items: ['view-document', 'view-visual', 'view-text', 'view-split', 'view-preview'] }]);
+            return table.concat(editing() ? editing().commands() : [], commonToolbar ? commonToolbar.commands() : [], [{ id: 'view-mode', label: 'View', glyph: 'panel', toolbarChoice: 'ed-view', toolbarPriority: 50, items: ['view-document', 'view-visual', 'view-text', 'view-split', 'view-preview'] }]);
         }
 
         /* The toolbar: what is used most stays named longest, and the view
@@ -2167,7 +2187,7 @@
             var titles = [
                 { label: 'Editor', glyph: 'document', items: window.pcAppletIdentity(root, ['key-bindings']) },
                 { id: 'file', label: 'File', glyph: 'file', items: ['new', 'open', 'save', 'save-as', '-', 'export-docx', 'export-pdf', 'print-document', '-', 'properties', 'present', '-', 'close-document'] },
-                { id: 'edit', label: 'Edit', glyph: 'pencil', items: ['undo', 'redo', '-', 'find', '-', 'json-format', 'language-restart'] },
+                { id: 'edit', label: 'Edit', glyph: 'pencil', items: ['undo', 'redo', '-', 'cut', 'copy', 'paste', '-', 'select-all', '-', 'find', '-', 'json-format', 'language-restart'] },
                 { id: 'insert', label: 'Insert', glyph: 'plus', items: ['link', 'insert', 'table', 'box', '-', 'insert-timestamp', 'insert-date', 'stamp-modified'] }
             ];
             /* Format, where there is formatting to do. */
