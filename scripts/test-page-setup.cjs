@@ -56,14 +56,20 @@ async function setup(page) { await command(page,'page-setup'); await page.locato
    await page.setViewportSize({width:390,height:844});await page.screenshot({path:path.join(evidence,engine+'-narrow.png')});
    assert.equal(await page.locator('.md-page-setup').evaluate(n=>n.scrollWidth>n.clientWidth+1),false);
    await measure(page,'all').scrollIntoViewIfNeeded();await page.screenshot({path:path.join(evidence,engine+'-narrow-margins.png')});await close(page);await page.setViewportSize({width:1400,height:1000});
-   phase='layout retention';
+   phase='distinct views and page settings retention';
    for(const mode of ['text','preview','visual','text','visual','split','preview','document']) {
     await action(page,'view',{mode});if(mode==='text')continue;
-    await page.waitForFunction(()=>+document.querySelector('[data-page-count]')?.dataset.pageCount>1);
-    assert.equal(await page.locator('.doc-paginated').evaluate(n=>n.getBoundingClientRect().width),816);
+    if(mode==='document') {
+     await page.waitForFunction(()=>+document.querySelector('[data-page-count]')?.dataset.pageCount>1);
+     assert.equal(await page.locator('.doc-paginated').evaluate(n=>n.getBoundingClientRect().width),816);
+    } else {
+     assert.equal(await page.locator('.doc-paginated').count(),0);
+     assert.equal(await page.locator('.doc-page-gap').count(),0);
+     assert.equal(await page.locator('.ed-document').count(),0);
+    }
     assert.equal(await read(page),source);
    }
-   await page.screenshot({path:path.join(evidence,engine+'-preview-pages.png')});
+   await page.screenshot({path:path.join(evidence,engine+'-document-restored.png')});
    await action(page,'new',{path:'~/flow.md',text:'# Ordinary Markdown\n\nWrap to the pane.'});await action(page,'view',{mode:'visual'});
    assert.equal(await page.locator('.doc-paginated').count(),0);await action(page,'view',{mode:'preview'});assert.equal(await page.locator('.doc-paginated').count(),0);
    phase='stale dialog';await setup(page);await action(page,'set-text',{text:'# Replaced while dialog was open.'});await apply(page);

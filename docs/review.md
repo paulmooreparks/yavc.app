@@ -393,6 +393,10 @@ A real click on Paper Size reproduced the reported dialog dismissal in installed
 
 The view-selector, dropdown-click, complete Page Setup and shared-toolbar fixtures pass Chromium, Firefox and WebKit. The shared-toolbar fixture covers Editor, Slides and Diagrams, including customization, ribbon visibility, legacy hosts and disposal. It now targets the separately customized Split button and verifies that every displayed Split control reflects the selected state. The full repository gate passes, and independent PUDL source review has no remaining findings. These checks use disposable headless browser contexts; they do not claim native desktop interaction or a new installation.
 
+## Distinct Document and Visual views, 2026-11-06
+
+Physical layout now depends on Document mode alone. The earlier `.docs.md` rule made Visual and Document indistinguishable and has been superseded. Visual, Split and Preview use fluid layout while retaining paper settings in the source. The regression fixtures switch through Text and every rendered mode, check that fluid modes remove page geometry and gaps, and return to Document to verify the original page width and pagination without reopening the file. The existing document fixture also checks rich editing, Undo and print pagination. Page Setup, document pagination/printing and toolbar/default/navigation fixtures pass Chromium, Firefox and WebKit. Independent source review found no remaining issues.
+
 ## Items for other projects
 
 These problems belong to PUDL or to applets that are maintained elsewhere, so they were reported instead of patched here.

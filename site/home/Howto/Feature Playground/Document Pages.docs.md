@@ -16,7 +16,7 @@ Choose **File, Page Setup**. Search for A4, select it, then change the orientati
 
 Choose **Custom Size** to enter your own Width and Height. The margin presets provide common starting points, and the linked **All Sides** field sets one margin everywhere.
 
-Document, Visual, Split and Preview keep this document's physical page width. Try Text, Preview and Visual in sequence; the paper layout returns after Text. Ordinary `.md` files wrap to the pane in their rendered views.
+Document shows this document's physical pages. Visual, Split and Preview wrap to the pane width. Try Text, Preview and Visual, then return to Document; the original paper size and margins return without reopening the file.
 
 ## Text, lists and tables
 

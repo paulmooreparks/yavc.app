@@ -74,6 +74,8 @@ Three gaps matter most. The Editor does not apply a document's `{{style}}` CSS a
 
 31. **The file type determines whether Visual and Preview are paginated** (2026-11-06, Paul reported losing layout after Text, Preview and Visual). Decision 2's separate Document mode alone did not match the expected behavior for `.docs.md` files. Every rendered view of that file type now uses physical geometry. Text remains the source, and switching back restores the layout without closing the file. Preview measures a read-only flow with noncontent gaps, uses the same planner as the rich editor, and retains source positions for Outline navigation. Resize and font/image completion trigger remeasurement, and changing views disposes the previous observer. Ordinary Markdown still wraps to the pane in Visual, Split and Preview; choosing Document gives it explicit sheets. No layout nodes enter Markdown or Undo.
 
+32. **Document mode alone applies physical layout** (2026-11-06, Paul). This supersedes decision 31. Visual, Split and Preview flow to the available pane width for `.docs.md` and ordinary Markdown alike. Document remains the default where supported and restores the authored dimensions and margins after visiting any other mode. View changes do not alter page properties, print settings or Office export settings.
+
 ## What a document looks like
 
 ```markdown

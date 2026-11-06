@@ -973,7 +973,7 @@
         var visual = { api: null, front: null, fromVisual: false, timer: 0, loading: null, gen: 0 };
         var pageSettings = null, printFrame = null, previewPages = null;
         function readsAsPreview() { var t = current(); return viewMode === 'preview' || !!(t && t.readOnly && viewMode !== 'text'); }
-        function pagedView(mode) { var t = current(); return mode !== 'text' && (mode === 'document' || !!(t && /\.docs\.md$/i.test(t.path || t.name || ''))); }
+        function pagedView(mode) { return mode === 'document'; }
         function pageLayout(layout) {
             el.pages.textContent = layout.count + (layout.count === 1 ? ' page' : ' pages');
             pageNotice(layout.oversized ? 'A block is taller than the page. Shorten it or enlarge the page before printing. Line-level pagination is not available yet.' : '');
