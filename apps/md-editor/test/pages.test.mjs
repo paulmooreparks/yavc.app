@@ -7,6 +7,16 @@ const context = vm.createContext({ window: {} });
 vm.runInContext(readFileSync(new URL('../paper-sizes.js', import.meta.url), 'utf8'), context);
 vm.runInContext(readFileSync(new URL('../pages.js', import.meta.url), 'utf8'), context);
 const P = context.window.yavcDocumentPages;
+vm.runInContext(readFileSync(new URL('../document-settings.js', import.meta.url), 'utf8'), context);
+const S = context.window.yavcDocumentSettings;
+
+test('document typography refuses CSS injection and validates physical limits', () => {
+    assert.equal(S.typography({size:'12pt',spacing:'1.6','paragraph-spacing':'8pt'}).size,12);
+    assert.match(S.typeCSS({font:'Times New Roman','heading-font':'Arial',size:'12pt'}),/--doc-font:"Times New Roman"/);
+    for (const props of [{font:'x; color:red'},{font:'url(bad)'},{size:'999pt'},{spacing:'0.5'},{spacing:'NaN'},{'paragraph-spacing':'-1pt'}]) { assert.throws(()=>S.typography(props)); }
+    assert.equal(S.properties({entries:[{key:'header',kind:'complex',mapping:{left:'{title}'}}]}).header.left,'{title}');
+    assert.throws(()=>S.properties({entries:[{key:'header',kind:'complex'}]}));
+});
 
 test('physical page settings share unit conversion, margin expansion and bounded custom sizes', () => {
     const letter = P.settings({page:'letter',margins:'1in 2cm 12pt 8px',orientation:'landscape'});

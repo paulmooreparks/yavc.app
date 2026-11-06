@@ -72,12 +72,13 @@
         return { gaps: gaps, count: sheet + 1, oversized: oversized };
     }
     function blocksOf(dom, positions) {
+        var host = dom.closest('.doc-paginated'), scale = host ? Number(host.style.zoom) || 1 : 1;
         var offset = 0, top = dom.getBoundingClientRect().top, blocks = [];
         Array.from(dom.children).forEach(function (node) {
-            if (node.classList.contains('doc-page-gap')) { offset += node.getBoundingClientRect().height; return; }
+            if (node.classList.contains('doc-page-gap')) { offset += node.getBoundingClientRect().height / scale; return; }
             var rect = node.getBoundingClientRect(), css = getComputedStyle(node);
-            blocks.push({ node: node, pos: positions ? positions[blocks.length] : 0, top: rect.top - top - offset,
-                height: rect.height + Math.max(0, parseFloat(css.marginBottom) || 0),
+            blocks.push({ node: node, pos: positions ? positions[blocks.length] : 0, top: (rect.top - top) / scale - offset,
+                height: rect.height / scale + Math.max(0, parseFloat(css.marginBottom) || 0),
                 breakBefore: /^(page|always)$/.test(css.breakBefore) || !!(blocks.length && (blocks[blocks.length - 1].node.matches('.sc-page-break') || blocks[blocks.length - 1].node.querySelector('.sc-page-break') || /^(page|always)$/.test(getComputedStyle(blocks[blocks.length - 1].node).breakAfter))) });
         });
         return blocks;
@@ -100,6 +101,7 @@
                     var d = surface(o.host, page); o.host.style.minHeight = (layout.count * (d.height + GAP) - GAP) + 'px'; o.host.setAttribute('data-page-count', layout.count);
                     o.changed(layout);
                     if (next !== signature) {
+                        if (window.yavcDocumentSettings) { window.yavcDocumentSettings.decorate(o.host, page, layout.count); }
                         signature = next; o.flow.querySelectorAll(':scope > .doc-page-gap').forEach(function (node) { node.remove(); });
                         layout.gaps.forEach(function (gap) { o.flow.insertBefore(spacer(gap.height), blocks[gap.index].node); });
                     }
@@ -131,6 +133,7 @@
                     if (o.paginated) { o.paginated(layout); }
                     if (next !== signature) {
                         signature = next;
+                        if (window.yavcDocumentSettings) { window.yavcDocumentSettings.decorate(o.page, page, layout.count); }
                         var widgets = layout.gaps.map(function (gap) { return PM.Decoration.widget(gap.pos, function () { return spacer(gap.height); }, { side: -1, key: gap.pos + ':' + gap.height, ignoreSelection: true }); });
                         v.dispatch(v.state.tr.setMeta(key, PM.DecorationSet.create(v.state.doc, widgets)).setMeta('addToHistory', false));
                     }

@@ -100,7 +100,7 @@
     }
     var pagesReady = null;
     function pages() {
-        if (!pagesReady) { pagesReady = loadScript(HERE + 'paper-sizes.js' + STAMP).then(function () { return loadScript(HERE + 'pages.js' + STAMP); }).then(function () { return window.yavcDocumentPages; }).catch(function (err) { pagesReady = null; throw err; }); }
+        if (!pagesReady) { pagesReady = loadScript(HERE + 'paper-sizes.js' + STAMP).then(function () { return loadScript(HERE + 'pages.js' + STAMP); }).then(function () { return loadScript(HERE + 'document-settings.js' + STAMP); }).then(function () { return window.yavcDocumentPages; }).catch(function (err) { pagesReady = null; throw err; }); }
         return pagesReady;
     }
     var pageSetupReady = null;

@@ -1,4 +1,11 @@
 /* Copyright 2026 Paul Parks. SPDX-License-Identifier: Apache-2.0 */
+.md-document-dialog { width: min(38rem, calc(100vw - 2rem)); }
+.md-document-dialog .dialog-body { max-height: 72svh; overflow: auto; }
+.md-document-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
+.md-furniture-fields { min-width: 0; margin-block: var(--space-3); }
+.md-furniture-fields .md-document-options { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 480px) { .md-furniture-fields .md-document-options { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 480px) { .md-document-options { grid-template-columns: minmax(0, 1fr); } }
 .md-style-dialog.dialog { width: min(60rem, calc(100vw - 2rem)); max-width: calc(100vw - 2rem); }
 .md-style-code { height: min(45vh, 26rem); min-height: 12rem; min-width: 0; }
 /* Glyph previews keep their descriptions visible as the dialog narrows. */

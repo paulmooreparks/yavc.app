@@ -34,10 +34,11 @@ type Entry struct {
 	// list of scalars is edited in a dialog; anything else (a nested
 	// mapping, a block of text over several lines, an anchor, an alias or
 	// a tag) is shown and left as written.
-	Kind     string `json:"kind"`
-	Editable bool   `json:"editable"`
-	line     int    // first line, 1-based, within the block's body
-	end      int    // last line, 1-based
+	Kind     string            `json:"kind"`
+	Editable bool              `json:"editable"`
+	Mapping  map[string]string `json:"mapping"`
+	line     int               // first line, 1-based, within the block's body
+	end      int               // last line, 1-based
 }
 
 // Front is a document's front matter as read.
@@ -175,6 +176,23 @@ func Read(text string) Front {
 			e.Editable = keyRe.MatchString(k.Value) && splittable
 		default:
 			e.Value = "(several lines)"
+			if v.Kind == yaml.MappingNode && v.Style&yaml.TaggedStyle == 0 {
+				parts := map[string]string{}
+				valid := true
+				for j := 0; j+1 < len(v.Content); j += 2 {
+					name, value := v.Content[j], v.Content[j+1]
+					if name.Kind != yaml.ScalarNode || value.Kind != yaml.ScalarNode || name.Anchor != "" || value.Anchor != "" || name.Style&yaml.TaggedStyle != 0 || value.Style&yaml.TaggedStyle != 0 || (name.Value != "left" && name.Value != "center" && name.Value != "right") {
+						valid = false
+					}
+					if _, duplicate := parts[name.Value]; duplicate {
+						valid = false
+					}
+					parts[name.Value] = value.Value
+				}
+				if valid {
+					e.Mapping = parts
+				}
+			}
 		}
 		f.Entries = append(f.Entries, e)
 	}
@@ -317,6 +335,12 @@ func list(key, v string) ([]string, error) {
 // matter; the front matter is made if there was none, and taken out if no
 // property is left and it held nothing else.
 func Set(text string, set map[string]*string, order []string) (string, error) {
+	return SetWithMappings(text, set, nil, order)
+}
+
+// SetWithMappings also edits bounded header/footer alignment mappings.
+// Other complex YAML remains protected from dialog changes.
+func SetWithMappings(text string, set map[string]*string, mappings map[string]map[string]string, order []string) (string, error) {
 	f := Read(text)
 	if f.Problem != "" {
 		return "", errors.New(f.Problem)
@@ -330,6 +354,9 @@ func Set(text string, set map[string]*string, order []string) (string, error) {
 		for k := range set {
 			keys = append(keys, k)
 		}
+		for k := range mappings {
+			keys = append(keys, k)
+		}
 	}
 	type edit struct {
 		from, to int
@@ -339,12 +366,45 @@ func Set(text string, set map[string]*string, order []string) (string, error) {
 	var added []string
 	for _, k := range keys {
 		v, asked := set[k]
-		if !asked {
+		mapping, mapped := mappings[k]
+		if !asked && !mapped {
 			continue
 		}
 		e, has := byKey[k]
-		if has && !e.Editable {
+		if has && !e.Editable && !(mapped && e.Mapping != nil) {
 			return "", fmt.Errorf("%s is written in a form this dialog does not change; edit it in the text", k)
+		}
+		if mapped {
+			if asked || (k != "header" && k != "footer") {
+				return "", errors.New("only header and footer accept alignment mappings")
+			}
+			written := []string{k + ":"}
+			for name := range mapping {
+				if name != "left" && name != "center" && name != "right" {
+					return "", errors.New("header and footer positions are left, center and right")
+				}
+			}
+			for _, name := range []string{"left", "center", "right"} {
+				if value, exists := mapping[name]; exists {
+					if err := Check(k, value); err != nil {
+						return "", err
+					}
+					encoded, err := scalar(k, value)
+					if err != nil {
+						return "", err
+					}
+					written = append(written, "  "+name+": "+encoded)
+				}
+			}
+			if len(written) == 1 {
+				written = []string{k + ": {}"}
+			}
+			if has {
+				edits = append(edits, edit{e.line, e.end, written})
+			} else {
+				added = append(added, written...)
+			}
+			continue
 		}
 		if v == nil {
 			if has {
@@ -420,8 +480,38 @@ func Set(text string, set map[string]*string, order []string) (string, error) {
 	} else {
 		out = "---\n" + strings.Join(lines, "\n") + "\n---\n" + bodyText
 	}
-	if err := verify(f, Read(out), set); err != nil {
+	after := Read(out)
+	before := f
+	before.Entries = nil
+	for _, entry := range f.Entries {
+		if _, changed := mappings[entry.Key]; !changed {
+			before.Entries = append(before.Entries, entry)
+		}
+	}
+	scalarAfter := after
+	scalarAfter.Entries = nil
+	for _, entry := range after.Entries {
+		if _, changed := mappings[entry.Key]; !changed {
+			scalarAfter.Entries = append(scalarAfter.Entries, entry)
+		}
+	}
+	if err := verify(before, scalarAfter, set); err != nil {
 		return "", err
+	}
+	for key, expected := range mappings {
+		found := false
+		for _, entry := range after.Entries {
+			if entry.Key == key {
+				found = entry.Mapping != nil && len(entry.Mapping) == len(expected)
+				for name, value := range expected {
+					got, exists := entry.Mapping[name]
+					found = found && exists && got == value
+				}
+			}
+		}
+		if !found {
+			return "", errors.New("header/footer mapping did not round trip")
+		}
 	}
 	return out, nil
 }
