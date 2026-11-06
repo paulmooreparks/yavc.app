@@ -92,6 +92,8 @@ Each decision is dated and numbered so that later documents and cards can refer 
 
 46. **Exports carry explicit document paper colors** (2026-11-05). Export preparation starts with white paper and neutral dark ink, independently of the app theme. Shared and inline document styles override those defaults in the established order. Both writers serialize the resolved paper color instead of relying on the reader's default. `docs/docs-design.md`, decision 27, records the color boundary and regression evidence.
 
+47. **Editor gains a paginated Document view** (2026-11-06). Documents remain Markdown with one editing history. Physical page settings are shared by the editable page layout, printing and Office exports. The first stage breaks between whole blocks and refuses printing of oversized blocks; finer pagination and document furniture remain later work. Decisions 28 and 29 in `docs/docs-design.md` define the implementation boundaries.
+
 ## Addresses
 
 `yavc.app` serves the desktop, which is windowed only (decision 26). A window's content comes from `/win/{key}`. `yavc.app/{slug}` opens the desktop with that application's window, or draws a site page as a page of its own. `{slug}.yavc.app` serves the same application standalone, and it is the application's page form. The engine answers both from one deployment: a wildcard DNS record points every subdomain at it, and the engine reads the host header to choose the standalone layout for the application whose slug matches. A subdomain whose slug matches no application redirects to the desktop.

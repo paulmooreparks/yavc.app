@@ -747,6 +747,7 @@ var schemaCache = null;
       return [
         listShortcuts(schema),
         taskBoxes(schema),
+        window.yavcDocumentPages.plugin(PM, o),
         suggestionPlugin(),
         findPlugin(),
         slashMenu(schema),
@@ -1547,6 +1548,7 @@ var schemaCache = null;
       paste: pasteContent, selectAll: selectAll,
       focus: function () { if (view) view.focus(); },
       // The page's editable element, for the Edit menu's Cut and Copy.
+      repaginate: function () { if (view) { view.dispatch(view.state.tr.setMeta('addToHistory', false)); } },
       element: function () { return view ? view.dom : null; },
       // The Editor's find bar, on the page.
       find: find, goToMatch: goToMatch, matchText: matchText, replaceMatch: replaceMatch, replaceAllMatches: replaceAllMatches, selectionText: selectionText,

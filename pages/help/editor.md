@@ -160,3 +160,11 @@ Your files are kept in this browser. Settings are shared by every address of the
 An AI agent paired in [Settings](/help/settings) can open, read, change, search, save and close documents here through the site's MCP endpoint, as you would. The page [For Agents](/agents) has the details.
 
 Your home folder has a sample document, `~/Howto/Editor.md`, which uses many of the things above and is there to open and change.
+
+## Document pages
+
+Files ending in `.docs.md` open in Document view. Choose View, Document for any Markdown file. The page has a fixed physical width, so narrow windows scroll horizontally; Visual still wraps to the pane. Page gaps are part of the view and never enter your source. You can edit, select and undo across them.
+
+File, Page Setup changes the page size, orientation and margins as one undoable edit. Use `a4`, `letter`, `legal` or a custom size such as `210mm x 297mm`. Margins accept one to four lengths in top, right, bottom, left order, with `pt`, `in`, `cm`, `mm` or `px` units. These settings also apply to Word and PDF exports.
+
+File, Print measures the export content after removing excluded notes and opens the browser print dialog. Select matching paper, use 100% scaling and turn off the browser's headers and footers. Browser Save as PDF uses this page layout; Download as PDF uses the existing PDF writer and can wrap lines differently. Print supports the same bounded content and local pictures as Office export. Whole lists, tables and boxes stay together. If a block is taller than a page, shorten it or enlarge the page before printing. Headers, footers and line-level pagination are not available yet.
