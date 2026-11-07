@@ -73,6 +73,8 @@ The status bar shows the number of words in a Markdown file, and for the text yo
 
 ## Finding and moving around
 
+Edit offers Cut, Copy, Paste and Select All for the pane you were editing. Read-only files and Preview allow Copy and Select All. The browser may ask for clipboard access; if it refuses, use the normal keyboard shortcut. A delayed clipboard operation cannot remove or paste text after you switch documents or change the selection. Undo and Redo show whether history is available, and rich-view keyboard Undo uses the same document history as the menu.
+
 Edit, Find and Replace (Ctrl+F) opens a bar with the two fields, Match Case, Whole Word and Regular Expression, and Replace and Replace All. It works on the Markdown in Text view and on the page in Visual view. Go, Go to Line (Ctrl+Alt+G) moves to a line by its number.
 
 A right-click on the text or the page gives Undo, Redo, Find and the Format menu. On a tab it gives Close and Close the Others, and on a file in the pane it gives Open. Shift+F10 and the Menu key open the same menus from the keyboard.
@@ -171,4 +173,4 @@ Document view displays physical pages. Visual, Split and Preview wrap to the pan
 
 Format, Page Setup changes the paper, orientation and margins as one undoable edit. Search the grouped standard sizes, or choose Custom Size and enter Width and Height. Editing either dimension also selects Custom Size. Units can be inches, millimeters, centimeters or points, and changing units preserves the measurements. Choose a margin preset, enter a single margin with Use the Same Margin on All Sides, or turn that off and edit Top, Bottom, Left and Right separately. These settings also apply to Word and PDF exports. The source still accepts one to four margin lengths in top, right, bottom, left order, including `px` lengths.
 
-File, Print measures the export content after removing excluded notes and opens the browser print dialog. Select matching paper, use 100% scaling and turn off the browser's headers and footers. Browser Save as PDF uses this page layout; Download as PDF uses the existing PDF writer and can wrap lines differently. Print supports the same bounded content and local pictures as Office export. Whole lists, tables and boxes stay together. If a block is taller than a page, shorten it or enlarge the page before printing. Headers, footers and line-level pagination are not available yet.
+File, Print measures the export content after removing excluded notes and opens the browser print dialog. Select matching paper, use 100% scaling and turn off the browser's headers and footers. Browser Save as PDF uses this page layout; Download as PDF uses the existing PDF writer and can wrap lines differently. Print supports the same bounded content and local pictures as Office export. Whole lists, tables and boxes stay together. If a block is taller than a page, shorten it or enlarge the page before printing. Line-level pagination is not available yet.

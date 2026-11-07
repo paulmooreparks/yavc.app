@@ -57,10 +57,13 @@
             function finish(value) {
                 if (done) { return; }
                 done = true;
+                if (o.signal) { o.signal.removeEventListener('abort', abort); }
                 if (dlg.open) { dlg.close(); }
                 resolve({ value: value, body: body });
                 setTimeout(function () { dlg.remove(); if (opener && opener.isConnected && opener.focus && !document.querySelector('dialog[open]')) { try { opener.focus({ preventScroll: true }); } catch (err) { } } }, 0);
             }
+            function abort() { finish(null); }
+            if (o.signal) { if (o.signal.aborted) { abort(); return; } o.signal.addEventListener('abort', abort, { once: true }); }
             dlg.addEventListener('click', function (e) { var b = e.target.closest('button[data-choice]'); if (b && dlg.contains(b)) { finish(b.getAttribute('data-choice')); } });
             dlg.addEventListener('keydown', function (e) {
                 if (e.key !== 'Tab' || e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) { return; }
@@ -102,7 +105,7 @@
             (opts.help ? '<p class="form-help" id="' + id + '-help">' + esc(opts.help) + '</p>' : '') +
             '<p class="form-error" data-role="error" hidden></p></div>';
         return open({
-            title: title, body: body, className: opts.className,
+            title: title, body: body, className: opts.className, signal: opts.signal,
             buttons: [{ id: 'cancel', label: 'Cancel' }, { id: 'ok', label: opts.okLabel || 'OK', primary: true }],
             check: function (v, b) {
                 if (v !== 'ok' || !opts.validate) { return null; }

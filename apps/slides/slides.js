@@ -190,6 +190,7 @@
         root.innerHTML =
             '<div class="deck-toolbar-slot" data-toolbar-slot></div>' +
             '<div class="tablist doc-tabs deck-tabs" role="tablist" aria-label="Open Decks" data-role="tabs" hidden></div>' +
+            '<div class="deck-find" data-role="find-place" hidden></div>' +
             '<div class="deck-main" data-role="main">' +
               '<div class="deck-film" data-role="film" role="listbox" aria-label="Slides"></div>' +
               '<div class="deck-work split" data-role="work" data-split-pane="first">' +
@@ -205,6 +206,7 @@
         root.addEventListener('focusin', function (e) {
             if (e.target.closest('.cm-editor')) { historyPane = 'text'; }
             else if (e.target.closest('.ProseMirror')) { historyPane = 'visual'; }
+            commandsChanged();
         });
         var el = { film: q('[data-role="film"]'), work: q('[data-role="work"]'), stagebox: q('[data-role="stagebox"]'), stage: q('[data-role="stage"]'), canvas: q('[data-role="canvas"]'), slide: q('[data-role="slide"]'),
             body: q('[data-role="body"]'), notesView: q('[data-role="notes-view"]'), split: q('[data-role="split"]'), text: q('[data-role="text"]'), tabsEl: q('[data-role="tabs"]'), floatBar: q('[data-role="float-bar"]'), main: q('[data-role="main"]'), where: q('[data-role="where"]'), message: q('[data-role="message"]'), presenter: q('[data-role="presenter"]'), main: q('[data-role="main"]') };
@@ -332,7 +334,7 @@
                 draw: function (target, html, diagrams) {
                     window.yavcMdEditor.drawBlocks(target, [{ line: 0, html: html, diagrams: diagrams }], { pictures: picturesHost() });
                 },
-                keys: function () { return [{ key: 'Mod-s', run: function () { save(); return true; } }]; },
+                keys: function () { return [{ key: 'Mod-s', run: function () { save(); return true; } }, { key: 'Mod-f', run: function () { openFind(); return true; } }]; },
                 say: say,
                 changed: function () { commandsChanged(); },
                 failed: function (text) { say(text, true); setMode('text'); }
@@ -353,6 +355,7 @@
             drawThumb(at);
             drawNotes();
             commandsChanged();
+            if (slideSearch) slideSearch.changed();
             keep();
         }
         function scheduleRedraw() { clearTimeout(redrawTimer); redrawTimer = setTimeout(function () { if (!pageActive()) { drawSlide(); } }, 250); }
@@ -398,9 +401,9 @@
             if (cmReady) { return cmReady; }
             cmReady = kit().then(function (K) { return K.macros(); }).then(codeMirror).then(function (CM) {
                 if (destroyed) { return null; }
-                var ext = [CM.history(), CM.drawSelection(), CM.highlightActiveLine(), CM.keymap.of([].concat(CM.defaultKeymap, CM.historyKeymap, [CM.indentWithTab])),
+                var ext = [CM.history(), CM.drawSelection(), CM.highlightActiveLine(), CM.keymap.of([{ key: 'Mod-f', run: function () { openFind(); return true; } }].concat(CM.defaultKeymap, CM.historyKeymap, [CM.indentWithTab])),
                     CM.EditorView.lineWrapping, CM.EditorView.contentAttributes.of({ 'aria-label': 'The Slide\'s Markdown' }),
-                    CM.EditorView.updateListener.of(function (u) { if (u.docChanged && !fromPage) { takeText(u.state.doc.toString(), 'text'); } })];
+                    CM.EditorView.updateListener.of(function (u) { if (u.docChanged && !fromPage) { takeText(u.state.doc.toString(), 'text'); } if (u.docChanged || u.selectionSet) commandsChanged(); })];
                 if (CM.markdown) { try { ext.push(CM.markdown()); } catch (err) { } }
                 ext.push(window.yavcMacroTools.completions(CM, currentMacroEngine));
                 if (CM.EditorView.theme) { ext.push(CM.EditorView.theme({ '&': { height: '100%', fontSize: 'var(--text-sm)' }, '.cm-scroller': { fontFamily: 'var(--mono)' }, '.cm-content': { caretColor: 'var(--text)' } })); }
@@ -540,10 +543,12 @@
             var b = e.target.closest('[data-slide]');
             if (b) { goTo(+b.getAttribute('data-slide')); }
         });
-        async function goTo(i) {
+        async function goTo(i, fromSearch) {
+            if (Math.max(0, Math.min(deck.slides.length - 1, i)) !== at) abortOwnedDialogs(true);
             i = Math.max(0, Math.min(deck.slides.length - 1, i));
             if (pageActive()) { await page.enable(false); }
             at = i;
+            if (slideSearch) slideSearch.changed(!fromSearch);
             el.film.querySelectorAll('[data-slide]').forEach(function (b) { b.setAttribute('aria-selected', String(+b.getAttribute('data-slide') === at)); });
             if (cm) { setCM(current().text); }
             applySlideSettings(el.slide, current());
@@ -613,26 +618,52 @@
         }
         /* A question with one field, as PUDL's dialog asks it. */
         /* The site's dialogs (static/dialogs.js). */
-        function askText(title, label, value) { return window.yavcDialog.askText(title, label, value); }
+        var dialogOwners = new Set();
+        async function settleForDialog(slideOnly) {
+            var owner = deck, slide = current();
+            try { if (pageActive()) await page.sync(); }
+            catch (err) { return false; }
+            return !destroyed && owner === deck && (!slideOnly || slide === current());
+        }
+        function dialogGuard(slideOnly) {
+            var owner = { deck: deck, slide: slideOnly ? current() : null, text: fullText(), controller: new AbortController() };
+            dialogOwners.add(owner);
+            return { signal: owner.controller.signal,
+                current: function () { return !destroyed && !owner.controller.signal.aborted && deck === owner.deck && (!owner.slide || current() === owner.slide) && fullText() === owner.text; },
+                release: function () { dialogOwners.delete(owner); }
+            };
+        }
+        function abortOwnedDialogs(slideOnly) {
+            dialogOwners.forEach(function (owner) { if (!slideOnly || owner.slide) { owner.controller.abort(); dialogOwners.delete(owner); } });
+        }
+        async function askText(title, label, value, slideOnly) {
+            if (!await settleForDialog(slideOnly)) return null;
+            var guard = dialogGuard(slideOnly);
+            if (typeof value === 'function') value = value();
+            return window.yavcDialog.askText(title, label, value, { signal: guard.signal, validate: function () { return guard.current() ? null : 'The deck changed. Close and reopen this form.'; } })
+                .then(function (answer) { return guard.current() ? answer : null; }).finally(guard.release);
+        }
         function askChoice(title, body, buttons) { return window.yavcDialog.askChoice(title, body, buttons); }
-        function deckColours() {
-            var f = deck.front;
-            window.yavcMdEditor.askColours('Deck Colors', [
+        async function deckColours() {
+            if (!await settleForDialog(false)) return;
+            var f = deck.front, guard = dialogGuard(false);
+            return window.yavcMdEditor.askColours('Deck Colors', [
                 { key: 'ink', label: 'Text', value: f.ink, fallback: '#1a1a1a', help: 'Paragraphs, lists and tables; headings too unless they have a color of their own. Empty is the theme\'s own.' },
                 { key: 'heading', label: 'Headings', value: f.heading, fallback: '#1a1a1a', help: 'Every heading, including a title slide\'s title.' },
                 { key: 'muted', label: 'Secondary Text', value: f.muted, fallback: '#5c6470', help: 'A title slide\'s subtitle, captions and the speaker notes.' },
                 { key: 'accent', label: 'Accent', value: f.accent, fallback: '#1f5fbf', help: 'The rule under a heading, links, and words colored "accent".' },
                 { key: 'background', label: 'Background', value: f.background, fallback: '#ffffff', help: 'Every slide, unless the slide sets its own.' }
-            ]).then(function (v) { if (!v) { return; } Object.keys(v).forEach(function (k) { setFront(k, v[k]); }); });
+            ], guard).then(function (v) { if (!v || !guard.current()) return; Object.keys(v).forEach(function (k) { setFront(k, v[k]); }); }).finally(guard.release);
         }
-        function slideColours() {
-            var st = settingsOf(current());
-            window.yavcMdEditor.askColours('Slide Colors', [
+        async function slideColours() {
+            if (!await settleForDialog(true)) return;
+            var st = settingsOf(current()), guard = dialogGuard(true);
+            return window.yavcMdEditor.askColours('Slide Colors', [
                 { key: 'color', label: 'Text', value: st.color, fallback: '#1a1a1a', placeholder: 'The deck\'s own', help: 'Paragraphs, lists and tables on this slide.' },
                 { key: 'heading', label: 'Headings', value: st.heading, fallback: '#1a1a1a', placeholder: 'The deck\'s own', help: 'This slide\'s headings.' },
                 { key: 'accent', label: 'Accent', value: st.accent, fallback: '#1f5fbf', placeholder: 'The deck\'s own', help: 'The rule under the heading, links, and words colored "accent".' },
                 { key: 'background', label: 'Background', value: st.background, fallback: '#ffffff', placeholder: 'The deck\'s own', help: 'This slide alone.' }
-            ]).then(function (v) { if (!v) { return; } Object.keys(v).forEach(function (k) { setSlideSetting(k, v[k]); }); });
+            ], guard).then(function (v) { if (!v || !guard.current()) return; Object.keys(v).forEach(function (k) { setSlideSetting(k, v[k]); }); }).finally(guard.release);
         }
         /* Cancel is not a submit button, so Enter in the field is OK. */
 
@@ -661,7 +692,7 @@
                 } }; });
         }
         async function editDefinitions() {
-            if (pageActive()) { await page.sync(); }
+            if (!await settleForDialog(true)) return;
             var captured = deck, slide = current(), front = frontTextOf(deck), text = front + slide.text, K = await kit(), M = await K.macros();
             function unchanged() { return !destroyed && deck === captured && current() === slide && frontTextOf(deck) + slide.text === text; }
             if (!unchanged()) { return; }
@@ -720,7 +751,7 @@
         function deckClasses() { var classes = deckStyle ? deckStyle.state().classes : []; slideStyles.forEach(function (controller) { classes = classes.concat(controller.state().classes); }); return Array.from(new Set(classes)).sort(); }
         var sheetWatch = H.fs && H.fs.onChange ? H.fs.onChange(function () { installStyle(true); }) : null;
         async function editStyles(shared) {
-            if (pageActive()) { await page.sync(); }
+            if (!await settleForDialog(true)) return;
             var captured = deck, slide = current(), text = slide.text, front = frontTextOf(deck), K = await kit(); await K.styles();
             function unchanged() { return !destroyed && deck === captured && current() === slide && slide.text === text && frontTextOf(deck) === front; }
             if (!unchanged()) { return; }
@@ -749,6 +780,7 @@
         async function activateTab(i) {
             if (!tabs[i]) { return; }
             if (i === active) { tabRow(); return; }
+            abortOwnedDialogs(false); if (slideSearch) slideSearch.reset();
             stash();
             if (presenting) { await leave(); }
             active = i;
@@ -792,6 +824,7 @@
         }
 
         function load(text, newPath, slide) {
+            abortOwnedDialogs(false); if (slideSearch) slideSearch.reset();
             deck = parseDeck(text);
             path = newPath || null;
             modified = false;
@@ -1168,24 +1201,49 @@
         function editCtx() {
             return {
                 page: function () { return page; }, text: function () { return cm; },
-                onPage: function () { return pageActive() && (mode === 'visual' || !(cm && cm.hasFocus)); },
+                onPage: function () { return pageActive() && (mode === 'visual' || (mode === 'split' && historyPane !== 'text')); },
                 blockStyle: function () { if (pageActive() && page.marks) { return page.marks().block || null; } if (!cm) { return null; } var m = /^\s{0,3}(#{1,6})(\s|$)/.exec(cm.state.doc.lineAt(cm.state.selection.main.head).text); return m ? 'h' + m[1].length : 'paragraph'; },
                 classes: deckClasses,
                 say: say, append: function (md) { takeText(current().text.replace(/\s*$/, '') + '\n\n' + md + '\n', 'command'); }
             };
         }
+        var slideSearch = null, searchLoading = null;
+        async function openFind() {
+            var owner = deck;
+            if (!searchLoading) searchLoading = loadScript(window.yavcUtil.versioned(HERE + 'search.js')).catch(function (err) { searchLoading = null; throw err; });
+            try {
+                await searchLoading; if (destroyed || owner !== deck) return;
+                if (!slideSearch) slideSearch = window.yavcSlideSearch.attach({
+                    deck: function () { return deck; }, current: current, source: function () { return cm; }, text: fullText,
+                    alive: function () { return !destroyed; }, say: say, place: q('[data-role="find-place"]'), go: function (index) { return goTo(index, true); },
+                    textPane: async function () { var owner = deck; if (pageActive()) await page.sync(); if (destroyed || deck !== owner) return; if (mode === 'visual') await setMode('split'); await makeCM(); },
+                    replace: function (edits) {
+                        edits.forEach(function (changes, slide) {
+                            if (slide === current()) cm.dispatch({ changes: changes, userEvent: 'input.replace', annotations: cmLibs.isolateHistory.of('full') });
+                            else {
+                                var state = cmStates.get(slide);
+                                if (!state || state.doc.toString() !== slide.text) state = cmLibs.EditorState.create({ doc: slide.text, extensions: cmExtensions });
+                                state = state.update({ changes: changes, userEvent: 'input.replace', annotations: cmLibs.isolateHistory.of('full') }).state;
+                                cmStates.set(slide, state); slide.text = state.doc.toString(); drawThumb(deck.slides.indexOf(slide));
+                            }
+                        });
+                        modified = true; installStyle(); keep(); commandsChanged();
+                    }
+                });
+                await slideSearch.open();
+            } catch (err) { if (!destroyed) say(err.message, true); }
+        }
         function cmd(id, label, glyph, run, more) {
             return Object.assign({ id: id, label: label, glyph: glyph || undefined, run: run }, more || {});
         }
-        async function editHistory(name) {
-            var slide = current(), rich = pageActive() && (mode === 'visual' || (mode === 'split' && historyPane !== 'text'));
-            if (rich) {
-                await page.sync();
-                if (!destroyed && current() === slide) { page.run(name); await page.sync(); }
-            } else {
-                var libs = await codeMirror();
-                if (!destroyed && current() === slide && cm) { libs[name](cm); cm.focus(); }
-            }
+        var editingCommands = null;
+        function editing() {
+            if (!editingCommands && window.yavcMdEditor) editingCommands = window.yavcMdEditor.editing({
+                source: function () { return cm; }, page: function () { return page; },
+                rich: function () { return pageActive() && (mode === 'visual' || (mode === 'split' && historyPane !== 'text')); },
+                identity: current, alive: function () { return !destroyed && !!md; }, readOnly: function () { return false; }, say: say, changed: commandsChanged
+            });
+            return editingCommands;
         }
         function commandTable() {
             var ready = !!md, s = current(), st = settingsOf(s);
@@ -1194,8 +1252,9 @@
                 cmd('open', 'Open…', 'folder', open, { shortcut: 'Mod+O' }),
                 cmd('save', 'Save', 'yavc-save', save, { shortcut: 'Mod+S', disabled: function () { return !ready; } }),
                 cmd('save-as', 'Save As…', 'yavc-save-as', saveAs),
-                cmd('undo', 'Undo', 'yavc-undo', function () { return editHistory('undo'); }, { shortcut: window.yavcUtil.shortcut('Mod-z'), bind: false, disabled: function () { return !ready; } }),
-                cmd('redo', 'Redo', 'yavc-redo', function () { return editHistory('redo'); }, { shortcut: window.yavcUtil.shortcut('Mod-y'), bind: false, disabled: function () { return !ready; } }),
+                cmd('find', 'Find and Replace…', 'search', openFind, { shortcut: window.yavcUtil.shortcut('Mod-f'), bind: false, disabled: function () { return !ready; } }),
+                cmd('undo', 'Undo', 'yavc-undo', function () { return editing().history('undo'); }, { shortcut: window.yavcUtil.shortcut('Mod-z'), bind: false, disabled: function () { return !editing() || !editing().canHistory('undo'); } }),
+                cmd('redo', 'Redo', 'yavc-redo', function () { return editing().history('redo'); }, { shortcut: window.yavcUtil.shortcut('Mod-y'), bind: false, disabled: function () { return !editing() || !editing().canHistory('redo'); } }),
                 cmd('edit-whole', 'Edit the Whole Deck in the Editor', 'pencil', editWhole, { disabled: function () { return !path; } }),
                 cmd('export-html', 'Download as a Page', 'download', exportHTML),
                 cmd('export-pptx', 'Download as PowerPoint', 'download', exportPPTX, { disabled: function () { return !ready; } }),
@@ -1215,7 +1274,7 @@
                 cmd('slide-colours', 'Slide Colors…', 'colour', slideColours),
                 cmd('deck-colours', 'Deck Colors…', 'colour', deckColours),
                 cmd('deck-stylesheet', 'Stylesheet File…', 'file', function () {
-                    askText('The Deck\'s Stylesheet', 'A CSS file of yours, such as ~/themes/mine.css; empty for none', deck.front.stylesheet || '').then(function (v) { if (v != null) { setFront('stylesheet', v.trim()); } });
+                    askText('The Deck\'s Stylesheet', 'A CSS file of yours, such as ~/themes/mine.css; empty for none', function () { return deck.front.stylesheet || ''; }).then(function (v) { if (v != null) { setFront('stylesheet', v.trim()); } });
                 }),
                 cmd('deck-style-block', 'Edit Style Blocks…', 'code', function () { return editStyles(false); }, { shortcut: 'Mod+Shift+F' }),
                 cmd('custom-shortcodes', 'Custom Shortcodes…', 'code', editDefinitions),
@@ -1223,25 +1282,26 @@
                     disabled: function () { return !(H.fs && H.fs.writeText && window.yavcStyleTools && /^~\/.+\.css$/i.test(window.yavcStyleTools.resolve(deck.front.stylesheet, styleDirectory()))); },
                     reason: 'Choose a home-folder CSS file in Stylesheet File first. This host also needs a writable file service.' }),
                 cmd('slide-class', 'Slide Style…', 'tag', function () {
-                    askText('This Slide\'s Style Classes', 'Class names from the stylesheet, separated by spaces; empty for none', settingsOf(current())['class'] || '').then(function (v) { if (v != null) { setSlideSetting('class', v.trim()); } });
+                    askText('This Slide\'s Style Classes', 'Class names from the stylesheet, separated by spaces; empty for none', function () { return settingsOf(current())['class'] || ''; }, true).then(function (v) { if (v != null) { setSlideSetting('class', v.trim()); } });
                 }),
                 cmd('styles-help', 'Styling a Deck', 'info', function () { window.open(publicOrigin() + '/slides-styles', '_blank', 'noopener'); }),
-                cmd('background-image', 'Background Picture…', 'image', function () { askText('Background Picture', 'The picture\'s address, such as /images/x.png; empty for none', settingsOf(current()).image || '').then(function (v) { if (v != null) { setSlideSetting('image', v.trim()); } }); }),
+                cmd('background-image', 'Background Picture…', 'image', function () { askText('Background Picture', 'The picture\'s address, such as /images/x.png; empty for none', function () { return settingsOf(current()).image || ''; }, true).then(function (v) { if (v != null) { setSlideSetting('image', v.trim()); } }); }),
                 { id: 'slide-transition', label: 'Transition', items: TRANSITIONS.map(function (t) { return { id: 'slide-transition-' + t[0], label: t[1], choice: 'deck-slide-transition', value: t[0], checked: function () { return (settingsOf(current()).transition || deck.front.transition || 'fade') === t[0]; }, run: function () { setSlideSetting('transition', t[0] === (deck.front.transition || 'fade') ? null : t[0]); } }; }) },
-                cmd('deck-title', 'Properties…', 'tag', function () {
-                    if (!ENGINE) { return; }
+                cmd('deck-title', 'Properties…', 'tag', async function () {
+                    if (!ENGINE || !await settleForDialog(false)) { return; }
+                    var guard = dialogGuard(false);
                     serializeDeck(deck);
                     var front = deck.frontProblem ? { problem: deck.frontProblem } : ENGINE.front(deck.frontText || '');
                     kit().then(function (k) {
-                        return k.askProperties(front, { title: 'Deck Properties', hidden: DECK_KEYS, hiddenWhere: 'in the Deck menu',
+                        return k.askProperties(front, { title: 'Deck Properties', current: guard.current, signal: guard.signal, hidden: DECK_KEYS, hiddenWhere: 'in the Deck menu',
                             hiddenNote: 'The theme, slide size, transition, colors and stylesheet are set from the Deck menu.' });
                     }).then(function (r) {
-                        if (!r || !r.order.length) { return; }
+                        if (!r || !r.order.length || !guard.current()) { return; }
                         var res;
                         try { res = ENGINE.frontset({ text: deck.frontText || '', set: r.set, order: r.order }); } catch (err) { say(err.message, true); return; }
                         takeFront(deck, res.text);
                         frontChanged();
-                    });
+                    }).finally(guard.release);
                 }),
                 { id: 'theme', label: 'Theme', glyph: 'theme', current: function () { var f = THEMES.find(function (x) { return x[0] === deck.front.theme; }); return f ? f[1] : null; },
                     items: THEMES.map(function (t) { return { id: 'theme-' + t[0], label: t[1], choice: 'deck-theme', value: t[0], checked: function () { return (deck.front.theme || 'plain') === t[0]; }, run: function () { setFront('theme', t[0]); } }; }) },
@@ -1260,7 +1320,7 @@
             [['visual', 'Visual'], ['text', 'Text'], ['split', 'Split']].forEach(function (v) {
                 table.push({ id: 'view-' + v[0], label: v[1], choice: 'deck-view', choiceLabel: 'View', value: v[0], checked: function () { return mode === v[0]; }, run: function () { setMode(v[0]); } });
             });
-            return table.concat(commonToolbar ? commonToolbar.commands() : [], [{ id: 'view-mode', label: 'View', glyph: 'panel', toolbarChoice: 'deck-view', toolbarPriority: 50, items: ['view-visual', 'view-text', 'view-split'] }]);
+            return table.concat(editing() ? editing().commands() : [], commonToolbar ? commonToolbar.commands() : [], [{ id: 'view-mode', label: 'View', glyph: 'panel', toolbarChoice: 'deck-view', toolbarPriority: 50, items: ['view-visual', 'view-text', 'view-split'] }]);
         }
         function toolbars() {
             if (commonToolbar) { return []; }
@@ -1279,7 +1339,7 @@
             return { titles: [
                 { label: 'Slides', glyph: 'document', items: H.identity ? H.identity(root, []) : [] },
                 { id: 'file', label: 'File', glyph: 'file', items: ['new-deck', 'open', 'import-pptx', 'save', 'save-as', '-', 'edit-whole', '-', 'export-pptx', 'export-pdf', 'export-html', 'print'] },
-                { id: 'edit', label: 'Edit', glyph: 'pencil', items: ['undo', 'redo'] },
+                { id: 'edit', label: 'Edit', glyph: 'pencil', items: ['undo', 'redo', '-', 'cut', 'copy', 'paste', '-', 'select-all', '-', 'find'] },
                 { id: 'slide', label: 'Slide', glyph: 'plus', items: ['slide-new', 'slide-duplicate', 'slide-delete', '-', 'slide-prev', 'slide-next', '-', 'slide-up', 'slide-down', '-', 'layout', 'reveal', 'slide-colours', 'slide-class', 'background-image', 'slide-transition'] },
                 { id: 'insert', label: 'Insert', glyph: 'plus', items: ['link', 'insert', 'table', 'box'] },
                 { id: 'format', label: 'Format', glyph: 'paragraph', items: window.yavcMdEditor ? window.yavcMdEditor.MENU.format.filter(function (id) { return ['link', 'insert', 'table', 'box'].indexOf(id) < 0; }).filter(function (id, i, ids) { return id !== '-' || (i > 0 && i < ids.length - 1 && ids[i - 1] !== '-'); }) : [] },
@@ -1575,6 +1635,7 @@
             destroy: function () {
                 if (commonToolbar) { commonToolbar.destroy(); }
                 destroyed = true;
+                abortOwnedDialogs(false); if (slideSearch) slideSearch.reset();
                 styleLifetime.abort();
                 if (detachLive) { detachLive(); }
                 styleRevision++; if (deckStyle) { deckStyle.destroy(); } slideStyles.forEach(function (controller) { controller.destroy(); });

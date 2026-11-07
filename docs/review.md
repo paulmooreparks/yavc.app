@@ -1,5 +1,19 @@
 # Stem-to-stern review, November 2026
 
+## Editing command follow-up, 2026-11-07
+
+Editor and Slides now share clipboard menu operations, read-only selection behavior and history availability. Slides adds source search with explicit Current Slide and Whole Deck scopes, per-slide replacement history and guarded metadata forms. `docs/editing-commands.md` records the ownership, limits, browser API contracts and remaining native clipboard verification boundary.
+
+Independent source review found stale Current Slide matches after navigation, a missing PUDL select wrapper, replacement paths that bypassed pending rich source, and single Replace retaining an ordinal after its source changed. Each finding has a regression or a semantic unit test. Current-slide navigation now refreshes and validates matches. Replacement flushes pending rich edits and checks ownership before mutation; single Replace refuses if synchronization changes the selected match's source. The review also checked the named replacement-token edge case. Final source review has no remaining findings.
+
+Cross-engine testing reproduced a WebKit sticky replacement failure. The implementation now expands full-input regex captures according to ECMAScript GetSubstitution on every engine, with tests for numbered/named/missing/empty captures, literal fallback, lookaround, prefix and suffix. The language-service build exports documented CodeMirror history queries and isolation annotations from its existing pinned packages; both bundles and their license inventories reproduce from the manifest.
+
+Regression testing caught writable Preview losing Undo availability and keyboard focus falling to the body when the rich view temporarily became noneditable during a source refresh. History editability now follows the document, while clipboard mutation still respects Preview. The page view remembers focus before that temporary state and restores it only if focus fell to the body in the still-focused document. Keyboard Undo/Redo tests verify retained rich focus. Existing style/source Undo tests pass again.
+
+The three-engine editing fixture passes with synthetic clipboard data, leaving the operating-system clipboard untouched. It covers clipboard representations, denial, oversized/empty payloads, stale reads/writes, read-only source and Preview, menu and keyboard history, Split targeting, search navigation and regexes, pending rich drafts, per-slide Undo, stale metadata, concurrent properties and desktop disposal. Existing Chromium Editor UI, rich structure, shared toolbar and stylesheet/save/disposal fixtures pass. Search screenshots were inspected at wide light and narrow dark sizes. Evidence, including failures used to identify the regressions, remains under `%TEMP%/yavc-editing-commands-evidence`.
+
+The previous content UI fixture now checks that Undo is disabled on an untouched slide instead of attempting that unavailable command. Chromium's shared language-service fixture passes in Editor and Diagrams after the export-only bundle rebuild. An initial invocation used that fixture's default port instead of the owned disposable server; the rerun explicitly used port 8428. The full repository gate passes, including 49 module tests, Go checks/builds and vulnerability scanning. Browser-native clipboard permission UI and the operating-system clipboard remain untested by these simulated clipboard checks.
+
 ## Content UI cleanup, 2026-11-07
 
 Page Setup moves from File into Editor's Format menu. Slides gains separate Edit and Insert menus, visible text Undo/Redo, Save As and Print glyphs, and American English Color labels. Slides and Diagrams reuse Editor's removable segmented View toolbar control and keep long locations on one status line, with slide position and diagram state visible independently.

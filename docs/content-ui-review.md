@@ -32,9 +32,9 @@ Existing Editor UI and command-toolbar fixtures cover shared dialogs, customizat
 
 | Area | Remaining work |
 | --- | --- |
-| Clipboard and search | Editor's explicit clipboard commands remain outstanding. Slides also needs a complete search and clipboard command surface, with clear current-slide versus whole-deck scope. |
-| History | History availability needs to reflect actual undo/redo state. Slides' new commands expose text-editing history; slide insertion, deletion, reordering, deck properties and cross-slide history need a separately specified deck-wide undo model. Delete confirmation remains in place. |
-| Dialog lifecycle | Audit every Slides metadata/style dialog for tab switches, closure and disposal before treating the entire dialog surface as verified. This batch checks labels and cancellation for the color and properties dialogs. |
+| Completed | Editor and Slides now share clipboard commands; Slides source search has explicit current-slide and whole-deck scopes. See [the editing command follow-up](editing-commands.md). |
+| History | History availability now follows actual state. Slides exposes text-editing history; slide insertion, deletion, reordering, deck properties and cross-slide history need a separately specified deck-wide undo model. Delete confirmation remains in place. |
+| Dialog lifecycle | Metadata forms now cancel on owner navigation/disposal and reject changed source. Existing style/shortcode forms retain source/disposal guards. The editing command fixture and stylesheet regressions cover these paths; manual assistive-technology testing remains separate. |
 | Diagrams | Continue the Inspector, Outline/navigation and keyboard selection review across Canvas, D2 and Mermaid, including source-based formats' differing edit capabilities. Existing Canvas editing tests remain applicable. |
 | Presentation | Presenter-window and full-screen behavior need their own cross-browser review. This batch does not claim those modes were tested. |
 | Accessibility | Headless focus, label and rendering checks do not replace manual assistive-technology testing. |

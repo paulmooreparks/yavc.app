@@ -222,10 +222,15 @@ var schemaCache = null;
      } */
   function attach(o) {
     var PM = null, view = null, on = false, shown = null, loading = 0;
-    var dirty = false, syncTimer = 0, syncing = null, reloadTimer = 0, sourceStale = false;
+    var dirty = false, syncTimer = 0, syncing = null, reloadTimer = 0, sourceStale = false, refreshFocus = null;
     function updating(value) {
+      if (value && !sourceStale && view && view.hasFocus()) refreshFocus = view;
       sourceStale = value;
       if (view) { view.setProps({ editable: function () { return !sourceStale; } }); view.dom.setAttribute('aria-busy', String(value)); }
+      if (!value) {
+        if (view && refreshFocus === view && document.hasFocus() && document.activeElement === document.body) view.focus();
+        refreshFocus = null;
+      }
       o.changed();
     }
     /* The top-level blocks exactly as they were read from the text: the
@@ -346,14 +351,13 @@ var schemaCache = null;
     /* Pastes Markdown at the selection: one paragraph's words go into the
        paragraph the cursor is in, and anything more as blocks. */
     function pasteMarkdown(text) {
-      var before = view && view.state.doc;
+      var target = view, before = view && view.state.doc, selection = view && view.state.selection;
       return Promise.resolve(o.blocksOf(text.replace(/\r\n/g, '\n'))).then(function (json) {
-        if (!view) return;
+        if (!view || view !== target || !on || view.state.doc !== before || !view.state.selection.eq(selection)) { o.say('The page or selection changed before Paste completed. Paste again.', true); return; }
         var nodes = (json || []).map(function (j) { return view.state.schema.nodeFromJSON(j); });
         if (!nodes.length) return;
         var one = nodes.length === 1 && nodes[0].type.name === 'paragraph';
         var slice = one ? new PM.Slice(PM.Fragment.from(nodes[0]), 1, 1) : new PM.Slice(PM.Fragment.fromArray(nodes), 0, 0);
-        if (view.state.doc !== before) o.say('The page changed while the text was being pasted; it is pasted where the cursor is now.');
         if (!intoCell(slice)) view.dispatch(view.state.tr.replaceSelection(slice).scrollIntoView().setMeta('uiEvent', 'paste'));
         view.focus();
       }).catch(function (err) { o.say(String(err && err.message || err), true); });
@@ -1539,6 +1543,15 @@ var schemaCache = null;
       active: function () { return on && !!view; },
       // Changes on the page not yet in the Editor's text.
       pending: function () { return dirty || !!syncing; },
+      historyAvailable: function (name) { return !!(view && !sourceStale && PM[name](view.state)); },
+      clipboardSelection: function () {
+        if (!view || sourceStale) return null;
+        var target = view, doc = view.state.doc, selection = view.state.selection;
+        var data = view.serializeForClipboard(selection.content());
+        function current() { return on && view === target && view.state.doc === doc && view.state.selection.eq(selection); }
+        return { text: data.text, html: data.dom.innerHTML, empty: selection.empty, current: current,
+          remove: function () { if (current()) view.dispatch(view.state.tr.deleteSelection().scrollIntoView().setMeta('uiEvent', 'cut')); } };
+      },
       sync: sync,
       textChanged: textChanged,
       reload: function () { return on ? load() : Promise.resolve(); },
