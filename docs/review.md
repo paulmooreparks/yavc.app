@@ -1,5 +1,19 @@
 # Stem-to-stern review, November 2026
 
+## Initial portable Diagrams host, 2026-11-07
+
+Diagrams 0.22.1 resolves its shared assets relative to its package, accepts only its host-supplied state when embedded, and can opt into an experimental revision-aware resource host. The builder compiles matching WASM/runtime assets and emits a dependency manifest; the test serves only that artifact beneath an unrelated prefix with a synthetic in-memory resource authority. It loads actual package support scripts without the yavc server, guest FS, configuration store, desktop shell or host-created site globals. `docs/content-host-audit.md` and `docs/content-resource-contract.md` record the scope and limits.
+
+The unrelated-host proof reproduced D2's requirement for a dedicated worker policy. The page still forbids eval, while the exact D2 worker response uses its existing restricted policy. A failure screenshot is retained. A Canvas-to-Mermaid switch also exposed a pending CodeMirror completion update with no completion state. Source languages without a provider now keep an empty completion extension, and the three-engine fixture checks the switch without changing vendor code.
+
+Independent source review found that incompatible recovery was joined before refusal, risking replacement of a prior snapshot with empty tabs, and that a delayed initial read could create a default editor after disposal. Startup now refuses before any recovery registration, and boot stops after disposal. Regressions assert zero snapshot joins and no post-disposal editor creation. The host fixture explicitly calls PUDL's documented destroy operation when removing its own content.
+
+This is the first extraction proof, not the complete portable release or site reintegration. The production FS still lacks a demonstrated atomic revision adapter; immutable read-only command policy, resource creation/Save As, revision-aware recovery, remaining applet extraction, mixed-module-version compatibility and actual receiving-webview checks remain gates. No real user data or installed candidate was changed.
+
+The resource-client unit tests and full repository gate pass. Chromium, Firefox and WebKit pass the independent-host fixture, including a write finishing after its mount is explicitly destroyed, incompatible recovery refusal and a disposed initial read. Existing Chromium Canvas pointer/keyboard/Inspector/export tests, shared language services, shared toolbar and content UI cleanup fixtures pass on the disposable site server. Initial local regression invocations exposed a startup-readiness race and a fixture-specific port variable; the final runs used a confirmed HTTP 200 and the fixture's explicit URL. Final independent source review has no findings. Evidence remains in `%TEMP%/yavc-portable-diagrams-evidence`.
+
+Rendered inspection found an old Saved message could remain below a save-conflict notice. Showing a fault now clears that stale confirmation, and the conflict regression checks the status line. The artifact includes the project and Go runtime licenses, pinned module files and explicit worker policy requirements; its builder copies the read-only Go license once rather than attempting to overwrite it for both engines on Windows.
+
 ## Holistic content application design, 2026-11-07
 
 Paul chose separate Docs and Editor applets with stable identity, shared implementation and source access in Docs. `docs/content-applications-design.md` defines that boundary across all file consumers, and `docs/content-applications-review.md` records the source evidence, inconsistencies and scenario walkthrough. DESIGN.md decisions 58 and 59 supersede the earlier profile and title-switching proposal. PR #46's automatic title change and temporary fixture are withdrawn; the installed Editor remains unchanged.

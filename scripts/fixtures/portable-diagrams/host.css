@@ -1,0 +1,7 @@
+/* Copyright 2026 Paul Parks. SPDX-License-Identifier: Apache-2.0 */
+body { padding: var(--space-3); }
+header h1 { font-size: var(--text-lg); }
+main { display: grid; gap: var(--space-4); }
+main > section { min-width: 0; }
+h2 { font-size: var(--text-base); }
+.dg-flow { height: 560px; }
