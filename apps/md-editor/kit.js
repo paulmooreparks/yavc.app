@@ -142,7 +142,7 @@
     var htmlReady = null;
     function safeHTML() {
         if (window.yavcHTML) { return Promise.resolve(window.yavcHTML); }
-        if (!htmlReady) { htmlReady = loadScript(window.yavcUtil.versioned('/applets/md-engine/safe-html.js')).then(function () { return window.yavcHTML; }).catch(function (e) { htmlReady = null; throw e; }); }
+        if (!htmlReady) { htmlReady = loadScript(window.yavcUtil.versioned(new URL('../md-engine/safe-html.js', HERE).href)).then(function () { return window.yavcHTML; }).catch(function (e) { htmlReady = null; throw e; }); }
         return htmlReady;
     }
     function mermaid() {
@@ -1337,7 +1337,7 @@
     var d2Ready = null;
     function drawD2(place, source) {
         if (!d2Ready) {
-            d2Ready = loadScript(window.yavcUtil.versioned('/applets/diagram-kit/d2.js')).then(function () { return window.yavcD2Engine; });
+            d2Ready = loadScript(window.yavcUtil.versioned(new URL('../diagram-kit/d2.js', HERE).href)).then(function () { return window.yavcD2Engine; });
             d2Ready.catch(function () { d2Ready = null; });
         }
         /* The engine reports a fault in the diagram itself; what reaches

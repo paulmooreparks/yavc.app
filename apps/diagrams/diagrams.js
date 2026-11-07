@@ -13,6 +13,8 @@
     'use strict';
 
     var esc = window.yavcUtil.esc, loadScript = window.yavcUtil.loadScript, versioned = window.yavcUtil.versioned;
+    var packageBase = new URL('.', document.currentScript.src);
+    function asset(path) { return new URL('../' + path, packageBase).href; }
 
     /* The shared parts, each loaded once: the editing kit (CodeMirror, its
        theme and Mermaid), the colouring for D2 and Mermaid, and the D2
@@ -32,19 +34,19 @@
         }
         return loaded[key];
     }
-    function kit() { return once('kit', '/applets/md-editor/kit.js', 'yavcMdEditor'); }
-    function modes() { return once('modes', '/applets/diagram-kit/modes.js', 'yavcDiagramModes'); }
-    function d2() { return once('d2', '/applets/diagram-kit/d2.js', 'yavcD2Engine'); }
-    function canvasLib() { return once('canvas', '/applets/diagrams/canvas.js', 'yavcDiagramCanvas'); }
+    function kit() { return once('kit', asset('md-editor/kit.js'), 'yavcMdEditor'); }
+    function modes() { return once('modes', asset('diagram-kit/modes.js'), 'yavcDiagramModes'); }
+    function d2() { return once('d2', asset('diagram-kit/d2.js'), 'yavcD2Engine'); }
+    function canvasLib() { return once('canvas', asset('diagrams/canvas.js'), 'yavcDiagramCanvas'); }
     /* JSON Canvas (docs/canvas-design.md), and the Markdown engine that
        draws a text node's Markdown on the screen (decision 6). */
-    function jcanvas() { return once('jcanvas', '/applets/diagram-kit/jcanvas.js', 'yavcCanvas'); }
+    function jcanvas() { return once('jcanvas', asset('diagram-kit/jcanvas.js'), 'yavcCanvas'); }
     async function canvasEditor() {
         await jcanvas();
-        await once('canvas-model', '/applets/diagrams/canvas-model.js', 'yavcCanvasModel');
-        return once('canvas-view', '/applets/diagrams/canvas-view.js', 'yavcCanvasView');
+        await once('canvas-model', asset('diagrams/canvas-model.js'), 'yavcCanvasModel');
+        return once('canvas-view', asset('diagrams/canvas-view.js'), 'yavcCanvasView');
     }
-    function mdEngine() { return once('md', '/applets/md-engine/loader.js', 'yavcMdEngine').then(function (f) { return f(); }); }
+    function mdEngine() { return once('md', asset('md-engine/loader.js'), 'yavcMdEngine').then(function (f) { return f(); }); }
 
     /* The styles New offers (decision 7). A style is a starter text; the
        style itself is read from the text, never recorded in the file. */
@@ -119,11 +121,13 @@
     function init(root, opts) {
         opts = opts || {};
         var n = ++count, H = window.pudlHost || {};
+        if (H.contentResources && H.snapshot) throw new Error('This resource host needs a revision-aware recovery adapter before it can restore diagrams.');
+        var resources = null;
         var tabs = [], active = -1, untitled = 0, destroyed = false;
         var settings = Object.assign({}, SETTINGS);
         var CM = null, cm = null, langs = {}, drawTimer = 0, drawSeq = 0, waiters = [], quiet = false, lsp = null, lspComp = null, inlineText = null, inlineNumber = 0;
         var start = new URLSearchParams(String(opts.state || '').replace(/^\?/, ''));
-        if (opts.host !== 'window') {
+        if (opts.ownsUrl) {
             var own = new URLSearchParams(location.search);
             if (own.get('file')) { start = own; }
         }
@@ -201,7 +205,7 @@
            person must deal with is the site's notice beside what failed,
            which stays until it is dismissed or put right (decision 15). */
         function say(msg, kind) {
-            if (kind) { window.yavcUtil.notice(el.tabsEl, msg, kind); return; }
+            if (kind) { el.message.textContent = ''; window.yavcUtil.notice(el.tabsEl, msg, kind); return; }
             el.message.textContent = msg || '';
         }
         function commandsChanged() { if (opts.commandsChanged) { opts.commandsChanged(); } tabRow(); }
@@ -242,6 +246,8 @@
                     else if (u.selectionSet && !quiet && u.view.hasFocus) { followCursor(u.state.selection.main.head); }
                 })];
             if (t.kind === 'd2') { ext.push(CM.autocompletion({ override: [complete], activateOnTyping: true })); }
+            // Keep completion state available when a tab has no completion provider.
+            else if (t.kind === 'mermaid' || !lsp) { ext.push(CM.autocompletion({ override: [], activateOnTyping: false })); }
             return CM.EditorState.create({ doc: text, extensions: ext });
         }
         function showTab(t) {
@@ -1599,14 +1605,17 @@
         /* === Files ======================================================== */
 
         async function openPath(p, view) {
+            if (destroyed) return false;
             for (var i = 0; i < tabs.length; i++) {
                 if (tabs[i].path === p) { activateTab(i); if (view) { setView(view); } return true; }
             }
-            if (!H.fs || !H.fs.readText) { say('There is no file service here.', true); return false; }
+            if (!resources && (!H.fs || !H.fs.readText)) { say('There is no file service here.', true); return false; }
             var text;
-            try { text = await H.fs.readText(p); } catch (err) { say(p + ' could not be read: ' + ((err && err.message) || err), true); return false; }
+            var resource;
+            try { if (resources) { resource = await resources.read(p); text = resource.text; } else { text = await H.fs.readText(p); } } catch (err) { if (!destroyed) say(p + ' could not be read: ' + ((err && err.message) || err), true); return false; }
+            if (destroyed) return false;
             if (text == null) { say('There is no file at ' + p + '.', true); return false; }
-            openInTab(text, p, null, view);
+            var opened = openInTab(text, p, null, view); opened.resource = resource || null; commandsChanged();
             say('Opened ' + p + '.');
             return true;
         }
@@ -1643,20 +1652,33 @@
             t.modified = t.path !== path || t.text !== text || ticket !== t.saveTicket;
             return true;
         }
+        async function writeResource(t, path, submitted) {
+            if (resources) {
+                if (!t.resource || path !== t.resource.resource) throw new Error('This resource host does not offer Save As yet.');
+                var accepted = await resources.write(t.resource, submitted);
+                if (!destroyed && tabs.indexOf(t) >= 0) t.resource = accepted;
+                return null;
+            }
+            if (!H.fs || !H.fs.writeText) throw new Error('This host cannot save files.');
+            return H.fs.writeText(path, submitted);
+        }
         async function save() {
             var t = current();
             if (!t) { return; }
             if (!t.path) { return saveAs(); }
             var submitted = t.text;
             return queueSave(t, async function (ticket) {
-                var path = t.path, err = await H.fs.writeText(path, submitted);
+                var path = t.path, err = await writeResource(t, path, submitted);
                 if (err) { t.saveFailed = true; t.modified = true; say('Could not save: ' + err, true); return; }
                 if (saved(t, path, submitted, ticket, false) && t === current()) { say('Saved ' + path + (t.modified ? '; newer edits are still unsaved.' : '.')); }
+            }).catch(function (err) {
+                if (!destroyed && tabs.indexOf(t) >= 0 && t === current()) say('Save was not acknowledged: ' + ((err && err.message) || err), true);
+                throw err;
             });
         }
         async function saveAs() {
             var t = current();
-            if (!t || !H.fs || !H.fs.save) { return; }
+            if (!t || resources || !H.fs || !H.fs.save) { return; }
             var submitted = t.text, blob = new Blob([submitted], { type: 'text/plain' });
             return queueSave(t, async function (ticket) {
                 var res = await H.fs.save({ title: 'Save the Diagram As', name: tabTitle(t), host: root, start: t.path ? t.path.replace(/\/[^\/]*$/, '') : '~/Documents', blob: blob }).catch(function (e) { t.saveFailed = true; t.modified = true; say(e.message, true); return null; });
@@ -1851,8 +1873,8 @@
                 cmd('new-mermaid', 'New Mermaid Diagram', 'file', null, { items: MERMAID_STYLES.map(function (s) { return { id: 'new-' + s.id, label: s.label, run: function () { newDiagram(s, 'mermaid'); } }; }) }),
                 cmd('new-canvas', 'New Canvas', 'file', null, { items: CANVAS_STYLES.map(function (s) { return { id: 'new-canvas-' + s[0], label: s[1], run: function () { return newCanvas(s[0]); } }; }) }),
                 cmd('open', 'Open…', 'folder', open, { shortcut: 'Mod+O' }),
-                cmd('save', 'Save', 'yavc-save', save, { shortcut: 'Mod+S', disabled: function () { return !current(); } }),
-                cmd('save-as', 'Save As…', 'yavc-save-as', saveAs, { disabled: function () { return !current(); } }),
+                cmd('save', 'Save', 'yavc-save', save, { shortcut: 'Mod+S', disabled: function () { var t = current(); return !t || (resources ? !resources.canWrite(t.resource) : !H.fs || !H.fs.writeText && !H.fs.save); } }),
+                cmd('save-as', 'Save As…', 'yavc-save-as', saveAs, { disabled: function () { return !current() || !!resources || !H.fs || !H.fs.save; }, reason: function () { return resources || !H.fs || !H.fs.save ? 'This host does not offer Save As.' : undefined; } }),
                 cmd('close-diagram', 'Close Diagram', null, function () { closeTab(active); }, { disabled: function () { return !current(); } }),
                 cmd('undo', 'Undo', 'yavc-undo', function () { if (cm) { CM.undo(cm); } }, { builtIn: 'Mod-z', glyphOnly: true }),
                 cmd('redo', 'Redo', 'yavc-redo', function () { if (cm) { CM.redo(cm); } }, { builtIn: 'Mod-y', glyphOnly: true }),
@@ -1940,6 +1962,10 @@
 
         var booted = (async function () {
             var got = await Promise.all([kit(), modes()]);
+            if (H.contentResources) {
+                var resourceAPI = await once('resources', asset('content-kit/resources.js'), 'yavcContentResources');
+                resources = resourceAPI.create(H.contentResources);
+            }
             CM = await got[0].libs();
             lspComp = new CM.Compartment();
             try {
@@ -1969,6 +1995,7 @@
             }
             var file = start.get('file'), view = start.get('view');
             if (file) { await openPath(file, view).catch(function (err) { say(err.message, true); return false; }); }
+            if (destroyed) return;
             if (!tabs.length) { tabs.push(makeTab(D2_STYLES[0].text, null, 'd2')); activateTab(0); }
             if (view && !file) { setView(view); }
             announce();
@@ -2024,6 +2051,7 @@
                 var submitted = t.text;
                 return queueSave(t, async function (ticket) {
                     var destination = input.path ? String(input.path) : t.path;
+                    if (resources && destination !== t.path) throw new Error('This host does not offer Save As.');
                     if (input.path) {
                         /* An agent's diagram never takes the name of a file that
                            exists, or saving would overwrite it unasked. */
@@ -2034,9 +2062,9 @@
                         }
                     }
                     if (!destination) { throw new Error('the diagram has no file yet; give a path such as ~/diagrams/plan.d2'); }
-                    if (!H.fs || !H.fs.writeText) { throw new Error('there is no file service here'); }
+                    if (!resources && (!H.fs || !H.fs.writeText)) { throw new Error('there is no file service here'); }
                     if (destroyed || tabs.indexOf(t) < 0) { throw new Error('The diagram was closed before it could be saved.'); }
-                    var err = await H.fs.writeText(destination, submitted);
+                    var err = await writeResource(t, destination, submitted);
                     if (err) { throw new Error('could not save: ' + err); }
                     if (destroyed || tabs.indexOf(t) < 0) { throw new Error('The file was saved after its diagram was closed.'); }
                     saved(t, destination, submitted, ticket, true);
@@ -2147,6 +2175,7 @@
             setState: function (s) {
                 var p = new URLSearchParams(String(s || '').replace(/^\?/, ''));
                 booted.then(function () {
+                    if (destroyed) return;
                     var file = p.get('file'), view = p.get('view');
                     var t = current();
                     if (file && (!t || file !== t.path)) { openPath(file, view).catch(function (err) { say(String((err && err.message) || err), true); }); }
