@@ -174,8 +174,20 @@
         /* The open decks, one tab each; deck, path, modified and at are the
            front tab's, copied back into it by stash() before a switch. */
         var tabs = [], active = -1;
+        var resourceSession = null, resources = null, recovery = null;
+        function resourceAsset(file) { return window.yavcUtil.versioned(new URL('../content-kit/' + file, SELF_SRC).href); }
+        function tab() { return tabs[active] || null; }
+        function dirtyTab(t) { return !!(t && (t.modified || (t === tab() && pageActive() && page.pending()))); }
+        function readOnly() { var t = tab(); return !!(resources && t && t.resource && !resources.canWrite(t.resource)); }
+        function requireEditable() { if (readOnly()) throw new Error('This deck is read-only. Use Save As to create an editable copy.'); }
+        function canSave() { var t = tab(); return !readOnly() && !(resources && t && t.path && !t.resource); }
+        function refreshAccess() {
+            root.setAttribute('data-read-only', String(readOnly()));
+            if (cm && accessComp) cm.dispatch({ effects: accessComp.reconfigure([cmLibs.EditorState.readOnly.of(readOnly()), cmLibs.EditorView.editable.of(!readOnly()), cmLibs.EditorView.contentAttributes.of({ 'aria-readonly': String(readOnly()), tabindex: '0' })]) });
+            commandsChanged();
+        }
         var settings = Object.assign({}, SETTINGS), mode = 'visual', md = null, page = null, cm = null, cmReady = null;
-        var cmSlide = null, cmStates = new WeakMap(), cmExtensions = null, cmLibs = null;
+        var cmSlide = null, cmStates = new WeakMap(), cmExtensions = null, cmLibs = null, accessComp = null;
         var historyPane = 'visual';
         var presenting = null, channel = null, presenterRole = null, fromPage = false, redrawTimer = 0;
         /* On a page of its own the deck and the presenter view come from the
@@ -344,6 +356,7 @@
         /* A change to the slide's text, from the page, the text pane or a
            command: the deck is told, the other views follow. */
         function takeText(text, from) {
+            requireEditable();
             var s = current();
             if (s.text === text) { return; }
             s.text = text;
@@ -366,7 +379,7 @@
             updateLocation();
         }
         function updateLocation() {
-            el.where.textContent = path || 'Not saved yet';
+            el.where.textContent = (path || 'Not saved yet') + (readOnly() ? ' (read-only)' : '');
             el.where.title = el.where.textContent;
             q('[data-role="position"]').textContent = 'Slide ' + (at + 1) + ' of ' + deck.slides.length;
         }
@@ -391,6 +404,7 @@
                 cmSlide = current();
                 var state = cmStates.get(cmSlide);
                 cm.setState(state && state.doc.toString() === text ? state : cmLibs.EditorState.create({ doc: text, extensions: cmExtensions }));
+                refreshAccess();
                 return;
             }
             if (cm.state.doc.toString() === text) { return; }
@@ -401,7 +415,10 @@
             if (cmReady) { return cmReady; }
             cmReady = kit().then(function (K) { return K.macros(); }).then(codeMirror).then(function (CM) {
                 if (destroyed) { return null; }
+                accessComp = new CM.Compartment();
                 var ext = [CM.history(), CM.drawSelection(), CM.highlightActiveLine(), CM.keymap.of([{ key: 'Mod-f', run: function () { openFind(); return true; } }].concat(CM.defaultKeymap, CM.historyKeymap, [CM.indentWithTab])),
+                    accessComp.of([CM.EditorState.readOnly.of(readOnly()), CM.EditorView.editable.of(!readOnly())]),
+                    CM.EditorState.transactionFilter.of(function (tr) { return tr.docChanged && readOnly() ? [] : tr; }),
                     CM.EditorView.lineWrapping, CM.EditorView.contentAttributes.of({ 'aria-label': 'The Slide\'s Markdown' }),
                     CM.EditorView.updateListener.of(function (u) { if (u.docChanged && !fromPage) { takeText(u.state.doc.toString(), 'text'); } if (u.docChanged || u.selectionSet) commandsChanged(); })];
                 if (CM.markdown) { try { ext.push(CM.markdown()); } catch (err) { } }
@@ -409,6 +426,7 @@
                 if (CM.EditorView.theme) { ext.push(CM.EditorView.theme({ '&': { height: '100%', fontSize: 'var(--text-sm)' }, '.cm-scroller': { fontFamily: 'var(--mono)' }, '.cm-content': { caretColor: 'var(--text)' } })); }
                 cmLibs = CM; cmExtensions = ext; cmSlide = current();
                 cm = new CM.EditorView({ state: CM.EditorState.create({ doc: current().text, extensions: ext }), parent: el.text });
+                refreshAccess();
                 return cm;
             });
             return cmReady;
@@ -496,7 +514,7 @@
                     if (destroyed) { return; }
                     if (!page) { page = window.yavcPageView.attach(pageHost()); window.yavcMdEditor._page = page; }
                     applySlideSettings(el.slide, current());
-                    await page.enable(true);
+                    if (readOnly()) { await page.enable(false); drawSlide(); } else await page.enable(true);
                 } catch (err) { say('The slide could not be edited on its canvas: ' + err.message, true); if (page) { page.enable(false); } drawSlide(); }
             } else if (page) { await page.enable(false); }
             fit();
@@ -553,7 +571,7 @@
             if (cm) { setCM(current().text); }
             applySlideSettings(el.slide, current());
             if (mode !== 'text') {
-                if (page) { try { await page.enable(true); } catch (err) { drawSlide(); } } else { drawSlide(); }
+                if (page && !readOnly()) { try { await page.enable(true); } catch (err) { drawSlide(); } } else { drawSlide(); }
             }
             drawNotes();
             updateLocation();
@@ -567,16 +585,18 @@
         /* === Slides: new, duplicate, delete, move ======================= */
 
         function addSlide(layout) {
+            requireEditable();
             var text = NEW_SLIDE[layout] || NEW_SLIDE.content;
             deck.slides.splice(at + 1, 0, { text: text });
             modified = true;
             drawFilm();
             goTo(at + 1);
         }
-        function duplicateSlide() { deck.slides.splice(at + 1, 0, { text: current().text }); modified = true; drawFilm(); goTo(at + 1); }
+        function duplicateSlide() { requireEditable(); deck.slides.splice(at + 1, 0, { text: current().text }); modified = true; drawFilm(); goTo(at + 1); }
         /* asked: false for an agent's delete@1, which changes only the deck
            in the window, unsaved, and must not wait on a dialog. */
         async function deleteSlide(asked) {
+            requireEditable();
             if (deck.slides.length <= 1) { say('A deck keeps at least one slide.'); return; }
             /* There is no undo for a slide, so the person's delete asks (Principles, section 3). */
             if (asked !== false && !(await window.yavcDialog.confirm('Delete slide ' + (at + 1) + '?', '"' + titleOf(current(), at) + '" and its notes go from the deck.', { okLabel: 'Delete', danger: true }))) { return; }
@@ -586,6 +606,7 @@
             goTo(Math.min(at, deck.slides.length - 1));
         }
         function moveSlide(by) {
+            requireEditable();
             var to = at + by;
             if (to < 0 || to >= deck.slides.length) { return; }
             var s = deck.slides.splice(at, 1)[0];
@@ -595,12 +616,14 @@
             goTo(to);
         }
         function setSlideSetting(key, value) {
+            requireEditable();
             var s = current();
             setSetting(s, key, value);
             takeText(s.text, 'command');
             if (pageActive()) { applySlideSettings(el.slide, s); }
         }
         function setFront(key, value) {
+            requireEditable();
             if (deck.frontProblem) { say('The front matter cannot be changed here: ' + deck.frontProblem, true); return; }
             if (value == null || value === '') { delete deck.front[key]; } else { deck.front[key] = value; }
             /* Written at once, so a change the engine refuses is known now. */
@@ -786,6 +809,7 @@
             active = i;
             var t = tabs[i];
             deck = t.deck; path = t.path; modified = t.modified; at = 0;
+            refreshAccess();
             installStyle();
             if (channel) { channel.close(); channel = null; }
             drawFilm();
@@ -796,7 +820,7 @@
             commandsChanged();
             announce();
         }
-        function untouched(t) { return !t.path && !t.modified; }
+        function untouched(t) { return !t.path && !dirtyTab(t); }
         /* A deck opens in a tab of its own, unless the front tab is a new
            deck nobody has touched, which it replaces. */
         async function openInTab(text, newPath, slide) {
@@ -808,11 +832,11 @@
         async function closeTab(i) {
             var t = tabs[i];
             if (!t) { return; }
-            if (t.modified) {
+            if (dirtyTab(t)) {
                 if (i !== active) { await activateTab(i); }
                 var choice = await window.yavcDialog.askSave(tabTitle(t));
                 if (choice !== 'discard' && choice !== 'save') { return; }
-                if (choice === 'save') { await save(); if (modified) { return; } }
+                if (choice === 'save') { await save(); if (dirtyTab(t)) { return; } }
             }
             var front = active;
             tabs.splice(i, 1);
@@ -842,6 +866,15 @@
             for (var i = 0; i < tabs.length; i++) {
                 if (tabs[i].path === p) { await activateTab(i); if (slide) { await goTo(slide - 1); } return true; }
             }
+            if (resources) {
+                var snapshot = await resources.read(p);
+                if (destroyed) return false;
+                stash();
+                tabs.push({ deck: parseDeck(snapshot.text), path: p, resource: snapshot, name: snapshot.name, modified: false, at: Math.max(0, (slide || 1) - 1) });
+                await activateTab(tabs.length - 1);
+                say('Opened ' + (snapshot.name || p) + (readOnly() ? ' (read-only).' : '.'));
+                return true;
+            }
             if (!H.fs || !H.fs.readText) { say('There is no file service here.', true); return false; }
             var text = await H.fs.readText(p);
             if (text == null) { say('There is no file at ' + p + '.', true); return false; }
@@ -860,6 +893,10 @@
             announce();
         }
         async function save() {
+            if (resources) {
+                if (!path) return saveAs();
+                try { return await saveResource(tab(), path); } catch (err) { say(err.message, true); return false; }
+            }
             if (!path) { return saveAs(); }
             var err = await H.fs.writeText(path, fullText());
             if (err) { say('Could not save: ' + err, true); return; }
@@ -868,6 +905,9 @@
             commandsChanged();
         }
         async function saveAs() {
+            if (resources) {
+                try { return await saveResource(tab(), null); } catch (err) { say(err.message, true); return false; }
+            }
             if (!H.fs || !H.fs.save) { return; }
             var name = (deck.front.title || 'deck').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'deck';
             var blob = new Blob([fullText()], { type: 'text/markdown' });
@@ -878,6 +918,39 @@
                applet (pudl-applet-packages README, fs.save). */
             else if (res.download) { window.yavcUtil.download(res.download, blob); say('Downloaded ' + res.download + '.'); }
             commandsChanged();
+        }
+        async function saveResource(t, destination) {
+            if (!t) return Promise.reject(new Error('No deck is open.'));
+            if (tab() === t && pageActive()) {
+                await page.sync();
+                if (destroyed || tab() !== t) throw new Error('The deck changed before saving.');
+            }
+            stash();
+            var submitted = serializeDeck(t.deck);
+            var pending = (t.saveQueue || Promise.resolve()).then(async function () {
+                if (destroyed || !tabs.includes(t)) throw new Error('The deck closed before its save could run.');
+                var accepted;
+                if (destination == null) accepted = await resources.saveAs({ name: t.name || tabTitle(t) + '.slides.md', sourceResource: t.path }, submitted, { host: root, signal: styleLifetime.signal });
+                else if (destination === t.path && t.resource) accepted = await resources.write(t.resource, submitted);
+                else if (destination === t.path && !t.fresh) throw new Error('The recovered deck has no matching revision. Use Save As to preserve a copy.');
+                else accepted = await resources.create(destination, submitted);
+                if (!accepted || destroyed || !tabs.includes(t)) return false;
+                var syncError = null;
+                if (tab() === t && pageActive()) {
+                    try { if (!resources.canWrite(accepted)) await page.enable(false); else await page.sync(); }
+                    catch (err) { syncError = err; if (!resources.canWrite(accepted)) page.freeze(); }
+                    if (destroyed || !tabs.includes(t)) return false;
+                }
+                t.resource = accepted; t.baseline = null; t.conflict = null; t.path = accepted.resource; t.name = accepted.name || t.name;
+                t.modified = !!syncError || serializeDeck(t.deck) !== submitted; t.fresh = false;
+                if (tab() === t) {
+                    path = t.path; modified = t.modified; refreshAccess();
+                    if (!syncError && readOnly() && page) { await page.enable(false); drawSlide(); }
+                    updateLocation(); announce(); say(syncError ? 'The submitted source was saved, but the newer rich draft could not synchronize. Copy it before leaving. ' + syncError.message : 'Saved ' + (t.name || path) + (modified ? '; newer edits are still unsaved.' : '.'), !!syncError);
+                }
+                tabRow(); keep(); return true;
+            });
+            t.saveQueue = pending.catch(function () {}); return pending;
         }
         async function newDeck() {
             stash();
@@ -1168,23 +1241,25 @@
            the snapshot, so leaving the page asks only when there is none;
            closing the window discards the snapshot, so closing asks. */
         var unguard = window.yavcDocTabs.guard(root, {
-            changed: function () { stash(); return tabs.filter(function (t) { return t.modified; }).map(tabTitle); },
-            keptOnReload: function () { return !!H.snapshot; },
+            changed: function () { stash(); return tabs.filter(dirtyTab).map(tabTitle); },
+            keptOnReload: function () { if (pageActive() && page.pending()) return false; return resources ? !!snap && snap.flush() : !!H.snapshot; },
             keptOnClose: function () { return false; },
             saveAll: async function () {
                 for (var i = 0; i < tabs.length; i++) {
-                    if (!tabs[i].modified) { continue; }
+                    if (!dirtyTab(tabs[i])) { continue; }
                     await activateTab(i);
                     await save();
-                    if (modified) { return false; }
+                    if (dirtyTab(tabs[i])) { return false; }
                 }
                 return true;
             }
         });
-        var snap = H.snapshot ? H.snapshot.join(root, function () {
+        var snap = null, restoring = false, recoveryKept = null;
+        function takeSnapshot() {
+            if (restoring) return recoveryKept;
             stash();
-            return { tabs: tabs.map(function (t) { return { path: t.path, text: t.modified ? serializeDeck(t.deck) : null, slide: t.at || 0 }; }), active: active, mode: mode };
-        }) : null;
+            return { version: resources ? 2 : undefined, tabs: tabs.map(function (t) { return { path: t.path, name: t.name, text: t.modified ? serializeDeck(t.deck) : null, baseline: resources ? recovery.capture(resources, t.resource, t.baseline) : undefined, slide: t.at || 0 }; }), active: active, mode: mode };
+        }
         function keep() { if (snap) { snap.changed(); } }
 
         /* === Commands ================================================== */
@@ -1215,9 +1290,10 @@
                 await searchLoading; if (destroyed || owner !== deck) return;
                 if (!slideSearch) slideSearch = window.yavcSlideSearch.attach({
                     deck: function () { return deck; }, current: current, source: function () { return cm; }, text: fullText,
-                    alive: function () { return !destroyed; }, say: say, place: q('[data-role="find-place"]'), go: function (index) { return goTo(index, true); },
+                    alive: function () { return !destroyed; }, readOnly: readOnly, say: say, place: q('[data-role="find-place"]'), go: function (index) { return goTo(index, true); },
                     textPane: async function () { var owner = deck; if (pageActive()) await page.sync(); if (destroyed || deck !== owner) return; if (mode === 'visual') await setMode('split'); await makeCM(); },
                     replace: function (edits) {
+                        requireEditable();
                         edits.forEach(function (changes, slide) {
                             if (slide === current()) cm.dispatch({ changes: changes, userEvent: 'input.replace', annotations: cmLibs.isolateHistory.of('full') });
                             else {
@@ -1241,7 +1317,7 @@
             if (!editingCommands && window.yavcMdEditor) editingCommands = window.yavcMdEditor.editing({
                 source: function () { return cm; }, page: function () { return page; },
                 rich: function () { return pageActive() && (mode === 'visual' || (mode === 'split' && historyPane !== 'text')); },
-                identity: current, alive: function () { return !destroyed && !!md; }, readOnly: function () { return false; }, say: say, changed: commandsChanged
+                identity: current, alive: function () { return !destroyed && !!md; }, readOnly: readOnly, say: say, changed: commandsChanged
             });
             return editingCommands;
         }
@@ -1251,7 +1327,7 @@
                 cmd('new-deck', 'New Deck', 'file', newDeck),
                 cmd('open', 'Open…', 'folder', open, { shortcut: 'Mod+O' }),
                 cmd('save', 'Save', 'yavc-save', save, { shortcut: 'Mod+S', disabled: function () { return !ready; } }),
-                cmd('save-as', 'Save As…', 'yavc-save-as', saveAs),
+                cmd('save-as', 'Save As…', 'yavc-save-as', saveAs, { disabled: function () { return !!(resources && !resources.canSaveAs()); } }),
                 cmd('find', 'Find and Replace…', 'search', openFind, { shortcut: window.yavcUtil.shortcut('Mod-f'), bind: false, disabled: function () { return !ready; } }),
                 cmd('undo', 'Undo', 'yavc-undo', function () { return editing().history('undo'); }, { shortcut: window.yavcUtil.shortcut('Mod-z'), bind: false, disabled: function () { return !editing() || !editing().canHistory('undo'); } }),
                 cmd('redo', 'Redo', 'yavc-redo', function () { return editing().history('redo'); }, { shortcut: window.yavcUtil.shortcut('Mod-y'), bind: false, disabled: function () { return !editing() || !editing().canHistory('redo'); } }),
@@ -1320,7 +1396,25 @@
             [['visual', 'Visual'], ['text', 'Text'], ['split', 'Split']].forEach(function (v) {
                 table.push({ id: 'view-' + v[0], label: v[1], choice: 'deck-view', choiceLabel: 'View', value: v[0], checked: function () { return mode === v[0]; }, run: function () { setMode(v[0]); } });
             });
-            return table.concat(editing() ? editing().commands() : [], commonToolbar ? commonToolbar.commands() : [], [{ id: 'view-mode', label: 'View', glyph: 'panel', toolbarChoice: 'deck-view', toolbarPriority: 50, items: ['view-visual', 'view-text', 'view-split'] }]);
+            table = table.concat(editing() ? editing().commands() : [], commonToolbar ? commonToolbar.commands() : [], [{ id: 'view-mode', label: 'View', glyph: 'panel', toolbarChoice: 'deck-view', toolbarPriority: 50, items: ['view-visual', 'view-text', 'view-split'] }]);
+            var navigation = /^(new-deck|open|save-as|find|copy|select-all|edit-whole|export-.+|import-pptx|print|slide-prev|slide-next|present|present-here|presenter|presenter-.+|show-.+|leave|view-.+|dock|dock-.+|toggle-film|styles-help|common-toolbar-.+)$/;
+            function guard(row) {
+                if (!row || typeof row !== 'object') return row;
+                var result = Object.assign({}, row);
+                if (row.items && Array.isArray(row.items)) result.items = row.items.map(guard);
+                if (row.id === 'save') {
+                    var saveDisabled = row.disabled;
+                    result.disabled = function () { return !canSave() || (typeof saveDisabled === 'function' ? saveDisabled() : !!saveDisabled); };
+                    result.reason = 'This deck is read-only or its recovered revision no longer matches. Use Save As.';
+                } else if (row.id && !navigation.test(row.id)) {
+                    var disabled = row.disabled, run = row.run;
+                    result.disabled = function () { return readOnly() || (typeof disabled === 'function' ? disabled() : !!disabled); };
+                    result.reason = readOnly() ? 'This deck is read-only.' : row.reason;
+                    if (run) result.run = function () { requireEditable(); return run.apply(this, arguments); };
+                }
+                return result;
+            }
+            return table.map(guard);
         }
         function toolbars() {
             if (commonToolbar) { return []; }
@@ -1382,6 +1476,14 @@
             md = await engine();
             await kit();
             if (destroyed) { return; }
+            await loadScript(resourceAsset('resource-session.js'));
+            resourceSession = await window.yavcResourceSession.open(H, function (file) { return loadScript(resourceAsset(file)); });
+            if (destroyed) return;
+            if (resourceSession) { resources = resourceSession.client; recovery = resourceSession.recovery; }
+            restoring = true;
+            if (H.snapshot) snap = H.snapshot.join(root, takeSnapshot, { validate: resourceSession ? resourceSession.validate : function (value) { if (value && value.version === 2) throw new Error('This recovery snapshot requires its resource host. Its saved copy has been retained.'); } });
+            recoveryKept = snap && snap.kept;
+            if (resources && (!snap || typeof snap.flush !== 'function')) { if (snap) snap.leave(); snap = null; throw new Error('Resource editing requires recovery write acknowledgement.'); }
             /* Decks parsed before the engine came read their front matter now. */
             if (deck.frontUnread) { takeFront(deck, deck.frontText); }
             tabs.forEach(function (t) { if (t.deck && t.deck.frontUnread) { takeFront(t.deck, t.deck.frontText); } });
@@ -1399,6 +1501,13 @@
             if (kept && kept.tabs) {
                 for (var ki = 0; ki < kept.tabs.length; ki++) {
                     var kt = kept.tabs[ki], ktext = kt.text;
+                    if (resources && kt.path) {
+                        var restored = await recovery.restore(resources, kt.path, kt.baseline, ktext);
+                        if (destroyed) return;
+                        tabs.push({ deck: parseDeck(restored.text), path: kt.path, name: (restored.snapshot && restored.snapshot.name) || kt.name,
+                            resource: restored.snapshot, baseline: restored.baseline, conflict: restored.conflict, modified: restored.modified, at: kt.slide || 0 });
+                        continue;
+                    }
                     if (ktext == null && kt.path && H.fs && H.fs.readText) { ktext = await H.fs.readText(kt.path).catch(function () { return null; }); }
                     if (ktext == null) { continue; }
                     tabs.push({ deck: parseDeck(ktext), path: kt.path || null, modified: kt.text != null, at: kt.slide || 0 });
@@ -1407,8 +1516,10 @@
             }
             if (file) { await openPath(file, parseInt(start.get('slide') || '1', 10)).catch(function (err) { say(err.message, true); return false; }); }
             if (!tabs.length) { load(NEW_DECK, null); }
+            restoring = false;
             listenForPresenter();
             await setMode(kept && kept.mode ? kept.mode : settings.view);
+            if (tabs.some(function (t) { return !!t.conflict; })) say('Some recovered drafts no longer match their original revision. Use Save As to preserve a copy.', true);
             if (start.get('present')) { present(parseInt(start.get('slide') || '1', 10) - 1); }
             announce();
         })().catch(function (err) { if (!destroyed) { root.innerHTML = '<div class="notice danger" role="alert"><div class="notice-content"><p class="notice-title">Slides could not start</p><p class="notice-body">' + esc(err.message) + '</p></div></div>'; } });
@@ -1457,6 +1568,7 @@
                 }
                 if (presenting) { await leave(); }
                 await openInTab(String(input.text), input.path || null, input.slide);
+                if (resources) { tab().resource = null; tab().fresh = !!input.path; }
                 modified = true;
                 stash();
                 commandsChanged();
@@ -1493,6 +1605,12 @@
             },
             'save@1': async function (input) {
                 await booted;
+                if (resources) {
+                    var destination = input.path ? String(input.path) : path;
+                    if (!destination) throw new Error('Choose a destination for the deck.');
+                    await saveResource(tab(), destination);
+                    return { output: { path: path } };
+                }
                 if (input.path) { path = String(input.path); }
                 if (!path) { throw new Error('the deck has no file yet; give a path such as ~/talks/intro.slides.md'); }
                 if (!H.fs || !H.fs.writeText) { throw new Error('there is no file service here'); }
@@ -1614,6 +1732,10 @@
                 return { output: { index: active + 1, title: got.title, slides: got.slides, pictures: got.pictures } };
             }
         };
+        ['table', 'format', 'set-text', 'insert', 'add', 'duplicate', 'delete', 'move', 'set-slide', 'set-deck'].forEach(function (name) {
+            var original = liveActions[name + '@1'];
+            if (original) liveActions[name + '@1'] = async function (input) { await booted; requireEditable(); return original(input); };
+        });
         var detachLive = window.pudlApplets && window.pudlApplets.attach ? window.pudlApplets.attach('yavc.slides', liveActions) : null;
         var commonToolbar = H.commandToolbar ? H.commandToolbar.attach(root, { app: 'slides', label: 'Slides', table: commandTable,
             defaults: ['save', '-', 'undo', 'redo', '-', 'slide-new', 'slide-duplicate', 'layout', '-', 'style', 'bold', 'italic', 'link', '-', 'present', 'presenter', 'view-mode'] }) : null;

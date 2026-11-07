@@ -16,7 +16,7 @@ The host obtains explicit confirmation before replacing an existing destination.
 
 The yavc adapter uses the existing PUDL file picker and guest VFS. Conditional picker choices contain `expectedRevision`, or null for an absent destination. A changed existing revision requires another Replace confirmation. The commit remains inside the picker, so an error stays beside the failed control and the person can choose again. Server mounts, virtual settings and non-text replacement targets are refused until their backend supports the same contract. Computer downloads remain a separate export command.
 
-The prepared adapter is available under the yavc-owned `pudlHost.contentResourceAdapter` extension. Diagrams now selects it for guest storage when snapshot service version 2 is available, as described in `diagram-resource-adoption.md`. Editor and Slides retain their legacy document writers. PUDL's documented `services` field remains a table of named service URLs. The other applet adapters still gate the complete Docs/Editor split and cross-applet conditional persistence.
+The prepared adapter is available under the yavc-owned `pudlHost.contentResourceAdapter` extension. Diagrams, Editor and Slides select it for guest storage when snapshot service version 2 is available, as described in `diagram-resource-adoption.md` and `editor-slides-resource-adoption.md`. Administrator mounts retain their legacy document writers. PUDL's documented `services` field remains a table of named service URLs. Routing, source preservation and package extraction still gate the complete Docs/Editor split.
 
 ## Applet acknowledgement
 

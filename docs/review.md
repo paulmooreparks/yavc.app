@@ -1,5 +1,21 @@
 # Stem-to-stern review, November 2026
 
+## Editor and Slides resource adoption, 2026-11-08
+
+Editor 45.30.0 and Slides 0.29.0 use guest resource revisions, captured Save As and original-baseline recovery. The shared selector validates legacy Editor drafts and waiting records with the same recovery limits as current snapshots. Editor stops writing its parallel session record in resource mode, but retains old records as migration inputs. Slides now enforces immutable resources across source, rich editing, search, commands and agent actions.
+
+Source review found that resource-mode Editor could report a dirty window as retained without writing recovery. The close guard now prompts rather than claiming retention. Review also found that clean recovered files could acquire stale Undo history, and that saves could capture source before pending rich edits synchronized. Clean recovery preserves the fingerprint check, and both adapters synchronize and recheck the originating rich surface before capturing a submission. Immutable source stays focusable and exposes its read-only state; Slides Find uses the actual write permission to disable Replace.
+
+The focused fixture covers competing writers, stale and matching recovery, legacy drafts without baselines, create-only destinations, edits during Save As, rich edits immediately followed by Save, immutable sources, editable copies and permission revocation in write acknowledgements. It also checks a real desktop Editor close prompt and fresh Undo history after an external update to a clean file. Selection after reload uses an explicit document URL so a competing page's shared host state cannot choose a different open tab for the assertion.
+
+A second review found that permission revocation could block a newer rich draft from reaching source before the rich surface closed. The adapters now drain that draft under its previous local editing state before applying the acknowledged permission, and compare it with the separately captured submission. The shared rich surface freezes edits while disabling and synchronizing. A held acknowledgement test types a newer rich draft, returns a read-only grant, and checks that the draft survives without being written as part of the earlier save.
+
+The accepted host revision also survives a failed local rich synchronization. That failure keeps the tab dirty, leaves the rich draft available for copying and warns before leaving. A revoked surface freezes its retained draft. A fault-injected rich drain failure after an accepted write verifies that a retry uses the accepted revision rather than reporting a false external conflict. Window Save All and tab closure do not discard newer edits merely because an earlier submission succeeded.
+
+The same pending-rich dirty predicate now controls close prompts, Save All inclusion, post-save checks and Slides replacement of an untouched starter. A separate desktop fixture reaches window and tab close prompts before rich autosync, chooses Save, and verifies the stored source includes the pending edit. Both applications use that predicate throughout those close paths.
+
+The resource and rich-close fixtures pass Chromium, Firefox and WebKit. The real VFS consumer fixture and Slides exclusion/export fixture also pass all three engines. Chromium shared editing commands, document pagination, Editor UI and shared LSP regressions pass. The repository gate includes 66 passing browser-module tests. Final independent source/PUDL review has no findings. A WebKit configuration request was interrupted by rapid fixture teardown; its error evidence is retained. The fixture now awaits the configuration queue before destroying that applet and navigating.
+
 ## Guest Diagrams resource adoption, 2026-11-07
 
 Diagrams 0.25.0 selects the prepared resource adapter for guest storage with snapshot service version 2. Administrator mounts retain the legacy adapter, which refuses resource recovery snapshots. Public site sources become read-only snapshots. Source transactions, drawing gestures, Inspector fields, history, formatting and mutating agent actions enforce that permission while selection, navigation and export remain available. Save As refreshes access after creating an editable copy.
