@@ -1,5 +1,13 @@
 # Stem-to-stern review, November 2026
 
+## Transactional guest VFS foundation, 2026-11-07
+
+The storage audit found that localStorage could not provide an atomic revision check, including against older tabs. The guest VFS now commits its existing record format through IndexedDB, imports pictures transactionally, preserves both old stores, and keeps the legacy file API available to every consumer. The experimental resource interface compares file revisions within the same authority. It remains disconnected from production applets until their recovery snapshots carry original baselines. This batch does not claim document-level stale-save protection for legacy applets.
+
+Independent source review caught a synchronous Terminal `touch` caller, migration revision metadata consuming the existing home quota, and an unstyled recovery-download button. Touch now mutates inside the VFS queue, host revisions are excluded from user quota, and the action uses PUDL's button class. The regression fixture includes near-limit migration and queued touch. The migration also retains the original picture database so older releases can still read their own retained copy.
+
+The three-engine fixture covers real IndexedDB migration, competing commits, stale resource writes, acknowledged concurrent mutations, picture lifetime, reload, malformed sources and quota rejection. A second three-engine fixture runs actual Terminal touch commands and Editor, Slides and Diagrams save/reload operations, and verifies the visible PUDL warning and record download. Rendered inspection confirms the warning is visible below the site menubar. The full repository gate and existing Chromium content UI and shared toolbar regressions pass. Independent source review is clean after the corrections. No installed browser data has been migrated by this candidate.
+
 ## Initial portable Diagrams host, 2026-11-07
 
 Diagrams 0.22.1 resolves its shared assets relative to its package, accepts only its host-supplied state when embedded, and can opt into an experimental revision-aware resource host. The builder compiles matching WASM/runtime assets and emits a dependency manifest; the test serves only that artifact beneath an unrelated prefix with a synthetic in-memory resource authority. It loads actual package support scripts without the yavc server, guest FS, configuration store, desktop shell or host-created site globals. `docs/content-host-audit.md` and `docs/content-resource-contract.md` record the scope and limits.

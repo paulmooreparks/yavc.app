@@ -1089,7 +1089,7 @@
                 if (n && realOf(n).home && !n.children) {
                     /* A server file keeps its time: rewriting it would only
                        file an identical copy in its history. */
-                    if (!realOf(n).server) { n.mtime = new Date(); var e = io.fs.save(); if (e) { io.err('touch: ' + e); status = 1; } }
+                    if (!realOf(n).server) { var e = await io.fs.touch(args[i]); if (e) { io.err('touch: ' + e); status = 1; } }
                     continue;
                 }
                 var r = await io.fs.write(args[i], '', false);
@@ -1893,6 +1893,7 @@
                     /* write, for a script: throws rather than answering { error }. */
                     saveText: async function (p, content, append) { var res = await writeFile(fs, base(), p, content, append); if (res && res.error) { throw new Error(res.error); } return true; },
                     save: homeSave,
+                    touch: function (p) { return F.touch(base(), p); },
                     mkdirp: async function (p, parents) { var e = await F.mkdir(base(), p, parents); if (e) { throw new Error(e); } return true; },
                     mkdir: mkdir,
                     remove: remove,
@@ -1973,7 +1974,7 @@
                 if (res.error) { write(paint('red', res.error) + '\n'); status = 1; }
             }
             /* A command may have removed or moved the current directory. */
-            if (!attached(cwd)) { cwd = resolve(fs, fs, cwdPath) || homeDir(); announce(); }
+            if (!attached(cwd)) { var restored = resolve(fs, fs, cwdPath); cwd = restored && restored.children ? restored : homeDir(); announce(); }
             return interrupted ? 130 : status;
         }
 
@@ -1983,7 +1984,11 @@
            the last pipeline's status: 0 for success, and anything else for a
            failure, which stops a script; or an Exit, from a script's exit. */
         async function execute(text, ctx) {
-            if (!ctx) { homeSync(); }
+            if (!ctx) {
+                var currentPath = cwd && pathOf(cwd);
+                try { await homeSync(); } catch (err) { return fail(err.message); }
+                if (cwd && !attached(cwd)) { var restored = resolve(fs, fs, currentPath); cwd = restored && restored.children ? restored : homeDir(); announce(); }
+            }
             var params = ctx && ctx.params, vars = ctx && ctx.env;
             function lookup(name) {
                 if (params && has(params, name)) { return params[name]; }
