@@ -1,5 +1,15 @@
 # Stem-to-stern review, November 2026
 
+## Guest Diagrams resource adoption, 2026-11-07
+
+Diagrams 0.25.0 selects the prepared resource adapter for guest storage with snapshot service version 2. Administrator mounts retain the legacy adapter, which refuses resource recovery snapshots. Public site sources become read-only snapshots. Source transactions, drawing gestures, Inspector fields, history, formatting and mutating agent actions enforce that permission while selection, navigation and export remain available. Save As refreshes access after creating an editable copy.
+
+Independent review found that a successful save acknowledgement could revoke permission without refreshing the controls. The acknowledgement now refreshes source, drawing and Inspector access. A synthetic host test covers that transition. Delayed D2 dialogs and formatting also check the originating tab and unchanged source before applying their result. The guest fixture covers two-window stale saves, absolute home aliases, read-only Canvas/D2/Mermaid and incompatible recovery refusal. The unrelated-host fixture covers immutable resources and editable copies without site globals.
+
+Editor and Slides remain legacy document writers. This batch does not establish cross-applet stale-save protection or complete extraction/reintegration. The VFS consumer fixture now waits for the Markdown engine to finish loading before reloading Editor or Slides, avoiding a fixture-induced interrupted WASM fetch. The original installed WebKit failure is retained with the v0.2.43 installation evidence.
+
+The new guest-adoption and unrelated-host fixtures pass Chromium, Firefox and WebKit, including stale writes, immutable resources, editable copies, revoked permission and dialog ownership. The existing host Save As fixture passes all three engines. Chromium Canvas and shared LSP regressions pass. The full repository gate passes with 64 browser-module tests, and final independent source review has no findings.
+
 ## Resource creation and Save As foundation, 2026-11-07
 
 The experimental resource capability now supports optional create-only destinations and host-owned Save As. The prepared guest adapter uses the existing file picker and VFS, captures destination revisions, and keeps errors inside the picker. It uses the separate `contentResourceAdapter` host extension because the host kit reserves `services` for named URLs. Production applets retain their existing file path until the remaining adoption gates pass.

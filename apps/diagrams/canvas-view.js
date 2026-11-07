@@ -101,12 +101,15 @@
                 var edge = out.edges.find(function (e) { return e.id === selection.id; });
                 if (edge) {
                     layer.appendChild(svg('path', { d: edge.d, 'class': 'dg-cv-ring dg-cv-line-ring' }));
-                    grip('from', 'Move the Start Endpoint', edge.fromPoint[0] + out.origin[0], edge.fromPoint[1] + out.origin[1], 'reconnect');
-                    grip('to', 'Move the End Endpoint', edge.toPoint[0] + out.origin[0], edge.toPoint[1] + out.origin[1], 'reconnect');
+                    if (!locked()) {
+                        grip('from', 'Move the Start Endpoint', edge.fromPoint[0] + out.origin[0], edge.fromPoint[1] + out.origin[1], 'reconnect');
+                        grip('to', 'Move the End Endpoint', edge.toPoint[0] + out.origin[0], edge.toPoint[1] + out.origin[1], 'reconnect');
+                    }
                 }
                 return;
             }
             layer.appendChild(svg('rect', { x: b.x, y: b.y, width: b.w, height: b.h, 'class': 'dg-cv-ring' }));
+            if (locked()) return;
             [['nw', 0, 0], ['n', 0.5, 0], ['ne', 1, 0], ['e', 1, 0.5], ['se', 1, 1], ['s', 0.5, 1], ['sw', 0, 1], ['w', 0, 0.5]].forEach(function (h) {
                 grip(h[0], 'Resize ' + ({ n: 'Top', s: 'Bottom', e: 'Right', w: 'Left', nw: 'Top Left', ne: 'Top Right', sw: 'Bottom Left', se: 'Bottom Right' })[h[0]], n.x + n.width * h[1], n.y + n.height * h[2], 'resize');
             });
@@ -187,16 +190,17 @@
                 if (b) { layer.appendChild(svg('rect', { x: b.x, y: b.y, width: b.w, height: b.h, 'class': 'dg-cv-preview' })); }
             }
         }
+        function locked() { return !!(host.readOnly && host.readOnly()); }
         function down(e) {
             if (drag || !out || !camera || !host.enabled() || (e.button !== 0 && e.button !== 1)) { return; }
             var grip = e.target.closest('[data-grip]'), hit = e.target.closest('[data-id]'), p = point(e);
             stage.focus({ preventScroll: true });
             if (space || e.button === 1 || host.panTool()) { drag = { kind: 'pan', px: e.clientX, py: e.clientY, camera: Object.assign({}, camera) }; }
-            else if (grip && grip.dataset.kind === 'reconnect' && selection && selection.kind === 'edge') {
+            else if (!locked() && grip && grip.dataset.kind === 'reconnect' && selection && selection.kind === 'edge') {
                 drag = { kind: 'reconnect', handle: grip.dataset.grip, edge: doc.edges.find(function (x) { return x.id === selection.id; }), point: p };
             }
-            else if (grip && selectedNode()) { drag = { kind: grip.dataset.kind, handle: grip.dataset.grip, node: Object.assign({}, selectedNode()), point: p }; }
-            else if (host.tool()) { host.create(Math.round(p.x), Math.round(p.y)); e.preventDefault(); return; }
+            else if (!locked() && grip && selectedNode()) { drag = { kind: grip.dataset.kind, handle: grip.dataset.grip, node: Object.assign({}, selectedNode()), point: p }; }
+            else if (!locked() && host.tool()) { host.create(Math.round(p.x), Math.round(p.y)); e.preventDefault(); return; }
             else if (hit) {
                 var s = { kind: hit.dataset.kind, id: hit.dataset.id }, contains = selections.some(function (x) { return x.kind === s.kind && x.id === s.id; });
                 if (e.shiftKey || e.ctrlKey || e.metaKey) {
@@ -204,7 +208,7 @@
                     e.preventDefault(); return;
                 }
                 select(contains ? selections.filter(function (x) { return x.kind !== s.kind || x.id !== s.id; }).concat([s]) : s, 'pointer');
-                if (selection.kind === 'node') { drag = { kind: 'move', node: Object.assign({}, selectedNode()), point: p }; }
+                if (!locked() && selection.kind === 'node') { drag = { kind: 'move', node: Object.assign({}, selectedNode()), point: p }; }
             } else { drag = { kind: 'marquee', point: p, base: e.shiftKey || e.ctrlKey || e.metaKey ? selections.slice() : [] }; }
             if (drag) {
                 autoFit = false;
@@ -255,6 +259,7 @@
                 select(d.base.concat(picked), 'pointer'); return;
             }
             if (host.text() !== d.text || !d.moved || !host.enabled()) { return; }
+            if (locked()) return;
             if (d.kind === 'connect' || d.kind === 'reconnect') {
                 host.edit(connectionRequest(d, p), d.text);
             } else if (d.box) {
@@ -295,14 +300,14 @@
         function blur() { space = false; cancel(); }
         function activate(e) {
             var under = document.elementFromPoint(e.clientX, e.clientY), hit = under && place.contains(under) && under.closest('[data-id]');
-            if (hit && hit.dataset.kind === 'node' && host.enabled() && host.activate) { host.activate(hit.dataset.id); }
+            if (hit && hit.dataset.kind === 'node' && host.enabled() && !locked() && host.activate) { host.activate(hit.dataset.id); }
         }
         place.addEventListener('pointerdown', down); place.addEventListener('pointermove', move); place.addEventListener('pointerup', up);
         place.addEventListener('dblclick', activate);
         place.addEventListener('pointercancel', cancel); place.addEventListener('lostpointercapture', cancel); place.addEventListener('wheel', wheel, { passive: false });
         window.addEventListener('keyup', keyup); window.addEventListener('blur', blur);
         var ro = new ResizeObserver(function () { if (!destroyed) { cancel(); if (camera && !autoFit) { view(); } else { fit(); } } }); ro.observe(stage);
-        return { show: show, selected: function () { return selection; }, selections: function () { return selections.map(function (s) { return Object.assign({}, s); }); }, select: select, reveal: reveal, cycle: cycle, onKey: onKey, fit: fit, zoom: zoom, actual: function () { zoom(1 / scale); }, pan: pan, cancel: cancel,
+        return { show: show, refreshAccess: mark, selected: function () { return selection; }, selections: function () { return selections.map(function (s) { return Object.assign({}, s); }); }, select: select, reveal: reveal, cycle: cycle, onKey: onKey, fit: fit, zoom: zoom, actual: function () { zoom(1 / scale); }, pan: pan, cancel: cancel,
             bounds: function (key) {
                 var n = doc && doc.nodes.find(function (x) { return x.id === key; }), r = place.getBoundingClientRect();
                 return n && camera ? { x: r.left + (n.x - camera.x) * scale, y: r.top + (n.y - camera.y) * scale, width: n.width * scale, height: n.height * scale } : null;

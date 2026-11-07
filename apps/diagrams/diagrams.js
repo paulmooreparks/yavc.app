@@ -210,6 +210,9 @@
         }
         function commandsChanged() { if (opts.commandsChanged) { opts.commandsChanged(); } tabRow(); }
         function current() { return tabs[active] || null; }
+        function readOnly(t) { return !!(resources && t && t.path && t.resource && !resources.canWrite(t.resource)); }
+        function mutationWhy(t) { return readOnly(t || current()) ? 'This diagram is read-only. Use Save As to make an editable copy.' : null; }
+        function requireEditable(t) { var reason = mutationWhy(t); if (reason) throw new Error(reason); }
         function stateString() {
             var t = current(), p = new URLSearchParams();
             if (t && t.path) { p.set('file', t.path); }
@@ -227,6 +230,7 @@
         /* Each tab keeps its own editor state, so its undo history and its
            cursor survive a switch to another tab and back. */
         function stateFor(t, text) {
+            t.accessComp = new CM.Compartment();
             var visualChange = CM.StateField.define({ create: function () { return ''; }, update: function (v, tr) { return tr.docChanged ? tr.annotation(CM.Transaction.userEvent) || '' : v; } });
             var history = t.kind === 'canvas' ? CM.history({ joinToEvent: function (tr, adjacent) {
                 var previous = tr.startState.field(visualChange), event = tr.annotation(CM.Transaction.userEvent) || '';
@@ -234,7 +238,8 @@
                 return adjacent && !tr.isUserEvent('input.canvas') && !/^input\.(canvas|type\.canvas)/.test(previous);
             } }) : CM.history();
             var ext = [visualChange, CM.lineNumbers(), CM.highlightActiveLineGutter(), history, CM.drawSelection(), CM.highlightActiveLine(), CM.highlightSelectionMatches(), CM.bracketMatching(), CM.closeBrackets(),
-                lspComp.of(lsp && t.kind === 'canvas' ? lsp.extension('canvas', false) : []),
+                t.accessComp.of([]), CM.EditorState.transactionFilter.of(function (tr) { return tr.docChanged && readOnly(t) ? [] : tr; }),
+                lspComp.of(lsp && t.kind === 'canvas' ? lsp.extension('canvas', readOnly(t)) : []),
                 CM.keymap.of([].concat(CM.closeBracketsKeymap, CM.completionKeymap, CM.lintKeymap, CM.defaultKeymap, CM.searchKeymap, CM.historyKeymap, [CM.indentWithTab])),
                 window.yavcMdEditor.codeSearch(CM),
                 CM.indentUnit.of('  '),
@@ -256,12 +261,23 @@
                 quiet = true;
                 try { cm.setState(t.state); } finally { quiet = false; }
             }
-            cm.dispatch({ effects: lspComp.reconfigure(lsp && t.kind === 'canvas' ? lsp.extension('canvas', false) : []) });
+            refreshAccess(t);
+        }
+        function refreshAccess(t) {
+            if (!cm || t !== current()) return;
+            var locked = readOnly(t);
+            root.setAttribute('data-read-only', String(locked));
+            if (t.settled && !t.settled.problems.length) el.state.textContent = locked ? 'Read-only' : 'Drawn';
+            cm.dispatch({ effects: [t.accessComp.reconfigure([CM.EditorState.readOnly.of(locked), CM.EditorView.editable.of(!locked), CM.EditorView.contentAttributes.of({ 'aria-readonly': String(locked), tabindex: '0' })]), lspComp.reconfigure(lsp && t.kind === 'canvas' ? lsp.extension('canvas', locked) : [])] });
+            if (locked) { setTool(null); if (connecting) stopConnect(''); }
+            if (t.cv && t.cv.refreshAccess) t.cv.refreshAccess();
+            if (t.canvas && t.canvas.refreshAccess) t.canvas.refreshAccess();
         }
         /* The text a command replaces, as one change, so Undo takes it back. */
         function replaceText(text, userEvent) {
             var t = current();
             if (!t || !cm || cm.state.doc.toString() === text) { return; }
+            requireEditable(t);
             cm.dispatch({ changes: { from: 0, to: cm.state.doc.length, insert: text }, userEvent: userEvent });
         }
         function textChanged(text) {
@@ -376,7 +392,7 @@
                 el.state.textContent = p.length === 1 ? 'One mistake' : p.length + ' mistakes';
             } else {
                 window.yavcUtil.notice(el.body, '');
-                el.state.textContent = 'Drawn';
+                el.state.textContent = readOnly(t) ? 'Read-only' : 'Drawn';
             }
             commandsChanged();
             renderInspector();
@@ -435,6 +451,7 @@
                     t.cv = V.attach(place, el.stage, {
                         selected: function (s, how) { canvasSelectionChanged(t, s, how); },
                         enabled: function () { return t === current() && t.text === t.cvText && !t.place.classList.contains('sc-diagram-stale'); },
+                        readOnly: function () { return readOnly(t); },
                         text: function () { return t.text; },
                         tool: function () { return tool; }, panTool: function () { return canvasPan; },
                         create: function (x, y) { canvasCreate(x, y); },
@@ -468,6 +485,7 @@
             entry.el.style.top = (Math.max(0, Math.min(box.y - stage.top, el.stage.clientHeight - entry.el.offsetHeight)) + el.stage.scrollTop) + 'px';
         }
         function startInlineText(key) {
+            if (readOnly(current())) return;
             var t = current(), selected = canvasSelection();
             key = key || (selected && selected.id);
             if (canvasWhy('shape')) { return; }
@@ -632,6 +650,7 @@
         async function canvasEdit(req, expected, strict, userEvent) {
             var t = current();
             try {
+                requireEditable(t);
                 if (!t || t.kind !== 'canvas' || (expected != null && expected !== t.text)) { throw new Error('The canvas changed before the edit finished. Try again on the current drawing.'); }
                 var J = window.yavcCanvas, M = window.yavcCanvasModel, got = J.read(t.text);
                 if (!got.doc) { throw new Error('Put the mistake in the canvas text right before editing the drawing.'); }
@@ -743,7 +762,7 @@
             var selected = canvasSelections(), show = !!(settings.inspector && t.cv);
             inspectorPresentation(show);
             if (!show) { inspected = null; return; }
-            var blocked = !!canvasWhy(false), state = 'canvas|' + JSON.stringify(selected) + '|' + blocked;
+            var blocked = !!(canvasWhy(false) || mutationWhy(t)), state = 'canvas|' + JSON.stringify(selected) + '|' + blocked;
             if (inspected === state && el.inspector.contains(document.activeElement)) { return; }
             inspected = state;
             if (!selected.length) { renderDocumentInspector(t, blocked); return; }
@@ -844,7 +863,11 @@
             } catch (err) { if (!destroyed && owner === current() && f.isConnected) { markField(f, err.message); } }
         }
         function canvasCommands() {
-            function c(id, label, run, key, needs, glyph) { return cmd('cv-' + id, label, glyph, run, { hidden: function () { return !isCanvas(); }, builtIn: key, disabled: function () { return !!canvasWhy(needs); }, reason: function () { return canvasWhy(needs); } }); }
+            function c(id, label, run, key, needs, glyph) {
+                var changes = !['select-all','select-items','copy','next','previous','zoom-in','zoom-out','actual','pan'].includes(id) && !id.startsWith('pan-');
+                function reason() { return canvasWhy(needs) || (changes ? mutationWhy() : null); }
+                return cmd('cv-' + id, label, glyph, run, { hidden: function () { return !isCanvas(); }, builtIn: key, disabled: function () { return !!reason(); }, reason: reason });
+            }
             var commands = [
                 c('edit-text', 'Edit Text', startInlineText, 'Enter', 'text', 'pencil'),
                 c('select-all', 'Select All Items', canvasSelectAll, 'Mod-a', false),
@@ -882,6 +905,7 @@
         }
         function canvasKey(e) {
             var t = current(), mod = e.ctrlKey || e.metaKey, key = e.key.toLowerCase();
+            if (readOnly(t) && ((mod && ['z','y','v','d','[',']'].includes(key)) || (!mod && !e.altKey && ['n','g','c','e','r','delete','enter'].includes(key)))) { e.preventDefault(); return; }
             if (mod && key === 'z') { e.preventDefault(); if (e.shiftKey) { CM.redo(cm); } else { CM.undo(cm); } return; }
             if (mod && key === 'y') { e.preventDefault(); CM.redo(cm); return; }
             if (e.key === 'Escape') { setTool(null); t.cv.cancel(); t.cv.select(null); e.preventDefault(); return; }
@@ -893,7 +917,7 @@
                 e.preventDefault();
                 var dx = e.key === 'ArrowLeft' ? -1 : e.key === 'ArrowRight' ? 1 : 0, dy = e.key === 'ArrowUp' ? -1 : e.key === 'ArrowDown' ? 1 : 0;
                 if (e.altKey) { t.cv.pan(dx * 80, dy * 80); }
-                else if (!canvasWhy('nodes')) { canvasRequest({ op: 'move', dx: dx * (e.shiftKey ? 8 : 1), dy: dy * (e.shiftKey ? 8 : 1) }); }
+                else if (!readOnly(t) && !canvasWhy('nodes')) { canvasRequest({ op: 'move', dx: dx * (e.shiftKey ? 8 : 1), dy: dy * (e.shiftKey ? 8 : 1) }); }
                 return;
             }
             if (mod && key === 'c') { e.preventDefault(); canvasCopy(); }
@@ -1007,6 +1031,7 @@
                 if (!t.canvas) {
                     t.canvas = C.attach(t.place, {
                         selected: function (key, how) { canvasSelected(t, key, how); },
+                        readOnly: function () { return readOnly(t); },
                         activate: function (key) { if (t === current()) { editLabel(key); } },
                         pick: function (key) { return t === current() && pickEnd(key); },
                         tool: function () { return tool; },
@@ -1035,7 +1060,7 @@
             return s ? '"' + (s.label || s.id) + '" (' + s.id + ', ' + s.shape.replace(/_/g, ' ') + ')' : key;
         }
         function selection() { var t = current(); return t && t.canvas ? t.canvas.selected() : null; }
-        function canEdit() { var t = current(); return !!(t && t.kind === 'd2' && t.canvas && !(t.problems && t.problems.length)); }
+        function canEdit() { var t = current(); return !!(t && !readOnly(t) && t.kind === 'd2' && t.canvas && !(t.problems && t.problems.length)); }
         /* A selection on the canvas selects the shape's text beside it,
            without taking the keyboard from the drawing. */
         function canvasSelected(t, key, how) {
@@ -1115,7 +1140,7 @@
             var show = !!(settings.inspector && t && t.kind === 'd2' && t.canvas);
             inspectorPresentation(show);
             if (!show) { inspected = null; return; }
-            var blocked = !!(t.problems && t.problems.length), state = key + '|' + blocked;
+            var blocked = !!(readOnly(t) || t.problems && t.problems.length), state = key + '|' + blocked;
             if (el.inspector.contains(document.activeElement) && inspected === state) { return; }
             inspected = state;
             /* Where the keyboard was, to put it back: the fields' ids last
@@ -1160,7 +1185,7 @@
                     textField(p + 'tip', key + '.tooltip', 'Tooltip', s.tooltip);
             }
             el.inspector.innerHTML = blocked
-                ? '<p class="form-help dg-inspector-blocked" id="' + p + 'blocked">The text has a mistake in it, so these settings cannot be changed until it is put right.</p><fieldset class="dg-inspector-fields" disabled aria-describedby="' + p + 'blocked">' + html + '</fieldset>'
+                ? '<p class="form-help dg-inspector-blocked" id="' + p + 'blocked">' + (readOnly(t) ? 'This diagram is read-only. Use Save As to make an editable copy.' : 'The text has a mistake in it, so these settings cannot be changed until it is put right.') + '</p><fieldset class="dg-inspector-fields" disabled aria-describedby="' + p + 'blocked">' + html + '</fieldset>'
                 : html;
             window.yavcMdEditor.wireColours(el.inspector);
             if (window.pudlFields && window.pudlFields.enhance) { window.pudlFields.enhance(el.inspector); }
@@ -1278,6 +1303,8 @@
         async function applyEdit(req, keep, quiet) {
             var t = current();
             if (!t || t.kind !== 'd2') { return null; }
+            if (readOnly(t)) { say(mutationWhy(t), 'info'); return null; }
+            var original = t.text;
             if (t.problems && t.problems.length) { say('The text has a mistake in it, so the drawing cannot be changed. Put the mistake right first.', 'warn'); return null; }
             var out;
             try {
@@ -1294,7 +1321,7 @@
             }
             if (!out) { return null; }
             if (out.problems && out.problems.length) { if (!quiet) { say('That change could not be made. ' + out.problems[0].message, 'warn'); } return out; }
-            if (t !== current()) { return null; }
+            if (destroyed || t !== current() || t.text !== original || readOnly(t)) { return null; }
             /* A change that worked puts right whatever a refused one said. */
             say('', 'warn');
             t.pending = keep || out.key || null;
@@ -1315,6 +1342,7 @@
         var canvasPan = false;
         function setCanvasPan(value) { setTool(null); canvasPan = value; root.classList.toggle('dg-cv-panning', value); commandsChanged(); }
         function setTool(kind) {
+            if (kind && kind !== 'select' && readOnly(current())) { say(mutationWhy(), 'info'); return; }
             canvasPan = false;
             root.classList.remove('dg-cv-panning');
             tool = kind && kind !== 'select' ? kind : null;
@@ -1364,12 +1392,13 @@
         function moveInto() {
             var key = selection(), t = current();
             if (!key || isConnection(key) || !canEdit()) { return; }
+            var original = t.text;
             var names = ((t.outline && t.outline.shapes) || []).map(function (s) { return s.id; }).filter(function (id) { return id !== key && id.indexOf(key + '.') !== 0; });
             window.yavcDialog.askText('Move Into a Shape', 'Container', '', {
                 okLabel: 'Move',
                 help: 'The full name of the shape to move ' + key + ' into, such as ' + (names[0] || 'site') + '. It becomes a container if it is not one.',
                 validate: function (v) { return !v ? 'Give the name of a shape.' : names.indexOf(v) < 0 ? 'There is no shape called ' + v + ' here.' : null; }
-            }).then(function (v) { if (v) { moveTo(key, v); } });
+            }).then(function (v) { if (v && !destroyed && t === current() && t.text === original && !readOnly(t)) { moveTo(key, v); } });
         }
         /* The next free name for a new shape in a container ('' for the
            top): item, item 2, item 3, as D2 numbers them. A connection's
@@ -1397,6 +1426,7 @@
             var t = current();
             key = key || selection();
             if (!t || !key || !canEdit()) { return; }
+            var original = t.text;
             var item = isConnection(key) ? connectionOf(t, key) : shapeOf(t, key);
             var now = item ? (item.label || '') : '';
             var conn = isConnection(key);
@@ -1405,7 +1435,7 @@
                 help: conn ? 'The words shown on the connection. Leave it empty for none.' : 'The words shown on the shape. Leave it empty to show its name, ' + lastName(key) + '.',
                 validate: function (v) { return /[{}]/.test(v) ? 'A label cannot hold a brace, { or }.' : null; }
             }).then(function (v) {
-                if (v == null || v === now) { return; }
+                if (v == null || v === now || destroyed || t !== current() || t.text !== original || readOnly(t)) { return; }
                 applyEdit({ op: 'set', key: key, value: v === '' ? (conn ? '' : lastName(key)) : v }).then(function (out) { done(out, 'Set the label.'); });
             });
         }
@@ -1413,6 +1443,7 @@
             var key = selection();
             if (!key || isConnection(key) || !canEdit()) { return; }
             var t = current(), parent = key.indexOf('.') >= 0 ? key.replace(/\.[^.]*$/, '') : '';
+            var original = t.text;
             var siblings = ((t.outline && t.outline.shapes) || []).filter(function (s) { return (s.parent || '') === parent && s.id !== key; }).map(function (s) { return lastName(s.id).toLowerCase(); });
             window.yavcDialog.askText('Rename the Shape', 'Name', lastName(key), {
                 okLabel: 'Rename',
@@ -1425,7 +1456,7 @@
                     return null;
                 }
             }).then(function (v) {
-                if (v == null || v === lastName(key)) { return; }
+                if (v == null || v === lastName(key) || destroyed || t !== current() || t.text !== original || readOnly(t)) { return; }
                 applyEdit({ op: 'rename', key: key, name: v }).then(function (out) { done(out, 'Renamed ' + key + ' to ' + v + '.'); });
             });
         }
@@ -1615,7 +1646,7 @@
             try { if (resources) { resource = await resources.read(p); text = resource.text; } else { text = await H.fs.readText(p); } } catch (err) { if (!destroyed) say(p + ' could not be read: ' + ((err && err.message) || err), true); return false; }
             if (destroyed) return false;
             if (text == null) { say('There is no file at ' + p + '.', true); return false; }
-            var opened = openInTab(text, p, null, view); opened.resource = resource || null; commandsChanged();
+            var opened = openInTab(text, p, null, view); opened.resource = resource || null; refreshAccess(opened); renderInspector(); commandsChanged();
             say('Opened ' + p + '.');
             return true;
         }
@@ -1657,7 +1688,7 @@
                 if (t.recoveryConflict) throw new Error('These recovered edits have no matching file revision. Download the source before reopening the file.');
                 if (!t.resource || path !== t.resource.resource) throw new Error('This resource host does not offer Save As yet.');
                 var accepted = await resources.write(t.resource, submitted);
-                if (!destroyed && tabs.indexOf(t) >= 0) t.resource = accepted;
+                if (!destroyed && tabs.indexOf(t) >= 0) { t.resource = accepted; if (t === current()) { refreshAccess(t); renderInspector(); } }
                 return null;
             }
             if (!H.fs || !H.fs.writeText) throw new Error('This host cannot save files.');
@@ -1704,6 +1735,7 @@
             if (!saved(t, path, submitted, ticket, true)) return;
             t.name = accepted && accepted.name || null;
             if (accepted) { t.resource = accepted; t.recoveryBaseline = null; t.recoveryConflict = null; }
+            refreshAccess(t); renderInspector();
             var kind = kindOf(accepted && accepted.name || path, t.text);
             if (kind !== t.kind) {
                 t.kind = kind;
@@ -1812,8 +1844,11 @@
         }
         function formatText() {
             var t = current();
+            if (!t || readOnly(t)) return;
+            var original = t.text;
             if (t && t.kind === 'canvas') {
                 tidyCanvas(t.text).then(function (out) {
+                    if (destroyed || t !== current() || t.text !== original || readOnly(t)) return;
                     if (out.problem) { say('The text has a mistake in it, so it was not tidied. Put the mistake right first.', 'warn'); return; }
                     if (out.text === t.text) { say('The text was tidy already.'); return; }
                     replaceText(out.text);
@@ -1823,6 +1858,7 @@
             }
             if (!t || t.kind !== 'd2') { return; }
             d2().then(function (E) { return E.call('format', { text: t.text }); }).then(function (out) {
+                if (destroyed || t !== current() || t.text !== original || readOnly(t)) return;
                 if (!out) { return; }
                 if (out.problems && out.problems.length) { say('The text has a mistake in it, so it was not tidied. Put the mistake right first.', 'warn'); return; }
                 if (out.text === t.text) { say('The text was tidy already.'); return; }
@@ -1847,9 +1883,10 @@
                 return true;
             }
         });
-        var snap = H.snapshot && !H.contentResources ? H.snapshot.join(root, function () {
+        function legacySnapshot() {
             return { tabs: tabs.map(function (t) { return { path: t.path, name: t.name || null, kind: t.kind, text: t.modified ? t.text : null, view: t.view || null }; }), active: active };
-        }) : null;
+        }
+        var snap = null;
         function resourceSnapshot() {
             if (!recoveryReady) return recoveryKept;
             var value = { version: 2, tabs: tabs.map(function (t) {
@@ -1880,6 +1917,7 @@
            PUDL shows it on the disabled control and tells an agent. */
         function whyNot(needs) {
             var t = current();
+            if (readOnly(t)) return mutationWhy(t);
             if (t && t.kind === 'canvas') { return canvasWhy(needs); }
             if (!t || t.kind !== 'd2') { return 'Only D2 diagrams and canvases are edited on their drawings.'; }
             if (t.problems && t.problems.length) { return 'The text has a mistake in it; put it right first.'; }
@@ -1895,20 +1933,20 @@
                 cmd('new-mermaid', 'New Mermaid Diagram', 'file', null, { items: MERMAID_STYLES.map(function (s) { return { id: 'new-' + s.id, label: s.label, run: function () { newDiagram(s, 'mermaid'); } }; }) }),
                 cmd('new-canvas', 'New Canvas', 'file', null, { items: CANVAS_STYLES.map(function (s) { return { id: 'new-canvas-' + s[0], label: s[1], run: function () { return newCanvas(s[0]); } }; }) }),
                 cmd('open', 'Open…', 'folder', open, { shortcut: 'Mod+O' }),
-                cmd('save', 'Save', 'yavc-save', save, { shortcut: 'Mod+S', disabled: function () { var t = current(); return !t || (resources ? !t.path ? !resources.canSaveAs() : !resources.canWrite(t.resource) : !H.fs || !H.fs.writeText && !H.fs.save); }, reason: function () { var t = current(); return t && t.recoveryConflict ? 'Recovered edits have no matching file revision. Use Save As or download the source.' : undefined; } }),
+                cmd('save', 'Save', 'yavc-save', save, { shortcut: 'Mod+S', disabled: function () { var t = current(); return !t || (resources ? !t.path ? !resources.canSaveAs() : !resources.canWrite(t.resource) : !H.fs || !H.fs.writeText && !H.fs.save); }, reason: function () { var t = current(); return mutationWhy(t) || (t && t.recoveryConflict ? 'Recovered edits have no matching file revision. Use Save As or download the source.' : undefined); } }),
                 cmd('save-as', 'Save As…', 'yavc-save-as', saveAs, { disabled: function () { return !current() || (resources ? !resources.canSaveAs() : !H.fs || !H.fs.save); }, reason: function () { return resources ? !resources.canSaveAs() ? 'This host does not offer Save As.' : undefined : !H.fs || !H.fs.save ? 'This host does not offer Save As.' : undefined; } }),
                 cmd('close-diagram', 'Close Diagram', null, function () { closeTab(active); }, { disabled: function () { return !current(); } }),
-                cmd('undo', 'Undo', 'yavc-undo', function () { if (cm) { CM.undo(cm); } }, { builtIn: 'Mod-z', glyphOnly: true }),
-                cmd('redo', 'Redo', 'yavc-redo', function () { if (cm) { CM.redo(cm); } }, { builtIn: 'Mod-y', glyphOnly: true }),
+                cmd('undo', 'Undo', 'yavc-undo', function () { if (cm && !readOnly(current())) { CM.undo(cm); } }, { builtIn: 'Mod-z', glyphOnly: true, disabled: function () { return readOnly(current()); }, reason: function () { return mutationWhy(); } }),
+                cmd('redo', 'Redo', 'yavc-redo', function () { if (cm && !readOnly(current())) { CM.redo(cm); } }, { builtIn: 'Mod-y', glyphOnly: true, disabled: function () { return readOnly(current()); }, reason: function () { return mutationWhy(); } }),
                 cmd('find', 'Find and Replace…', 'search', openFind, { builtIn: 'Mod-f' }),
-                cmd('language-restart', 'Restart Language Assistance', 'reload', function () { if (lsp && cm) { lsp.restart(); cm.dispatch({ effects: lspComp.reconfigure(lsp.extension('canvas', false)) }); } }, { hidden: function () { return !isCanvas(); }, disabled: function () { return !lsp || !cm; } }),
+                cmd('language-restart', 'Restart Language Assistance', 'reload', function () { if (lsp && cm) { lsp.restart(); cm.dispatch({ effects: lspComp.reconfigure(lsp.extension('canvas', readOnly(current()))) }); } }, { hidden: function () { return !isCanvas(); }, disabled: function () { return !lsp || !cm; } }),
                 cmd('go-to-line', 'Go to Line…', null, goToLine, { builtIn: 'Mod-Alt-g' }),
                 cmd('edit-in-editor', 'Open in the Editor', 'pencil', editInEditor, { disabled: function () { var c = current(); return !(c && c.path); } }),
                 cmd('export-svg', 'Download as SVG', 'download', downloadSVG, { disabled: function () { return !drawable(); } }),
                 cmd('export-png', 'Download as PNG', 'download', null, { disabled: function () { return !drawable(); }, items: [1, 2, 3].map(function (k) { return { id: 'export-png-' + k, label: k === 1 ? 'Actual Size' : k + ' Times the Size', run: function () { downloadPNG(k); } }; }) }),
                 cmd('export-source', 'Download the Text', 'download', downloadSource, { disabled: function () { return !current(); } }),
                 cmd('copy-embed', 'Copy as Embed', 'copy', copyEmbed, { hidden: function () { return isCanvas(); }, disabled: function () { return !current(); } }),
-                cmd('format-text', 'Tidy the Text', 'code', formatText, { hidden: function () { return !isD2() && !isCanvas(); } }),
+                cmd('format-text', 'Tidy the Text', 'code', formatText, { hidden: function () { return !isD2() && !isCanvas(); }, disabled: function () { return readOnly(current()); }, reason: function () { return mutationWhy(); } }),
                 cmd('shape-add', 'Add Shape', 'plus', function () { addShape(false); }, { builtIn: 'n', hidden: function () { return !isD2(); }, disabled: function () { return !!whyNot(false); }, reason: function () { return whyNot(false); } }),
                 cmd('shape-add-inside', 'Add Shape Inside', null, function () { addShape(true); }, { builtIn: 'Shift-n', hidden: function () { return !isD2(); }, disabled: function () { return !!whyNot('shape'); }, reason: function () { return whyNot('shape'); } }),
                 cmd('connect', 'Connect To…', 'yavc-connect', function () { if (connecting) { stopConnect('Stopped connecting.'); } else { startConnect(); } }, { builtIn: 'c', hidden: function () { return !isD2(); }, checked: function () { return !!connecting; }, disabled: function () { return !connecting && !!whyNot('shape'); }, reason: function () { return connecting ? null : whyNot('shape'); } }),
@@ -1984,9 +2022,12 @@
 
         var booted = (async function () {
             var got = await Promise.all([kit(), modes()]);
-            if (H.contentResources) {
+            var resourceHost = H.contentResources;
+            if (!resourceHost && H.contentResourceAdapter && H.snapshot && H.snapshot.version === 2 && typeof H.contentResourceAdapter.available === 'function' && await H.contentResourceAdapter.available()) resourceHost = H.contentResourceAdapter;
+            if (destroyed) return;
+            if (resourceHost) {
                 var resourceAPI = await once('resources', asset('content-kit/resources.js'), 'yavcContentResources');
-                resources = resourceAPI.create(H.contentResources);
+                resources = resourceAPI.create(resourceHost);
                 recovery = await once('recovery', asset('content-kit/recovery.js'), 'yavcContentRecovery');
                 if (recovery.version !== 1 || typeof resources.baseline !== 'function' || typeof resources.canSaveAs !== 'function') throw new Error('The content recovery modules are incompatible. Reload with matching package assets.');
             }
@@ -2006,6 +2047,9 @@
                 snap = H.snapshot.join(root, resourceSnapshot, { validate: recovery.validate });
                 recoveryKept = snap.kept;
                 if (typeof snap.flush !== 'function') { snap.leave(); snap = null; throw new Error('Snapshot version 2 must acknowledge recovery writes.'); }
+            }
+            else if (H.snapshot) {
+                snap = H.snapshot.join(root, legacySnapshot, { validate: function (value) { if (value && value.version === 2) throw new Error('This resource recovery snapshot needs its original resource host. Its saved copy has been retained.'); } });
             }
             /* The tabs kept across a reload come back first, unsaved text and
                all; then the address's file comes to the front. */
@@ -2079,6 +2123,7 @@
             'set-text@1': async function (input) {
                 await booted;
                 await front(input.index);
+                requireEditable(current());
                 replaceText(String(input.text));
                 return { output: Object.assign(summary(current(), active), await drawnNow()) };
             },
@@ -2139,6 +2184,8 @@
             'format@1': async function (input) {
                 await booted;
                 var t = await front(input.index);
+                requireEditable(t);
+                var original = t.text;
                 if (t.kind === 'mermaid') { throw new Error('only D2 and canvas text is tidied; this diagram is Mermaid'); }
                 var out;
                 if (t.kind === 'canvas') {
@@ -2148,6 +2195,7 @@
                     out = await (await d2()).call('format', { text: t.text });
                     if (out.problems && out.problems.length) { throw new Error('the text has a mistake on line ' + (out.problems[0].line || 1) + ': ' + out.problems[0].message); }
                 }
+                if (destroyed || t !== current() || t.text !== original || readOnly(t)) throw new Error('The diagram changed before formatting finished.');
                 var changed = out.text !== t.text;
                 replaceText(out.text);
                 return { output: { index: active + 1, changed: changed } };
@@ -2155,6 +2203,7 @@
             'edit@1': async function (input) {
                 await booted;
                 var t = await front(input.index);
+                requireEditable(t);
                 if (t.kind !== 'd2') { throw new Error('only D2 diagrams are edited shape by shape; this one is ' + KIND_NAME[t.kind]); }
                 if (!t.canvas) { await drawNow(); }
                 var req = { op: String(input.op), key: String(input.key) };
@@ -2189,6 +2238,7 @@
             'canvas-edit@1': async function (input) {
                 await booted;
                 var t = await front(input.index);
+                requireEditable(t);
                 if (t.kind !== 'canvas') { throw new Error('Open a JSON Canvas file before using canvas-edit.'); }
                 await canvasEditor();
                 if (destroyed || t !== current()) { throw new Error('The open canvas changed before the edit could run.'); }
