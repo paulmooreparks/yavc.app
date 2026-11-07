@@ -169,6 +169,20 @@
         /* === State ====================================================== */
 
         function current() { return tabs[active] || null; }
+        function applicationLabel() {
+            var t = current();
+            return t ? (t.lang === 'markdown' && (forDocuments || /\.docs\.md$/i.test(t.path || t.name || '')) ? 'Docs' : 'Editor') : (forDocuments ? 'Docs' : 'Editor');
+        }
+        var identityLabel = '';
+        function updateIdentity() {
+            var label = applicationLabel();
+            if (label === identityLabel) return;
+            identityLabel = label;
+            var win = root.closest('[data-win]');
+            if (win && window.pudlWindows) pudlWindows.retitle(win.getAttribute('data-win'), label);
+            else if (opts.ownsUrl) document.title = label + ' · yavc.app';
+            if (window.pudlMenubar) pudlMenubar.refresh();
+        }
         function stateString() { var t = current(); return t && t.path ? 'file=' + encodeURIComponent(t.path).replace(/%2F/g, '/').replace(/%7E/g, '~') + (t.navigationLine > 1 ? '&line=' + t.navigationLine : '') : ''; }
         function announce(push) {
             if (opts.ownsUrl) {
@@ -377,6 +391,7 @@
             close: closeTab
         }) : null;
         function renderTabs() {
+            updateIdentity();
             if (tabRow) { tabRow.render(); }
             var t = current();
             el.where.textContent = t ? (t.path || 'Not saved yet') : '';
@@ -2185,7 +2200,7 @@
         var LAYOUT = ['toggle-files', 'toggle-outline', 'hide-navigation', 'toggle-wrap', '-', 'view-document', 'view-visual', 'view-text', 'view-split', 'view-preview', 'document-zoom', 'md-default', '-', 'source', 'preview'];
         function menus() {
             var titles = [
-                { label: 'Editor', glyph: 'document', items: window.pcAppletIdentity(root, ['key-bindings']) },
+                { label: applicationLabel(), glyph: 'document', items: window.pcAppletIdentity(root, ['key-bindings']) },
                 { id: 'file', label: 'File', glyph: 'file', items: ['new', 'open', 'save', 'save-as', '-', 'export-docx', 'export-pdf', 'print-document', '-', 'properties', 'present', '-', 'close-document'] },
                 { id: 'edit', label: 'Edit', glyph: 'pencil', items: ['undo', 'redo', '-', 'cut', 'copy', 'paste', '-', 'select-all', '-', 'find', '-', 'json-format', 'language-restart'] },
                 { id: 'insert', label: 'Insert', glyph: 'plus', items: ['link', 'insert', 'table', 'box', '-', 'insert-timestamp', 'insert-date', 'stamp-modified'] }

@@ -2,6 +2,8 @@
 
 ## Slides menu glyphs, 2026-11-07
 
+The same candidate now updates the Editor window and application-menu identity from the active file. Document tabs use Docs, while plain text/code tabs use Editor, including when opened from the Docs launch. Editor is 45.29.1. The three-engine identity fixture covers desktop and standalone hosts, active-tab changes and documents switched to Text view. The existing Chromium Editor UI review and full repository gate pass. Independent PUDL source review has no findings. DESIGN.md decision 58 records the contract.
+
 The Slide menu and legacy Slide toolbar group now use PUDL's landscape panel glyph. Insert retains the plus glyph, matching insertion menus elsewhere. Slides is 0.28.1. `docs/file-associations.md` records the proposed shared association resolver and Editor/Docs launch profiles; that proposal has no runtime changes.
 
 The full repository gate and Chromium content UI fixture pass. A headless rendered check confirms different Slide and Insert masks, and the dark menu bar screenshot was inspected. Independent PUDL source review has no findings. This candidate is not merged or installed.
