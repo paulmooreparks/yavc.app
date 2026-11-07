@@ -302,7 +302,7 @@
         opts = opts || {};
         var uid = ++instances;
         var ownUrl = !!opts.ownsUrl;
-        var destroyed = false;
+        var destroyed = false,chooserGeneration=0;
         var OS = null, osmd = null, audio = null;
         var settings = Object.assign({}, SETTINGS), unConfig = null;
 
@@ -390,12 +390,12 @@
               '<div class="dialog-body" data-role="chooser-body"></div>' +
               '<div class="dialog-actions">' +
                 '<button type="button" class="btn" data-sr="file">From this device…</button>' +
-                '<button type="button" class="btn btn-primary" data-sr="close-chooser">Close</button>' +
+                '<button type="button" class="btn" data-sr="close-chooser">Cancel</button><button type="button" class="btn btn-primary" data-sr="choose-open" disabled>Open</button>' +
               '</div>' +
             '</dialog>' +
             '<dialog class="dialog sr-dialog" data-role="options" aria-labelledby="sr-opt-title-' + uid + '">' +
               '<h3 class="dialog-title" id="sr-opt-title-' + uid + '">Options</h3>' +
-              '<div class="settings-panel sr-options">' +
+              '<div class="dialog-body settings-panel sr-options">' +
                 '<section class="card">' +
                   '<h4 class="card-title">Instrument</h4><p class="card-desc">The keyboard or fingerboard you name the notes on.</p>' +
                   '<span class="form-select-wrap"><select class="form-select" data-opt="keyboard" aria-label="Instrument">' +
@@ -1217,19 +1217,27 @@
         /* === Choosing a score, and what to read ================================== */
 
         function openChooser() {
+            var request=++chooserGeneration;
             el.chooserBody.innerHTML = '<p class="sr-muted">Looking for scores…</p>';
+            root.querySelector('[data-sr="choose-open"]').disabled=true;
             if (!el.chooser.open) { el.chooser.showModal(); }
             fetchIndex().then(function (index) {
-                if (destroyed) { return; }
+                if (destroyed || request!==chooserGeneration || !el.chooser.open) { return; }
                 var groups = (index.groups || []).filter(function (g) { return g.scores && g.scores.length; });
-                el.chooserBody.innerHTML = groups.length ? groups.map(function (g) {
-                    return '<section class="sr-group">' + (g.name ? '<h4 class="sr-group-name">' + esc(g.name) + '</h4>' : '') +
-                        '<ul class="sr-list">' + g.scores.map(function (s) {
-                            return '<li><button type="button" class="btn sr-pick" data-sr-open="' + esc(s.file) + '" data-sr-name="' + esc(s.title) + '">' + esc(s.title) + '</button></li>';
-                        }).join('') + '</ul></section>';
-                }).join('') : '<p class="sr-muted">No sample scores were found. Open a file from this device instead.</p>';
+                if(!groups.length){el.chooserBody.innerHTML='<p class="sr-muted">No sample scores were found. Open a file from this device instead.</p>';return;}
+                var queryId='sr-score-query-'+uid,listId='sr-score-list-'+uid;
+                el.chooserBody.innerHTML='<div class="form-group"><label class="form-label" for="'+queryId+'">Find a Score</label><input type="search" class="form-input" id="'+queryId+'" data-score-query></div><div class="form-group"><label class="form-label" for="'+listId+'">Score</label><select class="form-select" id="'+listId+'" size="10" data-listbox data-score-list></select><p class="form-help sr-score-caption" data-score-caption aria-live="polite"></p></div>';
+                var list=el.chooserBody.querySelector('[data-score-list]'),query=el.chooserBody.querySelector('[data-score-query]'),selected=score && score.rel || '';
+                function changed(){var option=list.selectedOptions[0];selected=list.value;root.querySelector('[data-sr="choose-open"]').disabled=!selected;el.chooserBody.querySelector('[data-score-caption]').textContent=selected&&option?option.textContent:'Choose a score, then Open.';}
+                function filter(){var wanted=query.value.trim().toLowerCase(),html='<option value="" disabled>Select a score</option>';
+                    groups.forEach(function (group) {var choices=group.scores.filter(function (item) {return (group.name+' '+item.title).toLowerCase().includes(wanted);});if(!choices.length)return;
+                        html+='<optgroup label="'+esc(group.name || 'Scores')+'">'+choices.map(function (item) {return '<option value="'+esc(item.file)+'" data-score-title="'+esc(item.title)+'"'+(item.file===selected?' selected':'')+'>'+esc(item.title)+'</option>';}).join('')+'</optgroup>';});
+                    list.innerHTML=html;if(!Array.from(list.options).some(function (option) {return option.value===selected;}))selected='';list.value=selected;
+                    if(window.pudlListbox){window.pudlListbox.enhance(el.chooserBody);window.pudlListbox.refresh(list);}changed();}
+                query.addEventListener('input',filter);list.addEventListener('change',changed);filter();query.focus();
             });
         }
+        function chooseListedScore(){var list=el.chooserBody.querySelector('[data-score-list]'),option=list && list.selectedOptions[0];if(!option || !list.value)return;el.chooser.close();openScore({name:option.getAttribute('data-score-title') || option.textContent,rel:list.value});}
 
         function saveSetting(changes) {
             Object.assign(settings, changes);
@@ -1442,8 +1450,6 @@
             if (cell && root.contains(cell)) { if (!cell.classList.contains('sr-off')) { answerPiano(cell); } return; }
             var key = e.target.closest('.sr-key');
             if (key && root.contains(key)) { if (!dragged) { answerPiano(key); } return; }
-            var open = e.target.closest('[data-sr-open]');
-            if (open) { el.chooser.close(); openScore({ name: open.getAttribute('data-sr-name'), rel: open.getAttribute('data-sr-open') }); return; }
             var pref = e.target.closest('[data-opt]');
             if (pref && el.options.contains(pref) && pref.tagName !== 'SELECT') { if (!pref.disabled) { setPref(pref); } return; }
             var only = e.target.closest('[data-only]');
@@ -1454,6 +1460,7 @@
             if (!act) { return; }
             switch (act.getAttribute('data-sr')) {
                 case 'choose': openChooser(); break;
+                case 'choose-open': chooseListedScore();break;
                 case 'options': showOptions(); break;
                 case 'play': startPlay(); root.focus({ preventScroll: true }); break;
                 case 'stop': stopPlay(); root.focus({ preventScroll: true }); break;
@@ -1486,6 +1493,7 @@
         function onKeyDown(e) {
             if (e.ctrlKey || e.metaKey || e.altKey || e.defaultPrevented) { return; }
             var t = e.target;
+            if (e.key === 'Enter' && el.chooser.open && el.chooserBody.contains(t) && t.closest('select, [role="listbox"]')) { e.preventDefault(); chooseListedScore(); return; }
             /* Enter in a bar box applies it and returns to the music; Tab
                just moves on, so the first bar and the last are neighbours. */
             if (e.key === 'Enter' && t.hasAttribute && t.hasAttribute('data-bar')) {

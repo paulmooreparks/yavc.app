@@ -157,7 +157,7 @@
         ['bold', 'Bold', 'bold', 'Mod-b'], ['italic', 'Italic', 'italic', 'Mod-i'], ['underline', 'Underline', 'underline', 'Mod-u'], ['strike', 'Strike Through', 'strike'],
         ['code', 'Code', 'code', 'Mod-`'], ['highlight', 'Highlight', 'yavc-highlight', 'Mod-Shift-h'],
         ['superscript', 'Superscript', 'yavc-superscript'], ['subscript', 'Subscript', 'yavc-subscript'], ['link', 'Link…', 'link', 'Mod-k'],
-        ['bullets', 'Bulleted List', 'list'], ['numbers', 'Numbered List', 'list-numbered'], ['quote', 'Quote', 'quote'], ['color', 'Text Color…', 'colour'], ['class', 'Style…', 'tag']
+        ['bullets', 'Bulleted List', 'list'], ['numbers', 'Numbered List', 'list-numbered'], ['quote', 'Quote', 'quote'], ['color', 'Text Color…', 'colour'], ['class', 'Text Style…', 'tag']
     ];
     /* The classes a stylesheet defines, for the Style dialog. */
     function classesOf(css) {
@@ -238,8 +238,10 @@
         }
         if (name === 'link') {
             var chosen = state.sliceDoc(sel.from, sel.to);
-            askText('Link', 'Address', /^https?:\/\//.test(chosen) ? chosen : 'https://').then(function (href) {
-                if (!href) { view.focus(); return; }
+            var owner = ctx.identity && ctx.identity();
+            function currentLink() { return !(ctx.signal && ctx.signal.aborted) && (!ctx.identity || ctx.identity() === owner) && view.state.doc === state.doc && view.state.selection.eq(state.selection) && !(ctx.readOnly && ctx.readOnly()); }
+            askText('Link', 'Address', /^https?:\/\//.test(chosen) ? chosen : 'https://', { signal: ctx.signal, okLabel: 'Apply', validate: function () { return currentLink() ? null : 'The document or selection changed. Reopen this form.'; } }).then(function (href) {
+                if (!href || !currentLink()) { return; }
                 var label = chosen && !/^https?:\/\//.test(chosen) ? chosen : href;
                 var md = '[' + label + '](' + href + ')';
                 view.dispatch({ changes: { from: sel.from, to: sel.to, insert: md }, selection: { anchor: sel.from + 1, head: sel.from + 1 + label.length }, userEvent: 'input' });
@@ -247,28 +249,7 @@
             });
             return;
         }
-        if (name === 'class') {
-            askClass(ctx.classes ? ctx.classes() : []).then(function (v) {
-                if (v == null) { view.focus(); return; }
-                var s3 = view.state, sl3 = s3.selection.main, inner3 = s3.sliceDoc(sl3.from, sl3.to) || 'these words';
-                if (!v) { view.focus(); return; }
-                var open3 = '{{class:' + v + '}}', close3 = '{{/class}}';
-                view.dispatch({ changes: { from: sl3.from, to: sl3.to, insert: open3 + inner3 + close3 }, selection: { anchor: sl3.from + open3.length, head: sl3.from + open3.length + inner3.length }, userEvent: 'input' });
-                view.focus();
-            });
-            return;
-        }
-        if (name === 'color') {
-            askColour().then(function (v) {
-                if (v == null) { view.focus(); return; }
-                var s2 = view.state, sl = s2.selection.main, inner = s2.sliceDoc(sl.from, sl.to) || 'these words';
-                if (!v) { view.focus(); return; }
-                var open = '{{color:' + v + '}}', close = '{{/color}}';
-                view.dispatch({ changes: { from: sl.from, to: sl.to, insert: open + inner + close }, selection: { anchor: sl.from + open.length, head: sl.from + open.length + inner.length }, userEvent: 'input' });
-                view.focus();
-            });
-            return;
-        }
+        if (name === 'class' || name === 'color') { return formatDialog(name, ctx, false); }
         var first = state.doc.lineAt(sel.from), last = state.doc.lineAt(sel.to), changes = [];
         if (name === 'quote') {
             if (sel.to > sel.from && sel.to === last.from) { last = state.doc.lineAt(sel.to - 1); }
@@ -321,18 +302,77 @@
     function apply(name, ctx) {
         if (ctx.readOnly && ctx.readOnly()) { if (ctx.say) { ctx.say('This is read-only, so it cannot be changed.', true); } return; }
         var page = ctx.page && ctx.page();
+        if (name === 'color' || name === 'class') return formatDialog(name, ctx, !!(page && ctx.onPage()));
         if (page && ctx.onPage()) {
-            if (name === 'color') { askColour().then(function (v) { if (v == null) { return; } page.run('color', v || null); page.focus(); }); return; }
-            if (name === 'class') { askClass(ctx.classes ? ctx.classes() : []).then(function (v) { if (v == null) { return; } page.run('class', v || null); page.focus(); }); return; }
             page.run(name);
             return;
         }
         textFormat(ctx.text && ctx.text(), name, ctx);
     }
+    async function sourceFormatTarget(view, name) {
+        if (!view) return null;
+        var state = view.state, selection = state.selection, sel = selection.main, source = state.doc.toString();
+        if(sel.empty)return null;
+        var engine = await window.yavcMdEngine(), parsed = engine.doc(source), offset = parsed.attrs && parsed.attrs.front ? parsed.attrs.front.length : 0, block = null, blockStart=0,blockEnd=0;
+        (parsed.content || []).forEach(function (node) {
+            var attrs=node.attrs || {};offset+=(attrs.gap || '').length;
+            var end=offset+(attrs.src || '').length;
+            if(sel.from>=offset && sel.to<=end && (node.type==='paragraph' || node.type==='heading')) {block=node;blockStart=offset;blockEnd=end;}
+            offset=end;
+        });
+        if(!block)return null;
+        // Source edits are bounded to parser-confirmed, uncomplicated rich text.
+        // Complex Markdown remains editable through the rich surface or direct source editing.
+        var plain=block.attrs.src.replace(/\{\{(class|color):[^}\r\n]{1,128}\}\}([^{}]*?)\{\{\/\1\}\}/g,'$2');
+        if(/[\\`<>{}\[\]*_~]/.test(plain))return null;
+        var pattern = new RegExp('\\{\\{' + name + ':([^}\\r\\n]{1,128})\\}\\}([^{}]*?)\\{\\{/' + name + '\\}\\}', 'g'), match, existing = null;
+        while ((match = pattern.exec(source))) {
+            if(match.index<blockStart || match.index+match[0].length>blockEnd)continue;
+            var start = match.index + match[0].indexOf('}}') + 2, end = start + match[2].length;
+            if (sel.from >= start && sel.to <= end) { existing = { start: match.index, from: start, to: end, end: match.index + match[0].length, value: match[1] }; break; }
+        }
+        if (sel.empty || /[{}]/.test(source.slice(sel.from, sel.to))) return null;
+        function current() { return view.state.doc === state.doc && view.state.selection.eq(selection); }
+        return { value: existing ? existing.value : '', mixed: false, empty: false, text: source.slice(sel.from, sel.to) || (existing ? source.slice(existing.from, existing.to) : ''), current: current,
+            apply: function (value) {
+                if (!current()) return false;
+                var changes, offset = 0;
+                if (existing) {
+                    var close = '{{/' + name + '}}', oldOpen = '{{' + name + ':' + existing.value + '}}';
+                    var before = source.slice(existing.from, sel.from), after = source.slice(sel.to, existing.to);
+                    var left = before ? oldOpen + before + close : '', open = value ? '{{' + name + ':' + value + '}}' : '';
+                    var replacement = left + open + source.slice(sel.from, sel.to) + (value ? close : '') + (after ? oldOpen + after + close : '');
+                    changes = [{ from: existing.start, to: existing.end, insert: replacement }];
+                    offset = existing.start + left.length + open.length - sel.from;
+                } else {
+                    if (!value) return true;
+                    var prefix = '{{' + name + ':' + value + '}}'; offset = prefix.length;
+                    changes = [{ from: sel.from, insert: prefix }, { from: sel.to, insert: '{{/' + name + '}}' }];
+                }
+                view.dispatch({ changes: changes, selection: { anchor: sel.from + offset, head: sel.to + offset }, userEvent: 'input' }); view.focus(); return true;
+            } };
+    }
+    async function formatDialog(name, ctx, rich) {
+        var owner = ctx.identity && ctx.identity(), page = rich && ctx.page(), view = !rich && ctx.text();
+        var target = rich ? page.formatSelection(name) : await sourceFormatTarget(view, name);
+        if (!target) { if (ctx.say) ctx.say('Select text in an editable paragraph. Complex Markdown can be formatted in Visual view or edited directly in Text view.', true); return; }
+        function current() { return !(ctx.signal && ctx.signal.aborted) && (!ctx.identity || owner === ctx.identity()) && !(ctx.readOnly && ctx.readOnly()) && (rich ? ctx.page() === page && ctx.onPage() : ctx.text() === view) && target.current(); }
+        if (ctx.prepareFormats) await ctx.prepareFormats();
+        if (!current()) {if(ctx.say)ctx.say('The document or selection changed. Reopen formatting for the intended text.',true);return;}
+        var options = { value: target.value, mixed: target.mixed, sample: target.text, empty: target.empty, current: current, signal: ctx.signal, scope: ctx.styleScope ? ctx.styleScope() : '' };
+        var answer = name === 'class' ? await askClass(ctx.classes ? ctx.classes() : [], options) : await askColour(options);
+        if (answer != null && current()) target.apply(answer);
+    }
     function insertItem(item, ctx) {
         if (ctx.readOnly && ctx.readOnly()) { if (ctx.say) { ctx.say('This is read-only, so nothing can be added to it.', true); } return; }
+        var owner = ctx.identity && ctx.identity(), originalPage = ctx.page && ctx.page(), rich = originalPage && ctx.onPage();
+        var bookmark = rich && originalPage.clipboardSelection(), originalView = !rich && ctx.text && ctx.text();
+        var state = originalView && originalView.state;
         markdownFor(item, ctx).then(function (md) {
             if (!md) { return; }
+            var valid = !(ctx.signal && ctx.signal.aborted) && (!ctx.identity || ctx.identity() === owner) && !(ctx.readOnly && ctx.readOnly());
+            valid = valid && (rich ? ctx.page() === originalPage && ctx.onPage() && bookmark && bookmark.current() : ctx.text() === originalView && (!state || originalView.state.doc === state.doc && originalView.state.selection.eq(state.selection)));
+            if (!valid) { if (ctx.say) ctx.say('The document or selection changed. Insert again at the intended location.',true); return; }
             var page = ctx.page && ctx.page();
             if (page && ctx.onPage()) {
                 if (!item.shortcode && !item.name) { page.run(item.id); }
@@ -343,7 +383,7 @@
             var view = ctx.text && ctx.text();
             if (view && isInlineForm(item.name)) { textInsertInline(view, md); }
             else if (view) { textInsert(view, md); } else if (ctx.append) { ctx.append(md); }
-        });
+        }).catch(function (err) { if (ctx.say && !(ctx.signal && ctx.signal.aborted)) ctx.say(err.message || String(err),true); });
     }
 
     /* The command entries for a host's command table: the formats, the
@@ -585,7 +625,7 @@
         dlgCount++;
         return window.yavcDialog.open({ title: title, body: bodyHTML, buttons: buttons, className: 'md-editor-dialog', onOpen: onOpen });
     }
-    function askText(title, label, value) { return window.yavcDialog.askText(title, label, value); }
+    function askText(title, label, value, opts) { return window.yavcDialog.askText(title, label, value, opts); }
     function askChoice(title, body, buttons) { return window.yavcDialog.askChoice(title, body, buttons); }
     /* Several text fields in one dialog: fields is [{ key, label, value,
        placeholder, help }]; resolves to the values by key, or null. */
@@ -618,53 +658,81 @@
         }).join('');
     }
     function wirePickers(body) {
+        body.querySelectorAll('.md-colour-pick').forEach(function (picker) { if (picker.type !== 'color') picker.hidden = true; });
         body.addEventListener('input', function (e) {
             if (e.target.classList.contains('md-colour-pick')) { var t = body.querySelector('#' + e.target.getAttribute('data-for')); if (t) { t.value = e.target.value; } }
             else if (e.target.matches('.form-input') && /^#[0-9a-f]{6}$/i.test(e.target.value)) { var pk = body.querySelector('[data-for="' + e.target.id + '"]'); if (pk) { pk.value = e.target.value; } }
         });
     }
-    /* A swatch pressed answers the dialog with its name. */
-    function wireSwatches(api) {
-        api.body.addEventListener('click', function (e) { var b = e.target.closest('[data-swatch]'); if (b) { api.close('swatch:' + b.getAttribute('data-swatch')); } });
-    }
     /* The colour for some words: a swatch, or anything typed; '' takes the
        colour off; null is Cancel. */
-    function askColour() {
-        var html = '<div class="form-group"><span class="form-label">The Site\'s Colors</span><div class="md-swatches" role="group" aria-label="The Site\'s Colors">' +
-            SWATCHES.map(function (s) { return '<button type="button" class="btn md-swatch" data-swatch="' + s[0] + '"><span class="md-swatch-dot" style="background:' + swatchCSS(s[0]) + '" aria-hidden="true"></span>' + s[1] + '</button>'; }).join('') + '</div></div>' +
-            pickerRows([{ key: 'custom', label: 'Any Color', value: '', fallback: '#c0392b', placeholder: '#c0392b, tomato, hsl(200 60% 40%); empty removes the color' }]);
-        return dialog('Color the Words', html, [{ id: 'cancel', label: 'Cancel' }, { id: 'ok', label: 'Use This Color', primary: true }],
-            function (api) { wirePickers(api.body); wireSwatches(api); }).then(function (r) {
-            if (r.value && r.value.indexOf('swatch:') === 0) { return r.value.slice(7); }
-            if (r.value !== 'ok') { return null; }
-            return (r.body.querySelector('[data-key="custom"]') || { value: '' }).value.trim().replace(/[{}\s]/g, '');
-        });
+    function formatPreview(opts) {
+        return '<p class="form-help">' + esc(opts.empty ? 'Applies to the next words you type.' : 'Applies to the selected text.') + (opts.mixed ? ' The selection has mixed values.' : '') + '</p>' +
+            '<div class="md-format-preview-boundary"><div class="doc-page deck-body md-format-preview" data-format-preview><p><span data-format-sample>' + esc((opts.sample || 'Sample text').slice(0, 240)) + '</span></p></div></div>';
+    }
+    function preparePreview(api, opts) {
+        if (opts.scope) api.body.querySelector('[data-format-preview]').setAttribute('data-md-style', opts.scope);
+        api.body.addEventListener('input',function () {api.body.querySelector('[data-format-error]').hidden=true;api.body.querySelectorAll('[aria-invalid]').forEach(function (field) {field.removeAttribute('aria-invalid');});});
+    }
+    function formatError(api,input,message) {
+        var error=api.body.querySelector('[data-format-error]');error.id=input.id+'-error';error.textContent=message;error.hidden=false;
+        input.setAttribute('aria-invalid','true');input.setAttribute('aria-describedby',error.id);input.focus();
+    }
+    async function askColour(opts) {
+        opts = opts || {}; await styles();
+        var value = opts.value || '', preset = SWATCHES.some(function (s) { return s[0] === value; }), id = 'md-format-' + (++dlgCount);
+        var initial = opts.mixed ? '@mixed' : !value ? '' : preset ? value : '@custom';
+        var body = formatPreview(opts) + '<div class="form-group"><label class="form-label" for="' + id + '">Text Color</label><span class="form-select-wrap"><select class="form-select" id="' + id + '" data-format-choice>' +
+            (opts.mixed ? '<option value="@mixed">Mixed colors (unchanged)</option>' : '') + '<option value="">Automatic (remove explicit color)</option>' +
+            SWATCHES.map(function (s) { return '<option value="' + s[0] + '">Theme ' + s[1] + '</option>'; }).join('') + '<option value="@custom">Custom Color</option></select></span></div>' +
+            '<div data-format-custom>' + pickerRows([{ key: 'custom', label: 'Custom Color', value: preset ? '' : value, fallback: '#000000', placeholder: '#336699 or a CSS color name' }]) + '</div><p class="form-error" data-format-error role="alert" hidden></p>';
+        return ownForm({ title: 'Text Color', body: body, okLabel: 'Apply', signal: opts.signal, current: opts.current, setup: function (api) {
+            var choice = api.body.querySelector('[data-format-choice]'), input = api.body.querySelector('[data-key="custom"]'); choice.value = initial;
+            preparePreview(api, opts); wirePickers(api.body);
+            function refresh() { api.body.querySelector('[data-format-custom]').hidden = choice.value !== '@custom'; var color = choice.value === '@custom' ? input.value.trim() : choice.value; api.body.querySelector('[data-format-sample]').style.color = color.charAt(0) === '@' ? '' : swatchCSS(color); }
+            api.body.addEventListener('input', refresh); api.body.addEventListener('change', refresh); refresh();
+        }, submit: function (api) {
+            var value = api.body.querySelector('[data-format-choice]').value;
+            if (value === '@mixed') return null;
+            if (value === '@custom') {
+                value = api.body.querySelector('[data-key="custom"]').value.trim();
+                if (!value || /[{};\r\n]/.test(value) || !CSS.supports('color', value)) { formatError(api,api.body.querySelector('[data-key="custom"]'),'Choose a valid color or select Automatic.'); return undefined; }
+            }
+            return value;
+        } });
     }
     /* A class of the document's stylesheet: one of those it defines, or
        any name; '' takes the class off; null is Cancel. */
-    function classGroup(label, list) {
-        return list.length ? '<div class="form-group"><span class="form-label">' + label + '</span><div class="md-swatches" role="group" aria-label="' + label + '">' +
-            list.map(function (c) { return '<button type="button" class="btn md-swatch" data-swatch="' + esc(c) + '">' + esc(c) + '</button>'; }).join('') + '</div></div>' : '';
-    }
-    function askClass(names) {
-        var id = 'md-dlg-field-' + (dlgCount + 1), own = (names || []).filter(function (name) { return /^[A-Za-z_][A-Za-z0-9_-]{0,63}$/.test(name); });
-        var html = classGroup('The Stylesheet\'s Classes', own) + classGroup('Provided by the Site', STOCK_CLASSES.filter(function (c) { return own.indexOf(c) < 0; })) +
-            '<p class="form-help">A {{style}} block defines more, as .callout { … }.</p>' +
-            '<div class="form-group"><label class="form-label" for="' + id + '">Any Class</label><input class="form-input" id="' + id + '" autocomplete="off" spellcheck="false" placeholder="callout; empty takes the class off"></div>';
-        return dialog('Style the Words', html, [{ id: 'cancel', label: 'Cancel' }, { id: 'ok', label: 'Use This Style', primary: true }], wireSwatches).then(function (r) {
-            if (r.value && r.value.indexOf('swatch:') === 0) { return r.value.slice(7); }
-            if (r.value !== 'ok') { return null; }
-            return (r.body.querySelector('input') || { value: '' }).value.trim().replace(/[^A-Za-z0-9_-]/g, '');
-        });
+    async function askClass(names, opts) {
+        opts = opts || {}; await styles();
+        var blockClasses = ['center', 'right', 'justify', 'indent', 'no-break'];
+        var own = Array.from(new Set((names || []).filter(function (name) { return /^[A-Za-z_][A-Za-z0-9_-]{0,63}$/.test(name) && !blockClasses.includes(name); }))).sort();
+        var choices = [['', 'No Text Style'], ['small', 'Smaller Text'], ['lead', 'Larger Text']].concat(own.filter(function (name) { return name !== 'small' && name !== 'lead'; }).map(function (name) { return [name, name]; }));
+        var value = opts.value || '', initial = opts.mixed ? '@mixed' : choices.some(function (c) { return c[0] === value; }) ? value : '@custom', id = 'md-format-' + (++dlgCount);
+        var body = formatPreview(opts) + '<div class="form-group"><label class="form-label" for="' + id + '">Text Style</label><span class="form-select-wrap"><select class="form-select" id="' + id + '" data-format-choice>' +
+            (opts.mixed ? '<option value="@mixed">Mixed styles (unchanged)</option>' : '') + choices.map(function (choice) { return '<option value="' + esc(choice[0]) + '">' + esc(choice[1]) + '</option>'; }).join('') + '<option value="@custom">Custom CSS Class</option></select></span><p class="form-help">Styles available for this text are listed here. Paragraph layout is separate.</p></div>' +
+            '<div class="form-group" data-format-custom><label class="form-label" for="' + id + '-custom">CSS Class Name</label><input class="form-input" id="' + id + '-custom" data-format-class autocomplete="off" spellcheck="false" value="' + esc(value) + '"><p class="form-help">Use one class defined in the active stylesheet.</p></div><p class="form-error" data-format-error role="alert" hidden></p>';
+        return ownForm({ title: 'Text Style', body: body, okLabel: 'Apply', signal: opts.signal, current: opts.current, setup: function (api) {
+            var choice = api.body.querySelector('[data-format-choice]'); choice.value = initial; preparePreview(api, opts);
+            function refresh() { api.body.querySelector('[data-format-custom]').hidden = choice.value !== '@custom'; var name = choice.value === '@custom' ? api.body.querySelector('[data-format-class]').value.trim() : choice.value; api.body.querySelector('[data-format-sample]').className = /^[A-Za-z_][A-Za-z0-9_-]{0,63}$/.test(name) ? name : ''; }
+            api.body.addEventListener('input', refresh); api.body.addEventListener('change', refresh); refresh();
+        }, submit: function (api) {
+            var value = api.body.querySelector('[data-format-choice]').value;
+            if (value === '@mixed') return null;
+            if (value === '@custom') value = api.body.querySelector('[data-format-class]').value.trim();
+            if (value && (!/^[A-Za-z_][A-Za-z0-9_-]{0,63}$/.test(value) || blockClasses.includes(value))) { formatError(api,api.body.querySelector('[data-format-class]'),'Use one text-style class name. Alignment, indentation and page layout classes cannot be applied to words.'); return undefined; }
+            return value;
+        } });
     }
     /* Several colours at once, by key: { key, label, value, fallback,
        placeholder }; resolves to the values by key, or null. */
     function askColours(title, fields, opts) {
         opts = opts || {};
-        return ownForm({ title: title, body: pickerRows(fields), signal: opts.signal, current: opts.current,
+        return ownForm({ title: title, body: pickerRows(fields), signal: opts.signal, current: opts.current,okLabel:'Apply',
             setup: function (api) { wirePickers(api.body); }, submit: function (api) {
-                var out = {};
-                api.body.querySelectorAll('[data-key]').forEach(function (i) { out[i.getAttribute('data-key')] = i.value.trim(); });
+                var out = {},bad=null;
+                api.body.querySelectorAll('[data-key]').forEach(function (i) {var value=i.value.trim();out[i.getAttribute('data-key')]=value;if(value && (/[{};\r\n]/.test(value) || !CSS.supports('color',swatchCSS(value))))bad=bad || i;});
+                if(bad){window.yavcUtil.notice(bad.closest('.form-group'),'Enter a CSS color or leave it empty for the theme default.',true);bad.focus();return undefined;}
                 return out;
             } });
     }
@@ -681,12 +749,27 @@
         function abort() { if (api) { api.close('cancel'); } }
         dlgCount++;
         return window.yavcDialog.open({
-            title: o.title, className: 'md-editor-dialog ' + (o.className || ''), body: o.body,
+            title: o.title, className: 'md-editor-dialog ' + (o.className || ''), body: o.body, signal: o.signal,
             buttons: (o.remove ? [{ id: 'remove', label: 'Remove', danger: true, submit: false }] : []).concat([{ id: 'cancel', label: 'Cancel' }, { id: 'ok', label: o.okLabel || 'OK', primary: true }]),
-            onOpen: function (a) { api = a; if (o.signal) { o.signal.addEventListener('abort', abort, { once: true }); } if (o.setup) { o.setup(a); } if (o.signal && o.signal.aborted) { abort(); } },
+            onOpen: function (a) {
+                api = a;api.dialog.querySelector('form').noValidate=true;
+                api.body.addEventListener('input',function (event) {api.body.querySelectorAll('[data-own-validation]').forEach(function (notice) {notice.hidden=true;});if(event.target.dataset.ownInvalid){event.target.removeAttribute('aria-invalid');delete event.target.dataset.ownInvalid;}});
+                if (o.signal) { o.signal.addEventListener('abort', abort, { once: true }); } if (o.setup) { o.setup(a); } if (o.signal && o.signal.aborted) { abort(); }
+            },
             check: function (v) {
                 if (v !== 'ok') { return null; }
                 if (o.current && !o.current()) { window.yavcUtil.notice(api.body, 'The document changed. Close and reopen this form.', true); return 'kept open'; }
+                var invalid=Array.from(api.body.querySelectorAll('input,select,textarea')).find(function (input) {
+                    if(input.matches(':disabled'))return false;
+                    var group=input.closest('.form-group'),label=group && group.querySelector('label'),visible=label && label.control || input;
+                    return input.willValidate && !input.validity.valid || input.type==='number' && visible.getAttribute('aria-invalid')==='true';
+                });
+                if(invalid) {
+                    var group=invalid.closest('.form-group'),label=group && group.querySelector('label'),visible=label && label.control || invalid;
+                    var notice=window.yavcUtil.notice(group || invalid,invalid.validationMessage || 'Enter a valid value for '+(label?label.textContent:'this field')+'.',true);
+                    if(invalid.type!=='number'){invalid.setAttribute('aria-invalid','true');invalid.dataset.ownInvalid='true';}
+                    if(notice)notice.setAttribute('data-own-validation','');visible.focus();return 'kept open';
+                }
                 var out = o.submit(api);
                 if (out === undefined) { return 'kept open'; }
                 answer = out;
@@ -773,74 +856,34 @@
        the picture out, or null for no change. existing is the block being
        changed, or null for a new picture. */
     function askFigure(existing, pictures) {
+        var owner = pictures && pictures.identity && pictures.identity(), source = pictures && pictures.text && pictures.text();
+        function current() { return !(pictures && pictures.signal && pictures.signal.aborted) && (!pictures || (!pictures.identity || pictures.identity() === owner) && (!pictures.text || pictures.text() === source)); }
         var f = existing ? parseFigure(existing) : null, id = 'md-fig-' + (dlgCount + 1) + '-', width = splitWidth(f ? f.width : '');
         var body = '<div class="md-figure-fields">' +
-            '<label class="form-label" for="' + id + 'src">Picture</label>' +
-            '<div class="md-figure-src"><input class="form-input" id="' + id + 'src" data-key="src" value="' + esc(f ? f.src : '') + '" autocomplete="off" spellcheck="false" placeholder="cat.png, ~/Pictures/cat.png or https://…" required>' +
-            (pictures ? '<button type="button" class="btn" data-act="browse">Browse…</button><button type="button" class="btn" data-act="upload">Upload…</button>' : '') + '</div>' +
-            '<p class="form-help">A picture beside the document, one in your home folder, one of the site\'s, or an address on the web.</p>' +
-            '<label class="form-label" for="' + id + 'alt">What It Shows</label>' +
+            '<div class="form-group"><label class="form-label" for="' + id + 'src">Picture</label>' +
+            '<div class="yavc-path-field"><input class="form-input" id="' + id + 'src" data-key="src" data-file-path data-accept=".png,.jpg,.jpeg,.gif,.webp,.svg" value="' + esc(f ? f.src : '') + '" autocomplete="off" spellcheck="false" placeholder="cat.png, ~/Pictures/cat.png or https://…" required>' +
+            (pictures ? '<button type="button" class="btn" data-browse-for="' + id + 'src">Browse…</button>' : '') + '</div>' +
+            '<p class="form-help">A picture beside the document, one in your home folder, one of the site\'s, or an address on the web.</p></div>' +
+            '<div class="form-group"><label class="form-label" for="' + id + 'alt">What It Shows</label>' +
             '<input class="form-input" id="' + id + 'alt" data-key="alt" value="' + esc(f ? f.alt : '') + '" autocomplete="off">' +
-            '<p class="form-help">For someone who can\'t see it. Leave it empty for a picture that only decorates.</p>' +
-            '<label class="form-label" for="' + id + 'width">Largest Width</label>' +
+            '<p class="form-help">For someone who can\'t see it. Leave it empty for a picture that only decorates.</p></div>' +
+            '<div class="form-group"><label class="form-label" for="' + id + 'width">Largest Width</label>' +
             '<div class="md-figure-width"><span class="number-field"><input class="form-input" type="number" id="' + id + 'width" data-key="width" value="' + esc(width.n) + '" min="1" step="1" placeholder="Column"></span>' +
             '<span class="form-select-wrap"><select class="form-select" data-key="unit" aria-label="Unit of the Width">' + WIDTH_UNITS.map(function (u) { return '<option value="' + u + '"' + (u === width.u ? ' selected' : '') + '>' + u + '</option>'; }).join('') + '</select></span></div>' +
-            '<p class="form-help">Of the column (%), or in px, rem, em or ch; empty takes the column\'s width.</p>' +
-            '<label class="form-label" for="' + id + 'caption">Caption</label>' +
+            '<p class="form-help">Of the column (%), or in px, rem, em or ch; empty takes the column\'s width.</p></div>' +
+            '<div class="form-group"><label class="form-label" for="' + id + 'caption">Caption</label>' +
             '<input class="form-input" id="' + id + 'caption" data-key="caption" value="' + esc(f ? f.caption : '') + '" autocomplete="off">' +
-            '<p class="form-help">Under the picture, in Markdown.</p>' +
+            '<p class="form-help">Under the picture, in Markdown.</p></div>' +
             '<p class="form-error" data-role="error" hidden></p>' +
-            '<input type="file" accept="image/*" hidden data-role="file">' +
             '</div>';
         var dlg = null, errorLine = null;
         function field(k) { return dlg.querySelector('[data-key="' + k + '"]'); }
         function problem(text, focus) { errorLine.textContent = text; errorLine.hidden = false; if (focus) { focus.focus(); } }
-        function browse() {
-            pictures.site().then(function (site) {
-                var F = site.F, FB = site.FB, dir = pictures.dir ? pictures.dir() : null;
-                return FB.pick(F, {
-                    mode: 'open', title: 'Choose a Picture', host: pictures.root, start: dir && F.resolve(null, dir) ? dir : '~',
-                    check: function (r) { return PICTURE_EXT.test(r.name) ? null : r.name + ' isn\'t a picture.'; },
-                    commit: function (c) {
-                        var node = c.path ? F.resolve(null, c.path) : null;
-                        if (!node) { return 'Choose a picture.'; }
-                        field('src').value = addressOf(F, node, dir);
-                        return true;
-                    }
-                });
-            }).then(function (res) { if (res) { errorLine.hidden = true; field('alt').focus(); } }).catch(function (err) { problem(err && err.message || String(err)); });
-        }
-        function upload(file) {
-            var picked = file.files && file.files[0];
-            if (!picked) { return; }
-            var F = null, dir = pictures.dir ? pictures.dir() : null, into = null;
-            pictures.site().then(function (site) {
-                F = site.F;
-                into = dir ? F.resolve(null, dir) : null;
-                if (into && F.realOf(into).home) { return null; }
-                /* An unsaved document, or one on the site: the picture goes to ~/Pictures. */
-                dir = '~/Pictures';
-                return F.mkdir(null, dir, true).then(function (err) { if (err) { throw new Error(err); } into = F.resolve(null, dir); });
-            }).then(function () { return F.upload(into, picked); }).then(function (res) {
-                if (res.error) { throw new Error(res.error); }
-                field('src').value = addressOf(F, res.node, dir);
-                errorLine.hidden = true;
-                if (pictures.say) { pictures.say('Uploaded ' + picked.name + ' to ' + F.displayPath(into) + '.'); }
-                field('alt').focus();
-            }).catch(function (err) { problem(err && err.message || String(err)); });
-        }
         return ownForm({
-            title: f ? 'Change the Picture' : 'Insert a Picture', className: 'md-figure', body: body, remove: !!f, okLabel: f ? 'Change' : 'Insert',
+            title: f ? 'Change the Picture' : 'Insert a Picture', className: 'md-figure', body: body, remove: !!f, okLabel: f ? 'Change' : 'Insert', signal:pictures && pictures.signal,current:current,
             setup: function (api) {
                 dlg = api.dialog; errorLine = dlg.querySelector('[data-role="error"]');
-                var file = dlg.querySelector('[data-role="file"]');
-                api.body.addEventListener('click', function (e) {
-                    var b = e.target.closest('[data-act]');
-                    if (!b) { return; }
-                    if (b.getAttribute('data-act') === 'browse') { browse(); }
-                    else if (b.getAttribute('data-act') === 'upload') { file.value = ''; file.click(); }
-                });
-                file.addEventListener('change', function () { upload(file); });
+                window.yavcDialog.wirePaths(api,{signal:pictures && pictures.signal,current:current});
                 if (f) { field('caption').focus(); }
             },
             submit: function () {
@@ -915,7 +958,7 @@
                 return '{{applet:' + name + ' fit=' + (v.fit === 'fill' ? 'fill' : 'flow') + (plain(v.state) ? ' state=' + quoteArg(plain(v.state)) : '') + '}}';
             } },
         code: { title: 'A Code Listing from a File', fields: [
-            { key: 'src', label: 'File', placeholder: '~/bin/hello or /applets/dice/dice.js', browse: true, help: 'A file of yours under ~, or one of the site\'s; the page shows it as it is when the page is read.' },
+            { key: 'src', label: 'File', placeholder: '~/bin/hello or /applets/dice/dice.js', browse: true, maxBytes: 256 * 1024, help: 'A file of yours under ~, or one of the site\'s; the page shows it as it is when the page is read.' },
             { key: 'lang', label: 'Language', placeholder: 'From the file name', help: 'Optional, such as javascript or go, for syntax coloring.' }],
             read: function (sc) { return { src: sc.named.src || sc.positional[0] || '', lang: sc.named.lang || '' }; },
             write: function (v) {
@@ -980,6 +1023,8 @@
     function askShortcode(name, existing, host, customForm) {
         var form = customForm || FORMS[name];
         if (!form) { return Promise.resolve(null); }
+        var owner = host && host.identity && host.identity(), openingSource = host && host.text && host.text();
+        function unchanged() { return (!form.current || form.current()) && !(host && host.signal && host.signal.aborted) && (!host || (!host.identity || host.identity() === owner) && (!host.text || host.text() === openingSource)); }
         var sc = existing ? parseShortcode(existing) : null;
         var values = form.read(sc || { name: name, args: '', positional: [], named: {} });
         var id = 'md-sc-' + (dlgCount + 1) + '-';
@@ -990,17 +1035,18 @@
                 else if (f.kind === 'select') { control = '<span class="form-select-wrap"><select class="form-select" id="' + fid + '" data-key="' + f.key + '" data-value="' + esc(v) + '"><option value="' + esc(v) + '">' + esc(v || 'Loading…') + '</option></select></span>'; }
                 else if (f.kind === 'number') { control = '<span class="number-field"><input class="form-input" type="number" id="' + fid + '" data-key="' + f.key + '" value="' + esc(v) + '" min="' + f.min + '" max="' + f.max + '" step="1"></span>'; }
                 else { control = '<input class="form-input" id="' + fid + '" data-key="' + f.key + '" value="' + esc(v) + '" autocomplete="off" spellcheck="false"' + (f.placeholder ? ' placeholder="' + esc(f.placeholder) + '"' : '') + '>'; }
-                if (f.browse && host && host.site) { control = '<div class="md-figure-src">' + control + '<button type="button" class="btn" data-act="browse" data-for="' + f.key + '">Browse…</button></div>'; }
-                return '<label class="form-label" for="' + fid + '">' + esc(f.label) + '</label>' + control + help;
+                if (f.browse && host && host.site) { control = '<div class="yavc-path-field">' + control.replace('data-key=', 'data-file-path' + (f.maxBytes ? ' data-max-bytes="' + f.maxBytes + '"' : '') + ' data-key=') + '<button type="button" class="btn" data-browse-for="' + fid + '">Browse…</button></div>'; }
+                return '<div class="form-group"><label class="form-label" for="' + fid + '">' + esc(f.label) + '</label>' + control + help + '</div>';
             }).join('') + '<p class="form-error" id="' + id + 'error" data-role="error" role="alert" hidden></p></div>';
         var dlg = null, errorLine = null;
         function field(k) { return dlg.querySelector('[data-key="' + k + '"]'); }
         return ownForm({
-            signal: form.signal, current: form.current,
+            signal: form.signal || host && host.signal, current: unchanged,
             title: existing ? 'Change ' + form.title.replace(/^(A|An) /, 'the ') : 'Insert ' + form.title.replace(/^(A|An) /, 'a ').replace(/^a a/, 'an a'),
             className: 'md-form', body: body, remove: !!existing, okLabel: existing ? 'Change' : 'Insert',
             setup: function (api) {
                 dlg = api.dialog; errorLine = dlg.querySelector('[data-role="error"]');
+                window.yavcDialog.wirePaths(api,{signal:form.signal || host && host.signal,current:unchanged});
                 if (name === 'glyph') {
                     var choices = dlg.querySelector('.md-glyph-options'), search = dlg.querySelector('[data-glyph-search]');
                     glyphOptions().then(function (list) {
@@ -1008,32 +1054,24 @@
                         choices.replaceChildren();
                         list.forEach(function (option) {
                             var key = option[0]; if (!/^[a-z][a-z0-9-]*$/.test(key)) { return; }
-                            var button = document.createElement('button'), glyph = document.createElement('span'), label = document.createElement('span');
-                            button.type = 'button'; button.className = 'btn'; button.dataset.glyphChoice = key; button.setAttribute('aria-pressed', String(field('name').value === key));
+                            var button = document.createElement('label'), radio=document.createElement('input'), glyph = document.createElement('span'), label = document.createElement('span');
+                            button.className = 'check'; button.dataset.glyphChoice = key;radio.type='radio';radio.name=id+'glyph';radio.value=key;radio.checked=field('name').value===key;
                             glyph.className = 'glyph'; glyph.style.setProperty('--glyph', 'var(--glyph-' + key + ')'); glyph.setAttribute('aria-hidden', 'true');
-                            label.textContent = option[1]; button.append(glyph, label); choices.append(button);
+                            label.textContent = option[1]; button.append(radio,glyph, label); choices.append(button);
                         });
                         filterGlyphs();
                     }).catch(function () { window.yavcUtil.notice(api.body, 'The glyph list could not be loaded. Close and reopen the dialog to retry.', true); });
                     function filterGlyphs() {
                         var query = search.value.trim().toLowerCase(), visible = 0;
-                        choices.querySelectorAll('[data-glyph-choice]').forEach(function (button) { button.hidden = button.dataset.glyphChoice.indexOf(query) < 0; if (!button.hidden) { visible++; } });
+                        choices.querySelectorAll('[data-glyph-choice]').forEach(function (button) { button.hidden = !button.dataset.glyphChoice.includes(query) && !button.textContent.toLowerCase().includes(query); if (!button.hidden) { visible++; } });
                         dlg.querySelector('[data-glyph-empty]').hidden = visible > 0;
                     }
                     search.addEventListener('input', filterGlyphs);
-                    choices.addEventListener('click', function (event) {
-                        var button = event.target.closest('[data-glyph-choice]'); if (!button) { return; }
-                        field('name').value = button.dataset.glyphChoice;
-                        choices.querySelectorAll('[data-glyph-choice]').forEach(function (other) { other.setAttribute('aria-pressed', String(other === button)); });
+                    choices.setAttribute('role','radiogroup');
+                    choices.addEventListener('change', function (event) {
+                        if(!event.target.matches('input[type="radio"]'))return;
+                        field('name').value = event.target.value;
                         errorLine.hidden = true;
-                    });
-                    choices.addEventListener('keydown', function (event) {
-                        if (!/^(ArrowRight|ArrowLeft|ArrowDown|ArrowUp|Home|End)$/.test(event.key)) { return; }
-                        var buttons = Array.from(choices.querySelectorAll('[data-glyph-choice]')).filter(function (button) { return !button.hidden; });
-                        var at = buttons.indexOf(event.target); if (at < 0 || !buttons.length) { return; }
-                        event.preventDefault();
-                        var next = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1 : (at + (/^(ArrowRight|ArrowDown)$/.test(event.key) ? 1 : buttons.length - 1)) % buttons.length;
-                        buttons[next].focus();
                     });
                 }
                 /* A choice fills from its list; a value it does not list is kept as a choice of its own. */
@@ -1053,15 +1091,6 @@
                         if (want && !opts.some(function (o) { return o[0] === want; })) { opts.unshift([want, want]); }
                         sel.innerHTML = (want ? '' : '<option value="">Choose…</option>') + opts.map(function (o) { return '<option value="' + esc(o[0]) + '"' + (o[0] === want ? ' selected' : '') + '>' + esc(o[1]) + '</option>'; }).join('');
                     }).catch(function () { });
-                });
-                api.body.addEventListener('click', function (e) {
-                    var b = e.target.closest('[data-act="browse"]');
-                    if (!b) { return; }
-                    var key = b.getAttribute('data-for');
-                    host.site().then(function (site) {
-                        return site.FB.pick(site.F, { mode: 'open', title: 'Choose a File', host: host.root, start: '~',
-                            commit: function (c) { var node = c.path ? site.F.resolve(null, c.path) : null; if (!node || node.children) { return 'Choose a file.'; } field(key).value = site.F.displayPath(site.F.realOf(node)); return true; } });
-                    }).catch(function (err) { errorLine.textContent = err && err.message || String(err); errorLine.hidden = false; });
                 });
             },
             submit: function () {
@@ -1449,7 +1478,7 @@
         var dlg = null, list = null, errorLine = null;
         function problem(text, focus) { errorLine.textContent = text; errorLine.hidden = false; if (focus) { focus.focus(); } }
         return ownForm({
-            title: opts.title || 'Properties', className: 'md-props', body: html, signal: opts.signal, current: opts.current,
+            title: opts.title || 'Properties', className: 'md-props', body: html, signal: opts.signal, current: opts.current,okLabel:'Apply',
             setup: function (api) {
                 dlg = api.dialog; list = dlg.querySelector('[data-role="custom"]'); errorLine = dlg.querySelector('[data-role="error"]');
                 api.body.addEventListener('click', function (e) {

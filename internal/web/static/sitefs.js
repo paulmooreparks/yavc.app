@@ -225,7 +225,7 @@
        older build kept under /.config in the browser's record, carried
        through saves untouched until it has moved to the session. */
     var home = { dir: null, raw: undefined, settingsDir: null, legacy: {}, record: null };
-    var mutationQueue = Promise.resolve(), mutationActive = false, refreshPending = false;
+    var mutationQueue = Promise.resolve(), mutationActive = false, refreshPending = false, mutationContext = null;
     var homeChannel = typeof BroadcastChannel === 'function' ? new BroadcastChannel('yavc-home') : null;
     function publishHome() {
         if (homeChannel) homeChannel.postMessage('changed');
@@ -377,11 +377,11 @@
        what every applet shows matches what the browser kept. */
     async function homeSave() {
         if (MOUNT) { return null; }
-        return persistHome(homeSerialize(), home.record.generation, false);
+        return persistHome(homeSerialize(), home.record.generation, false, mutationContext);
     }
-    async function persistHome(s, generation, rebuild) {
+    async function persistHome(s, generation, rebuild, context) {
         try {
-            home.record = await store.commit(generation, s); home.raw = home.record.raw;
+            home.record = await store.commit(generation, s, function () { return operationCurrent(context); }); home.raw = home.record.raw;
             if (rebuild) homeLoad(home.record);
             var entries = store.parse(home.raw).files;
             (function revisions(d, prefix) { d.children.forEach(function (n) { if (n.settings) return; var p = prefix + '/' + n.name; n.revision = entries[p].revision; if (n.children) revisions(n, p); }); })(home.dir, '');
@@ -794,7 +794,7 @@
     /* Writes a file of bytes, such as a picture, creating it if need be;
        in ~ the bytes go to the browser's database. Resolves to { error }
        or { node }. */
-    async function writeBytes(base, path, bytes, type) {
+    async function writeBytes(base, path, bytes, type, context) {
         var n = resolve(base, path);
         if (n) { n = realOf(n); }
         if (n && n.children) { return { error: path + ': is a directory' }; }
@@ -810,6 +810,7 @@
         }
         if (d.settings) { return { error: path + ': ~/.config holds only settings, which are text' }; }
         if (bytes instanceof Blob) { bytes = await bytes.arrayBuffer(); }
+        if (!operationCurrent(context)) return {error:'The import was cancelled before saving.'};
         if (d.server) {
             if (bytes.byteLength > SERVER_MAX) { return { error: path + ': too large (the limit is 10 MB)' }; }
             return serverPut(d, name, bytes, path, null);
@@ -817,6 +818,7 @@
         if (bytes.byteLength > BLOB_MAX) { return { error: path + ': too large (the limit for a picture is 8 MB)' }; }
         var id = newBlobId();
         try { await blobPut(id, bytes); } catch (err) { return { error: path + ': ' + (err && err.message || 'the browser would not store it') }; }
+        if (!operationCurrent(context)) { blobDel(id);return {error:'The import was cancelled before saving.'}; }
         var was = n && n.bin ? n.blob : null;
         if (n) {
             delete n.content;
@@ -836,7 +838,8 @@
        takes any file as it is; ~ in this browser takes text as text and
        anything else, a picture say, as bytes in its database. Resolves to
        { error } or { node }. */
-    async function upload(dir, file) {
+    function operationCurrent(context) {return !context || !(context.signal && context.signal.aborted) && (!context.current || context.current());}
+    async function upload(dir, file, context) {
         dir = realOf(dir);
         if (!dir.home || !dir.children) { return { error: 'files can only be uploaded into your home directory (~)' + (MOUNT ? ', /wwwroot or /etc' : '') }; }
         if (!validName(file.name)) { return { error: file.name + ' is not a valid file name' }; }
@@ -849,9 +852,20 @@
         var binary = /^(image|audio|video|font)\//.test(file.type) || /^application\/(pdf|zip|octet-stream)/.test(file.type);
         if (!binary && file.size <= FILE_MAX) {
             var text = await file.text();
+            if(!operationCurrent(context))return {error:'The import was cancelled before saving.'};
             if (text.indexOf('\0') < 0) { return write(dir, file.name, text, false); }
         }
-        return writeBytes(dir, file.name, file, file.type);
+        return writeBytes(dir, file.name, file, file.type,context);
+    }
+
+    // A dependency import creates a file; it cannot replace another resource.
+    async function importFile(dir, file, context) {
+        dir = realOf(dir);
+        if (context && (context.signal && context.signal.aborted || context.current && !context.current())) return { error: 'The document changed before Import. Choose the file again.' };
+        if (!dir.home || !dir.children || dir.server || dir.settings) return { error: 'Import into your browser home (~). This destination does not support conditional creation.' };
+        if (childNamed(dir, file.name)) return { error: file.name + ' already exists. Choose a different name.' };
+        if(file.size>BLOB_MAX)return {error:file.name+' is larger than the 8 MB import limit.'};
+        return upload(dir, file,context);
     }
 
     /* Copies a file to a new path or into a directory. A server file goes
@@ -1147,13 +1161,18 @@
     function mutation(fn, nodeIndexes, objectResult) {
         return function () {
             var args = Array.from(arguments), paths = nodeIndexes.map(function (i) { return args[i] ? pathOf(args[i]) : null; });
-            return queued(function () {
+            var context=args[args.length-1];if(!context || typeof context!=='object' || !(context.signal || typeof context.current==='function'))context=null;
+            return queued(async function () {
+                if(!operationCurrent(context))throw new Error('The operation was cancelled before it started.');
                 nodeIndexes.forEach(function (i, j) {
                     if (!paths[j]) return;
                     args[i] = resolve(null, paths[j]);
                     if (!args[i]) throw new Error(paths[j] + ': no longer exists');
                 });
-                return fn.apply(null, args);
+                // The serialized queue owns this context through the authority commit.
+                mutationContext = context;
+                try { return await fn.apply(null, args); }
+                finally { mutationContext = null; }
             }).catch(function (err) { return objectResult ? { error: err.message } : err.message; });
         };
     }
@@ -1235,6 +1254,7 @@
         touch: mutation(touch, [0], false),
         writeBytes: mutation(writeBytes, [0], true),
         upload: mutation(upload, [0], true),
+        importFile: mutation(importFile, [0], true),
         copy: mutation(copy, [0, 1], true),
         mkdir: mutation(mkdir, [0], false),
         remove: mutation(remove, [0], false),

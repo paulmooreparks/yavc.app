@@ -126,7 +126,12 @@ async function run(engine, base) {
             try{await yavcHomeStore.update(r=>{const d=JSON.parse(r.raw);d.files['/extra']={t:'f',c:'extra'};return JSON.stringify(d);});}catch(e){return {message:e.message,unchanged:(await yavcHomeStore.read()).raw===before.raw};}
         });assert.match(rejected.message,/full/);assert.equal(rejected.unchanged,true);
         await full.close();
-        console.log(engine+': migration, quota, revisions, concurrent writers, touch, pictures, legacy fork and reload passed');
+        const cancelled=await a.evaluate(async()=>{
+            const before=await yavcHomeStore.read();let current=true;
+            const pending=yavcHomeStore.commit(before.generation,before.raw,()=>current);current=false;
+            try{await pending;return {accepted:true};}catch(error){return {message:error.message,unchanged:(await yavcHomeStore.read()).raw===before.raw};}
+        });assert.match(cancelled.message,/cancelled/);assert.equal(cancelled.unchanged,true);
+        console.log(engine+': migration, quota, revisions, concurrent writers, cancellation at commit, touch, pictures, legacy fork and reload passed');
     } finally { await context.close(); await browser.close(); }
 }
 (async()=>{

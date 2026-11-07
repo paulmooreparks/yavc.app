@@ -24,7 +24,8 @@
    Snapshots are kept in this browser tab's session storage, which a
    reload keeps and the browser brings back with a tab it reopens. Two
    tabs keep apart. A window's snapshot goes when the window closes, so a
-   window opened again later starts afresh; an applet on a page of its own
+   window opened again later starts afresh unless its primary applet opts
+   into a remembered workspace; an applet on a page of its own
    keeps its snapshot under that page's address. Load before pudl-applets.js,
    without defer, beside js/continuity.js. */
 (function () {
@@ -32,6 +33,28 @@
     if (window.yavcSnapshot) { return; }
 
     var PREFIX = 'pc-snap:';
+    var RESUME_PREFIX = 'pc-resume:';
+    function remembered(key) {
+        var best = null, prefix = RESUME_PREFIX + key;
+        try {
+            for (var i = 0; i < localStorage.length; i++) {
+                var name = localStorage.key(i);
+                if (name !== prefix && name.indexOf(prefix + ':') !== 0) continue;
+                var entry;
+                try { entry = JSON.parse(localStorage.getItem(name)); } catch (err) { continue; }
+                if (entry && typeof entry.t === 'number' && 'v' in entry && (!best || entry.t > best.t)) best = Object.assign({},entry,{key:name});
+            }
+        } catch (err) { return null; }
+        return best;
+    }
+    function seal(j) {
+        if(!j.remember)return;
+        try {var entry=JSON.parse(localStorage.getItem(j.remember));if(entry && entry.sealed===false){entry.sealed=true;localStorage.setItem(j.remember,JSON.stringify(entry));}}catch(err){/* A retained unsealed copy is safer than deleting an uncertain writer. */}
+    }
+    function retireParent(j) {
+        var parent=j.parent;j.parent=null;if(!parent)return;
+        try {var entry=JSON.parse(localStorage.getItem(parent.key));if(entry && entry.sealed===true && entry.t===parent.t && JSON.stringify(entry.v)===parent.text)localStorage.removeItem(parent.key);}catch(err){/* Recovery copies survive cleanup failures. */}
+    }
     var joined = [];        /* { root, key, take, dirty } */
     var timer = null;
 
@@ -81,7 +104,20 @@
     function keepApplet(j) {
         var value = null;
         try { value = j.take(); } catch (err) { j.dirty = true; if (window.console) { console.warn('snapshot:', err); } return false; }
-        var kept = write(j.key, value == null ? null : { t: Date.now(), v: value });
+        var serialized;
+        if (j.remember) {
+            try { serialized = JSON.stringify(value); } catch (err) { j.dirty = true; return false; }
+            if (serialized !== j.rememberedText) j.changedAt = Math.max(Date.now(), j.changedAt + 1);
+        }
+        var kept = write(j.key, value == null ? null : { t: j.remember ? j.changedAt : Date.now(), v: value });
+        if (kept && j.remember) {
+            try {
+                localStorage.setItem(j.remember, JSON.stringify({ t: j.changedAt, v: value,sealed:false }));
+                j.rememberedText = serialized;
+                retireParent(j);
+            }
+            catch (err) { kept = false; }
+        }
         j.dirty = !kept;
         if (kept) j.pendingCleanup = j.pendingCleanup.filter(function (key) { return !write(key, null); });
         if (!kept && window.console) {
@@ -138,9 +174,15 @@
     function join(root, take, options) {
         var key = keyOf(root);
         var plan = newest(key, root), entry = plan.entry;
+        var resumeKey = options && options.remember ? root.getAttribute('data-applet') : null;
+        var resume = resumeKey ? remembered(resumeKey) : null;
+        if (resume && !entry) entry = resume;
         // Validation precedes registration and cleanup of other snapshots.
         if (options && typeof options.validate === 'function') options.validate(entry ? entry.v : null);
-        var j = { root: root, key: key, take: take, dirty: false, active: true, pendingCleanup: plan.remove };
+        var j = { root: root, key: key, take: take, dirty: false, active: true, pendingCleanup: plan.remove,
+            remember: resumeKey ? RESUME_PREFIX + resumeKey + ':' + crypto.randomUUID() : null,
+            rememberedText: entry ? JSON.stringify(entry.v) : null, changedAt: entry ? entry.t : 0,
+            parent:resume && entry && JSON.stringify(resume.v)===JSON.stringify(entry.v)?{key:resume.key,t:resume.t,text:JSON.stringify(resume.v)}:null };
         joined.push(j);
         var win = winOf(root);
         var wasFocused = !!focus && (focus === key || (win && focus === 'win:' + win.getAttribute('data-win')));
@@ -151,6 +193,7 @@
             flush: function () { return j.active ? keepApplet(j) : false; },
             leave: function () {
                 j.active = false;
+                seal(j);
                 var i = joined.indexOf(j);
                 if (i >= 0) { joined.splice(i, 1); }
             }
@@ -274,7 +317,10 @@
     }
 
     /* The page is going, or may be: everything is kept as it is now. */
-    window.addEventListener('pagehide', keepAll);
+    window.addEventListener('pagehide', function (event) {
+        keepAll();
+        if(!event.persisted){joined.forEach(function (j) {j.active=false;seal(j);});joined=[];}
+    });
     document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'hidden') { keepAll(); } });
     var scrollTimer = null;
     document.addEventListener('scroll', function () {
@@ -300,5 +346,5 @@
     }
     if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', start); } else { start(); }
 
-    window.yavcSnapshot = { version: 2, join: join, keepAll: keepAll };
+    window.yavcSnapshot = { version: 2, remembersClosed: true, join: join, keepAll: keepAll };
 })();

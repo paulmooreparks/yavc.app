@@ -2554,8 +2554,8 @@ var qrcodegen;
                 function action(name, label) { return host().action(root, '[data-action=\"' + name + '\"]', label); }
                 return { titles: [
                     { label: 'Barcode Flash Cards', items: host().identity(root) },
-                    { label: 'Deck', items: [action('reveal', 'Reveal answer'), action('shuffle', 'Shuffle')] }
-                ], into: { go: [action('prev', 'Previous card'), action('next', 'Next card')] } };
+                    { label: 'Deck', items: [action('prev', 'Previous card'), action('next', 'Next card'), '-', action('reveal', 'Reveal answer'), action('shuffle', 'Shuffle')] }
+                ] };
             },
             destroy: function () {
                 destroyed = true;

@@ -1,7 +1,7 @@
 {
   "name": "asteroids",
   "title": "Asteroids",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "The 1979 arcade game: turn, thrust and shoot the rocks into ever smaller pieces, and watch for the saucers.",
   "license": "Apache-2.0",
   "src": "asteroids.js",

@@ -123,6 +123,10 @@
             var result = resolver.resolve(request, { installed: installed, preferences: validAssociations || { version: 1, rules: [] } });
             return Object.assign({}, result, { preferenceError: preferenceError });
         } },
+        fileFields: { version: 1, choose: async function (request) {
+            var fields = await U.loadGlobal(versioned('/static/file-fields.js'), 'yavcFileFields');
+            return fields.choose(request);
+        } },
         /* Prepared for explicit capability adoption after the applet gates. */
         contentResourceAdapter: { version: 1,
             available: function () { return fs().then(function (F) { return !F.mounted; }); },

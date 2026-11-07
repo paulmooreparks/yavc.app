@@ -1,7 +1,7 @@
 {
   "name": "settings",
   "title": "Settings",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "Your appearance choices and what this site keeps for you.",
   "license": "Apache-2.0",
   "src": "settings.js",

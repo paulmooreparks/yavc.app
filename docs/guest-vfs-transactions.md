@@ -12,7 +12,15 @@ Every persisted entry has an opaque revision. An unrelated file save preserves i
 
 `pcSiteFs.contentResources` implements the experimental version 1 read/write contract for existing text files under canonical guest `~/` paths. Server mounts and virtual settings are refused because their backends do not yet implement this contract. It does not create resources or implement Save As. The ordinary legacy filesystem still supports those operations.
 
-This capability is not yet supplied as `pudlHost.contentResources` to installed applets. Their recovered drafts do not yet carry original resource revisions. The legacy document save path therefore retains its previous document-level concurrency limitations, even though bulk filesystem operations now have a transactional commit boundary. Enabling the resource capability requires baseline-aware recovery and per-document save integration.
+The guest host now supplies this capability through the resource adapter used by Diagrams, Editor and Slides. Their baseline-aware recovery and per-document save integration are recorded in `diagram-resource-adoption.md` and `editor-slides-resource-adoption.md`. Administrator server mounts and settings retain the documented legacy limitations.
+
+## Create-only imports and operation lifetime
+
+`pcSiteFs.importFile(dir, file, context)` creates a guest-home file inside the existing serialized mutation queue. It refreshes the authoritative tree before checking the destination name and refuses an existing file or directory. Server mounts and virtual settings are refused because they do not implement conditional creation. Dependency fields use this operation after an explicit destination choice, as described in `file-fields-contract.md`.
+
+The optional final mutation context contains `signal` and a synchronous `current()` callback. The queue checks this context before starting an operation. File import also rechecks it after asynchronous reads and binary preparation. The storage authority checks it inside the IndexedDB transaction before changing the root, including when that transaction waited behind another writer. Cancellation before that check does not link a new entry, and an abandoned prepared binary is removed. A commit already past the authority check may finish. Callers must independently prevent a late result from changing a disposed document's controls.
+
+Files uses this context for New File, New Folder, Rename, Move and Delete. Guest New File uses create-only import. The server and settings backends retain their existing legacy write behavior and do not gain conditional creation from this change.
 
 ## Migration and rollback
 

@@ -1,4 +1,7 @@
 /* Copyright 2026 Paul Parks. SPDX-License-Identifier: Apache-2.0 */
+.dg-item-dialog { width: min(38rem, calc(100vw - 2rem)); }
+.dg-item-list { max-height: 45svh; overflow: auto; }
+.dg-item-list .listbox-title, .dg-item-list .listbox-detail { overflow-wrap: anywhere; }
 /* Diagrams (diagrams.js, docs/diagrams-design.md): the chrome is Slides'
    (slides.css), so the toolbar, the tabs, the splitter and the status line
    sit where they sit there, and the drawing takes the canvas's place. */

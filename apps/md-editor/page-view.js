@@ -1337,12 +1337,14 @@ var schemaCache = null;
       if (action === 'args') {
         var ask = window.yavcMdEditor && window.yavcMdEditor.askText;
         if (!ask) return;
-        ask(BOX_NAMES[node.attrs.name] || node.attrs.name, BOX_TITLED[node.attrs.name] || 'Arguments', node.attrs.args).then(function (args) {
-          if (args == null || !o.wrapOf) return;
+        var openingDoc=v.state.doc, openingGeneration=loading;
+        function sameBox() {var at=getPos();return on && view===v && !sourceStale && !frozen && loading===openingGeneration && v.state.doc===openingDoc && typeof at==='number' && v.state.doc.nodeAt(at) && v.state.doc.nodeAt(at).eq(node);}
+        ask(BOX_NAMES[node.attrs.name] || node.attrs.name, BOX_TITLED[node.attrs.name] || 'Arguments', node.attrs.args,{signal:o.signal,okLabel:'Apply',validate:function () {return sameBox()?null:'The document or box changed. Close and reopen this form.';}}).then(function (args) {
+          if (args == null || !o.wrapOf || !sameBox()) return;
           var line = args.trim() ? '{{' + node.attrs.name + ':' + args.trim() + '}}' : '{{' + node.attrs.name + '}}';
           return Promise.resolve(o.wrapOf(line)).then(function (info) {
             var at = getPos(), now = typeof at === 'number' ? v.state.doc.nodeAt(at) : null;
-            if (!now || now.type !== node.type) return;
+            if (!sameBox() || !now || !now.eq(node)) return;
             v.dispatch(v.state.tr.setNodeMarkup(at, null, Object.assign({}, now.attrs, { args: info.args, open: info.open, before: info.before, after: info.after })));
             v.focus();
           });
@@ -1513,8 +1515,9 @@ var schemaCache = null;
         if (m) current = m.attrs.href;
       });
       var from = s.selection.from, to = s.selection.to;
-      window.yavcDialog.askText('Link', 'Address', current, { placeholder: 'https://', help: 'Leave the address empty to take the link away.', okLabel: 'Set the Link' }).then(function (address) {
-        if (view !== v) return;
+      function unchanged() { return on && view === v && !sourceStale && !frozen && v.state.doc === s.doc && v.state.selection.eq(s.selection); }
+      window.yavcDialog.askText('Link', 'Address', current, { signal: o.signal, placeholder: 'https://', help: 'Leave the address empty to take the link away.', okLabel: 'Apply', validate: function () { return unchanged() ? null : 'The document or selection changed. Reopen this form.'; } }).then(function (address) {
+        if (!unchanged()) return;
         v.focus();
         if (address == null) return;
         var tr = v.state.tr;
@@ -1547,12 +1550,26 @@ var schemaCache = null;
       active: function () { return on && !!view; },
       // Changes on the page not yet in the Editor's text.
       pending: function () { return dirty || !!syncing; },
+      formatSelection: function (name) {
+        if (!view || !on || sourceStale || frozen) return null;
+        var target = view, doc = view.state.doc, selection = view.state.selection, stored = view.state.storedMarks, type = view.state.schema.marks[name];
+        if (!type) return null;
+        var values = new Set();
+        function value(marks) { var mark = type.isInSet(marks); return mark ? String(mark.attrs.value || '') : ''; }
+        if (selection.empty) values.add(value(view.state.storedMarks || selection.$from.marks()));
+        else doc.nodesBetween(selection.from, selection.to, function (node) { if (node.isText) values.add(value(node.marks)); });
+        if (!values.size) return null;
+        function current() { return on && view === target && view.editable && !sourceStale && !frozen && view.state.doc === doc && view.state.selection.eq(selection) && view.state.storedMarks === stored; }
+        return { value: values.size === 1 ? Array.from(values)[0] : '', mixed: values.size > 1, empty: selection.empty,
+          text: selection.empty ? 'Sample text' : doc.textBetween(selection.from, selection.to, ' ').slice(0, 240), current: current,
+          apply: function (next) { return current() && run(name, next || null); } };
+      },
       historyAvailable: function (name) { return !!(view && !sourceStale && PM[name](view.state)); },
       clipboardSelection: function () {
         if (!view || sourceStale) return null;
         var target = view, doc = view.state.doc, selection = view.state.selection;
         var data = view.serializeForClipboard(selection.content());
-        function current() { return on && view === target && view.state.doc === doc && view.state.selection.eq(selection); }
+        function current() { return on && view === target && view.editable && !sourceStale && !frozen && view.state.doc === doc && view.state.selection.eq(selection); }
         return { text: data.text, html: data.dom.innerHTML, empty: selection.empty, current: current,
           remove: function () { if (current()) view.dispatch(view.state.tr.deleteSelection().scrollIntoView().setMeta('uiEvent', 'cut')); } };
       },

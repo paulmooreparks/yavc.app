@@ -47,23 +47,23 @@
                 '<p class="form-help">The shape and depth of every control, from the PUDL release installed on this site.</p>' +
               '</div>' +
               '<div class="form-group">' +
-                '<label class="form-label" for="yavc-set-palette-' + n + '">Colours</label>' +
+                '<label class="form-label" for="yavc-set-palette-' + n + '">Colors</label>' +
                 '<span class="form-select-wrap"><select class="form-select" id="yavc-set-palette-' + n + '" data-palette>' + options(data.palettes, current.palette) + '</select></span>' +
-                '<p class="form-help">A colour theme goes with any skin, in light and dark.</p>' +
+                '<p class="form-help">A color theme goes with any skin, in light and dark.</p>' +
               '</div>' +
             '</section>' +
             '<section class="card">' +
               '<h2 class="card-title">What This Site Keeps</h2>' +
               '<p class="card-desc">Your appearance choices and each application\'s state, such as a game in progress, are kept on this site under an anonymous session, so the same game is on the desktop and on the application\'s own address. Nothing in it identifies you.' + kept + '</p>' +
               '<p class="card-desc">Files you make, in the editor, the terminal or a game\'s saves, are kept in this browser alone, under the address you made them at, and this site never sees them. The desktop and each application\'s own address keep separate files. Clearing this browser\'s site data removes them, so download anything you want to keep.</p>' +
-              '<div class="settings-actions"><button type="button" class="btn btn-danger" commandfor="yavc-forget-' + n + '" command="show-modal">Forget Everything This Site Keeps for You…</button></div>' +
+              '<div class="settings-actions"><button type="button" class="btn btn-danger" commandfor="yavc-forget-' + n + '" command="show-modal">Reset Saved Site State…</button></div>' +
               '<p class="settings-status" data-status role="status"></p>' +
               '<dialog class="dialog" id="yavc-forget-' + n + '" aria-labelledby="yavc-forget-title-' + n + '">' +
-                '<h3 class="dialog-title" id="yavc-forget-title-' + n + '">Forget everything this site keeps for you?</h3>' +
-                '<p class="dialog-body">Your appearance choices and every application\'s state go, and the page starts afresh. Nothing can bring them back. Your files in this browser are kept.</p>' +
+                '<h3 class="dialog-title" id="yavc-forget-title-' + n + '">Reset Saved Site State?</h3>' +
+                '<p class="dialog-body">Clears appearance choices and application settings saved by the site, and revokes paired agent tokens. Files and drafts stored in this browser remain available. This reset cannot be undone.</p>' +
                 '<form class="dialog-actions" method="dialog">' +
-                  '<button class="btn" value="keep" autofocus>Keep Them</button>' +
-                  '<button class="btn btn-danger" value="forget">Forget Them</button>' +
+                  '<button class="btn" value="keep" autofocus>Cancel</button>' +
+                  '<button class="btn btn-danger" value="forget">Reset</button>' +
                 '</form>' +
               '</dialog>' +
             '</section>' +
@@ -117,7 +117,7 @@
             if (dialog.returnValue !== 'forget') { return; }
             window.fetch('/session', { method: 'DELETE', credentials: 'same-origin' }).then(function (r) {
                 if (!r.ok) { throw new Error('HTTP ' + r.status); }
-                status.textContent = 'Forgotten. The page will reload.';
+                status.textContent = 'Saved site state was reset. The page will reload.';
                 setTimeout(function () { location.reload(); }, 800);
             }).catch(function () {
                 window.yavcUtil.notice(status, 'Your data could not be forgotten just now. Try again in a moment.', true);

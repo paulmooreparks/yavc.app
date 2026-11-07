@@ -199,7 +199,9 @@ rules.push({ id: 'pudl-script-loaded', run() {
   const needs = [
     [/\bsplit-handle\b/, 'pudl-split.js'], [/\bdata-date\b/, 'pudl-date.js'], [/\bnumber-field\b/, 'pudl-fields.js'],
     [/\bpudlToast\b/, 'pudl-toast.js'], [/\bcard disclosure\b|\bpudlDisclose\b/, 'pudl-disclose.js'], [/\brole=["\\']*tree\b/, 'pudl-tree.js'],
-    [/\bdata-code-actions\b/, 'pudl-code.js'], [/\bdata-combo\b/, 'pudl-combo.js'], [/\bdata-reorder\b/, 'pudl-reorder.js']
+    [/\bdata-code-actions\b/, 'pudl-code.js'], [/\bdata-combo\b/, 'pudl-combo.js'], [/\bdata-reorder\b/, 'pudl-reorder.js'],
+    // List boxes need their PUDL keyboard and selection behavior on every host page.
+    [/\bdata-listbox\b|\bpudlListbox\b/, 'pudl-listbox.js']
   ];
   const sources = files.filter((f) => /^(apps|internal\/web)\//.test(f) && /\.(js|html|go)$/.test(f));
   for (const [re, script] of needs) {

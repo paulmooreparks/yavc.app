@@ -1935,22 +1935,26 @@
                 <dialog class="dialog" data-role="input-dialog" aria-labelledby="${id}-input-title">
                     <h2 class="dialog-title" id="${id}-input-title">Enter a barcode</h2>
                     <form data-role="text-form">
+                        <div class="dialog-body"><div class="form-group">
                         <label class="form-label" for="${id}-text">Scanned or pasted value</label>
-                        <textarea class="form-input" id="${id}-text" data-role="text" rows="3" spellcheck="false" autocomplete="off"></textarea>
+                        <textarea class="form-textarea" id="${id}-text" data-role="text" rows="3" spellcheck="false" autocomplete="off"></textarea></div><div class="form-group">
                         <label class="form-label" for="${id}-format">Input format</label>
                         <span class="form-select-wrap"><select class="form-select" id="${id}-format" data-role="format"><option value="">Unknown / try all</option>
                         ${Object.keys(B.symbologies).map(function (key) { return '<option value="' + esc(key) + '">' + esc(B.symbologies[key].name || key) + '</option>'; }).join('')}</select></span>
+                        </div>
                         <p class="form-help">Enter decodes; Shift+Enter inserts a line break. You can also use a keyboard scanner.</p>
+                        </div>
                         <div class="dialog-actions"><button class="btn" type="button" data-action="close-input">Cancel</button><button class="btn btn-primary" type="submit">Decode value</button></div>
                     </form>
                 </dialog>
                 <dialog class="dialog" data-role="details-dialog" aria-labelledby="${id}-details-title">
                     <h2 class="dialog-title" id="${id}-details-title">Scan details</h2>
-                    <div data-role="details"></div>
+                    <div class="dialog-body" data-role="details"></div>
                     <div class="dialog-actions"><button class="btn" type="button" data-action="close-details">Close</button></div>
                 </dialog>
                 <dialog class="dialog" data-role="install-dialog" aria-labelledby="${id}-install-title">
                     <h2 class="dialog-title" id="${id}-install-title">Install scanner</h2>
+                    <div class="dialog-body">
                     <p><a href="${esc((host().pages || '/page/') + 'barcode-scanner?frame')}" target="_blank" rel="noopener">Open the standalone scanner</a> in your browser, then install it from there.</p>
                     <ul>
                         <li>On iPhone or iPad, use Share, then Add to Home Screen.</li>
@@ -1959,12 +1963,15 @@
                         <li>On Safari for Mac, use File, then Add to Dock.</li>
                     </ul>
                     <p class="form-help">Installation adds a Scanner icon that opens this app on its own. An internet connection is still needed to load the scanner.</p>
+                    </div>
                     <div class="dialog-actions"><button class="btn" type="button" data-action="close-install">Close</button></div>
                 </dialog>
                 <dialog class="dialog" data-role="copy-fallback" aria-labelledby="${id}-export-title">
                     <h2 class="dialog-title" id="${id}-export-title">Copy result</h2>
+                    <div class="dialog-body"><div class="form-group">
                     <label class="form-label" for="${id}-export">Select and copy this result</label>
-                    <textarea class="form-input" id="${id}-export" readonly rows="6"></textarea>
+                    <textarea class="form-textarea" id="${id}-export" readonly rows="6"></textarea>
+                    </div></div>
                     <div class="dialog-actions"><button class="btn" type="button" data-action="close-copy">Close</button></div>
                 </dialog>`;
             function q(role) { return root.querySelector('[data-role="' + role + '"]'); }

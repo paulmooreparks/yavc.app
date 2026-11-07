@@ -592,7 +592,7 @@
     function pick(F, o) {
         o = o || {};
         if (o.signal && o.signal.aborted) return Promise.resolve(null);
-        var save = o.mode === 'save', id = 'fb-pick-' + (++pickCount);
+        var save = o.mode === 'save', folder = o.mode === 'folder', id = 'fb-pick-' + (++pickCount);
         var accept = (o.accept || []).map(function (x) { return x.toLowerCase(); });
         var fits = function (name) { return !accept.length || accept.some(function (x) { return name.toLowerCase().slice(-x.length) === x; }); };
         var dlg = document.createElement('dialog'); // check-ignore(one-shared-implementation): the file picker is a whole file browser in a dialog, not a question
@@ -617,9 +617,9 @@
                 '<div class="fb-pick-browse">' + markup.body({}) + '</div>' +
                 '<p class="fb-pick-note" data-pick="note" hidden></p>' +
                 '<div class="form-group fb-pick-field">' +
-                  '<label class="form-label" for="' + id + '-input">' + (save ? 'File Name' : 'Path') + '</label>' +
+                  '<label class="form-label" for="' + id + '-input">' + (folder ? 'Folder' : save ? 'File Name' : 'Path') + '</label>' +
                   '<input class="form-input mono" id="' + id + '-input" data-pick="input" autocomplete="off" spellcheck="false"' +
-                    (save ? '' : ' placeholder="Choose a file, or type a path such as ~/README"') + ' />' +
+                    (save ? '' : folder ? ' placeholder="Choose a folder, or enter its path"' : ' placeholder="Choose a file, or type a path such as ~/README"') + ' />' +
                 '</div>' +
                 '<p class="form-error" data-pick="error" role="alert" hidden></p>' +
               '</div>' +
@@ -729,6 +729,13 @@
         function submit() {
             if (busy) { return; }
             var v = input.value.trim(), dir = b.cwd();
+            if (folder) {
+                var destination = v ? F.resolve(dir,v) : dir;
+                if (!destination || !destination.children) { say('Choose a folder.'); return; }
+                var folderProblem = o.check ? o.check(destination) : null;
+                if (folderProblem) { say(folderProblem); return; }
+                choose({path:F.displayPath(destination),node:destination}); return;
+            }
             if (!save) {
                 var sel = b.selected();
                 var node = v ? F.resolve(dir, v) : (sel && !sel.children ? sel : null);
@@ -760,6 +767,7 @@
             var path = F.displayPath(target).replace(/\/$/, '') + '/' + base;
             var expected = existing ? existing.revision : null;
             if (o.conditional && existing && (typeof expected !== 'string' || !expected)) { say('This destination does not support conditional replacement.'); return; }
+            if (existing && o.createOnly) { say(base + ' already exists. Choose a different name.'); return; }
             /* Replacing a file takes a second press, on a button that says
                so; any change to the name asks again. */
             if (existing && (o.conditional || path !== o.current) && (replacing !== path || o.conditional && replacingRevision !== expected)) {
@@ -800,7 +808,7 @@
             done = resolve;
             b = create(dlg, F, {
                 start: o.start || F.displayPath(F.home()),
-                filter: accept.length ? function (n) { return fits(n.name); } : null,
+                filter: folder ? function () { return false; } : accept.length ? function (n) { return fits(n.name); } : null,
                 onOpen: function (node) {
                     if (busy) { return; }
                     input.value = save ? node.name : F.displayPath(F.realOf(node));
@@ -808,12 +816,12 @@
                     submit();
                 },
                 onSelect: function (node) {
-                    if (!node || node.children || busy) { return; }
+                    if (!node || busy || (folder ? !node.children : node.children)) { return; }
                     input.value = save ? node.name : F.displayPath(F.realOf(node));
                     resetReplace();
                     say('');
                 },
-                onNavigate: function () { resetReplace(); folderState(); },
+                onNavigate: function () { if(folder)input.value='';resetReplace(); folderState(); },
                 say: function (m) { if (m) { say(m); } }
             });
             if (save) { input.value = o.name || ''; }
@@ -856,6 +864,7 @@
             if (o.computer && !save) {
                 q('chooser').addEventListener('change', function () {
                     var f = this.files && this.files[0];
+                    if(f && !fits(f.name)){say(f.name+' is not a '+accept.join(' or ')+' file.');this.value='';return;}
                     if (f) { choose({ file: f }); }
                 });
                 /* A file dropped from the computer anywhere on the dialog

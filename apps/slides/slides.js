@@ -346,6 +346,7 @@
         }
         function pageHost() {
             return {
+                signal: styleLifetime.signal,
                 root: root, page: el.body, scroll: el.stagebox,
                 customName: function (name) { return window.yavcMacroTools && window.yavcMacroTools.metadata(currentMacroEngine()).some(function (item) { return item.name === name; }); },
                 text: function () { return current().text; },
@@ -676,11 +677,11 @@
         function abortOwnedDialogs(slideOnly) {
             dialogOwners.forEach(function (owner) { if (!slideOnly || owner.slide) { owner.controller.abort(); dialogOwners.delete(owner); } });
         }
-        async function askText(title, label, value, slideOnly) {
+        async function askText(title, label, value, slideOnly, fieldOptions) {
             if (!await settleForDialog(slideOnly)) return null;
             var guard = dialogGuard(slideOnly);
             if (typeof value === 'function') value = value();
-            return window.yavcDialog.askText(title, label, value, { signal: guard.signal, validate: function () { return guard.current() ? null : 'The deck changed. Close and reopen this form.'; } })
+            return window.yavcDialog.askText(title, label, value, Object.assign({},fieldOptions,{ signal: guard.signal, current:guard.current, okLabel:'Apply', validate: function () { return guard.current() ? null : 'The deck changed. Close and reopen this form.'; } }))
                 .then(function (answer) { return guard.current() ? answer : null; }).finally(guard.release);
         }
         function askChoice(title, body, buttons) { return window.yavcDialog.askChoice(title, body, buttons); }
@@ -788,7 +789,7 @@
                 problems = Array.from(new Set(problems)); styleNotice.hidden = !problems.length; styleNotice.querySelector('.notice-body').textContent = problems.join(' ');
             } catch (err) { if (!destroyed && revision === styleRevision) { say('Styles could not be applied: ' + err.message, true); } }
         }
-        function deckClasses() { var classes = deckStyle ? deckStyle.state().classes : []; slideStyles.forEach(function (controller) { classes = classes.concat(controller.state().classes); }); return Array.from(new Set(classes)).sort(); }
+        function deckClasses() { var classes = deckStyle ? deckStyle.state().classes : [], own = slideStyles.get(at); if (own) classes = classes.concat(own.state().classes); return Array.from(new Set(classes)).sort(); }
         var sheetWatch = H.fs && H.fs.onChange ? H.fs.onChange(function () { installStyle(true); }) : null;
         async function editStyles(shared) {
             if (!await settleForDialog(true)) return;
@@ -1292,6 +1293,9 @@
         var DECK_INSERTS = [{ id: 'insert-notes', label: 'Speaker Notes', words: 'notes speaker', markdown: '{{notes}}\nWhat to say.\n{{/notes}}' }];
         function editCtx() {
             return {
+                identity: current, signal: styleLifetime.signal, readOnly: readOnly,
+                prepareFormats: async function () { await deckEngine(); await installStyle(); },
+                styleScope: function () { return el.body.getAttribute('data-md-style') || ''; },
                 page: function () { return page; }, text: function () { return cm; },
                 onPage: function () { return pageActive() && (mode === 'visual' || (mode === 'split' && historyPane !== 'text')); },
                 blockStyle: function () { if (pageActive() && page.marks) { return page.marks().block || null; } if (!cm) { return null; } var m = /^\s{0,3}(#{1,6})(\s|$)/.exec(cm.state.doc.lineAt(cm.state.selection.main.head).text); return m ? 'h' + m[1].length : 'paragraph'; },
@@ -1367,7 +1371,7 @@
                 cmd('slide-colours', 'Slide Colors…', 'colour', slideColours),
                 cmd('deck-colours', 'Deck Colors…', 'colour', deckColours),
                 cmd('deck-stylesheet', 'Stylesheet File…', 'file', function () {
-                    askText('The Deck\'s Stylesheet', 'A CSS file of yours, such as ~/themes/mine.css; empty for none', function () { return deck.front.stylesheet || ''; }).then(function (v) { if (v != null) { setFront('stylesheet', v.trim()); } });
+                    askText('Deck Stylesheet', 'Stylesheet File', function () { return deck.front.stylesheet || ''; },false,{browse:true,accept:'.css',maxBytes:256*1024,help:'Leave empty to use the deck theme.'}).then(function (v) { if (v != null) { setFront('stylesheet', v.trim()); } });
                 }),
                 cmd('deck-style-block', 'Edit Style Blocks…', 'code', function () { return editStyles(false); }, { shortcut: 'Mod+Shift+F' }),
                 cmd('custom-shortcodes', 'Custom Shortcodes…', 'code', editDefinitions),
@@ -1378,7 +1382,7 @@
                     askText('This Slide\'s Style Classes', 'Class names from the stylesheet, separated by spaces; empty for none', function () { return settingsOf(current())['class'] || ''; }, true).then(function (v) { if (v != null) { setSlideSetting('class', v.trim()); } });
                 }),
                 cmd('styles-help', 'Styling a Deck', 'info', function () { window.open(publicOrigin() + '/slides-styles', '_blank', 'noopener'); }),
-                cmd('background-image', 'Background Picture…', 'image', function () { askText('Background Picture', 'The picture\'s address, such as /images/x.png; empty for none', function () { return settingsOf(current()).image || ''; }, true).then(function (v) { if (v != null) { setSlideSetting('image', v.trim()); } }); }),
+                cmd('background-image', 'Background Picture…', 'image', function () { askText('Background Picture', 'Picture File or URL', function () { return settingsOf(current()).image || ''; }, true,{browse:true,accept:'.png,.jpg,.jpeg,.gif,.webp,.svg',help:'Leave empty to remove the background picture.'}).then(function (v) { if (v != null) { setSlideSetting('image', v.trim()); } }); }),
                 { id: 'slide-transition', label: 'Transition', items: TRANSITIONS.map(function (t) { return { id: 'slide-transition-' + t[0], label: t[1], choice: 'deck-slide-transition', value: t[0], checked: function () { return (settingsOf(current()).transition || deck.front.transition || 'fade') === t[0]; }, run: function () { setSlideSetting('transition', t[0] === (deck.front.transition || 'fade') ? null : t[0]); } }; }) },
                 cmd('deck-title', 'Properties…', 'tag', async function () {
                     if (!ENGINE || !await settleForDialog(false)) { return; }

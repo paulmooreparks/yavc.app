@@ -1,7 +1,7 @@
 {
   "name": "invaders",
   "title": "Space Invaders",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "The 1978 arcade game: shoot the invaders before they land, from behind four crumbling shields.",
   "license": "Apache-2.0",
   "src": "invaders.js",

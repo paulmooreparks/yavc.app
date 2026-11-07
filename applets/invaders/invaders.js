@@ -24,6 +24,7 @@
         opts = opts || {};
         var held = {};
         function down(e) {
+            if (e.target.closest('dialog[open],input,textarea,select,[contenteditable="true"]')) { clear(); return; }
             var n = KEYS[e.code];
             if (!n) { return; }
             e.preventDefault();
@@ -32,6 +33,7 @@
             if (opts.press) { opts.press(n); }
         }
         function up(e) {
+            if (e.target.closest('dialog[open],input,textarea,select,[contenteditable="true"]')) { clear(); return; }
             var n = KEYS[e.code];
             if (!n) { return; }
             e.preventDefault();

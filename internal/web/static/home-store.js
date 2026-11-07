@@ -120,8 +120,9 @@
             return next;
         });
     }
-    function commit(expected, raw) {
+    function commit(expected, raw, current) {
         return update(function (record) {
+            if (current && !current()) throw new Error('The operation was cancelled before saving.');
             if (record.generation !== expected) throw new Error('Files changed in another tab. Your operation was not saved; retry against the current files.');
             return raw;
         });

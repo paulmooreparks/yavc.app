@@ -13,7 +13,8 @@
          it returns a problem; onOpen({ dialog, body, close(value) }) runs
          once the dialog shows, to wire what the body holds.
      yavcDialog.askText(title, label, value, opts)       -> string or null
-         opts: { text, okLabel, help, placeholder, validate(v) -> error or null }
+         opts: { text, okLabel, help, placeholder, signal, validate(v) -> error or null,
+                 choices: [[value,label]], multiline, browse: true|'folder', accept, maxBytes }
      yavcDialog.askChoice(title, text, buttons)          -> an id or null
          buttons: [[id, label, primary, danger], ...]
      yavcDialog.confirm(title, text, opts)               -> true or false
@@ -31,6 +32,18 @@
 
     var count = 0;
     var esc = window.yavcUtil.esc;
+    // Authored and generated dialogs share the same keyboard boundary.
+    document.addEventListener('keydown', function (event) {
+        if (event.key !== 'Tab' || event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return;
+        var dialog = event.target.closest && event.target.closest('dialog.dialog[open]');
+        if (!dialog) return;
+        var stops = Array.from(dialog.querySelectorAll('button,input,select,textarea,a[href],[tabindex],[contenteditable="true"]')).filter(function (node) {
+            return node.tabIndex >= 0 && !node.matches(':disabled') && !node.closest('[inert]') && node.getClientRects().length && getComputedStyle(node).visibility !== 'hidden';
+        });
+        if (!stops.length) {event.preventDefault();dialog.focus();return;}
+        if (event.shiftKey && document.activeElement === stops[0]) {event.preventDefault();stops[stops.length-1].focus();}
+        else if (!event.shiftKey && document.activeElement === stops[stops.length-1]) {event.preventDefault();stops[0].focus();}
+    });
 
     function open(o) {
         var n = ++count, dlg = document.createElement('dialog'), opener = document.activeElement;
@@ -65,16 +78,6 @@
             function abort() { finish(null); }
             if (o.signal) { if (o.signal.aborted) { abort(); return; } o.signal.addEventListener('abort', abort, { once: true }); }
             dlg.addEventListener('click', function (e) { var b = e.target.closest('button[data-choice]'); if (b && dlg.contains(b)) { finish(b.getAttribute('data-choice')); } });
-            dlg.addEventListener('keydown', function (e) {
-                if (e.key !== 'Tab' || e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) { return; }
-                var stops = Array.from(dlg.querySelectorAll('button,input,select,textarea,a[href],[tabindex],[contenteditable="true"]')).filter(function (node) {
-                    return node.tabIndex >= 0 && !node.disabled && !node.closest('[inert]') && node.getClientRects().length && getComputedStyle(node).visibility !== 'hidden';
-                });
-                if (!stops.length) { e.preventDefault(); dlg.focus(); return; }
-                var first = stops[0], last = stops[stops.length - 1], active = document.activeElement;
-                if (e.shiftKey && active === first) { e.preventDefault(); last.focus(); }
-                else if (!e.shiftKey && active === last) { e.preventDefault(); first.focus(); }
-            });
             form.addEventListener('submit', function (e) {
                 e.preventDefault();
                 var v = e.submitter ? e.submitter.value : (form.querySelector('[type="submit"]') || {}).value;
@@ -96,24 +99,59 @@
         });
     }
 
+    function pathField(o) {
+        return '<div class="form-group"><label class="form-label" for="' + esc(o.id) + '">' + esc(o.label) + '</label><div class="yavc-path-field"><input class="form-input" id="' + esc(o.id) + '" data-file-path data-accept="' + esc(o.accept || '') + '"' +
+            (o.maxBytes!=null?' data-max-bytes="'+esc(o.maxBytes)+'"':'') + (o.help?' aria-describedby="'+esc(o.id)+'-help"':'') + ' value="' + esc(o.value || '') + '" autocomplete="off"><button class="btn" type="button" data-browse-for="' + esc(o.id) + '"><span class="glyph" style="--glyph:var(--glyph-folder)" aria-hidden="true"></span>Browse…</button></div>' + (o.help ? '<p class="form-help" id="'+esc(o.id)+'-help">' + esc(o.help) + '</p>' : '') + '</div>';
+    }
+    function wirePaths(api, opts) {
+        opts = opts || {};
+        var hostFields=window.pudlHost && window.pudlHost.fileFields;
+        var controller = new AbortController(), capability = opts.choose || (hostFields && hostFields.version===1 && typeof hostFields.choose==='function' ? function (request) {return hostFields.choose(request);} : null);
+        function abort() { controller.abort(); }
+        if (opts.signal) { if (opts.signal.aborted) abort(); else opts.signal.addEventListener('abort', abort, {once:true}); }
+        api.dialog.addEventListener('close', function () { abort(); if (opts.signal) opts.signal.removeEventListener('abort',abort); }, {once:true});
+        api.body.querySelectorAll('[data-browse-for]').forEach(function (button) {
+            if (!capability) { button.disabled = true; button.title = 'This host does not offer file browsing. Enter the path directly.'; return; }
+            button.addEventListener('click', async function () {
+                var input = api.body.querySelector('#' + CSS.escape(button.getAttribute('data-browse-for')));
+                function current() { return api.dialog.open && !controller.signal.aborted && (!opts.current || opts.current()); }
+                if (!input || !current()) return;
+                button.disabled = true;
+                try {
+                    var limit=input.getAttribute('data-max-bytes');
+                    var path = await capability({signal:controller.signal,current:current,kind:opts.browse === 'folder' ? 'folder' : 'file',accept:input.getAttribute('data-accept'),maxBytes:limit?Number(limit):undefined,start:opts.start || '~',host:opts.host});
+                    if (path != null && current()) { input.value = path; input.dispatchEvent(new Event('input',{bubbles:true})); input.focus(); }
+                } catch (err) { if (current()) window.yavcUtil.notice(input.closest('.form-group'),err.message || String(err),true); }
+                finally { if (button.isConnected) button.disabled = false; }
+            });
+        });
+    }
     function askText(title, label, value, opts) {
         opts = opts || {};
         var id = 'yavc-dlg-field-' + (count + 1);
+        var control = opts.choices ? '<span class="form-select-wrap"><select class="form-select" id="' + id + '"' + (opts.choices.length > 8 ? ' data-combo' : '') + '>' + opts.choices.map(function (choice) { return '<option value="' + esc(choice[0]) + '"' + (String(choice[0]) === String(value) ? ' selected' : '') + '>' + esc(choice[1]) + '</option>'; }).join('') + '</select></span>' : opts.multiline ? '<textarea class="form-textarea" id="'+id+'" rows="4">'+esc(value || '')+'</textarea>' :
+            '<input class="form-input" id="' + id + '" value="' + esc(value || '') + '" autocomplete="off" spellcheck="false"' + (opts.placeholder ? ' placeholder="' + esc(opts.placeholder) + '"' : '') + '>';
         var body = (opts.text ? '<p>' + esc(opts.text) + '</p>' : '') +
-            '<div class="form-group"><label class="form-label" for="' + id + '">' + esc(label) + '</label>' +
-            '<input class="form-input" id="' + id + '" value="' + esc(value || '') + '" autocomplete="off" spellcheck="false"' + (opts.placeholder ? ' placeholder="' + esc(opts.placeholder) + '"' : '') + (opts.help ? ' aria-describedby="' + id + '-help"' : '') + '>' +
+            (opts.browse ? pathField({id:id,label:label,value:value,accept:opts.accept,help:opts.help,maxBytes:opts.maxBytes}) + '<p class="form-error" id="' + id + '-error" data-role="error" role="alert" hidden></p>' : '<div class="form-group"><label class="form-label" for="' + id + '">' + esc(label) + '</label>' +
+            control +
             (opts.help ? '<p class="form-help" id="' + id + '-help">' + esc(opts.help) + '</p>' : '') +
-            '<p class="form-error" data-role="error" hidden></p></div>';
+            '<p class="form-error" id="' + id + '-error" data-role="error" role="alert" hidden></p></div>');
         return open({
             title: title, body: body, className: opts.className, signal: opts.signal,
             buttons: [{ id: 'cancel', label: 'Cancel' }, { id: 'ok', label: opts.okLabel || 'OK', primary: true }],
+            onOpen: function (api) {
+                var input = api.body.querySelector('#'+id);
+                input.setAttribute('aria-describedby', [opts.help ? id + '-help' : '',id + '-error'].filter(Boolean).join(' '));
+                input.addEventListener('input',function () { input.removeAttribute('aria-invalid'); api.body.querySelector('[data-role="error"]').hidden=true; });
+                if (opts.browse) wirePaths(api,opts);
+            },
             check: function (v, b) {
                 if (v !== 'ok' || !opts.validate) { return null; }
-                var input = b.querySelector('input'), err = b.querySelector('[data-role="error"]'), problem = opts.validate(input.value.trim());
+                var input = b.querySelector('#'+id), err = b.querySelector('[data-role="error"]'), problem = opts.validate(input.value.trim());
                 if (problem) { err.textContent = problem; err.hidden = false; input.setAttribute('aria-invalid', 'true'); input.focus(); }
                 return problem;
             }
-        }).then(function (r) { return r.value === 'ok' ? r.body.querySelector('input').value.trim() : null; });
+        }).then(function (r) { return r.value === 'ok' ? r.body.querySelector('#'+id).value.trim() : null; });
     }
 
     function askChoice(title, text, buttons) {
@@ -126,7 +164,7 @@
     function confirm(title, text, opts) {
         opts = opts || {};
         return open({
-            title: title, body: text ? '<p>' + esc(text) + '</p>' : '', warn: !!opts.danger,
+            title: title, body: text ? '<p>' + esc(text) + '</p>' : '', warn: !!opts.danger,signal:opts.signal,
             buttons: [{ id: 'cancel', label: 'Cancel' }, { id: 'ok', label: opts.okLabel || 'OK', primary: !opts.danger, danger: !!opts.danger }]
         }).then(function (r) { return r.value === 'ok'; });
     }
@@ -142,5 +180,5 @@
         }).then(function (r) { return r.value === 'save' || r.value === 'discard' ? r.value : null; });
     }
 
-    window.yavcDialog = Object.freeze({ open: open, askText: askText, askChoice: askChoice, confirm: confirm, askSave: askSave });
+    window.yavcDialog = Object.freeze({ open: open, askText: askText, askChoice: askChoice, confirm: confirm, askSave: askSave, pathField:pathField, wirePaths:wirePaths });
 })();

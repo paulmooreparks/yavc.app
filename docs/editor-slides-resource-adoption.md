@@ -12,7 +12,7 @@ A pending rich draft drains before a revoked permission locks the surface. If th
 
 Recovery retains the original baseline rather than taking a newly read revision for an old draft. Matching drafts can save. Stale, unavailable and unversioned drafts retain their source and offer Save As while refusing an ordinary overwrite. Clean Editor snapshots restore history only when their stored source fingerprint still matches the file. A changed clean file opens with fresh history.
 
-Resource-mode Editor uses host snapshots for new recovery writes. Its old local session and work records are retained as migration inputs, and the adapter validates their draft and waiting-record limits before using them. Reload protection requires `snapshot.flush()` to acknowledge storage. Closing an Editor or Slides window still prompts for unsaved work because closing the window can discard its snapshot.
+Resource-mode Editor uses host snapshots for new recovery writes. Its old local session and work records are retained as migration inputs, and the adapter validates their draft and waiting-record limits before using them. Reload protection requires `snapshot.flush()` to acknowledge storage. Editor's primary instance now opts into the host's remembered-workspace capability so closing and reopening the window retains its current tabs. The close warning remains when the host lacks that capability, storage fails or rich edits have not reached the source snapshot. Slides retains its existing close warning.
 
 ## Immutable resources
 
