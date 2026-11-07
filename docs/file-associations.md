@@ -1,54 +1,7 @@
-# Launch profiles and file associations
+# File associations
 
-This proposal records the response to Paul's questions on 2026-11-07. File-association implementation has not started. Docs already uses the Editor package, as DESIGN.md's Addresses section and decision 17 of `docs/docs-design.md` describe.
+The current design is [Content applications and file opening](content-applications-design.md), prepared on 2026-11-07 after Paul chose separate Docs and Editor applets with shared implementation code. Its sections 4 through 8 define routing, configuration, dispatch, byte preservation and resource ownership.
 
-## Editor and Docs
+The earlier launch-profile proposal and automatic title switching were withdrawn. Docs defaults to ordinary Markdown in Visual and `.docs.md` in Document, with Text and Split source access. Editor handles general text/code and offers read-only preview where supported. Slides and Diagrams retain their own domains and backing-source views. The same applet identity persists across view changes.
 
-Editor and Docs should remain two named launch profiles of one applet implementation. Docs starts with document creation and Document view. Editor starts with general text/code editing and its applicable view defaults. Both profiles use the same file tabs, editing engine, save lifecycle, formatting and export code. A user can choose Text while working in Docs or Document while working in Editor.
-
-A launch profile needs a stable ID, display name, default new-file type and supported default view. It should be usable from the launcher, a standalone address, a desktop window and Open With. The current Docs subdomain alias supplies only part of that contract. Separate applet implementations would duplicate state and editing behavior without adding a useful boundary. If packages must expose separately named launcher entries, both entries should still invoke the same implementation through declared profiles.
-
-Paul clarified that the active file should identify the window as Docs or Editor. The candidate implements that identity for `.docs.md` files, Markdown in the Docs launch, and plain text/code in either launch. It updates the title and application menu without changing canonical applet identity. A document's Text view still belongs to Docs. General Markdown in the Editor launch retains Editor until explicit launch profiles make that choice addressable.
-
-The existing per-origin guest storage boundary remains significant. Launching Docs inside the desktop can share that desktop's files, while navigating to `docs.yavc.app` enters a different browser origin. Naming profiles does not make those stores interchangeable. An association must use the current host's file capability rather than navigating a guest's file path to another origin.
-
-## Current routing
-
-Applet manifests declare operation handlers such as Editor's `open`, Slides' `present` and Diagrams' `diagram`. Files separately tests `.slides.md` and the diagram suffixes before falling back to `open`. Editor independently chooses supported views and document defaults. MIME type is currently used in other file-serving and artifact paths; it does not provide a unified applet-and-view association policy.
-
-## Proposed resolver
-
-One host service should resolve a file to an installed applet, launch profile, operation and initial view. Files, recent files, links and desktop hosts should use that service instead of copying suffix rules. Applet metadata should declare supported content types and profiles; host defaults should select among them, and user configuration should override the default choice within those supported capabilities. Manifest metadata remains JSON under DESIGN.md decision 8. Host policy should use the engine's configuration format and be exposed through the existing configuration capability; this proposal does not add fields to the shared PUDL package contract without coordinating that schema.
-
-The resolver should use this order:
-
-1. An explicit Open With or URL choice wins if that applet and mode support the file.
-2. A user association overrides the shipped default. Filename matching is case-insensitive and uses the longest matching suffix.
-3. Shipped compound-suffix associations precede generic suffix and MIME matches.
-4. A known MIME type can supply a choice when filename rules do not identify a supported handler. Generic `text/plain` and `application/octet-stream` do not override a specific filename convention.
-5. An unrecognized file offers supported Open With choices or download. Text fallback requires text identification; unsupported binary data is not opened as text automatically.
-
-A remembered view for an existing document takes precedence over an association's initial-view hint. An explicit current opening choice takes precedence over that remembered view. An invalid or unsupported choice is explained beside Open With and offers an available alternative. Associations never authorize execution, unsanitized HTML, automatic full-screen presentation or access beyond the current file grant. MIME metadata is a hint and remains untrusted.
-
-The shipped defaults would include these associations:
-
-| Filename | Applet/profile | Initial mode |
-| --- | --- | --- |
-| `*.docs.md` | Editor / Docs | Document |
-| `*.slides.md` | Slides | Visual editing |
-| `*.canvas` | Diagrams | Visual editing |
-| `*.d2`, `*.mmd`, `*.mermaid` | Diagrams | Split |
-| `*.md` | Editor / Editor | User's Markdown preference |
-| `*.html`, `*.css`, `*.js`, `*.json`, ordinary text | Editor / Editor | Text |
-
-HTML should open as source by default because editing source and viewing its rendered result are different operations, and the current Editor does not have a rich HTML editing mode. A separate Preview action can keep the established sandbox and sanitization boundary. `.docs.md`, `.slides.md` and `.canvas` retain their existing storage formats; a profile does not create another file format.
-
-Settings should expose File Associations with a default app/profile and starting mode, plus Reset to Default. Open With should offer one-time opening and an explicit Always Use choice. The resolver should return both its choice and the rule that selected it so the UI can explain an unexpected opening. Persistence should contain stable applet/profile IDs and validated modes, with unavailable choices retained but visibly unavailable. Resolver tests should cover compound suffix precedence, case, MIME disagreement, missing applets, user overrides, supported modes and guest-origin isolation.
-
-The shipped associations should cover common types without becoming a whitelist of editable filenames. Unknown text should be openable through Editor without requiring an association, with plain-text highlighting when its language is unknown. Text detection and decoding are separate from applet association. The current server-backed text extension list and browser upload MIME heuristic need replacement by a bounded encoding-aware identification path, with an explicit Open as Text escape hatch and a warning before lossy decoding. Binary Office containers use importers rather than text decoding.
-
-## Office import scope
-
-DOCX import is designed in `docs/docs-design.md` but has no current command or implementation. A browser-local Mammoth conversion to sanitized HTML and the existing rich paste-to-Markdown path is the proposed first stage. Mammoth's [documented conversion](https://github.com/mwilliamson/mammoth.js/blob/master/README.md) preserves semantic structure rather than exact layout and performs no sanitization itself. The integration must bound ZIP expansion and image data, use the existing sanitizer, report unsupported content and preserve the original file. The first deliverable should be a new `.docs.md` copy with an explicit conversion notice. Native DOCX save-back and exact pagination require a separate fidelity contract.
-
-Slides already has File, Import from PowerPoint and an `import-pptx` action. The current importer reads text, emphasis, lists, tables, columns and notes from OOXML, converting pictures to named placeholders. Direct Open can route PPTX through that importer, but should still create a `.slides.md` copy and disclose conversion losses. Image preservation, positioning, themes, charts and animation fidelity are further work. Neither existing PPTX export nor DOCX export establishes a lossless Office round trip.
+File association implementation has not started. The installed release still uses the current manifest request handlers, Files suffix checks and Docs subdomain alias. Shipped associations and user overrides will select among declared capabilities; they will not restrict the universe of text files that Editor can open or grant a handler unsupported editing features.

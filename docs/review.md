@@ -1,10 +1,16 @@
 # Stem-to-stern review, November 2026
 
+## Holistic content application design, 2026-11-07
+
+Paul chose separate Docs and Editor applets with stable identity, shared implementation and source access in Docs. `docs/content-applications-design.md` defines that boundary across all file consumers, and `docs/content-applications-review.md` records the source evidence, inconsistencies and scenario walkthrough. DESIGN.md decisions 58 and 59 supersede the earlier profile and title-switching proposal. PR #46's automatic title change and temporary fixture are withdrawn; the installed Editor remains unchanged.
+
+The review found first-handler dispatch ambiguity, unsafe saved-path handoff, insufficient concurrent-write protection, incompatible view/history semantics, stale text-only import rationale and a server-store sentence that contradicted origin-local guest storage. The design resolves those policies. Independent review rejected an undefined first-writer fallback; the final design requires documented storage-authority guarantees and a source-preservation audit before writable split implementation. Final independent design review has no findings. No browser test establishes this unimplemented design.
+
+Paul reaffirmed standard PUDL applet portability, prioritizing Editor/Docs and Diagrams. `docs/applet-portability-design.md` defines the capability audit, ordinary package boundary, host ownership, exact asset release and minimal-host/actual-webview gates. Independent review found no inconsistency with the content design or earlier Dinah briefs. The design introduces no parallel applet runtime or document store and does not claim an extraction proof has passed.
+
 ## Slides menu glyphs, 2026-11-07
 
-The same candidate now updates the Editor window and application-menu identity from the active file. Document tabs use Docs, while plain text/code tabs use Editor, including when opened from the Docs launch. Editor is 45.29.1. The three-engine identity fixture covers desktop and standalone hosts, active-tab changes and documents switched to Text view. The existing Chromium Editor UI review and full repository gate pass. Independent PUDL source review has no findings. DESIGN.md decision 58 records the contract.
-
-The Slide menu and legacy Slide toolbar group now use PUDL's landscape panel glyph. Insert retains the plus glyph, matching insertion menus elsewhere. Slides is 0.28.1. `docs/file-associations.md` records the proposed shared association resolver and Editor/Docs launch profiles; that proposal has no runtime changes.
+The Slide menu and legacy Slide toolbar group use PUDL's landscape panel glyph. Insert retains the plus glyph, matching insertion menus elsewhere. Slides is 0.28.1. The accompanying content application design has no split/resolver implementation.
 
 The full repository gate and Chromium content UI fixture pass. A headless rendered check confirms different Slide and Insert masks, and the dark menu bar screenshot was inspected. Independent PUDL source review has no findings. This candidate is not merged or installed.
 
