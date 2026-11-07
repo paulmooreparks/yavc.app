@@ -52,7 +52,7 @@ func (s *Server) startCatalog(r *http.Request) map[string]any {
 	counts := map[string]int{}
 	kind, _ := s.hostKind(r)
 	q := r.URL.Query()
-	for _, key := range []string{"start", "start-q", "start-category"} {
+	for _, key := range []string{"start", "start-mode", "start-q", "start-category"} {
 		q.Del(key)
 	}
 	desktop := parseDesktop(q)
@@ -94,7 +94,7 @@ func (s *Server) startCatalog(r *http.Request) map[string]any {
 	}
 	var hidden []map[string]string
 	for key, values := range r.URL.Query() {
-		if key == "start" || key == "start-q" || key == "start-category" {
+		if key == "start" || key == "start-mode" || key == "start-q" || key == "start-category" {
 			continue
 		}
 		for _, value := range values {
@@ -102,7 +102,11 @@ func (s *Server) startCatalog(r *http.Request) map[string]any {
 		}
 	}
 	sort.Slice(hidden, func(i, j int) bool { return hidden[i]["Name"] < hidden[j]["Name"] })
+	settingsHref := s.siteURL(r) + desktop.openWindow("settings")
+	if kind != "desktop" {
+		settingsHref = desktop.openWindow("settings")
+	}
 	return map[string]any{"Categories": categories, "Items": entries, "Query": query, "Category": category, "Hidden": hidden,
-		"SettingsHref": s.siteURL(r) + desktop.openWindow("settings"), "HelpHref": s.siteURL(r) + desktop.openWindow("help"),
+		"SettingsHref": settingsHref, "HelpHref": s.siteURL(r) + desktop.openWindow("help"),
 		"Action": (&url.URL{Path: r.URL.Path}).String()}
 }

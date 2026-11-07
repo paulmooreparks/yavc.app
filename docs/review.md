@@ -1,5 +1,13 @@
 # Stem-to-stern review, November 2026
 
+## PUDL launcher and taskbar integration, 2026-11-07
+
+PUDL 0.103.0 replaces the taskbar Start entry and Applets menu with the site-title launcher. Settings and About yavc.app occupy the header with glyphs, and application rows and windows use the standard provider-backed taskbar pin menus. The host persists launcher and taskbar preferences through its existing configuration service. `docs/pudl-launcher.md` records the documented contracts and release archive hash.
+
+Independent source review found that Escape could focus a hidden opener after the menubar folded and that Back could lose the initial preference-restored pane. The host now closes through the documented launcher controller and canonicalizes preference-derived presentation into the URL. Managed window and dialog links explicitly accept launcher activation. The release vendor files remain unchanged. Final independent source review has no findings.
+
+The new launcher fixture and existing catalog fixture pass in Chromium, Firefox and WebKit. They verify header actions, unopened pinning, dormant-pin reload and activation, unpinning, saved pane state, Back, focus and responsive bounds. Existing Chromium editing-command, Editor UI and content UI cleanup fixtures pass. Screenshots were inspected at desktop and narrow widths. The full repository gate passes. The installed candidate remains v0.2.38 pending merge approval.
+
 ## Editing command follow-up, 2026-11-07
 
 Editor and Slides now share clipboard menu operations, read-only selection behavior and history availability. Slides adds source search with explicit Current Slide and Whole Deck scopes, per-slide replacement history and guarded metadata forms. `docs/editing-commands.md` records the ownership, limits, browser API contracts and remaining native clipboard verification boundary.

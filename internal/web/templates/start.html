@@ -1,10 +1,11 @@
 {{define "start"}}
-<div class="menu site-start-wrap">
-  <button class="btn menu-btn" type="button" id="site-start-button" popovertarget="site-start" aria-haspopup="dialog"><span class="glyph" style="--glyph:var(--glyph-app)" aria-hidden="true"></span>Start</button>
-  <section class="menu-panel start-menu site-start" id="site-start" data-start data-start-side="left" popover role="dialog" aria-labelledby="site-start-title" data-site-start-desktop="{{if .Desktop}}true{{else}}false{{end}}">
-    <header class="popover-head start-header"><h2 class="popover-title" id="site-start-title">Start</h2><button class="icon-btn popover-close" type="button" data-start-close aria-label="Close Start"></button></header>
+<section class="menu-panel start-menu site-start" id="site-start" data-start data-start-side="left" popover role="dialog" aria-label="{{.Site}} launcher" data-site-start-desktop="{{if .Desktop}}true{{else}}false{{end}}">
+    <header class="popover-head start-header"><nav class="site-launcher-actions" aria-label="Launcher Actions">
+      <a class="btn btn-sm" href="{{.Start.SettingsHref}}" data-launcher-activate{{if or .Desktop .Standalone}} data-win-open="settings" data-site-start-window="settings"{{end}}><span class="glyph" style="--glyph:var(--glyph-gear)" aria-hidden="true"></span>Settings</a>
+      <a class="btn btn-sm" href="{{.AboutSite}}" data-dialog="about-site" data-launcher-activate><span class="glyph" style="--glyph:var(--glyph-info)" aria-hidden="true"></span>About yavc.app</a>
+    </nav><div class="site-launcher-controls"><button class="icon-btn" type="button" data-launcher-pin aria-label="Keep Launcher Open" aria-pressed="false" title="Keep Launcher Open"><span class="glyph" style="--glyph:var(--glyph-pin)" aria-hidden="true"></span></button><button class="icon-btn popover-close" type="button" data-launcher-close aria-label="Close Launcher"></button></div></header>
     <div class="start-search"><form class="md-filter-group start-search-form" role="search" method="get" action="{{.Start.Action}}">
-      {{range .Start.Hidden}}<input type="hidden" name="{{.Name}}" value="{{.Value}}">{{end}}
+      {{range .Start.Hidden}}<input type="hidden" name="{{.Name}}" value="{{.Value}}" data-start-context>{{end}}
       <input type="hidden" name="start" value="1"><input type="hidden" name="start-category" value="{{.Start.Category}}" data-site-start-category>
       <label class="visually-hidden" for="site-start-query">Search applications</label><input class="md-filter" type="search" name="start-q" id="site-start-query" data-start-query maxlength="512" autocomplete="off" placeholder="Search applications" value="{{.Start.Query}}">
       <button class="icon-btn md-filter-go" type="submit" aria-label="Open First Matching Application"></button>
@@ -16,12 +17,14 @@
       <div class="split-handle" aria-label="Resize Start Categories" data-split-min="96" data-split-max="45%"></div>
       <div class="split-pane start-items-pane"><div class="start-heading"><h3 class="md-section-label" id="site-start-heading" data-start-heading>All</h3><span class="start-count-summary">Applications <span data-start-count>{{len .Start.Items}}</span></span></div>
         <ul class="row-list start-items" data-start-items aria-labelledby="site-start-heading">{{range .Start.Items}}
-          <li class="md-row" data-start-item data-start-category="{{.Category}}" data-start-keywords="{{.Keywords}}"><a class="md-item start-item" href="{{.Href}}" data-site-start-app="{{.Name}}"{{if $.Desktop}} data-win-open="{{.Name}}"{{end}}>{{if .Icon}}<img src="{{.Icon}}" alt="">{{else}}<span class="glyph" style="--glyph:var(--glyph-app)" aria-hidden="true"></span>{{end}}<span class="start-copy"><span class="start-name">{{.Title}}</span><span class="md-meta">{{.Description}}</span></span></a></li>
+          <li class="md-row" data-start-item data-start-category="{{.Category}}" data-start-keywords="{{.Keywords}}"{{if $.Desktop}} data-win-destination-provider="applications" data-win-pin-target="{{.Name}}"{{end}}><a class="md-item start-item" href="{{.Href}}" data-site-start-app="{{.Name}}"{{if $.Desktop}} data-win-open="{{.Name}}"{{end}}>{{if .Icon}}<img src="{{.Icon}}" alt="">{{else}}<span class="glyph" style="--glyph:var(--glyph-app)" aria-hidden="true"></span>{{end}}<span class="start-copy"><span class="start-name">{{.Title}}</span><span class="md-meta">{{.Description}}</span></span></a>{{if $.Desktop}}<button class="icon-btn" type="button" data-row-actions aria-label="Actions for {{.Title}}"></button>{{end}}</li>
         {{end}}</ul>
         <div class="empty-state" data-start-empty hidden><span class="glyph" style="--glyph:var(--glyph-search)" aria-hidden="true"></span><p class="empty-state-body">No matching applications.</p><button class="btn btn-sm" type="button" data-start-clear>Show All</button></div>
       </div>
     </div>
-    <footer class="popover-actions start-footer"><a href="{{.Start.SettingsHref}}"{{if .Desktop}} data-win-open="settings" data-site-start-app="settings"{{end}}>Settings</a><a href="{{.Start.HelpHref}}"{{if .Desktop}} data-win-open="help" data-site-start-app="help"{{end}}>Help</a><span class="start-key-hint"><kbd>↓</kbd> to browse <kbd>Esc</kbd> to close</span><span class="visually-hidden" role="status" aria-live="polite" aria-atomic="true">Matching applications: <span data-start-announcement></span></span></footer>
+    <footer class="popover-actions start-footer"><a href="{{.Start.HelpHref}}"{{if .Desktop}} data-win-open="help" data-site-start-app="help"{{end}}>Help</a><span class="start-key-hint"><kbd>↓</kbd> to browse <kbd>Esc</kbd> to close</span><span class="visually-hidden" role="status" aria-live="polite" aria-atomic="true">Matching applications: <span data-start-announcement></span></span></footer>
   </section>
-</div>
+{{end}}
+
+{{define "launcher-layout"}}<div class="split site-launcher-layout" id="site-launcher-layout" data-split-pane="second"><div class="split-pane site-launcher-slot" id="site-launcher-slot"></div><div class="split-handle" aria-label="Resize Launcher" data-split-min="260" data-split-max="65%"></div>
 {{end}}
