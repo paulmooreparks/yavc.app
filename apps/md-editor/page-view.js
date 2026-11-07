@@ -222,11 +222,11 @@ var schemaCache = null;
      } */
   function attach(o) {
     var PM = null, view = null, on = false, shown = null, loading = 0;
-    var dirty = false, syncTimer = 0, syncing = null, reloadTimer = 0, sourceStale = false, refreshFocus = null;
+    var dirty = false, syncTimer = 0, syncing = null, reloadTimer = 0, sourceStale = false, refreshFocus = null, frozen = false;
     function updating(value) {
       if (value && !sourceStale && view && view.hasFocus()) refreshFocus = view;
       sourceStale = value;
-      if (view) { view.setProps({ editable: function () { return !sourceStale; } }); view.dom.setAttribute('aria-busy', String(value)); }
+      if (view) { view.setProps({ editable: function () { return on && !sourceStale && !frozen; } }); view.dom.setAttribute('aria-busy', String(value)); }
       if (!value) {
         if (view && refreshFocus === view && document.hasFocus() && document.activeElement === document.body) view.focus();
         refreshFocus = null;
@@ -242,12 +242,14 @@ var schemaCache = null;
 
     function enable(next) {
       next = !!next;
+      if (next && frozen) { frozen = false; if (view) view.setProps({ editable: function () { return on && !sourceStale; } }); }
       if (next === on) return Promise.resolve();
       on = next;
       o.page.classList.toggle('page-view', on);
       if (on) return load();
+      if (view) view.setProps({ editable: function () { return false; } });
       clearTimeout(reloadTimer);
-      return sync().then(close).catch(function (err) { on = true; o.page.classList.add('page-view'); throw err; });
+      return sync().then(close).catch(function (err) { on = true; if (view) view.setProps({ editable: function () { return !sourceStale && !frozen; } }); o.page.classList.add('page-view'); throw err; });
     }
     function close() {
       if (view) { view.destroy(); view = null; }
@@ -296,7 +298,7 @@ var schemaCache = null;
 
     function dispatch(tr) {
       if (!view) return;
-      if (sourceStale && tr.docChanged && !tr.getMeta('fromText')) return;
+      if ((!on || sourceStale || frozen) && tr.docChanged && !tr.getMeta('fromText')) return;
       view.updateState(view.state.apply(tr));
       if (tr.docChanged && !tr.getMeta('fromText')) {
         dirty = true;
@@ -1540,6 +1542,8 @@ var schemaCache = null;
 
     return {
       enable: enable,
+      // Preserve a failed rich draft for selection/copy after its host revokes editing.
+      freeze: function () { frozen = true; if (view) view.setProps({ editable: function () { return false; } }); },
       active: function () { return on && !!view; },
       // Changes on the page not yet in the Editor's text.
       pending: function () { return dirty || !!syncing; },

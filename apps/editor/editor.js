@@ -156,6 +156,13 @@
 
         var CM = null, F = null, view = null, destroyed = false, unsubscribe = null, styleLifetime = new AbortController();
         var tabs = [], active = -1, untitled = 0;
+        var H = window.pudlHost || {}, resourceSession = null, resources = null, recovery = null;
+        function resourceAsset(file) { return window.yavcUtil.versioned(new URL('../content-kit/' + file, SELF_SRC).href); }
+        function refreshAccess(t, preserveRich) {
+            var effects = [roComp.reconfigure([CM.EditorState.readOnly.of(!!t.readOnly), CM.EditorView.editable.of(!t.readOnly), CM.EditorView.contentAttributes.of({ 'aria-readonly': String(!!t.readOnly), tabindex: '0' })]), lspComp.reconfigure(languageAssistance(t))];
+            if (current() === t) { view.dispatch({ effects: effects }); if (!preserveRich && viewMode !== 'text') return setView(viewMode); }
+            else t.state = t.state.update({ effects: effects }).state;
+        }
         var wrapComp = null, langComp = null, lintComp = null, roComp = null, keyComp = null, lspComp = null, lsp = null;
         var startFile = fileFrom(opts.state) || (opts.ownsUrl ? fileFrom(location.search) : null);
         var startLine = Number(new URLSearchParams(opts.state || (opts.ownsUrl ? location.search : '')).get('line')) || 1;
@@ -169,6 +176,7 @@
         /* === State ====================================================== */
 
         function current() { return tabs[active] || null; }
+        function dirtyTab(t) { return !!(t && (t.modified || (t === current() && pageActive() && visual.api.pending()))); }
         function stateString() { var t = current(); return t && t.path ? 'file=' + encodeURIComponent(t.path).replace(/%2F/g, '/').replace(/%7E/g, '~') + (t.navigationLine > 1 ? '&line=' + t.navigationLine : '') : ''; }
         function announce(push) {
             if (opts.ownsUrl) {
@@ -324,7 +332,8 @@
                     langComp.of(langExtension(tab.lang)),
                     lintComp.of(lintExtension(tab)),
                     lspComp.of(languageAssistance(tab)),
-                    roComp.of([CM.EditorState.readOnly.of(!!tab.readOnly), CM.EditorView.editable.of(!tab.readOnly)]),
+                    roComp.of([CM.EditorState.readOnly.of(!!tab.readOnly), CM.EditorView.editable.of(!tab.readOnly), CM.EditorView.contentAttributes.of({ 'aria-readonly': String(!!tab.readOnly), tabindex: '0' })]),
+                    CM.EditorState.transactionFilter.of(function (tr) { return tr.docChanged && tab.readOnly ? [] : tr; }),
                     CM.EditorView.contentAttributes.of({ 'aria-label': 'Text of ' + tab.name }),
                     CM.EditorView.updateListener.of(function (u) {
                         if (u.docChanged && tabs[active] === tab) { markModified(tab); scheduleStyles(); scheduleOutline(); }
@@ -472,6 +481,16 @@
            dialog to show; otherwise the status line says why. */
         async function openPath(path, strict) {
             function fail(msg) { if (strict) { throw new Error(msg); } say(msg, true); return false; }
+            if (resources) {
+                for (var ri = 0; ri < tabs.length; ri++) if (tabs[ri].path === path) { activate(ri); return true; }
+                try {
+                    var snapshot = await resources.read(path);
+                    if (destroyed) return false;
+                    var name = snapshot.name || String(path).split('/').pop();
+                    addTab({ path: path, name: name, lang: languageFor(name), readOnly: !resources.canWrite(snapshot), resource: snapshot }, snapshot.text);
+                    return true;
+                } catch (err) { return fail(err.message); }
+            }
             /* An address or kept tab from before the site moved under /site
                still finds its file. */
             path = F.upgradePath(path);
@@ -526,11 +545,11 @@
         async function closeTab(i) {
             var t = tabs[i];
             if (!t) { return; }
-            if (t.modified) {
+            if (dirtyTab(t)) {
                 if (active !== i) { activate(i); }
                 var choice = await window.yavcDialog.askSave(t.name);
                 if (choice == null) { return; }
-                if (choice === 'save' && !(await save())) { return; }
+                if (choice === 'save' && (!(await save()) || dirtyTab(t))) { return; }
             }
             /* The editor's text belongs to the tab in front. Closing another
                tab leaves it there and only renumbers. Closing the tab in
@@ -561,6 +580,10 @@
         /* With strict, a write that fails throws, for the Save as dialog to
            show; otherwise the status line says why. */
         async function writeTo(t, path, strict) {
+            if (current() === t && pageActive()) {
+                await visual.api.sync();
+                if (destroyed || current() !== t) throw new Error('The document changed before saving.');
+            }
             var text = (current() === t ? view.state : t.state).doc.toString();
             var ticket = t.saveTicket = (t.saveTicket || 0) + 1;
             t.savePending = (t.savePending || 0) + 1;
@@ -584,6 +607,13 @@
         }
         async function writeSubmitted(t, path, text, ticket) {
             if (current() === t) { say('Saving…'); }
+            if (resources) {
+                var accepted;
+                if (t.path === path && t.resource) accepted = await resources.write(t.resource, text);
+                else if (t.path === path && !t.fresh) throw new Error('The recovered draft has no matching revision. Use Save As to preserve a copy.');
+                else accepted = await resources.create(path, text);
+                return acceptResource(t, accepted, text, ticket);
+            }
             t.submittedWrite = { path: path, text: text };
             var res;
             try { res = await F.write(F.home(), path, text, false); }
@@ -621,6 +651,7 @@
         async function saveAs() {
             var t = current();
             if (!t) { return false; }
+            if (resources) return copyResource(t);
             /* A file of yours saves beside itself; anything else starts in ~. */
             var node = t.path ? F.resolve(F.home(), t.path) : null, r = node ? F.realOf(node) : null;
             var startDir = r && r.home && !t.readOnly ? F.displayPath(r.parent) : '~';
@@ -639,6 +670,42 @@
                 return false;
             }
             return true;
+        }
+
+        async function acceptResource(t, accepted, text, ticket) {
+            if (destroyed || tabs.indexOf(t) < 0) return false;
+            var syncError = null;
+            if (current() === t && pageActive()) {
+                try { if (!resources.canWrite(accepted)) await visual.api.enable(false); else await visual.api.sync(); }
+                catch (err) { syncError = err; if (!resources.canWrite(accepted)) visual.api.freeze(); }
+                if (destroyed || !tabs.includes(t)) return false;
+            }
+            t.resource = accepted; t.baseline = null; t.conflict = null; t.path = accepted.resource;
+            t.name = accepted.name || t.name; t.lang = languageFor(t.name); t.saved = text;
+            t.readOnly = !resources.canWrite(accepted); t.saveFailed = !!syncError; t.fresh = false; t.external = false;
+            t.modified = !!syncError || (current() === t ? view.state : t.state).doc.toString() !== text || ticket !== t.saveTicket;
+            var effects = [langComp.reconfigure(langExtension(t.lang)), lintComp.reconfigure(lintExtension(t))];
+            if (current() === t) view.dispatch({ effects: effects }); else t.state = t.state.update({ effects: effects }).state;
+            await refreshAccess(t, !!syncError); if (destroyed || !tabs.includes(t)) return false;
+            renderTabs(); announce(); keep();
+            if (current() === t) say(syncError ? 'The submitted source was saved, but the newer rich draft could not synchronize. Copy it before leaving. ' + syncError.message : 'Saved ' + t.name + (t.modified ? '; newer edits are still unsaved.' : '.'), !!syncError);
+            return true;
+        }
+        async function copyResource(t) {
+            if (current() === t && pageActive()) {
+                await visual.api.sync();
+                if (destroyed || current() !== t) throw new Error('The document changed before Save As.');
+            }
+            var text = (current() === t ? view.state : t.state).doc.toString(), ticket = t.saveTicket = (t.saveTicket || 0) + 1;
+            t.savePending = (t.savePending || 0) + 1;
+            var pending = (t.saveQueue || Promise.resolve()).then(async function () {
+                if (destroyed || tabs.indexOf(t) < 0) throw new Error('The document closed before Save As.');
+                var accepted = await resources.saveAs({ name: t.name, sourceResource: t.path }, text, { host: root, signal: styleLifetime.signal });
+                return accepted ? acceptResource(t, accepted, text, ticket) : false;
+            });
+            t.saveQueue = pending.catch(function () {});
+            try { return await pending; } catch (err) { if (!destroyed) say(err.message, true); return false; }
+            finally { t.savePending--; if (!destroyed && tabs.includes(t)) { t.modified = !!t.savePending || !!t.saveFailed || (current() === t ? view.state : t.state).doc.toString() !== t.saved; renderTabs(); keep(); } }
         }
 
         var download = window.yavcUtil.download;
@@ -1569,6 +1636,8 @@
            with no unsaved changes takes the new text; one with changes is
            told, and keeps the reader's version. */
         function onFsChange() {
+            // Resource tabs retain their captured revision until an acknowledged save or explicit reopen.
+            if (resources) return;
             refreshStyles(true);
             tabs.forEach(function (t, i) {
                 if (!t.path || t.readOnly) { return; }
@@ -1656,7 +1725,7 @@
            and all. A reload prefers the tab's own snapshot, which is newer
            when two tabs each have an Editor. The first instance keeps the
            session; a numbered one keeps only its snapshot. */
-        var snap = window.pcSnapshot ? window.pcSnapshot.join(root, takeSnapshot) : null;
+        var snap = null;
         var waiting = [], restoring = false;
         var SESSION_KEY = 'pc-editor-session';
         /* PUDL keys a numbered instance name-2 to name-9 (0.27.0). */
@@ -1665,12 +1734,12 @@
         function keep() {
             if (restoring) { return; }
             if (snap) { snap.changed(); }
-            if (ownsSession) { clearTimeout(sessionTimer); sessionTimer = setTimeout(keepSession, 500); }
+            if (ownsSession && !resources) { clearTimeout(sessionTimer); sessionTimer = setTimeout(keepSession, 500); }
         }
         /* Writes the session now; false when the browser would not keep it. */
         function keepSession() {
             clearTimeout(sessionTimer);
-            if (!ownsSession || restoring || !view || !CM) { return true; }
+            if (resources || !ownsSession || restoring || !view || !CM) { return true; }
             var s = takeSnapshot();
             try {
                 if (s && (s.tabs.length || s.waiting.length)) { localStorage.setItem(SESSION_KEY, JSON.stringify(s)); }
@@ -1731,7 +1800,7 @@
         var SNAPSHOT_MAX = 1500000;
         function takeSnapshot() {
             /* Until what was kept is all back, it is still the whole of it. */
-            if (restoring) { return snap.kept; }
+            if (restoring) { return snap && snap.kept; }
             if (!view || !CM) { return null; }
             var front = current();
             if (front) { front.state = view.state; front.scroll = scrollAnchor(); }
@@ -1743,12 +1812,14 @@
                 var json = st.toJSON({ history: CM.historyField });
                 list.push({
                     path: t.path, name: t.name, lang: t.lang, mtime: t.mtime, fresh: !!t.fresh,
+                    baseline: resources ? recovery.capture(resources, t.resource, t.baseline) : undefined,
                     draft: t.modified ? text : null, sum: t.modified ? null : fingerprint(text),
                     selection: json.selection, history: json.history, scroll: t.scroll == null ? null : t.scroll,
                     search: searchOf(st), view: t === front ? viewMode : (t.view || 'text')
                 });
             });
             var out = { tabs: list, front: frontAt, waiting: waiting, view: viewMode, explorer: explorer ? explorer.snapshot() : null };
+            if (resources) out.version = 2;
             /* Undo history is the first thing let go when the whole would be
                too large for the browser to keep. */
             if (JSON.stringify(out).length > SNAPSHOT_MAX) { list.forEach(function (k) { k.history = null; }); }
@@ -1797,10 +1868,11 @@
         function readKept() {
             if (snap && snap.kept && Array.isArray(snap.kept.tabs)) { return snap.kept; }
             var session = readSession();
-            if (session) { return session; }
+            if (session) { if (resourceSession) resourceSession.validate(session); return session; }
             try {
                 var old = JSON.parse(sessionStorage.getItem('pc-editor-work') || 'null');
-                sessionStorage.removeItem('pc-editor-work');
+                if (!resources) sessionStorage.removeItem('pc-editor-work');
+                if (resourceSession && old) resourceSession.validate(old);
                 return old && Array.isArray(old.tabs) ? old : null;
             } catch (err) { return null; }
         }
@@ -1815,6 +1887,7 @@
             try { frontTab = await reopen(all, back, kept.tabs[kept.front] || null); } finally { restoring = false; }
             if (frontTab) { var fi = tabs.indexOf(frontTab); if (fi >= 0) { activate(fi); } }
             var msg = back.length ? 'Your unsaved changes to ' + back.join(', ') + ' are back.' : '';
+            if (resources && tabs.some(function (t) { return !!t.conflict; })) msg += ' Some drafts no longer match their original revision. Save As preserves a copy without replacing the changed file.';
             if (waiting.length) {
                 msg += (msg ? ' ' : '') + 'Unsaved changes to ' + waiting.map(function (k) { return k.path; }).join(', ') +
                     ' are kept until the file can be reached again; you may need to sign in, then reload.';
@@ -1829,6 +1902,20 @@
             for (var i = 0; i < all.length; i++) {
                 var k = all[i], t = null;
                 if (!k || typeof k !== 'object') { continue; }
+                if (resources && k.path) {
+                    var restored;
+                    try { restored = await recovery.restore(resources, k.path, k.baseline, k.draft); }
+                    catch (err) { waiting.push(k); continue; }
+                    if (destroyed) return null;
+                    var name = (restored.snapshot && restored.snapshot.name) || k.name || String(k.path).split('/').pop();
+                    addTab({ path: k.path, name: name, lang: languageFor(name), resource: restored.snapshot, baseline: restored.baseline, conflict: restored.conflict,
+                        readOnly: !!restored.snapshot && !resources.canWrite(restored.snapshot) }, restored.snapshot ? restored.snapshot.text : '');
+                    t = current(); applyKept(t, Object.assign({}, k, { draft: restored.modified ? restored.text : null }));
+                    t.modified = restored.modified; t.conflict = restored.conflict;
+                    if (t.modified) back.push(t.name);
+                    if (k === frontKept) frontTab = t;
+                    continue;
+                }
                 if (!k.path) {
                     if (typeof k.draft !== 'string') { continue; }
                     var n = /^untitled-(\d+)(\.docs\.md)?$/.exec(k.name || '');
@@ -1864,14 +1951,14 @@
            could not keep it (static/doc-tabs.js guard). Save All saves every
            changed file, and the window stays if a save fails. */
         var unguard = window.yavcDocTabs.guard(root, {
-            changed: function () { return tabs.filter(function (t) { return t.modified; }).map(function (t) { return t.name; }); },
-            keptOnReload: function () { return ownsSession && keepSession(); },
-            keptOnClose: function () { return ownsSession && keepSession(); },
+            changed: function () { return tabs.filter(dirtyTab).map(function (t) { return t.name; }); },
+            keptOnReload: function () { if (pageActive() && visual.api.pending()) return false; return resources ? !!snap && snap.flush() : ownsSession && keepSession(); },
+            keptOnClose: function () { return !resources && ownsSession && keepSession(); },
             saveAll: async function () {
                 for (var i = 0; i < tabs.length; i++) {
-                    if (!tabs[i].modified) { continue; }
+                    if (!dirtyTab(tabs[i])) { continue; }
                     activate(i);
-                    if (!(await save())) { return false; }
+                    if (!(await save()) || dirtyTab(tabs[i])) { return false; }
                 }
                 return true;
             }
@@ -2073,8 +2160,8 @@
                 cmd('section-down', 'Move Section Down', 'arrow-down', function () { return moveOutline('down'); }, { shortcut: key('section-down', 'Alt-Shift-ArrowDown'), disabled: function () { var entry = outlineEntries[outlineTarget]; return !editable || !entry || entry.next < 0; } }),
                 cmd('new', 'New', 'file', function () { newTab(); }),
                 cmd('open', 'Open…', 'folder', function () { openDialog(); }),
-                cmd('save', 'Save', 'yavc-save', function () { save(); }, { disabled: function () { var t = current(); return !ready || !t || t.readOnly; }, reason: 'This file is read-only.' }),
-                cmd('save-as', 'Save As…', 'yavc-save-as', function () { saveAs(); }, { label: function () { var t = current(); return t && t.readOnly ? 'Save a Copy to ~…' : 'Save As…'; }, disabled: function () { return !ready || !current(); } }),
+                cmd('save', 'Save', 'yavc-save', function () { return save(); }, { disabled: function () { var t = current(); return !ready || !t || t.readOnly || !!(resources && t.path && !t.resource && !t.fresh); }, reason: 'This file is read-only or its recovered revision no longer matches. Use Save As.' }),
+                cmd('save-as', 'Save As…', 'yavc-save-as', function () { return saveAs(); }, { label: function () { var t = current(); return t && t.readOnly ? 'Save a Copy…' : 'Save As…'; }, disabled: function () { return !ready || !current() || !!(resources && !resources.canSaveAs()); } }),
                 cmd('close-document', 'Close Document', null, function () { COMMANDS['close-document'](); }, { disabled: function () { return !ready || !current(); } }),
                 /* glyphOnly: a glyph every reader knows shows alone on the
                    menu bar's ribbon (PUDL 0.79.0), its words its tooltip. */
@@ -2200,6 +2287,14 @@
         var boot = Promise.all([loadCodeMirror(), loadSiteFs().then(function (api) { F = api; return F.load(); }), loadBrowser()]).then(async function (res) {
             if (destroyed) { return; }
             CM = res[0];
+            await loadScript(resourceAsset('resource-session.js'));
+            resourceSession = await window.yavcResourceSession.open(H, function (file) { return loadScript(resourceAsset(file)); });
+            if (destroyed) return;
+            if (resourceSession) { resources = resourceSession.client; recovery = resourceSession.recovery; }
+            var snapshotHost = H.snapshot || window.pcSnapshot;
+            restoring = true;
+            if (snapshotHost) snap = snapshotHost.join(root, takeSnapshot, { validate: resourceSession ? resourceSession.validate : function (value) { if (value && value.version === 2) throw new Error('This recovery snapshot requires its resource host. Its saved copy has been retained.'); } });
+            if (resources && (!snap || typeof snap.flush !== 'function')) { if (snap) snap.leave(); snap = null; throw new Error('Resource editing requires recovery write acknowledgement.'); }
             lspComp = new CM.Compartment();
             try {
                 var languageServices = await window.yavcMdEditor.languageServices();
@@ -2234,6 +2329,7 @@
             if (!opened) {
                 if (startFile && !F.resolve(F.home(), startFile)) { newNamed(startFile); } else if (!tabs.length) { newTab(); }
             }
+            restoring = false;
             if (restored && restored.text) { say(restored.text, restored.error); }
             /* The view showing before the reload comes back, which asks the
                server for the page, so it is not waited for. */
@@ -2360,7 +2456,7 @@
                 var i = docNo(input.index);
                 if (i !== active) { activate(i); }
                 var t = tabs[i];
-                if (t.readOnly) { throw new Error('the document is read-only; save a copy under ~ instead'); }
+                if (t.readOnly) { throw new Error('The document is read-only. Use Save As to create an editable copy.'); }
                 var path = input.path ? String(input.path) : t.path;
                 if (!path) { throw new Error('the document has no file yet; give a path such as ~/notes/a.md'); }
                 await writeTo(t, path, true);

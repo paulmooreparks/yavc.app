@@ -14,6 +14,6 @@ Asynchronous edit and format results are applied only to the same live tab and u
 
 ## Incremental adoption
 
-This batch enables the resource path for Diagrams only. Editor and Slides still have legacy document writers, so this is not a claim of cross-applet stale-save protection. Existing Terminal and Files operations also retain their explicit filesystem semantics. The Docs/Editor split remains gated on the other document adapters, file routing and source-preservation work. Older open applet versions retain their previous behavior and should be reloaded after installation.
+The initial adoption batch enabled the resource path for Diagrams only. The subsequent Editor/Slides batch in `editor-slides-resource-adoption.md` completes guest document-writer adoption across those applications. Terminal and Files operations retain their explicit filesystem semantics. The Docs/Editor split remains gated on file routing, source preservation and package extraction. Older open applet versions retain their previous behavior and should be reloaded after installation.
 
 The per-applet adoption makes conditional saves and safe recovery available now without changing other applications' backends. The host remains the single VFS authority. Complete extraction/reintegration and actual receiving-webview acceptance remain separate gates.

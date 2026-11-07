@@ -60,6 +60,7 @@
         }
         function move(index) { show(index).catch(function (err) { if (o.alive()) o.say(err.message, true); }); }
         async function replace(all) {
+            if (o.readOnly && o.readOnly()) return;
             if (!matches.length || error) return;
             var deck = o.deck(), owner = o.current(), savedQuery = query, savedScope = scope, selectedAt = at;
             var savedMatch = matches[Math.max(0, Math.min(at, matches.length - 1))];
@@ -91,7 +92,7 @@
             next: function () { collect(); if (matches.length) move((at + 1) % matches.length); },
             prev: function () { collect(); if (matches.length) move((at - 1 + matches.length) % matches.length); },
             replace: function () { replace(false).catch(function (err) { if (o.alive()) o.say(err.message, true); }); }, replaceAll: function () { replace(true).catch(function (err) { if (o.alive()) o.say(err.message, true); }); },
-            readOnly: function () { return false; }, count: function () { return { total: matches.length, at: at + 1, error: error }; },
+            readOnly: function () { return !!(o.readOnly && o.readOnly()); }, count: function () { return { total: matches.length, at: at + 1, error: error }; },
             close: function () { revision++; o.place.hidden = true; if (o.source()) o.source().focus(); }
         };
         return {
