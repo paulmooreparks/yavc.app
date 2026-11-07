@@ -1,5 +1,7 @@
 # Slides: a deck application driven by Markdown
 
+The application and file-opening boundaries are now specified in `content-applications-design.md` (2026-11-07). Slides keeps its own identity, editing/source scopes and presentation commands. Its Markdown suffix does not make it an ordinary Docs document. The older import rationale below assumes text-only home storage; the current FS already supports browser-local binary uploads, while the existing PPTX importer still replaces pictures with named placeholders. Image preservation remains implementation work.
+
 Status: designed and prototyped on 2026-11-02 and 2026-11-03. Decisions taken under the design authority Paul delegated; each is marked, and he can overturn any of them.
 
 Slides is yavc.app's first application written for the site rather than brought in. A deck is one Markdown file in the reader's home folder, and Slides edits it slide by slide, presents it full screen with speaker notes in a presenter window, and exports it as a page that presents itself anywhere. The aim Paul set is as much of what Google Slides and PowerPoint do as a Markdown document can carry; what they do by dragging boxes on a canvas, Slides does with layouts, so a deck stays a text file the Editor, the Terminal and git can read.

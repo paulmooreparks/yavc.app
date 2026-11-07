@@ -1,5 +1,19 @@
 # Stem-to-stern review, November 2026
 
+## Holistic content application design, 2026-11-07
+
+Paul chose separate Docs and Editor applets with stable identity, shared implementation and source access in Docs. `docs/content-applications-design.md` defines that boundary across all file consumers, and `docs/content-applications-review.md` records the source evidence, inconsistencies and scenario walkthrough. DESIGN.md decisions 58 and 59 supersede the earlier profile and title-switching proposal. PR #46's automatic title change and temporary fixture are withdrawn; the installed Editor remains unchanged.
+
+The review found first-handler dispatch ambiguity, unsafe saved-path handoff, insufficient concurrent-write protection, incompatible view/history semantics, stale text-only import rationale and a server-store sentence that contradicted origin-local guest storage. The design resolves those policies. Independent review rejected an undefined first-writer fallback; the final design requires documented storage-authority guarantees and a source-preservation audit before writable split implementation. Final independent design review has no findings. No browser test establishes this unimplemented design.
+
+Paul reaffirmed standard PUDL applet portability and included extraction/reintegration in the upcoming effort. `docs/applet-portability-design.md` now includes Editor, Docs, Diagrams and Slides, with a capability audit, ordinary package boundary, host ownership, exact asset release and minimal-host/actual-webview gates. yavc.app must consume the extracted artifacts without a legacy runtime fallback. Independent review of the expanded scope found no inconsistency with the content design or earlier Dinah briefs. The design introduces no parallel applet runtime or document store and does not claim an extraction proof has passed.
+
+## Slides menu glyphs, 2026-11-07
+
+The Slide menu and legacy Slide toolbar group use PUDL's landscape panel glyph. Insert retains the plus glyph, matching insertion menus elsewhere. Slides is 0.28.1. The accompanying content application design has no split/resolver implementation.
+
+The full repository gate and Chromium content UI fixture pass. A headless rendered check confirms different Slide and Insert masks, and the dark menu bar screenshot was inspected. Independent PUDL source review has no findings. This candidate is not merged or installed.
+
 ## PUDL launcher and taskbar integration, 2026-11-07
 
 PUDL 0.103.0 replaces the taskbar Start entry and Applets menu with the site-title launcher. Settings and About yavc.app occupy the header with glyphs, and application rows and windows use the standard provider-backed taskbar pin menus. The host persists launcher and taskbar preferences through its existing configuration service. `docs/pudl-launcher.md` records the documented contracts and release archive hash.

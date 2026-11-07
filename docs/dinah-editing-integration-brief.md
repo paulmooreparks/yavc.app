@@ -1,5 +1,7 @@
 # Editing integration with Dinah Desktop
 
+Paul reaffirmed on 2026-11-07 that portability is a requirement for every PUDL applet, with Editor/Docs and Diagrams first. `applet-portability-design.md` now specifies that acceptance boundary, and `content-applications-design.md` defines separate fixed Docs/Editor identities. These additions use standard PUDL packages and host capabilities. This brief's older version inventory remains historical; its source-preservation, host-authority, save and actual-webview gates still apply. They do not authorize replacing Dinah's editor or changing its document authority.
+
 This brief was requested by Paul on 4 November 2026 for the cousin agent working in this repository with the Dinah Team Lead. It proposes a route for sharing the editing features, without authorising implementation, replacement of Dinah's editor or a storage migration. The released source baseline is yavc.app `v0.2.14`, commit `2555ef7`. The shared LSP round is a subsequent candidate described separately below.
 
 The [shared-editor platform proposal](shared-editor-platform-proposal.md) retains the earlier host, save and compatibility requirements. Its implementation inventory predates the current Diagrams work. This brief supplies a current starting point and does not amend the signed joint-plan record. The canonical architectural principles remain in `C:\Users\paul\OneDrive\Documents\Architectural Principles.md`.

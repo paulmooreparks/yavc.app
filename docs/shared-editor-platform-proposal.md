@@ -1,5 +1,7 @@
 # Shared Editor and Diagrams Integration Proposal
 
+The 2026-11-07 `applet-portability-design.md` and `content-applications-design.md` refine package portability and fixed Docs/Editor identities. They retain this proposal's resource/save/dependency contracts and do not amend the signed platform plan or authorize migration. The inventories below record their original checked baselines rather than the current release.
+
 This proposal contributes the editor inventory and adoption contract to the joint Dinah platform plan requested by Paul on 4 November 2026. Dinah Team Lead owns the consolidated plan in GK's private repository at `docs/proposals/dinah-platform-plan.md`. This public document contains generic contracts only. It is a proposal for review, and it does not authorize extraction, implementation or publication.
 
 Paul clarified the priority in group message 4737. Building GK Companion on Dinah to stop runtime divergence comes first, while preserving the useful behavior GK already has. The editor and Diagrams contracts below are future-direction constraints. Their implementation, extraction and feature completion do not gate the first Dinah-based product. The immediate integration must preserve the existing document experience through supported host interfaces and keep a later shared-editor adoption possible.
