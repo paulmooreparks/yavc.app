@@ -119,7 +119,7 @@
                connection is dragged out. */
             layer.querySelectorAll('.dg-handle').forEach(function (h) { h.remove(); });
             var box = sel && !/^\(/.test(sel) && (out.shapes || []).find(function (s) { return s.id === sel; });
-            if (box) {
+            if (box && !(host.readOnly && host.readOnly())) {
                 /* Six screen pixels whatever the drawing's scale, with a
                    wider ring that takes the pointer. */
                 var lr = layer.getBoundingClientRect(), k = lr.width ? out.width / lr.width : 1;
@@ -182,6 +182,7 @@
             var handle = e.target.classList && e.target.classList.contains('dg-handle');
             var key = handle ? sel : hitOf(e.target);
             press = { x: e.clientX, y: e.clientY, key: key, at: handle ? e.target.__at : null, kind: handle ? 'connect' : (key && key === sel && !/^\(/.test(key) ? 'move' : null), moved: false };
+            if (host.readOnly && host.readOnly()) press.kind = null;
             layer.setPointerCapture(e.pointerId);
             e.preventDefault();
         });
@@ -213,6 +214,7 @@
             clearDrag();
             if (cancelled) { return; }
             if (p.moved) {
+                if (host.readOnly && host.readOnly()) return;
                 if (p.kind === 'connect') { host.drop({ kind: 'connect', from: p.key, to: shapeAt(e, null) }); }
                 else if (p.kind === 'move') { host.drop({ kind: 'move', from: p.key, to: dropped }); }
                 return;
@@ -226,7 +228,7 @@
         layer.addEventListener('pointercancel', function (e) { release(e, true); });
         layer.addEventListener('dblclick', function (e) {
             var key = hitOf(e.target);
-            if (key) { select(key, 'pointer'); host.activate(key); }
+            if (key) { select(key, 'pointer'); if (!(host.readOnly && host.readOnly())) host.activate(key); }
         });
         /* Keys, on the drawing's pane: the arrows and Home and End move the
            selection through the shapes and connections in drawing order,
@@ -251,7 +253,7 @@
         layer.style.display = 'none';
         place.appendChild(layer);
         return {
-            show: show, fit: fitLayer, onKey: onKey,
+            show: show, refreshAccess: mark, fit: fitLayer, onKey: onKey,
             select: function (key) { select(key, null); },
             selected: function () { return sel; },
             keys: function () { return order.slice(); },

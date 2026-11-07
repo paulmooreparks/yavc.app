@@ -26,6 +26,7 @@ const action=(p,app,name,input)=>p.evaluate(({app,name,input})=>pudlActions.run(
     if(app==='slides'){await action(p,app,'load',{text:'# VFS deck\n\nEditable.'});await action(p,app,'save',{path:'~/consumer.slides.md'});}
     if(app==='diagrams'){await action(p,app,'new',{kind:'canvas',text:'{"nodes":[],"edges":[]}'});await action(p,app,'save',{path:'~/consumer.canvas'});}
     const name=app==='editor'?'consumer.md':app==='slides'?'consumer.slides.md':'consumer.canvas';
+    if(app==='editor'||app==='slides'){await p.waitForFunction(()=>typeof yavcMdEngine==='function');await p.evaluate(()=>yavcMdEngine());}
     const saved=await p.evaluate(name=>pcSiteFs.readHome(pcSiteFs.resolve(pcSiteFs.home(),name)),name);assert.ok(saved);
     await p.reload();await p.waitForFunction(()=>{const save=document.querySelector('.yavc-command-toolbar [data-command="save"]');return save&&!save.disabled;});
     assert.equal(await p.evaluate(name=>pcSiteFs.readHome(pcSiteFs.resolve(pcSiteFs.home(),name)),name),saved);

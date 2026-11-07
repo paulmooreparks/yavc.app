@@ -108,6 +108,7 @@
         snapshot: window.pcSnapshot,
         /* Prepared for explicit capability adoption after the applet gates. */
         contentResourceAdapter: { version: 1,
+            available: function () { return fs().then(function (F) { return !F.mounted; }); },
             read: function (request) { return resources().then(function (adapter) { return adapter.read(request); }); },
             write: function (request) { return resources().then(function (adapter) { return adapter.write(request); }); },
             create: function (request) { return resources().then(function (adapter) { return adapter.create(request); }); },
