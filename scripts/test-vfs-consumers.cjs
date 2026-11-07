@@ -21,6 +21,7 @@ const action=(p,app,name,input)=>p.evaluate(({app,name,input})=>pudlActions.run(
    for(const app of ['editor','slides','diagrams']){
     phase=app+' initial load';
     await p.goto(`http://${app}.localhost:${port}/`);await p.waitForFunction(()=>{const save=document.querySelector('.yavc-command-toolbar [data-command="save"]');return save&&!save.disabled;});
+    if(app==='diagrams')await p.locator('.dg-canvas img').waitFor();
     if(app==='editor'){await action(p,app,'new',{path:'~/consumer.md',text:'# VFS document\n\nEditable.'});await action(p,app,'save',{path:'~/consumer.md'});}
     if(app==='slides'){await action(p,app,'load',{text:'# VFS deck\n\nEditable.'});await action(p,app,'save',{path:'~/consumer.slides.md'});}
     if(app==='diagrams'){await action(p,app,'new',{kind:'canvas',text:'{"nodes":[],"edges":[]}'});await action(p,app,'save',{path:'~/consumer.canvas'});}

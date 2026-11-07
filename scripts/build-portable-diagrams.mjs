@@ -23,7 +23,7 @@ async function copyTree(source,target) {
 for (const name of ['content-kit','diagrams','diagram-kit','md-editor','md-engine']) await copyTree(join(root,'apps',name),join(out,'content',name));
 await copyTree(join(root,'web','pudl'),join(out,'pudl'));
 await mkdir(join(out,'support'));
-for (const name of ['yavc-util.js','dialogs.js','doc-tabs.js','pudl-host-kit.js']) await copyFile(join(root,'internal','web','static',name),join(out,'support',name));
+for (const name of ['yavc-util.js','dialogs.js','doc-tabs.js','pudl-host-kit.js','snapshot.js']) await copyFile(join(root,'internal','web','static',name),join(out,'support',name));
 const css=await readFile(join(root,'internal','web','static','site.css'),'utf8');
 const glyphs=css.match(/--glyph-yavc-[a-z0-9-]+:\s*url\("[^"\n]*"\);/g);
 if (!glyphs?.length) throw new Error('Project glyph declarations were not found.');

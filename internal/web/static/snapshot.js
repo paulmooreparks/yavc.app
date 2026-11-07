@@ -80,11 +80,14 @@
 
     function keepApplet(j) {
         var value = null;
-        try { value = j.take(); } catch (err) { if (window.console) { console.warn('snapshot:', err); } return; }
-        j.dirty = false;
-        if (!write(j.key, value == null ? null : { t: Date.now(), v: value }) && window.console) {
+        try { value = j.take(); } catch (err) { j.dirty = true; if (window.console) { console.warn('snapshot:', err); } return false; }
+        var kept = write(j.key, value == null ? null : { t: Date.now(), v: value });
+        j.dirty = !kept;
+        if (kept) j.pendingCleanup = j.pendingCleanup.filter(function (key) { return !write(key, null); });
+        if (!kept && window.console) {
             console.warn('snapshot: ' + j.key + ' is too large to keep');
         }
+        return kept;
     }
     /* A snapshot is taken once a run of changes pauses, and at least every
        few seconds through a long one, rather than every half second while
@@ -121,29 +124,33 @@
         var name = root.getAttribute('data-applet') || '';
         var win = winOf(root);
         var own = readApplet(key);
-        if (!name || (win && win.getAttribute('data-win') !== name)) { return own; }
-        var best = own;
+        if (!name || (win && win.getAttribute('data-win') !== name)) { return { entry: own, remove: [] }; }
+        var best = own, remove = [];
         keys().forEach(function (k) {
             if (k === key || !(k === 'win:' + name + ':' + name || (k.indexOf('page:') === 0 && k.slice(-(name.length + 1)) === ':' + name))) { return; }
             var e = readApplet(k);
             if (e && (!best || e.t > best.t)) { best = e; }
-            write(k, null);
+            remove.push(k);
         });
-        return best;
+        return { entry: best, remove: remove };
     }
 
-    function join(root, take) {
+    function join(root, take, options) {
         var key = keyOf(root);
-        var j = { root: root, key: key, take: take, dirty: false };
+        var plan = newest(key, root), entry = plan.entry;
+        // Validation precedes registration and cleanup of other snapshots.
+        if (options && typeof options.validate === 'function') options.validate(entry ? entry.v : null);
+        var j = { root: root, key: key, take: take, dirty: false, active: true, pendingCleanup: plan.remove };
         joined.push(j);
         var win = winOf(root);
         var wasFocused = !!focus && (focus === key || (win && focus === 'win:' + win.getAttribute('data-win')));
-        var entry = newest(key, root);
         return {
             kept: entry ? entry.v : null,
             focused: wasFocused,
             changed: function () { j.dirty = true; keepSoon(); },
+            flush: function () { return j.active ? keepApplet(j) : false; },
             leave: function () {
+                j.active = false;
                 var i = joined.indexOf(j);
                 if (i >= 0) { joined.splice(i, 1); }
             }
@@ -293,5 +300,5 @@
     }
     if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', start); } else { start(); }
 
-    window.yavcSnapshot = { join: join, keepAll: keepAll };
+    window.yavcSnapshot = { version: 2, join: join, keepAll: keepAll };
 })();
