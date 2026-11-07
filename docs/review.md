@@ -1,5 +1,11 @@
 # Stem-to-stern review, November 2026
 
+## Slides menu glyphs, 2026-11-07
+
+The Slide menu and legacy Slide toolbar group now use PUDL's landscape panel glyph. Insert retains the plus glyph, matching insertion menus elsewhere. Slides is 0.28.1. `docs/file-associations.md` records the proposed shared association resolver and Editor/Docs launch profiles; that proposal has no runtime changes.
+
+The full repository gate and Chromium content UI fixture pass. A headless rendered check confirms different Slide and Insert masks, and the dark menu bar screenshot was inspected. Independent PUDL source review has no findings. This candidate is not merged or installed.
+
 ## PUDL launcher and taskbar integration, 2026-11-07
 
 PUDL 0.103.0 replaces the taskbar Start entry and Applets menu with the site-title launcher. Settings and About yavc.app occupy the header with glyphs, and application rows and windows use the standard provider-backed taskbar pin menus. The host persists launcher and taskbar preferences through its existing configuration service. `docs/pudl-launcher.md` records the documented contracts and release archive hash.
