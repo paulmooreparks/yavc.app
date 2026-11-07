@@ -2,6 +2,7 @@
 package web
 
 import (
+	"html"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -26,8 +27,11 @@ func TestStartCatalogAndRoutes(t *testing.T) {
 	}
 	for _, rawURL := range []string{site("/"), "https://dice." + testDomain + "/"} {
 		body := req(t, s, "GET", rawURL, "").Body.String()
-		if strings.Count(body, `id="site-start"`) != 1 || !strings.Contains(body, `/pudl/pudl-start.js?v=0.98.0`) || !strings.Contains(body, `data-start-category="games"`) || strings.Contains(body, "ZgotmplZ") {
+		if strings.Count(body, `id="site-start"`) != 1 || !strings.Contains(body, `/pudl/pudl-launcher.js?v=0.103.0`) || !strings.Contains(body, `data-start-category="games"`) || strings.Contains(body, "ZgotmplZ") {
 			t.Fatalf("Start markup invalid at %s", rawURL)
+		}
+		if strings.Contains(body, `id="site-start-button"`) || strings.Contains(body, `data-menubar-id="applets"`) || !strings.Contains(body, `data-menubar-launcher="site-start"`) || !strings.Contains(body, `aria-label="`+html.EscapeString(s.Title)+` launcher"`) {
+			t.Fatalf("launcher identity or retired controls invalid at %s", rawURL)
 		}
 	}
 	desktopBody := req(t, s, "GET", site("/"), "").Body.String()

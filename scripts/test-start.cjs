@@ -18,7 +18,7 @@ const evidence = path.join(os.tmpdir(), 'yavc-start-review'); fs.mkdirSync(evide
                 const space = document.querySelector('.win-host').getBoundingClientRect(), bar = document.querySelector('.win-bar').getBoundingClientRect();
                 return Math.abs(space.left) <= 1 && Math.abs(space.width - innerWidth) <= 1 && Math.abs(space.bottom - bar.top) <= 1 && Math.abs(bar.bottom - innerHeight) <= 1;
             });
-            await page.locator('#site-start-button').click();
+            await page.locator('.site-menubar .menubar-title[data-menu-id=site]').click();
             const root = page.locator('#site-start');
             await root.waitFor({ state: 'visible' });
             assert.equal(await root.locator('[data-start-item]').count(), 17);
@@ -56,9 +56,9 @@ const evidence = path.join(os.tmpdir(), 'yavc-start-review'); fs.mkdirSync(evide
             }
             await page.keyboard.press('Escape');
             await root.waitFor({ state: 'hidden' });
-            assert.equal(await page.locator('#site-start-button').evaluate(e => e === document.activeElement), true);
+            await page.waitForFunction(() => pudlMenubar.launcherButton({ visible: true }) === document.activeElement);
             await page.setViewportSize({ width: 1280, height: 900 });
-            await page.locator('#site-start-button').click();
+            await page.locator('.site-menubar .menubar-title[data-menu-id=site]').click();
             const editor = root.locator('a[data-site-start-app="editor"]');
             const target = new URL(await editor.getAttribute('href'));
             assert.ok(target.searchParams.get('open').split(',').includes('dice'));

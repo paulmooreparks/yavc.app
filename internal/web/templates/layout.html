@@ -65,7 +65,9 @@
   <script src="{{asset "/pudl/pudl-fields.js"}}" defer></script>
   <script src="{{asset "/pudl/pudl-split.js"}}" defer></script>
   <script src="{{asset "/pudl/pudl-start.js"}}" defer></script>
+  <script src="{{asset "/pudl/pudl-launcher.js"}}" defer></script>
   <script src="{{asset "/static/start.js"}}" defer></script>
+  {{if .Desktop}}<script src="{{asset "/static/taskbar.js"}}" defer></script>{{end}}
   <script src="{{asset "/pudl/pudl-date.js"}}" defer></script>
   <script src="{{asset "/pudl/pudl-combo.js"}}" defer></script>
   <script src="{{asset "/pudl/pudl-code.js"}}" defer></script>
@@ -73,24 +75,17 @@
 {{end}}
 
 {{/* The site's menu bar, as parkscomputing.com draws it from sitenav:
-     the site's own title first, then Go, Applets, View, Window and Help.
+     the site's own title first, then Go, View, Window and Help.
      On the desktop a link opens a window; on a page it goes to the page.
      The site navigation file in XferLang replaces this in milestone 2. */}}
 {{define "menubar"}}
-      {{if not .Desktop}}{{template "start" .}}{{end}}
-      <nav class="site-menubar" data-menubar data-menubar-ribbon aria-label="{{.Site}}">
+      {{template "start" .}}
+      <nav class="site-menubar" data-menubar data-menubar-ribbon data-menubar-launcher="site-start" aria-label="{{.Site}}">
         <ul data-menubar-source hidden>
           <li data-menubar-id="site"><img src="{{asset "/static/icon.svg"}}" alt=""> {{.Site}}<ul>
             <li><a href="{{.SiteURL}}">Desktop</a></li>
-            <li><a href="{{.AboutSite}}" data-dialog="about-site">About yavc.app</a></li>
-            <li>-</li>
-            <li><a href="{{.SiteURL}}?open=settings&amp;top=settings"{{if .Desktop}} data-win-open="settings"{{end}}>Settings</a></li>
           </ul></li>
           <li data-menubar-id="go">Go<ul></ul></li>
-          <li data-menubar-id="applets">Applets<ul>
-            {{range .Applets}}{{if ne .Name "settings"}}<li><a href="{{$.SiteURL}}?open={{.Name}}&amp;top={{.Name}}"{{if $.Desktop}} data-win-open="{{.Name}}"{{end}} title="{{.Description}}">{{if .Icon}}<img src="{{.Icon}}" alt=""> {{end}}{{.Title}}</a></li>
-            {{end}}{{end}}
-          </ul></li>
           <li data-menubar-id="view">View<ul>
             <li>Mode<ul data-menu-radio>
               <li><button type="button" data-site-command="mode" data-args="light" {{checked .Appearance.Mode "light"}}>Light</button></li>
@@ -122,7 +117,7 @@
             <li><a href="{{.SiteURL}}?open=terms&amp;top=terms"{{if .Desktop}} data-win-open="terms"{{end}}>Terms &amp; Conditions</a></li>
           </ul></li>
         </ul>
-        <a class="brand topbar-pill" href="{{.SiteURL}}" data-menubar-fallback><img src="{{asset "/static/icon.svg"}}" alt=""> <span class="site-menu-name">{{.Site}}</span></a>
+        <button class="brand topbar-pill" type="button" popovertarget="site-start" data-menubar-fallback><img src="{{asset "/static/icon.svg"}}" alt=""> <span class="site-menu-name">{{.Site}}</span></button>
       </nav>
       {{template "ribbon-slot"}}
 {{end}}
@@ -140,13 +135,14 @@
     </div>
   </header>
   <div class="desktop-shell">
-    <div class="desktop-space">
+    {{template "launcher-layout" .}}
+    <div class="desktop-space split-pane">
       <div class="reader-stage" tabindex="0">
         <div class="reader-col">
           <main class="win-host">
             <div class="reader-empty"><div class="card welcome-card">
               <h1>Welcome to {{.Site}}</h1>
-              <p>Choose an application from Start and it opens as a floating window. Drag it by its title bar, resize it from any edge, snap it against the sides, or maximize it; open several and switch between them from the taskbar below.</p>
+              <p>Choose an application from the launcher in the site title and it opens as a floating window. Drag it by its title bar, resize it from any edge, snap it against the sides, or maximize it; open several and switch between them from the taskbar below.</p>
               <p>Every application also runs on its own, at its own address, with the same game or document you left on the desktop. The Open as a Page button <span class="glyph" style="--glyph: var(--glyph-new-window)" aria-hidden="true"></span> in a window's title bar takes you there.</p>
               <p>The arrangement of windows lives in the page address, so it can be bookmarked and shared, and Back undoes the last thing you did.</p>
               <p>This desktop is built with <a href="https://github.com/paulmooreparks/pudl" target="_blank" rel="noopener">PUDL</a>, the Pleasantly Usable Design Language. Skins and colours are in the View menu.</p>
@@ -156,8 +152,8 @@
         </div>
       </div>
     </div>
+    </div>
     <div class="win-bar">
-      {{template "start" .}}
       <nav class="win-dock" data-win-dock aria-label="Open Windows"></nav>
       <a class="icon-btn" data-win-back href="{{.Bar.Back}}"{{if .Bar.NoneShown}} aria-disabled="true"{{end}} aria-label="Minimize All Windows" data-tooltip="Minimize All Windows"></a>
       <a class="icon-btn" data-win-restore href="{{.Bar.Restore}}"{{if .Bar.NoneMinimized}} aria-disabled="true"{{end}} aria-label="Restore All Windows" data-tooltip="Restore All Windows"></a>
@@ -172,7 +168,7 @@
 
 {{/* A window: the applet's page body, as PUDL's windows fetch it by key
      and as the desktop draws it for the windows the address names. */}}
-{{define "window"}}<section class="win" data-win="{{.Key}}"{{if .Applet.Icon}} data-win-icon="{{.Applet.IconURL}}"{{end}} data-win-mode="floating"{{if .Content}} data-win-size="content"{{end}}{{if .Applet.Min}} data-win-min="{{.Applet.Min}}"{{end}}{{if .Applet.Max}} data-win-max="{{.Applet.Max}}"{{end}} role="dialog" aria-labelledby="win-{{.Key}}-title"{{if .Style}} style="{{.Style}}"{{end}}>
+{{define "window"}}<section class="win" data-win="{{.Key}}" data-win-destination-provider="applications" data-win-destination="{{.Applet.Name}}"{{if .Applet.Icon}} data-win-icon="{{.Applet.IconURL}}"{{end}} data-win-mode="floating"{{if .Content}} data-win-size="content"{{end}}{{if .Applet.Min}} data-win-min="{{.Applet.Min}}"{{end}}{{if .Applet.Max}} data-win-max="{{.Applet.Max}}"{{end}} role="dialog" aria-labelledby="win-{{.Key}}-title"{{if .Style}} style="{{.Style}}"{{end}}>
   <header class="win-head">
     <button type="button" class="win-btn" data-win-action="menu" aria-label="Window Menu" title="Window Menu"></button>
     <h2 class="win-title" id="win-{{.Key}}-title">{{.Title}}</h2>
@@ -196,7 +192,7 @@
   <header class="site-header">
     <div class="topbar">
       {{template "start" .}}
-      <nav class="site-menubar" data-menubar data-menubar-ribbon aria-label="{{.Title}}">
+      <nav class="site-menubar" data-menubar data-menubar-ribbon data-menubar-launcher="site-start" aria-label="{{.Title}}">
         <ul data-menubar-source hidden>
           <li data-menubar-id="site"><img src="{{asset "/static/icon.svg"}}" alt=""> {{.Site}}<ul>
             <li><a href="{{.SiteURL}}">Desktop</a></li>
@@ -233,16 +229,18 @@
             <li><a href="{{index .WindowLinks "terms"}}" data-win-open="terms">Terms &amp; Conditions</a></li>
           </ul></li>
         </ul>
-        <a class="brand topbar-pill" href="{{.SiteURL}}" data-menubar-fallback><img src="{{asset "/static/icon.svg"}}" alt=""> <span class="site-menu-name">{{.Site}}</span></a>
+        <button class="brand topbar-pill" type="button" popovertarget="site-start" data-menubar-fallback><img src="{{asset "/static/icon.svg"}}" alt=""> <span class="site-menu-name">{{.Site}}</span></button>
       </nav>
       {{template "ribbon-slot"}}
     </div>
   </header>
-  <main class="standalone-main win-host" data-applet-page>
+  {{template "launcher-layout" .}}
+  <main class="standalone-main win-host split-pane" data-applet-page>
     <nav data-page-menu hidden aria-label="Page Menu"><ul></ul></nav>
     {{.Mount}}
     <div class="win-layer" data-win-layer data-win-pane="off" data-win-src="/win/{key}">{{.Windows}}</div>
   </main>
+  </div>
   <nav class="win-dock standalone-dock" data-win-dock aria-label="Open Help Windows"></nav>
   {{template "dialogs" .}}
   {{template "scripts" .}}
@@ -255,19 +253,21 @@
 {{define "article"}}{{template "head" .}}
 <body>
   <header class="site-header"><div class="topbar">{{template "menubar" .}}</div></header>
-  <main class="site-main" id="main-content" tabindex="-1">
+  {{template "launcher-layout" .}}
+  <main class="site-main split-pane" id="main-content" tabindex="-1">
     <article class="post-content">
       <nav data-page-menu hidden aria-label="Page Menu"><ul></ul></nav>
       {{.Article}}
     </article>
   </main>
+  </div>
   {{template "dialogs" .}}
   {{template "scripts" .}}
 </body>
 </html>
 {{end}}
 
-{{define "window-article"}}<section class="win" data-win="{{.Key}}" data-win-mode="floating" role="dialog" aria-labelledby="win-{{.Key}}-title"{{if .Style}} style="{{.Style}}"{{end}}>
+{{define "window-article"}}<section class="win" data-win="{{.Key}}" data-win-pinnable="false" data-win-mode="floating" role="dialog" aria-labelledby="win-{{.Key}}-title"{{if .Style}} style="{{.Style}}"{{end}}>
   <header class="win-head">
     <button type="button" class="win-btn" data-win-action="menu" aria-label="Window Menu" title="Window Menu"></button>
     <h2 class="win-title" id="win-{{.Key}}-title">{{.Title}}</h2>
@@ -287,11 +287,13 @@
 {{define "problem"}}{{template "head" .}}
 <body>
   <header class="site-header"><div class="topbar">{{template "menubar" .}}</div></header>
-  <main class="site-main">
+  {{template "launcher-layout" .}}
+  <main class="site-main split-pane">
     <h1>{{.Title}}</h1>
     <p>{{.Message}}</p>
     <p><a href="{{.SiteURL}}">Go to the Desktop</a></p>
   </main>
+  </div>
   {{template "dialogs" .}}
   {{template "scripts" .}}
 </body>

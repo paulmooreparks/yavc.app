@@ -7,7 +7,14 @@
 
 /* Shared command toolbar and its native-list customization form. */
 .site-start .start-item > img { width: 20px; height: 20px; object-fit: contain; flex: none; }
-@media (min-width: 651px) { body:not(.desktop) .site-start { inset: 4rem auto auto var(--space-3); } }
+.site-launcher-layout { flex: 1 1 auto; min-height: 0; min-width: 0; }
+.site-launcher-layout > .split-pane { min-width: 0; }
+.site-launcher-actions { display: flex; flex: 1 1 auto; flex-wrap: wrap; min-width: 0; gap: var(--space-2); }
+.site-launcher-controls { display: flex; flex: none; gap: var(--space-1); }
+.site-start .start-header { align-items: flex-start; }
+.site-start [data-row-actions] { flex: none; }
+.site-launcher-slot .site-start { height: 100%; }
+
 [data-toolbar-slot]:has(> .yavc-command-toolbar[hidden]) { display: none; }
 .yavc-command-toolbar[hidden] { display: none; }
 .dialog.yavc-toolbar-dialog { width: min(54rem, 94vw); max-width: 94vw; }
