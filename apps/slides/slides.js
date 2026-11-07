@@ -70,26 +70,33 @@
         return { read: read, problem: f.problem || null };
     }
     function parseDeck(text) {
-        var lines = text.replace(/\r\n/g, '\n').split('\n'), i = 0, frontText = '';
+        var bom = text.charAt(0) === '\ufeff' ? '\ufeff' : '', raw = bom ? text.slice(1) : text;
+        var records = raw.match(/[^\r\n]*(?:\r\n|\r|\n|$)/g) || [''];
+        if (records.length > 1 && records[records.length - 1] === '') records.pop();
+        var lines = records.map(function (line) { return line.replace(/(?:\r\n|\r|\n)$/, ''); }), i = 0, frontText = '', rawFront = '';
         if (lines[0] === '---') {
             var j = 1;
             while (j < lines.length && lines[j].replace(/[ \t]+$/, '') !== '---') { j++; }
             if (j < lines.length) {
-                frontText = lines.slice(0, j + 1).join('\n') + '\n';
+                rawFront = records.slice(0, j + 1).join('');
+                frontText = rawFront.replace(/\r\n?|\n/g, '\n');
                 i = j + 1;
             }
         }
         var got = readFront(frontText), front = Object.assign({}, FRONT, got.read);
-        var slides = [], cur = [], fence = null;
+        var slides = [], cur = [], separators = [], fence = null;
         for (; i < lines.length; i++) {
             var l = lines[i], f = /^\s{0,3}(`{3,}|~{3,})/.exec(l);
             if (f) { if (!fence) { fence = f[1]; } else if (l.trim().indexOf(fence) === 0) { fence = null; } }
-            if (!fence && /^\s{0,3}---\s*$/.test(l)) { slides.push(cur.join('\n')); cur = []; continue; }
-            cur.push(l);
+            if (!fence && /^\s{0,3}---\s*$/.test(l)) { slides.push(cur.join('')); separators.push(records[i]); cur = []; continue; }
+            cur.push(records[i]);
         }
-        slides.push(cur.join('\n'));
-        if (slides.length > 1 && slides[0].trim() === '') { slides.shift(); }
-        return { front: front, frontRead: got.read, frontText: frontText, frontProblem: got.problem, frontUnread: !!got.unread, slides: slides.map(function (t) { return { text: t.replace(/^\n+/, '').replace(/\s+$/, '') + '\n' }; }) };
+        slides.push(cur.join(''));
+        var prefix = '';
+        if (slides.length > 1 && slides[0].trim() === '') { prefix = slides.shift() + separators.shift(); }
+        return { front: front, frontRead: got.read, frontText: frontText, frontProblem: got.problem, frontUnread: !!got.unread,
+            nativeSource: { bom: bom, front: rawFront, frontText: frontText, prefix: prefix, separators: separators, eol: (raw.match(/\r\n|\r|\n/) || ['\n'])[0] },
+            slides: slides.map(function (t) { var normalized = t.replace(/\r\n?|\n/g, '\n').replace(/^\n+/, '').replace(/\s+$/, '') + '\n'; return { text: normalized, nativeSource: { raw: t, text: normalized } }; }) };
     }
     /* The changes to the front matter: each property now different from
        what was read, null for one taken out; a default never written
@@ -126,7 +133,17 @@
     }
     function serializeDeck(deck) {
         var front = frontTextOf(deck);
-        return (front ? front + '\n' : '') + deck.slides.map(function (s) { return s.text.replace(/\s+$/, ''); }).join('\n\n---\n\n') + '\n';
+        var source = deck.nativeSource || { bom: '', front: '', frontText: '', prefix: '', separators: [], eol: '\n' };
+        var out = source.bom + (front === source.frontText ? source.front : front.replace(/\r\n?|\n/g, source.eol) + (front && !source.front ? source.eol : '')) + source.prefix;
+        deck.slides.forEach(function (slide, index) {
+            if (index) {
+                if (!/[\r\n]$/.test(out)) out += source.eol;
+                out += source.separators[index - 1] || source.eol + '---' + source.eol + source.eol;
+            }
+            var original = slide.nativeSource;
+            out += original && slide.text === original.text ? original.raw : slide.text.replace(/\r\n?|\n/g, source.eol);
+        });
+        return out;
     }
     /* A slide's settings, from its {{slide}} line, and that line set. */
     function parseArgs(args) {

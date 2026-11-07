@@ -176,6 +176,12 @@
         /* === State ====================================================== */
 
         function current() { return tabs[active] || null; }
+        function normalizedSource(text) { return text.replace(/\r\n?/g, '\n'); }
+        function submittedText(t) {
+            var text = (current() === t ? view.state : t.state).doc.toString();
+            var original = t.resource ? t.resource.text : t.savedRaw;
+            return typeof original === 'string' && text === normalizedSource(original) ? original : text;
+        }
         function dirtyTab(t) { return !!(t && (t.modified || (t === current() && pageActive() && visual.api.pending()))); }
         function stateString() { var t = current(); return t && t.path ? 'file=' + encodeURIComponent(t.path).replace(/%2F/g, '/').replace(/%7E/g, '~') + (t.navigationLine > 1 ? '&line=' + t.navigationLine : '') : ''; }
         function announce(push) {
@@ -464,9 +470,10 @@
         }
 
         function addTab(t, text) {
-            t.saved = text;
+            t.savedRaw = text;
             t.modified = false;
             t.state = stateFor(t, text);
+            t.saved = t.state.doc.toString();
             tabs.push(t);
             activate(tabs.length - 1);
             /* Focus would raise the Editor's window over one the reader has
@@ -584,7 +591,7 @@
                 await visual.api.sync();
                 if (destroyed || current() !== t) throw new Error('The document changed before saving.');
             }
-            var text = (current() === t ? view.state : t.state).doc.toString();
+            var text = submittedText(t);
             var ticket = t.saveTicket = (t.saveTicket || 0) + 1;
             t.savePending = (t.savePending || 0) + 1;
             var pending = (t.saveQueue || Promise.resolve()).then(function () {
@@ -625,10 +632,10 @@
             var renamed = t.path !== display;
             t.path = display;
             t.name = res.node.name;
-            t.saved = text;
+            t.savedRaw = text; t.saved = normalizedSource(text);
             t.mtime = res.node.server ? +res.node.mtime : null;
             t.saveFailed = false;
-            t.modified = (current() === t ? view.state : t.state).doc.toString() !== text || ticket !== t.saveTicket;
+            t.modified = (current() === t ? view.state : t.state).doc.toString() !== t.saved || ticket !== t.saveTicket;
             t.external = false;
             t.fresh = false;
             t.readOnly = false;
@@ -681,9 +688,9 @@
                 if (destroyed || !tabs.includes(t)) return false;
             }
             t.resource = accepted; t.baseline = null; t.conflict = null; t.path = accepted.resource;
-            t.name = accepted.name || t.name; t.lang = languageFor(t.name); t.saved = text;
+            t.name = accepted.name || t.name; t.lang = languageFor(t.name); t.savedRaw = text; t.saved = normalizedSource(text);
             t.readOnly = !resources.canWrite(accepted); t.saveFailed = !!syncError; t.fresh = false; t.external = false;
-            t.modified = !!syncError || (current() === t ? view.state : t.state).doc.toString() !== text || ticket !== t.saveTicket;
+            t.modified = !!syncError || (current() === t ? view.state : t.state).doc.toString() !== t.saved || ticket !== t.saveTicket;
             var effects = [langComp.reconfigure(langExtension(t.lang)), lintComp.reconfigure(lintExtension(t))];
             if (current() === t) view.dispatch({ effects: effects }); else t.state = t.state.update({ effects: effects }).state;
             await refreshAccess(t, !!syncError); if (destroyed || !tabs.includes(t)) return false;
@@ -696,7 +703,7 @@
                 await visual.api.sync();
                 if (destroyed || current() !== t) throw new Error('The document changed before Save As.');
             }
-            var text = (current() === t ? view.state : t.state).doc.toString(), ticket = t.saveTicket = (t.saveTicket || 0) + 1;
+            var text = submittedText(t), ticket = t.saveTicket = (t.saveTicket || 0) + 1;
             t.savePending = (t.savePending || 0) + 1;
             var pending = (t.saveQueue || Promise.resolve()).then(async function () {
                 if (destroyed || tabs.indexOf(t) < 0) throw new Error('The document closed before Save As.');
@@ -1677,7 +1684,7 @@
             if (t.submittedWrite && t.path === t.submittedWrite.path && text === t.submittedWrite.text) { return; }
             var edited = (i === active ? view.state.doc.toString() : t.state.doc.toString()) !== t.saved;
             if (!edited) {
-                t.saved = text;
+                t.savedRaw = text; t.saved = normalizedSource(text);
                 if (i === active) { view.dispatch(outsideChange(view.state, text)); t.modified = false; }
                 else { t.state = t.state.update(outsideChange(t.state, text)).state; }
             } else {

@@ -41,6 +41,13 @@
         if (!resourceAdapter) resourceAdapter = Promise.all([withDialog(), U.loadGlobal(versioned('/static/resource-host.js'), 'yavcResourceHost')]).then(function (parts) { return parts[1].create(parts[0][0], parts[0][1]); }).catch(function (err) { resourceAdapter = null; throw err; });
         return resourceAdapter;
     }
+    var resolution = null, validAssociations = null;
+    function fileResolver() {
+        if (!resolution) resolution = Promise.all([U.loadGlobal(versioned('/static/file-resolver.js'), 'yavcFileResolver'),
+            fetch(versioned('/static/content-handlers.json')).then(function (response) { if (!response.ok) throw new Error('The file capability catalog could not load.'); return response.json(); })])
+            .then(function (parts) { return parts[0].create(parts[1]); }).catch(function (err) { resolution = null; throw err; });
+        return resolution;
+    }
 
     /* The applets with published actions, for find(). */
     var appletManifests = (function () {
@@ -106,6 +113,16 @@
         },
         pages: '/', pudl: '/pudl/',
         snapshot: window.pcSnapshot,
+        /* Plan-only extension. Existing file routing remains until Docs and its migration gates are ready. */
+        fileResolution: { version: 1, resolve: async function (request) {
+            var resolver = await fileResolver(), preferenceError = null;
+            var preferences = await window.pudlHost.config.load('file-associations', { version: 1, rules: [] });
+            try { resolver.validatePreferences(preferences); validAssociations = JSON.parse(JSON.stringify(preferences)); }
+            catch (err) { preferenceError = err.message; }
+            var installed = window.pudlApplets && window.pudlApplets.definitions ? Object.keys(window.pudlApplets.definitions()) : [];
+            var result = resolver.resolve(request, { installed: installed, preferences: validAssociations || { version: 1, rules: [] } });
+            return Object.assign({}, result, { preferenceError: preferenceError });
+        } },
         /* Prepared for explicit capability adoption after the applet gates. */
         contentResourceAdapter: { version: 1,
             available: function () { return fs().then(function (F) { return !F.mounted; }); },
