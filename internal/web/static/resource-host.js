@@ -3,7 +3,34 @@
 (function () {
     'use strict';
     function create(F, FB) {
-        return Object.freeze({ version: 1, read: F.contentResources.read, write: F.contentResources.write, create: F.contentResources.create,
+        function guest(node) { return !!(node && node.home && !node.server && !node.settings); }
+        function destination(resource) {
+            if (typeof resource !== 'string') throw new Error('A resource identity is required.');
+            var split = F.splitPath(resource), parent = F.resolve(null, split.dir);
+            if (!guest(parent) || !parent.children || !F.validName(split.base)) throw new Error('Choose a destination in your guest home directory.');
+            return F.displayPath(parent).replace(/\/$/, '') + '/' + split.base;
+        }
+        return Object.freeze({ version: 1,
+            read: async function (request) {
+                var resource = request.resource; await F.sync();
+                var node = F.resolve(null, resource);
+                if (!node || node.children || !F.isText(node)) throw new Error('The text resource does not exist.');
+                if (guest(node)) return Object.assign({}, await F.contentResources.read({ resource: F.displayPath(node) }), { resource: resource });
+                var text = await F.read(node);
+                if (typeof text !== 'string' || text.length > 4 * 1024 * 1024) throw new Error('The resource exceeds the supported text limit.');
+                var digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+                return { resource: resource, revision: 'readonly:' + Array.from(new Uint8Array(digest), function (byte) { return byte.toString(16).padStart(2, '0'); }).join(''), text: text, name: node.name, writable: false };
+            },
+            write: async function (request) {
+                request = { resource: request.resource, expectedRevision: request.expectedRevision, text: request.text }; await F.sync();
+                var node = F.resolve(null, request.resource);
+                if (!guest(node) || node.children) throw new Error('This resource is read-only or no longer exists.');
+                return Object.assign({}, await F.contentResources.write({ resource: F.displayPath(node), expectedRevision: request.expectedRevision, text: request.text }), { resource: request.resource });
+            },
+            create: async function (request) {
+                request = { resource: request.resource, text: request.text }; await F.sync();
+                return Object.assign({}, await F.contentResources.create({ resource: destination(request.resource), text: request.text }), { resource: request.resource });
+            },
             saveAs: async function (request, context) {
                 request = { name: request.name, sourceResource: request.sourceResource, text: request.text };
                 if (F.mounted) throw new Error('The server mount does not support conditional Save As.');

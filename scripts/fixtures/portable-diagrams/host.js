@@ -7,6 +7,7 @@
         ['memory:second.canvas',{text:JSON.stringify({nodes:[{id:'a',type:'text',x:0,y:0,width:160,height:80,text:'Canvas'}],edges:[],unknownFixture:{preserve:true}}),revision:1}]
     ]);
     var writes=[], pause=null, options=new URLSearchParams(location.search), readPause=null;
+    if(options.has('readonly')){records.get('memory:first.d2').readOnly=true;records.get('memory:second.canvas').readOnly=true;}
     if(options.has('resourceRecovery')){
         var persisted=sessionStorage.getItem('fixture:resources');if(persisted)records=new Map(JSON.parse(persisted));
         document.querySelector('#two').remove();
@@ -17,12 +18,12 @@
     window.pudlHost=pudlHostKit.host({
         pages:'/different-application/', identity:function(){return [];},
         contentResources:{version:1,
-            read:async function(request){if(readPause&&request.resource==='memory:first.d2'){fixture.readPending=true;await readPause;}var record=records.get(request.resource);if(!record)throw new Error('Resource not found');return {resource:request.resource,text:record.text,revision:String(record.revision),writable:true,name:record.name};},
+            read:async function(request){if(readPause&&request.resource==='memory:first.d2'){fixture.readPending=true;await readPause;}var record=records.get(request.resource);if(!record)throw new Error('Resource not found');return {resource:request.resource,text:record.text,revision:String(record.revision),writable:!record.readOnly,name:record.name};},
             write:async function(request){
                 writes.push({...request}); if(pause)await pause.promise;
-                var record=records.get(request.resource);if(!record||String(record.revision)!==request.expectedRevision)throw new Error('Conflict: the resource changed.');
-                record.text=request.text;record.revision++;if(options.has('resourceRecovery'))fixture.persist();
-                return {resource:request.resource,revision:String(record.revision),writable:true};
+                var record=records.get(request.resource);if(!record||String(record.revision)!==request.expectedRevision)throw new Error('Conflict: the resource changed.');if(record.readOnly)throw new Error('Read-only resource');
+                record.text=request.text;record.revision++;if(fixture.revokeOnWrite){record.readOnly=true;fixture.revokeOnWrite=false;}if(options.has('resourceRecovery'))fixture.persist();
+                return {resource:request.resource,revision:String(record.revision),writable:!record.readOnly};
             }
         }
     });
