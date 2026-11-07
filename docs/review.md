@@ -1,5 +1,15 @@
 # Stem-to-stern review, November 2026
 
+## No-op source preservation and file resolution foundation, 2026-11-08
+
+Slides 0.30.0 preserves original source spans when opening and saving a deck, including BOM, separator whitespace and line endings. Editor 45.31.0 submits the original resource text when the canonical buffer is unchanged and keeps a canonical dirty baseline. The source audit records the still-open byte-encoding and edited mixed-EOL gates rather than treating this corpus as complete extraction acceptance.
+
+The pure file resolver and versioned catalog prepare explicit choices, compound suffixes, unavailable handlers and verified-text fallback. The host extension produces plans only; it leaves current routing intact, retains invalid saved preferences and reports when the last valid page-local settings are used. Unit and real-host fixtures cover malformed configuration, capability boundaries, MIME precedence, unsupported explicit views and a missing Docs package. Independent source review has no findings.
+
+Paul expanded the dialog backlog to every shared, site-level and applet-specific dialog. `shared-dialog-review.md` records a complete-inventory requirement and per-dialog rendered, keyboard and narrow-layout acceptance. The style/color button grids, path-only prompts and Canvas checkbox pile are examples. Their overhaul follows this batch and has not been implemented here.
+
+The preservation/host fixture passes Chromium, Firefox and WebKit. The existing resource/recovery fixture passes Chromium, and Slides HTML/PPTX/PDF/exclusion checks pass all three engines. Chromium document pagination/source-preservation and shared LSP regressions pass. Eight new resolver unit tests bring the full browser-module suite to 74. No default route or dialog layout changed in this batch.
+
 ## Editor and Slides resource adoption, 2026-11-08
 
 Editor 45.30.0 and Slides 0.29.0 use guest resource revisions, captured Save As and original-baseline recovery. The shared selector validates legacy Editor drafts and waiting records with the same recovery limits as current snapshots. Editor stops writing its parallel session record in resource mode, but retains old records as migration inputs. Slides now enforces immutable resources across source, rich editing, search, commands and agent actions.
