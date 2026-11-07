@@ -9,7 +9,7 @@
    the home directory, ~.
 
    On the public site ~ is /home/guest, kept in this browser's
-   localStorage, and nothing here can reach a file on the server. On the
+   IndexedDB, and nothing here can reach a file on the server. On the
    edit origin, a page that names the admin mount in
    <meta name="pc-fs-mount"> (Architecture/admin-and-identity-design.md,
    A7 and A10) gets two server directories instead: /wwwroot, the web root,
@@ -39,34 +39,11 @@
     /* A file that is not text, such as a picture, is kept as bytes in the
        browser's database under an id the home record points to, so the
        record's 2 MB is not spent on it (DESIGN.md, decision 14). */
-    var BLOB_DB = 'yavc-home-blobs', BLOB_STORE = 'blobs', BLOB_MAX = 8 * 1024 * 1024;
-    var blobDb = null;
-    function blobs() {
-        if (blobDb) { return blobDb; }
-        blobDb = new Promise(function (resolve, reject) {
-            if (!window.indexedDB) { reject(new Error('this browser has no database for pictures')); return; }
-            var r = indexedDB.open(BLOB_DB, 1);
-            r.onupgradeneeded = function () { r.result.createObjectStore(BLOB_STORE); };
-            r.onsuccess = function () { resolve(r.result); };
-            r.onerror = function () { reject(r.error || new Error('the browser would not open its database')); };
-        });
-        blobDb.catch(function () { blobDb = null; });
-        return blobDb;
-    }
-    function blobOp(mode, fn) {
-        return blobs().then(function (db) {
-            return new Promise(function (resolve, reject) {
-                var tx = db.transaction(BLOB_STORE, mode), req = fn(tx.objectStore(BLOB_STORE));
-                tx.oncomplete = function () { resolve(req ? req.result : undefined); };
-                tx.onerror = function () { reject(tx.error || new Error('the database failed')); };
-                tx.onabort = function () { reject(tx.error || new Error('the database failed')); };
-            });
-        });
-    }
-    function blobGet(id) { return blobOp('readonly', function (st) { return st.get(id); }); }
-    function blobPut(id, bytes) { return blobOp('readwrite', function (st) { return st.put(bytes, id); }); }
-    function blobDel(id) { return blobOp('readwrite', function (st) { return st.delete(id); }).catch(function () { }); }
-    function newBlobId() { return 'b' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10); }
+    var BLOB_MAX = 8 * 1024 * 1024, store = null;
+    function blobGet(id) { return store.blobGet(id).then(function (bytes) { if (!bytes) throw new Error('The saved picture is unavailable.'); return bytes; }); }
+    function blobPut(id, bytes) { return store.blobPut(id, bytes); }
+    function blobDel(id) { return store.blobDelete(id).catch(function () { }); }
+    function newBlobId() { return 'b' + crypto.randomUUID(); }
     /* The blobs under a node, a file's own or a directory's throughout. */
     function blobsUnder(n, out) {
         out = out || [];
@@ -90,7 +67,17 @@
         if (!treeReady) {
             treeReady = fetch('/api/site/tree', { headers: { Accept: 'application/json' } })
                 .then(function (r) { if (!r.ok) { throw new Error('HTTP ' + r.status); } return r.json(); })
-                .then(function (data) { root = buildFs(data); return MOUNT ? mountServer(root) : Promise.all([seedHome(), loadSettings().then(migrateSettings)]); })
+                .then(async function (data) {
+                    if (!MOUNT) {
+                        store = await window.yavcUtil.loadGlobal(window.yavcUtil.versioned('/static/home-store.js'), 'yavcHomeStore');
+                        home.record = await store.initialize();
+                    }
+                    root = buildFs(data);
+                    if (MOUNT) return mountServer(root);
+                    await seedHome();
+                    await migrateSettings(await loadSettings());
+                    warnLegacyFork();
+                })
                 .then(function () { return root; })
                 .catch(function (err) { treeReady = null; throw err; });
         }
@@ -230,14 +217,37 @@
     function realOf(n) { return n.target || n; }
 
     /* === The home directory ===============================================
-       /home/guest, shown as ~, lives in localStorage under pc-terminal-home
+       /home/guest, shown as ~, lives in IndexedDB. The legacy localStorage record
        as { seeded, files: { "/path": { t: "f"|"d", c, m } } }. The first
        visit seeds a few files so there is something to try. */
 
     /* home.settingsDir is ~/.config (below); home.legacy holds what an
        older build kept under /.config in the browser's record, carried
        through saves untouched until it has moved to the session. */
-    var home = { dir: null, raw: undefined, settingsDir: null, legacy: {} };
+    var home = { dir: null, raw: undefined, settingsDir: null, legacy: {}, record: null };
+    var mutationQueue = Promise.resolve(), mutationActive = false, refreshPending = false;
+    var homeChannel = typeof BroadcastChannel === 'function' ? new BroadcastChannel('yavc-home') : null;
+    function publishHome() {
+        if (homeChannel) homeChannel.postMessage('changed');
+        try { localStorage.setItem('yavc-home-change', crypto.randomUUID()); } catch (err) { }
+    }
+    function warnLegacyFork() {
+        if (!store || !home.record) return;
+        var status;
+        try { status = store.legacyStatus(home.record); } catch (err) { return; }
+        if (status.changed && !document.querySelector('[data-home-fork]')) {
+            var ref = document.createElement('div'); ref.setAttribute('data-home-fork', ''); (document.querySelector('.site-header') || document.body).appendChild(ref);
+            var notice = window.yavcUtil.notice(ref, 'An older tab changed a separate copy of your files. Close older tabs to prevent further divergence. Both file records are retained in this browser.', 'warn');
+            var download = document.createElement('button'); download.type = 'button'; download.className = 'btn'; download.textContent = 'Download File Records';
+            download.addEventListener('click', async function () {
+                try {
+                    var record = await store.read(), legacy = store.legacyStatus(record);
+                    window.yavcUtil.download('yavc-file-records.json', new Blob([JSON.stringify({ current: store.parse(record.raw), migrationSource: legacy.original, olderTab: legacy.current })], { type: 'application/json' }));
+                } catch (err) { window.yavcUtil.notice(ref, err.message, true); }
+            });
+            if (notice) { var actions = document.createElement('div'); actions.className = 'notice-actions'; actions.appendChild(download); notice.querySelector('.notice-content').appendChild(actions); }
+        }
+    }
 
     /* The stock files come from the server (/api/site/home, from
        site/home). Each is seeded once: a reader who deletes one keeps it
@@ -258,16 +268,15 @@
         if (!seeding) {
             seeding = fetch('/api/site/home', { headers: { Accept: 'application/json' } })
                 .then(function (r) { return r.ok ? r.json() : null; })
-                .then(function (seed) { if (seed && seed.files) { applySeed(seed.files); } })
+                .then(function (seed) { if (seed && seed.files) { return applySeed(seed.files); } })
                 .catch(function () { })
                 .then(function () { seeding = null; });
         }
         return seeding;
     }
-    function applySeed(files) {
-        var raw = null, data = null;
-        try { raw = localStorage.getItem(HOME_KEY); data = raw ? JSON.parse(raw) : null; } catch (err) { data = null; }
-        if (!data || !data.files || typeof data.files !== 'object') { data = { files: {} }; }
+    async function applySeed(files) {
+        var record = await store.update(function (current) {
+        var data = store.parse(current.raw);
         var done = data.seeds && typeof data.seeds === 'object' ? data.seeds : {}, changed = false;
         var old = data.files['/README'];
         if (old && old.t === 'f' && String(old.c || '').indexOf('Welcome to your home directory.') === 0) { delete data.files['/README']; changed = true; }
@@ -289,9 +298,9 @@
             }
         });
         data.seeds = done;
-        if (!changed) { return; }
-        try { var out = JSON.stringify(data); localStorage.setItem(HOME_KEY, out); home.raw = out; } catch (err) { return; }
-        homeLoad();
+        return changed ? JSON.stringify(data) : current.raw;
+        });
+        homeLoad(record);
         emit('home');
     }
     function ensureDirs(data, p) {
@@ -324,18 +333,16 @@
         for (var i = 0; i < parts.length - 1; i++) { d = childNamed(d, parts[i]) || mkDirNode(d, parts[i], e.m); }
         var name = parts[parts.length - 1];
         if (childNamed(d, name)) { return; }
-        if (e.t === 'd') { mkDirNode(d, name, e.m); return; }
-        if (e.t === 'b') { d.children.push({ name: name, kind: 'file', home: true, bin: true, blob: String(e.id || ''), size: e.s || 0, type: String(e.y || ''), mtime: new Date(e.m || Date.now()), parent: d }); return; }
-        d.children.push({ name: name, kind: 'file', home: true, content: String(e.c || ''), mtime: new Date(e.m || Date.now()), parent: d });
+        if (e.t === 'd') { mkDirNode(d, name, e.m).revision = e.revision; return; }
+        if (e.t === 'b') { d.children.push({ name: name, kind: 'file', home: true, revision: e.revision, bin: true, blob: String(e.id || ''), size: e.s || 0, type: String(e.y || ''), mtime: new Date(e.m || Date.now()), parent: d }); return; }
+        d.children.push({ name: name, kind: 'file', home: true, revision: e.revision, content: String(e.c || ''), mtime: new Date(e.m || Date.now()), parent: d });
     }
 
-    function homeLoad() {
-        var raw = null;
-        try { raw = localStorage.getItem(HOME_KEY); } catch (err) { }
-        home.raw = raw;
-        var data = null;
-        try { data = raw ? JSON.parse(raw) : null; } catch (err) { data = null; }
-        if (!data || !data.files || typeof data.files !== 'object') { data = { files: {} }; }
+    function homeLoad(record) {
+        if (record && home.record && record.generation < home.record.generation) return;
+        home.record = record || home.record;
+        home.raw = home.record.raw;
+        var data = store.parse(home.raw);
         /* The record of what the site seeded is kept in memory, so a save
            need not read the whole stored record back to keep it
            (performance review, 2026-11-03). */
@@ -368,21 +375,31 @@
 
     /* Saves the home directory; on failure the stored copy is reloaded so
        what every applet shows matches what the browser kept. */
-    function homeSave() {
+    async function homeSave() {
         if (MOUNT) { return null; }
-        var s = homeSerialize();
-        if (s.length > HOME_MAX) { homeLoad(); emit('home'); return 'your home directory is full (the limit is 2 MB)'; }
-        try { localStorage.setItem(HOME_KEY, s); home.raw = s; emit('home'); return null; }
-        catch (err) { homeLoad(); emit('home'); return 'this browser would not store it (' + err.name + ')'; }
+        return persistHome(homeSerialize(), home.record.generation, false);
+    }
+    async function persistHome(s, generation, rebuild) {
+        try {
+            home.record = await store.commit(generation, s); home.raw = home.record.raw;
+            if (rebuild) homeLoad(home.record);
+            var entries = store.parse(home.raw).files;
+            (function revisions(d, prefix) { d.children.forEach(function (n) { if (n.settings) return; var p = prefix + '/' + n.name; n.revision = entries[p].revision; if (n.children) revisions(n, p); }); })(home.dir, '');
+            publishHome(); emit('home'); return null;
+        } catch (err) {
+            try { homeLoad(await store.read()); } catch (readError) { homeLoad(); }
+            emit('home'); return err.message || 'The browser could not store your files.';
+        }
     }
 
     /* Another tab may have changed the files since this one last looked. */
-    function homeSync() {
+    async function homeSync() {
         if (!home.dir || MOUNT) { return false; }
-        var raw = null;
-        try { raw = localStorage.getItem(HOME_KEY); } catch (err) { }
-        if (raw === home.raw) { return false; }
-        homeLoad();
+        if (mutationActive) { refreshPending = true; return false; }
+        var record = await store.read();
+        if (mutationActive) { refreshPending = true; return false; }
+        if (record.generation <= home.record.generation) return false;
+        homeLoad(record);
         emit('home');
         return true;
     }
@@ -390,8 +407,10 @@
     /* A change in another tab reaches this one through the storage event. */
     window.addEventListener('storage', function (e) {
         if (MOUNT) { return; }
-        if (e.key === HOME_KEY || e.key === null) { homeSync(); }
+        if (e.key === HOME_KEY || e.key === null) warnLegacyFork();
+        if (e.key === 'yavc-home-change' || e.key === null) homeSync().catch(function () { });
     });
+    if (homeChannel) homeChannel.onmessage = function () { homeSync().catch(function () { }); };
 
     /* === Settings, ~/.config ==============================================
        An applet's settings are kept by the engine under the reader's
@@ -514,14 +533,21 @@
             }
             old['/.config-old' + rest] = e;
         }
-        var data = null;
-        try { data = JSON.parse(localStorage.getItem(HOME_KEY) || 'null'); } catch (err) { data = null; }
-        if (!data || !data.files) { return; }
-        paths.forEach(function (p) { delete data.files[p]; });
-        Object.keys(keep).forEach(function (p) { data.files[p] = keep[p]; });
-        Object.keys(old).forEach(function (p) { ensureDirs(data, p); data.files[p] = old[p]; });
-        try { var out = JSON.stringify(data); localStorage.setItem(HOME_KEY, out); home.raw = out; } catch (err) { return; }
-        homeLoad();
+        var legacy = home.legacy;
+        var record = await store.update(function (current) {
+            var data = store.parse(current.raw);
+            paths.forEach(function (p) {
+                if (JSON.stringify(data.files[p]) !== JSON.stringify(legacy[p]) || keep[p]) return;
+                var destination = '/.config-old' + p.slice('/.config'.length);
+                if (old[destination]) {
+                    if (data.files[destination]) return;
+                    ensureDirs(data, destination); data.files[destination] = old[destination];
+                }
+                delete data.files[p];
+            });
+            return JSON.stringify(data);
+        });
+        homeLoad(record);
         if (sent || Object.keys(old).length) { emit('home'); }
     }
 
@@ -718,11 +744,21 @@
     function limitText(n) { return n && n.server ? '10 MB' : '256 KB'; }
 
     /* Writes a file, creating it if need be. Resolves to { error } or { node }. */
-    async function write(base, path, content, append) {
+    async function touch(base, path) {
+        var n = resolve(base, path);
+        if (!n) { var created = await write(base, path, '', false); return created.error || null; }
+        n = realOf(n);
+        if (!n.home || n.children || n.settings) return path + ': cannot update its time';
+        if (n.server) return null;
+        n.mtime = new Date();
+        return homeSave();
+    }
+    async function write(base, path, content, append, expectedRevision) {
         var n = resolve(base, path);
         if (n) { n = realOf(n); }
         if (n && n.children) { return { error: path + ': is a directory' }; }
         if (n && !n.home) { return { error: path + ' is part of the site, which is read-only' }; }
+        if (expectedRevision !== undefined && (!n || n.revision !== expectedRevision || n.server || n.settings)) return { error: path + ': the file changed or conditional saving is unavailable; your text was not saved' };
         var d = n ? n.parent : null, name = n ? n.name : null;
         if (!n) {
             var sp = splitPath(path);
@@ -740,8 +776,9 @@
             return serverPut(d, name, bytes, path, full);
         }
         if (full.length > FILE_MAX) { return { error: path + ': too large (the limit is 256 KB)' }; }
+        var was = n && n.bin ? n.blob : null;
         if (n) {
-            if (n.bin) { blobDel(n.blob); delete n.bin; delete n.blob; delete n.size; delete n.type; }
+            if (n.bin) { delete n.bin; delete n.blob; delete n.size; delete n.type; }
             n.content = full;
             n.mtime = new Date();
         } else {
@@ -749,7 +786,8 @@
             d.children.push(n);
             sortKids(d);
         }
-        var err = homeSave();
+        var err = await homeSave();
+        if (!err && was) blobDel(was);
         return err ? { error: err } : { node: n };
     }
 
@@ -788,7 +826,7 @@
             d.children.push(n);
             sortKids(d);
         }
-        var err = homeSave();
+        var err = await homeSave();
         if (err) { blobDel(id); return { error: err }; }
         if (was) { blobDel(was); }
         return { node: n };
@@ -889,7 +927,7 @@
         }
         var gone = blobsUnder(n);
         n.parent.children.splice(n.parent.children.indexOf(n), 1);
-        var saved = homeSave();
+        var saved = await homeSave();
         if (!saved) { gone.forEach(blobDel); }
         return saved;
     }
@@ -1091,6 +1129,74 @@
         return childNamed(content, r.name + '.md') || childNamed(content, r.name + '.html') || null;
     }
 
+    /* Serialize local mutations, including blob preparation. The transaction
+       still compares the authoritative generation; notifications only refresh
+       the cache. Node arguments are rebound by path after that refresh. */
+    function queued(operation) {
+        var result = mutationQueue.then(async function () {
+            await load(); await homeSync(); mutationActive = true;
+            try { return await operation(); }
+            finally {
+                mutationActive = false;
+                if (refreshPending) { refreshPending = false; await homeSync(); }
+            }
+        });
+        mutationQueue = result.catch(function () { });
+        return result;
+    }
+    function mutation(fn, nodeIndexes, objectResult) {
+        return function () {
+            var args = Array.from(arguments), paths = nodeIndexes.map(function (i) { return args[i] ? pathOf(args[i]) : null; });
+            return queued(function () {
+                nodeIndexes.forEach(function (i, j) {
+                    if (!paths[j]) return;
+                    args[i] = resolve(null, paths[j]);
+                    if (!args[i]) throw new Error(paths[j] + ': no longer exists');
+                });
+                return fn.apply(null, args);
+            }).catch(function (err) { return objectResult ? { error: err.message } : err.message; });
+        };
+    }
+    function saveCapturedTree() {
+        if (MOUNT) return Promise.resolve(null);
+        var raw = homeSerialize(), generation = home.record.generation;
+        return queued(function () { return persistHome(raw, generation, true); }).catch(function (err) { return err.message; });
+    }
+    function resourcePath(resource) {
+        if (typeof resource !== 'string' || resource.length > 4096 || !resource.startsWith('~/') || resource.split('/').slice(1).some(function (part) { return !validName(part) || part === '.' || part === '..'; })) throw new Error('The resource must name a canonical guest home path.');
+        if (resource === '~/.config' || resource.startsWith('~/.config/')) throw new Error('Settings do not support conditional resource saves.');
+        if (MOUNT) throw new Error('The server mount does not support conditional resource saves.');
+        return resource.slice(1);
+    }
+    var contentResources = Object.freeze({
+        version: 1,
+        read: function (request) {
+            request = { resource: request.resource };
+            return queued(async function () {
+                var path = resourcePath(request.resource), record = await store.read(), entry = store.parse(record.raw).files[path];
+                if (!entry || entry.t !== 'f') throw new Error('The text resource does not exist.');
+                return { resource: request.resource, revision: entry.revision, text: entry.c, writable: true };
+            });
+        },
+        write: function (request) {
+            request = { resource: request.resource, expectedRevision: request.expectedRevision, text: request.text };
+            return queued(async function () {
+                var path = resourcePath(request.resource);
+                if (typeof request.text !== 'string' || request.text.length > FILE_MAX) throw new Error('The resource exceeds the 256 KB text limit.');
+                if (typeof request.expectedRevision !== 'string' || !request.expectedRevision || request.expectedRevision.length > 4096) throw new Error('A baseline revision is required.');
+                var record = await store.update(function (current) {
+                    var data = store.parse(current.raw), entry = data.files[path];
+                    if (!entry || entry.t !== 'f' || entry.revision !== request.expectedRevision) throw new Error('The file changed or was deleted. Your text was not saved.');
+                    if (entry.c === request.text) return current.raw;
+                    entry.c = request.text; entry.m = Date.now();
+                    return JSON.stringify(data);
+                });
+                homeLoad(record); publishHome(); emit('home');
+                return { resource: request.resource, revision: store.parse(record.raw).files[path].revision, writable: true };
+            });
+        }
+    });
+
     window.pcSiteFs = {
         load: load,
         root: function () { return root; },
@@ -1107,15 +1213,17 @@
         size: size,
         read: read,
         readHome: readHome,
-        write: write,
-        writeBytes: writeBytes,
-        upload: upload,
-        copy: copy,
-        mkdir: mkdir,
-        remove: remove,
-        move: move,
-        save: homeSave,
+        write: mutation(write, [0], true),
+        touch: mutation(touch, [0], false),
+        writeBytes: mutation(writeBytes, [0], true),
+        upload: mutation(upload, [0], true),
+        copy: mutation(copy, [0, 1], true),
+        mkdir: mutation(mkdir, [0], false),
+        remove: mutation(remove, [0], false),
+        move: mutation(move, [0, 1], false),
+        save: saveCapturedTree,
         sync: homeSync,
+        contentResources: contentResources,
         /* The admin mount (edit origin only). */
         mounted: !!MOUNT,
         user: function () { return home.dir ? home.dir.name : 'guest'; },
