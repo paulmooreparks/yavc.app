@@ -2,7 +2,7 @@
 
 This design was prepared on 2026-11-07 after Paul chose separate Docs and Editor applets, with direct source access in Docs and Markdown opening in Docs by default. It defines the intended system. The installed release remains v0.2.39, where Docs is an Editor subdomain alias. The split, association resolver and Office import improvements are not implemented. This design supersedes the launch-profile proposal in `file-associations.md`, the one-Editor choice in decisions 1 and 17 of `docs-design.md`, and PR #46's withdrawn automatic title switching.
 
-The cross-project Architectural Principles remain at `C:\Users\paul\OneDrive\Documents\Architectural Principles.md`. This design applies their addressable state, progressive enhancement and PUDL requirements without introducing another frontend framework or document store. PUDL applet portability applies to every applet. Editor/Docs and Diagrams are its first priority acceptance targets, detailed in `applet-portability-design.md`.
+The cross-project Architectural Principles remain at `C:\Users\paul\OneDrive\Documents\Architectural Principles.md`. This design applies their addressable state, progressive enhancement and PUDL requirements without introducing another frontend framework or document store. PUDL applet portability applies to every applet. The upcoming effort includes actual extraction of Editor/Docs and Diagrams, consistent extraction of Slides, and reintegration of those portable packages into yavc.app, as detailed in `applet-portability-design.md`.
 
 ## 1. Applications follow the work
 
@@ -163,8 +163,8 @@ Progressive enhancement applies to the server-rendered application catalog, link
 1. Remove automatic identity switching from PR #46, retain the independent Slide glyph correction, and land the reviewed design. Do not implement the split in a design-only release.
 2. Audit the priority applets against documented PUDL/host-kit capabilities, establish the portable host boundary and minimal unrelated-host harness, and prove Diagrams with synthetic resources. Keep yavc.app on the same portable artifact. Reuse the receiving host's existing resource/writer contracts.
 3. Add the pure resolver, versioned host-owned capability registry, explanations and File Associations settings. Preserve current routing through adapters, add a bounded byte-read/text-decoding capability, and provide documented revision-checked writes or documented exclusive-writer enforcement before enabling the writable split.
-4. Extract the shared workspace and register Docs as a separate portable PUDL applet. Apply fixed identities, menus, source/preview limits, URL behavior, independent launcher/taskbar entries and conservative preferences/snapshot migration. Migrate capability/action manifests and host adapters with it.
-5. Route Files, applet Open/Open With, recent files, Edit Whole Deck, diagram source links and agent operations through the shared contracts. Keep explicit applet choices explicit and verify the same-origin handoff behavior.
+4. Extract the shared workspace and portable Editor, Docs, Diagrams and Slides packages. Register Docs with fixed identity, menus, source/preview limits, URL behavior, independent launcher/taskbar entries and conservative preferences/snapshot migration. Migrate capability/action manifests and host adapters with it.
+5. Reintegrate the built portable artifacts into yavc.app, removing the old implementation path after parity/rollback checks. Route Files, applet Open/Open With, recent files, Edit Whole Deck, diagram source links and agent operations through the shared contracts. Keep explicit applet choices explicit and verify same-origin handoff and artifact identity.
 6. Add DOCX import and improve PPTX image handling as a separate fidelity batch. Do not hold the identity split for Office fidelity work.
 
 Each implementation batch must pass the full repository gate, focused three-engine fixtures, independent source/PUDL review and rendered checks in desktop/standalone contexts. No browser/native test is claimed by this design document. Acceptance must include these scenarios:
@@ -180,6 +180,7 @@ Each implementation batch must pass the full repository gate, focused three-engi
 - Slides search/history scopes, Mermaid read-only rendering, D2/Canvas editing, embedded diagram ownership, terminal execution and comparison intents retain their domain contracts.
 - Import reports expose conversion losses, preserve Office originals and never save Markdown bytes over an Office container.
 - The same exact priority applet artifacts run in yavc.app and a minimal unrelated PUDL host with no site globals/storage. Actual receiving-host webview checks prove offline assets, workers/WASM, isolation and host-owned save/recovery before adoption.
+- Editor, Docs, Diagrams and Slides are loaded from the extracted release artifacts in the reintegrated yavc.app build. Shared-consumer tests and artifact identity checks exclude a hidden legacy-source fallback.
 
 ## 13. Boundaries and implementation gates
 
