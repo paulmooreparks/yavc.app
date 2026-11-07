@@ -1,5 +1,15 @@
 # Stem-to-stern review, November 2026
 
+## Revision-aware recovery foundation, 2026-11-07
+
+The shared content recovery helper retains original revision metadata and draft text without accessing storage. Diagrams 0.23.0 accepts a version 2 snapshot host, restores matching baselines through fresh issued snapshots, and preserves stale, unavailable and older unversioned drafts without granting them the current file's write baseline. It disables conflicting saves with a reason and retains source download. Production resource-capability adoption remains gated on creation/Save As, complete read-only policy and the remaining applet adapters.
+
+Snapshot registration now validates before consuming any prior snapshot, and capture validates the same bounds as restoration. Independent source review found alternate keys were removed before a replacement write succeeded. Cleanup now follows successful destination storage; quota failure, startup failure and disposal retain the original durable copy. The new synchronous flush acknowledgement keeps Diagrams' normal reload warning available when recovery storage fails. A left handle cannot flush.
+
+Seven focused unit tests cover matching/stale/legacy/unavailable baselines, invalid payloads, validation order, quota failure and snapshot-key migration. The unrelated-host fixture passes Chromium, Firefox and WebKit with actual source edits, reload, protected external content, legacy conversion, future-version retention and disposal during recovery. Rendered inspection confirms the conflict notice and disabled save state. The shared-consumer fixture verifies normal Terminal and Editor/Slides/Diagrams save/reload behavior against a disposable site host. The full repository gate passes with 61 browser-module tests. Independent source review is clean after the durability correction.
+
+The ordinary-site consumer fixture now waits for the initial D2 drawing before replacing it with Canvas. Installed v0.2.41 testing exposed a WebKit cancellation report when that fixture reloaded while D2's first WASM load was still in flight. The original failure remains with the release receipt. This readiness change makes the storage fixture wait for the work it started; it does not claim to fix interrupted-WASM lifecycle behavior.
+
 ## Transactional guest VFS foundation, 2026-11-07
 
 The storage audit found that localStorage could not provide an atomic revision check, including against older tabs. The guest VFS now commits its existing record format through IndexedDB, imports pictures transactionally, preserves both old stores, and keeps the legacy file API available to every consumer. The experimental resource interface compares file revisions within the same authority. It remains disconnected from production applets until their recovery snapshots carry original baselines. This batch does not claim document-level stale-save protection for legacy applets.

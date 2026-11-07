@@ -26,6 +26,10 @@
                 return remember(snapshot(await host.read({ resource: resource }), resource));
             },
             canWrite: function (value) { return !!value && issued.has(value) && value.writable && typeof host.write === 'function'; },
+            baseline: function (value) {
+                if (!value || !issued.has(value)) throw new Error('The baseline was not issued by this resource client.');
+                return Object.freeze({ resource: value.resource, revision: value.revision });
+            },
             write: async function (value, content) {
                 if (!value || !issued.has(value) || !value.writable || typeof host.write !== 'function') throw new Error('This resource cannot be saved by this host.');
                 var submitted = text(content), expected = value.revision;

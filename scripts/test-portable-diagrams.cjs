@@ -81,8 +81,46 @@ const types={'.html':'text/html','.js':'text/javascript','.css':'text/css','.jso
     await p.waitForFunction(()=>fixture.readPending&&fixture.releaseRead);
     await p.evaluate(async()=>{fixture.removed=document.querySelector('#one');pudlApplets.destroy(fixture.removed);fixture.removed.remove();fixture.releaseRead();await new Promise(requestAnimationFrame);});
     assert.equal(await p.evaluate(()=>fixture.removed.querySelector('.cm-editor')===null),true,'A disposed initial read must not restart the editor');
+    await p.goto(`http://127.0.0.1:${server.address().port}${prefix}lab/index.html?resourceRecovery=1`);
+    await p.locator('#one .dg-canvas img').waitFor();
+    const recoveredSource=p.locator('#one .cm-content');await recoveredSource.click();await p.keyboard.press('ControlOrMeta+End');await p.keyboard.type('\nrecovery: Unsaved draft');
+    assert.equal(await p.evaluate(()=>fixture.recovery.flush()),true);
+    await p.reload();await p.locator('#one .dg-canvas img').waitFor();
+    assert.match(await recoveredSource.innerText(),/Unsaved draft/);
+    await p.evaluate(()=>pudlCommands.run('save',null,document.querySelector('#one')));
+    assert.match(await p.evaluate(()=>fixture.records.get('memory:first.d2').text),/Unsaved draft/);
+    await recoveredSource.click();await p.keyboard.press('ControlOrMeta+End');await p.keyboard.type('\nrecoveryConflict: Keep these edits');
+    await p.evaluate(()=>{fixture.recovery.flush();const r=fixture.records.get('memory:first.d2');r.text='external: Protected file\n';r.revision++;fixture.persist();});
+    await p.reload();await p.locator('#one .dg-canvas img').waitFor();
+    await p.locator('#one .yavc-notice').filter({hasText:'Recovered edits'}).waitFor();
+    assert.match(await recoveredSource.innerText(),/Keep these edits/);
+    assert.equal(await p.locator('#one [data-command="save"]').isDisabled(),true);
+    assert.match(await p.evaluate(async()=>{try{await pudlCommands.run('save',null,document.querySelector('#one'));}catch(e){return e.message;}}),/matching file revision/);
+    assert.equal(await p.evaluate(()=>fixture.writes.length),0);
+    assert.equal(await p.evaluate(()=>fixture.records.get('memory:first.d2').text),'external: Protected file\n');
+    const retained=await p.evaluate(()=>{fixture.recovery.flush();const key=Object.keys(sessionStorage).find(k=>k.startsWith('pc-snap:page:')&&k.endsWith(':diagrams'));return JSON.parse(sessionStorage.getItem(key)).v;});
+    assert.equal(retained.tabs[0].baseline.revision,'2');
+    assert.equal(await p.evaluate(()=>{
+     fixture.originalSet=Storage.prototype.setItem;Storage.prototype.setItem=function(k,v){if(k.startsWith('pc-snap:'))throw new DOMException('Full','QuotaExceededError');return fixture.originalSet.call(this,k,v);};
+     return fixture.recovery.flush();
+    }),false);
+    await p.evaluate(()=>{Storage.prototype.setItem=fixture.originalSet;fixture.recovery.flush();});
+    await p.screenshot({path:path.join(evidence,engine+'-recovered-conflict.png'),fullPage:true});
+    await p.evaluate(()=>{const key=Object.keys(sessionStorage).find(k=>k.startsWith('pc-snap:page:')&&k.endsWith(':diagrams'));pudlApplets.destroy(document.querySelector('#one'));sessionStorage.setItem(key,JSON.stringify({t:Date.now(),v:{tabs:[{path:'memory:first.d2',kind:'d2',text:'legacy: Preserve this draft\n',view:'split'}],active:0}}));});
+    await p.reload();await p.locator('#one .dg-canvas img').waitFor();assert.match(await recoveredSource.innerText(),/Preserve this draft/);
+    assert.equal(await p.locator('#one [data-command="save"]').isDisabled(),true);
+    await p.evaluate(()=>{fixture.recovery.flush();fixture.futureKey=Object.keys(sessionStorage).find(k=>k.startsWith('pc-snap:page:')&&k.endsWith(':diagrams'));pudlApplets.destroy(document.querySelector('#one'));sessionStorage.setItem(fixture.futureKey,JSON.stringify({t:Date.now(),v:{version:99,tabs:[{text:'future draft'}],active:0}}));});
+    const future=await p.evaluate(()=>sessionStorage.getItem(fixture.futureKey));
+    await p.reload();await p.locator('#one .notice').filter({hasText:'unsupported format'}).waitFor();
+    assert.equal(await p.evaluate(()=>{yavcSnapshot.keepAll();return sessionStorage.getItem(Object.keys(sessionStorage).find(k=>k.startsWith('pc-snap:page:')&&k.endsWith(':diagrams')));}),future);
+    await p.evaluate(()=>{const key=Object.keys(sessionStorage).find(k=>k.startsWith('pc-snap:page:')&&k.endsWith(':diagrams'));sessionStorage.setItem(key,JSON.stringify({t:Date.now(),v:{version:2,tabs:[{path:'memory:first.d2',kind:'d2',text:'pending: Keep this draft\n',view:'split',baseline:{version:1,resource:'memory:first.d2',revision:String(fixture.records.get('memory:first.d2').revision)}}],active:0}}));});
+    await p.goto(`http://127.0.0.1:${server.address().port}${prefix}lab/index.html?resourceRecovery=1&holdRead=1`);
+    await p.waitForFunction(()=>fixture.readPending&&fixture.releaseRead);
+    await p.evaluate(async()=>{fixture.removed=document.querySelector('#one');pudlApplets.destroy(fixture.removed);fixture.removed.remove();fixture.releaseRead();await new Promise(requestAnimationFrame);});
+    assert.equal(await p.evaluate(()=>fixture.removed.querySelector('.cm-editor')===null),true);
+    assert.match(await p.evaluate(()=>{yavcSnapshot.keepAll();return sessionStorage.getItem(Object.keys(sessionStorage).find(k=>k.startsWith('pc-snap:page:')&&k.endsWith(':diagrams')));}),/Keep this draft/);
     assert.deepEqual(badRequests,[]);assert.deepEqual(errors,[]);
-    console.log(engine+': extracted assets, D2/WASM, Canvas/Markdown, independent mounts, conditional saves, newer edits, conflict and disposal passed');
+    console.log(engine+': extracted assets, conditional saves, disposal, matching/stale/legacy recovery, quota refusal and future snapshot retention passed');
    }catch(e){await p.screenshot({path:path.join(evidence,engine+'-failure.png'),fullPage:true});throw e;}finally{await browser.close();}
   }
  }finally{await new Promise(resolve=>server.close(resolve));}

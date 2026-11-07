@@ -121,8 +121,8 @@
     function init(root, opts) {
         opts = opts || {};
         var n = ++count, H = window.pudlHost || {};
-        if (H.contentResources && H.snapshot) throw new Error('This resource host needs a revision-aware recovery adapter before it can restore diagrams.');
-        var resources = null;
+        if (H.contentResources && H.snapshot && (H.snapshot.version !== 2 || typeof H.snapshot.join !== 'function')) throw new Error('This resource host needs snapshot version 2 before it can restore diagrams.');
+        var resources = null, recovery = null, recoveryReady = false, recoveryKept = null;
         var tabs = [], active = -1, untitled = 0, destroyed = false;
         var settings = Object.assign({}, SETTINGS);
         var CM = null, cm = null, langs = {}, drawTimer = 0, drawSeq = 0, waiters = [], quiet = false, lsp = null, lspComp = null, inlineText = null, inlineNumber = 0;
@@ -1654,6 +1654,7 @@
         }
         async function writeResource(t, path, submitted) {
             if (resources) {
+                if (t.recoveryConflict) throw new Error('These recovered edits have no matching file revision. Download the source before reopening the file.');
                 if (!t.resource || path !== t.resource.resource) throw new Error('This resource host does not offer Save As yet.');
                 var accepted = await resources.write(t.resource, submitted);
                 if (!destroyed && tabs.indexOf(t) >= 0) t.resource = accepted;
@@ -1822,7 +1823,7 @@
 
         var unguard = window.yavcDocTabs.guard(root, {
             changed: function () { return tabs.filter(function (t) { return t.modified; }).map(tabTitle); },
-            keptOnReload: function () { return !!H.snapshot; },
+            keptOnReload: function () { return !!snap && (typeof snap.flush === 'function' ? snap.flush() : !resources); },
             keptOnClose: function () { return false; },
             saveAll: async function () {
                 for (var i = 0; i < tabs.length; i++) {
@@ -1834,9 +1835,18 @@
                 return true;
             }
         });
-        var snap = H.snapshot ? H.snapshot.join(root, function () {
+        var snap = H.snapshot && !H.contentResources ? H.snapshot.join(root, function () {
             return { tabs: tabs.map(function (t) { return { path: t.path, name: t.name || null, kind: t.kind, text: t.modified ? t.text : null, view: t.view || null }; }), active: active };
         }) : null;
+        function resourceSnapshot() {
+            if (!recoveryReady) return recoveryKept;
+            var value = { version: 2, tabs: tabs.map(function (t) {
+                return { path: t.path, name: t.name || null, kind: t.kind, text: t.modified || !t.path ? t.text : null, view: t.view || null,
+                    baseline: t.path ? recovery.capture(resources, t.resource, t.recoveryBaseline) : null };
+            }), active: active };
+            recovery.validate(value);
+            return value;
+        }
         function keep() { if (snap) { snap.changed(); } }
 
         /* === Commands ===================================================== */
@@ -1873,7 +1883,7 @@
                 cmd('new-mermaid', 'New Mermaid Diagram', 'file', null, { items: MERMAID_STYLES.map(function (s) { return { id: 'new-' + s.id, label: s.label, run: function () { newDiagram(s, 'mermaid'); } }; }) }),
                 cmd('new-canvas', 'New Canvas', 'file', null, { items: CANVAS_STYLES.map(function (s) { return { id: 'new-canvas-' + s[0], label: s[1], run: function () { return newCanvas(s[0]); } }; }) }),
                 cmd('open', 'Open…', 'folder', open, { shortcut: 'Mod+O' }),
-                cmd('save', 'Save', 'yavc-save', save, { shortcut: 'Mod+S', disabled: function () { var t = current(); return !t || (resources ? !resources.canWrite(t.resource) : !H.fs || !H.fs.writeText && !H.fs.save); } }),
+                cmd('save', 'Save', 'yavc-save', save, { shortcut: 'Mod+S', disabled: function () { var t = current(); return !t || (resources ? !resources.canWrite(t.resource) : !H.fs || !H.fs.writeText && !H.fs.save); }, reason: function () { var t = current(); return t && t.recoveryConflict ? 'Recovered edits have no matching file revision. Download the source before reopening the file.' : undefined; } }),
                 cmd('save-as', 'Save As…', 'yavc-save-as', saveAs, { disabled: function () { return !current() || !!resources || !H.fs || !H.fs.save; }, reason: function () { return resources || !H.fs || !H.fs.save ? 'This host does not offer Save As.' : undefined; } }),
                 cmd('close-diagram', 'Close Diagram', null, function () { closeTab(active); }, { disabled: function () { return !current(); } }),
                 cmd('undo', 'Undo', 'yavc-undo', function () { if (cm) { CM.undo(cm); } }, { builtIn: 'Mod-z', glyphOnly: true }),
@@ -1965,6 +1975,8 @@
             if (H.contentResources) {
                 var resourceAPI = await once('resources', asset('content-kit/resources.js'), 'yavcContentResources');
                 resources = resourceAPI.create(H.contentResources);
+                recovery = await once('recovery', asset('content-kit/recovery.js'), 'yavcContentRecovery');
+                if (recovery.version !== 1 || typeof resources.baseline !== 'function') throw new Error('The content recovery modules are incompatible. Reload with matching package assets.');
             }
             CM = await got[0].libs();
             lspComp = new CM.Compartment();
@@ -1978,15 +1990,26 @@
             if (destroyed) { return; }
             fitInspector();
             applyFit();
+            if (resources && H.snapshot) {
+                snap = H.snapshot.join(root, resourceSnapshot, { validate: recovery.validate });
+                recoveryKept = snap.kept;
+                if (typeof snap.flush !== 'function') { snap.leave(); snap = null; throw new Error('Snapshot version 2 must acknowledge recovery writes.'); }
+            }
             /* The tabs kept across a reload come back first, unsaved text and
                all; then the address's file comes to the front. */
             var kept = snap && snap.kept;
             if (kept && kept.tabs) {
                 for (var i = 0; i < kept.tabs.length; i++) {
                     var k = kept.tabs[i], text = k.text;
-                    if (text == null && k.path && H.fs && H.fs.readText) { text = await H.fs.readText(k.path).catch(function () { return null; }); }
+                    var restored = null;
+                    if (resources && k.path) {
+                        try { restored = await recovery.restore(resources, k.path, k.baseline, text); text = restored.text; }
+                        catch (err) { if (destroyed) return; say('A saved tab could not be reopened: ' + err.message, 'warn'); continue; }
+                    } else if (text == null && k.path && H.fs && H.fs.readText) { text = await H.fs.readText(k.path).catch(function () { return null; }); }
+                    if (destroyed) return;
                     if (text == null) { continue; }
-                    var t = makeTab(text, k.path || null, EXT[k.kind] ? k.kind : null, k.view);
+                    var t = makeTab(text, k.path || null, Object.hasOwn(EXT, k.kind) ? k.kind : null, k.view);
+                    if (restored) { t.resource = restored.snapshot; t.recoveryBaseline = restored.baseline; t.recoveryConflict = restored.conflict; }
                     if (!k.path && k.name && /^untitled-\d+\.(d2|mmd|canvas)$/.test(k.name)) { t.name = k.name; untitled = Math.max(untitled, +/\d+/.exec(k.name)[0]); }
                     t.modified = k.text != null;
                     tabs.push(t);
@@ -1998,6 +2021,8 @@
             if (destroyed) return;
             if (!tabs.length) { tabs.push(makeTab(D2_STYLES[0].text, null, 'd2')); activateTab(0); }
             if (view && !file) { setView(view); }
+            recoveryReady = true;
+            if (tabs.some(function (t) { return t.recoveryConflict; })) say('Recovered edits have no matching file revision. Download the source to keep a copy before reopening the file. The file has not been overwritten.', 'warn');
             announce();
         })().catch(function (err) { if (!destroyed) { root.innerHTML = '<div class="notice danger" role="alert"><div class="notice-content"><p class="notice-title">Diagrams could not start</p><p class="notice-body">' + esc(err.message) + '</p></div></div>'; } });
 
