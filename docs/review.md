@@ -1,5 +1,13 @@
 # Stem-to-stern review, November 2026
 
+## Resource creation and Save As foundation, 2026-11-07
+
+The experimental resource capability now supports optional create-only destinations and host-owned Save As. The prepared guest adapter uses the existing file picker and VFS, captures destination revisions, and keeps errors inside the picker. It uses the separate `contentResourceAdapter` host extension because the host kit reserves `services` for named URLs. Production applets retain their existing file path until the remaining adoption gates pass.
+
+Diagrams 0.24.0 saves unbound drafts through the host chooser, accepts the host-selected identity and display name, and leaves later edits dirty. Agent saves to new explicit destinations use atomic creation and cannot replace existing files. Copy cancellation and failed acknowledgement retain the old binding. Independent review found missing disposal cancellation and display names lost during conflicted recovery. Instance signals now close pending pickers, prevent a picker after delayed loading, and guard the mutation inside the VFS transaction. Display names persist independently of a writable snapshot. Source review is clean after those fixes.
+
+The real host fixture passes Chromium, Firefox and WebKit with captured text, cancellation, destination re-confirmation after another tab changes the file, create-only agent saves, disposal during selection, a blocked authority transaction and delayed adapter loading. The independent-host artifact passes all three engines with opaque host-selected identities, copied drafts, later dirty edits and display-name retention through stale recovery. Unit tests cover creation, acknowledgements and cancellation; the three-engine VFS fixture also checks simultaneous creators. Existing ordinary-site consumers retain their save/reload behavior. The full repository gate passes with 64 browser-module tests.
+
 ## Revision-aware recovery foundation, 2026-11-07
 
 The shared content recovery helper retains original revision metadata and draft text without accessing storage. Diagrams 0.23.0 accepts a version 2 snapshot host, restores matching baselines through fresh issued snapshots, and preserves stale, unavailable and older unversioned drafts without granting them the current file's write baseline. It disables conflicting saves with a reason and retains source download. Production resource-capability adoption remains gated on creation/Save As, complete read-only policy and the remaining applet adapters.

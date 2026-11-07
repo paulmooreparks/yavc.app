@@ -45,3 +45,23 @@ test('an unchanged save may retain a content-based revision', async () => {
     const loaded=await client.read('one'), accepted=await client.write(loaded,loaded.text);
     assert.equal(accepted.revision,loaded.revision); assert.equal(accepted.text,loaded.text);
 });
+test('creation captures submitted text, refuses duplicates and validates destination identity',async()=>{
+    const files=new Map(),authority={version:1,read:async({resource})=>({resource,...files.get(resource),writable:true}),
+        async create({resource,text}){if(files.has(resource))throw new Error('Already exists');files.set(resource,{text,revision:'1'});return {resource,revision:'1',name:'New.canvas',writable:true};}};
+    const client=create(authority),first=await client.create('new','submitted');assert.equal(first.text,'submitted');assert.equal(first.name,'New.canvas');
+    await assert.rejects(client.create('new','overwrite'),/exists/);assert.equal(files.get('new').text,'submitted');
+    const wrong=create({...authority,create:async()=>({resource:'different',revision:'1'})});await assert.rejects(wrong.create('requested','draft'),/different/);
+});
+test('Save As cancellation leaves its source baseline intact and successful copies use the host destination',async()=>{
+    let release,request;const authority=host();
+    authority.saveAs=async captured=>{request=captured;await new Promise(r=>{release=r;});return {resource:'opaque:chosen',revision:'copy-1',name:'Chosen.canvas',writable:true};};
+    const client=create(authority),source=await client.read('source'),options={name:'Suggested.canvas',sourceResource:'source'};
+    const pending=client.saveAs(options,'captured');options.name='later';release();const copy=await pending;
+    assert.equal(request.name,'Suggested.canvas');assert.equal(copy.resource,'opaque:chosen');assert.equal(copy.name,'Chosen.canvas');assert.equal(copy.text,'captured');assert.equal(source.revision,'1');
+    authority.saveAs=async()=>null;assert.equal(await client.saveAs(options,'cancelled'),null);assert.equal(source.text,'original');
+    authority.saveAs=async()=>({resource:'invalid-ack',revision:'1',writable:true});await assert.rejects(client.saveAs(options,'draft'),/display name/);
+});
+test('a display name survives ordinary saves when the host omits unchanged metadata',async()=>{
+    const client=create({...host(),read:async({resource})=>({resource,revision:'1',text:'original',writable:true,name:'Drawing.d2'})});
+    const saved=await client.write(await client.read('opaque:id'),'changed');assert.equal(saved.name,'Drawing.d2');
+});

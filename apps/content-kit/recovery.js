@@ -20,6 +20,7 @@
         value.tabs.forEach(function (tab) {
             if (!tab || typeof tab !== 'object') throw new Error('The recovery tab is invalid.');
             if (tab.path != null) token(tab.path);
+            if (tab.name != null && (typeof tab.name !== 'string' || !tab.name || tab.name.length > 255 || /[\x00-\x1f\x7f]/.test(tab.name))) throw new Error('The recovered display name is invalid.');
             if (tab.text != null && (typeof tab.text !== 'string' || tab.text.length > MAX_TEXT)) throw new Error('The recovered draft exceeds its text limit.');
             total += tab.text ? tab.text.length : 0;
             if (total > MAX_TOTAL) throw new Error('The recovery snapshot exceeds its text limit.');

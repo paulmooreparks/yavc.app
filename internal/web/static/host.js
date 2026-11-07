@@ -36,6 +36,11 @@
     var fs = U.siteFs;
     function withDialog() { return Promise.all([fs(), fileBrowser()]); }
     function isText(blob) { return /^text\/|json|xml|javascript/.test(blob.type || 'text/plain'); }
+    var resourceAdapter = null;
+    function resources() {
+        if (!resourceAdapter) resourceAdapter = Promise.all([withDialog(), U.loadGlobal(versioned('/static/resource-host.js'), 'yavcResourceHost')]).then(function (parts) { return parts[1].create(parts[0][0], parts[0][1]); }).catch(function (err) { resourceAdapter = null; throw err; });
+        return resourceAdapter;
+    }
 
     /* The applets with published actions, for find(). */
     var appletManifests = (function () {
@@ -101,6 +106,13 @@
         },
         pages: '/', pudl: '/pudl/',
         snapshot: window.pcSnapshot,
+        /* Prepared for explicit capability adoption after the applet gates. */
+        contentResourceAdapter: { version: 1,
+            read: function (request) { return resources().then(function (adapter) { return adapter.read(request); }); },
+            write: function (request) { return resources().then(function (adapter) { return adapter.write(request); }); },
+            create: function (request) { return resources().then(function (adapter) { return adapter.create(request); }); },
+            saveAs: function (request, context) { return resources().then(function (adapter) { return adapter.saveAs(request, context); }); }
+        },
         services: {},
         actions: {
             run: function (ref, input) {

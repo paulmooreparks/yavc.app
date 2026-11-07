@@ -1175,16 +1175,34 @@
             return queued(async function () {
                 var path = resourcePath(request.resource), record = await store.read(), entry = store.parse(record.raw).files[path];
                 if (!entry || entry.t !== 'f') throw new Error('The text resource does not exist.');
-                return { resource: request.resource, revision: entry.revision, text: entry.c, writable: true };
+                return { resource: request.resource, revision: entry.revision, text: entry.c, writable: true, name: path.slice(path.lastIndexOf('/') + 1) };
             });
         },
-        write: function (request) {
+        create: function (request, context) {
+            request = { resource: request.resource, text: request.text };
+            return queued(async function () {
+                var path = resourcePath(request.resource);
+                if (typeof request.text !== 'string' || request.text.length > FILE_MAX) throw new Error('The resource exceeds the 256 KB text limit.');
+                var record = await store.update(function (current) {
+                    if (context && context.signal && context.signal.aborted) throw new DOMException('The save was cancelled.', 'AbortError');
+                    var data = store.parse(current.raw), parent = path.slice(0, path.lastIndexOf('/'));
+                    if (data.files[path]) throw new Error('The destination already exists. Choose it again before replacing it.');
+                    if (parent && (!data.files[parent] || data.files[parent].t !== 'd') && !Object.keys(data.files).some(function (key) { return key.startsWith(parent + '/'); })) throw new Error('The destination folder no longer exists.');
+                    data.files[path] = { t: 'f', c: request.text, m: Date.now() };
+                    return JSON.stringify(data);
+                });
+                homeLoad(record); publishHome(); emit('home');
+                return { resource: request.resource, revision: store.parse(record.raw).files[path].revision, writable: true, name: path.slice(path.lastIndexOf('/') + 1) };
+            });
+        },
+        write: function (request, context) {
             request = { resource: request.resource, expectedRevision: request.expectedRevision, text: request.text };
             return queued(async function () {
                 var path = resourcePath(request.resource);
                 if (typeof request.text !== 'string' || request.text.length > FILE_MAX) throw new Error('The resource exceeds the 256 KB text limit.');
                 if (typeof request.expectedRevision !== 'string' || !request.expectedRevision || request.expectedRevision.length > 4096) throw new Error('A baseline revision is required.');
                 var record = await store.update(function (current) {
+                    if (context && context.signal && context.signal.aborted) throw new DOMException('The save was cancelled.', 'AbortError');
                     var data = store.parse(current.raw), entry = data.files[path];
                     if (!entry || entry.t !== 'f' || entry.revision !== request.expectedRevision) throw new Error('The file changed or was deleted. Your text was not saved.');
                     if (entry.c === request.text) return current.raw;
@@ -1192,7 +1210,7 @@
                     return JSON.stringify(data);
                 });
                 homeLoad(record); publishHome(); emit('home');
-                return { resource: request.resource, revision: store.parse(record.raw).files[path].revision, writable: true };
+                return { resource: request.resource, revision: store.parse(record.raw).files[path].revision, writable: true, name: path.slice(path.lastIndexOf('/') + 1) };
             });
         }
     });

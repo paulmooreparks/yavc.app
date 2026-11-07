@@ -552,7 +552,8 @@
            start      the folder to start in (default ~)
            name       Save as: the name to suggest
            current    Save as: the file being saved, which needs no
-                      question before it is replaced
+                      question before it is replaced, unless conditional
+                      replacement is requested
            accept     extensions, such as ['.json']: Open lists and takes
                       only those files, and the computer's chooser too
            check(node)  Open: why this file won't do, or null
@@ -566,6 +567,11 @@
                       dialog shows why and stays open to choose again; it
                       may answer false to stay open saying nothing. From GK
                       Companion's Open and Save dialogs.
+           conditional    Save as: capture an existing entry's revision in
+                      expectedRevision, or null for a new destination.
+                      Changed revisions require another Replace confirmation.
+           signal         optional AbortSignal: close a pending picker and
+                      prevent a new commit when its owning applet is disposed.
          })
 
        resolves to one of
@@ -585,6 +591,7 @@
     var PICK_SIZE_KEY = 'pc-picker-size';
     function pick(F, o) {
         o = o || {};
+        if (o.signal && o.signal.aborted) return Promise.resolve(null);
         var save = o.mode === 'save', id = 'fb-pick-' + (++pickCount);
         var accept = (o.accept || []).map(function (x) { return x.toLowerCase(); });
         var fits = function (name) { return !accept.length || accept.some(function (x) { return name.toLowerCase().slice(-x.length) === x; }); };
@@ -629,7 +636,7 @@
         (o.host || document.body).appendChild(dlg);
         var q = function (s) { return dlg.querySelector('[data-pick="' + s + '"]'); };
         var input = q('input'), error = q('error'), note = q('note'), ok = q('ok'), dl = q('download');
-        var okLabel = ok.textContent, replacing = null, done = null, b = null, busy = false, readOnlyHere = false;
+        var okLabel = ok.textContent, replacing = null, replacingRevision = null, done = null, b = null, busy = false, readOnlyHere = false, ro = null;
 
         /* The size it was last given, as far as it fits the window. */
         try {
@@ -652,7 +659,7 @@
             return /[.!?]$/.test(m) ? m : m + '.';
         }
         function realName(v) { return v.indexOf('/') >= 0 ? v.slice(v.lastIndexOf('/') + 1) : v; }
-        function resetReplace() { replacing = null; if (!busy) { ok.textContent = okLabel; } }
+        function resetReplace() { replacing = null; replacingRevision = null; if (!busy) { ok.textContent = okLabel; } }
 
         /* Whether the folder shown can take a new file or folder: one of the
            reader's own (~), or for an admin, the server's. */
@@ -689,6 +696,8 @@
 
         function finish(value) {
             if (!done) { return; }
+            if (o.signal) o.signal.removeEventListener('abort', abort);
+            if (ro) ro.disconnect();
             var d = done;
             done = null;
             keepSize();
@@ -697,6 +706,7 @@
             dlg.remove();
             d(value);
         }
+        function abort() { finish(null); }
 
         /* A choice: done at once, or with commit, done while the dialog
            waits, which closes only when it worked. */
@@ -704,7 +714,7 @@
             if (!o.commit) { finish(value); return; }
             say('');
             setBusy(true);
-            Promise.resolve().then(function () { return o.commit(value); }).then(function (result) {
+            Promise.resolve().then(function () { if (!done || o.signal && o.signal.aborted) return false; return o.commit(value); }).then(function (result) {
                 if (!done) { return; }
                 setBusy(false);
                 if (result === false) { return; }
@@ -748,15 +758,20 @@
             var existing = F.childNamed(target, base);
             if (existing && existing.children) { say(base + ' is a folder.'); return; }
             var path = F.displayPath(target).replace(/\/$/, '') + '/' + base;
+            var expected = existing ? existing.revision : null;
+            if (o.conditional && existing && (typeof expected !== 'string' || !expected)) { say('This destination does not support conditional replacement.'); return; }
             /* Replacing a file takes a second press, on a button that says
                so; any change to the name asks again. */
-            if (existing && path !== o.current && replacing !== path) {
+            if (existing && (o.conditional || path !== o.current) && (replacing !== path || o.conditional && replacingRevision !== expected)) {
                 replacing = path;
+                replacingRevision = expected;
                 ok.textContent = 'Replace';
                 say(base + ' already exists here. Replace it?');
                 return;
             }
-            choose({ path: path, dir: target, name: base });
+            var choice = { path: path, dir: target, name: base };
+            if (o.conditional) choice.expectedRevision = expected;
+            choose(choice);
         }
 
         /* New folder: a name, then a folder of that name here. */
@@ -808,7 +823,7 @@
             input.addEventListener('input', function () { resetReplace(); say(''); });
             /* A size set by dragging the corner is kept. */
             if (window.ResizeObserver) {
-                var ro = new ResizeObserver(function () {
+                ro = new ResizeObserver(function () {
                     var s = dlg.offsetWidth + 'x' + dlg.offsetHeight;
                     if (sizeAtOpen && s !== sizeAtOpen) { dlg.dataset.resized = '1'; }
                 });
@@ -856,6 +871,7 @@
                     choose({ file: f });
                 });
             }
+            if (o.signal) { if (o.signal.aborted) { finish(null); return; } o.signal.addEventListener('abort', abort, { once: true }); }
             dlg.showModal();
             sizeAtOpen = dlg.offsetWidth + 'x' + dlg.offsetHeight;
             folderState();

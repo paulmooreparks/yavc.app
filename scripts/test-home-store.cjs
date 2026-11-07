@@ -51,6 +51,12 @@ async function run(engine, base) {
         assert.notEqual(accepted.revision,first.revision);
         assert.match(await b.evaluate(async r=>{try{await pcSiteFs.contentResources.write({...r,expectedRevision:r.revision,text:'stale'});}catch(e){return e.message;}},stale),/changed/);
         assert.equal((await read(b)).text,'accepted');
+        const created=await Promise.all([a,b].map((p,i)=>p.evaluate(async i=>{
+            try{const r=await pcSiteFs.contentResources.create({resource:'~/new-resource.md',text:'creator '+i});return {created:true,revision:r.revision};}catch(e){return {error:e.message};}
+        },i)));
+        assert.equal(created.filter(r=>r.created).length,1);assert.match(created.find(r=>r.error).error,/exists/);
+        assert.match((await a.evaluate(()=>pcSiteFs.contentResources.read({resource:'~/new-resource.md'}))).text,/creator [01]/);
+        assert.match(await a.evaluate(async()=>{try{await pcSiteFs.contentResources.create({resource:'~/absent/new.md',text:'lost'});}catch(e){return e.message;}}),/folder/);
         const results=await Promise.all([a.evaluate(()=>pcSiteFs.write(pcSiteFs.home(),'a.md','A',false)),b.evaluate(()=>pcSiteFs.write(pcSiteFs.home(),'b.md','B',false))]);
         // Conflicts can be returned, but acknowledged writes must survive.
         const texts=await a.evaluate(async()=>{await pcSiteFs.sync();return ['a.md','b.md'].map(p=>{const n=pcSiteFs.resolve(pcSiteFs.home(),p);return n&&pcSiteFs.readHome(n);});});
@@ -98,7 +104,7 @@ async function run(engine, base) {
         assert.equal(await a.evaluate(()=>pcSiteFs.readHome(pcSiteFs.resolve(pcSiteFs.home(),'seed.md'))),'seed');
         assert.deepEqual(errors,[]);
         // A malformed source is retained, and cannot become an empty home.
-        const bad=await browser.newContext(), p=await bad.newPage(); await p.goto(base);
+        const bad=await browser.newContext(), p=await bad.newPage(); await p.goto(base);await p.waitForFunction(()=>!!window.pcSiteFs);
         await p.evaluate(()=>localStorage.setItem('pc-terminal-home','broken'));
         assert.match(await p.evaluate(async()=>{try{await pcSiteFs.load();}catch(e){return e.message;}}),/JSON|Unexpected/);
         assert.equal(await p.evaluate(()=>localStorage.getItem('pc-terminal-home')),'broken');
@@ -107,7 +113,7 @@ async function run(engine, base) {
         assert.match(await p.evaluate(async()=>{try{await pcSiteFs.load();}catch(e){return e.message;}}),/picture database is unavailable/);
         assert.equal(await p.evaluate(()=>localStorage.getItem('pc-terminal-home')),missing);
         await bad.close();
-        const full=await browser.newContext(), q=await full.newPage(); await q.goto(base);
+        const full=await browser.newContext(), q=await full.newPage(); await q.goto(base);await q.waitForFunction(()=>!!window.pcSiteFs);
         await q.evaluate(()=>{
             const files={};for(let i=0;i<9;i++)files['/large-'+i+'.txt']={t:'f',c:'x'.repeat(230000),m:1};
             const data={files};files['/large-8.txt'].c+='x'.repeat(2*1024*1024-1-JSON.stringify(data).length);

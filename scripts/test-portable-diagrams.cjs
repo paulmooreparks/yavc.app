@@ -119,6 +119,14 @@ const types={'.html':'text/html','.js':'text/javascript','.css':'text/css','.jso
     await p.evaluate(async()=>{fixture.removed=document.querySelector('#one');pudlApplets.destroy(fixture.removed);fixture.removed.remove();fixture.releaseRead();await new Promise(requestAnimationFrame);});
     assert.equal(await p.evaluate(()=>fixture.removed.querySelector('.cm-editor')===null),true);
     assert.match(await p.evaluate(()=>{yavcSnapshot.keepAll();return sessionStorage.getItem(Object.keys(sessionStorage).find(k=>k.startsWith('pc-snap:page:')&&k.endsWith(':diagrams')));}),/Keep this draft/);
+    await p.goto(`http://127.0.0.1:${server.address().port}${prefix}lab/index.html?resourceRecovery=1&creation=1`);await p.locator('#one .dg-canvas img').waitFor();
+    await p.evaluate(()=>{fixture.nextCopy=null;});await p.evaluate(()=>pudlCommands.run('save-as',null,document.querySelector('#one')));assert.equal(await p.locator('#one [data-role="where"]').innerText(),'memory:first.d2');
+    await p.evaluate(()=>{fixture.nextCopy={resource:'opaque:allocated-copy',name:'Human File.d2',expectedRevision:null};fixture.hold();fixture.pendingCopy=pudlCommands.run('save-as',null,document.querySelector('#one'));});
+    await p.waitForFunction(()=>fixture.copies.length===2);await recoveredSource.click();await p.keyboard.press('ControlOrMeta+End');await p.keyboard.type('\nnewer: Keep dirty');await p.evaluate(async()=>{fixture.release();await fixture.pendingCopy;});
+    assert.doesNotMatch(await p.evaluate(()=>fixture.records.get('opaque:allocated-copy').text),/Keep dirty/);assert.equal(await p.locator('#one .doc-tab-dirty').count(),1);assert.equal(await p.evaluate(()=>fixture.records.get('memory:first.d2').text),'external: Protected file\n');
+    await p.evaluate(()=>{fixture.recovery.flush();fixture.records.get('opaque:allocated-copy').revision++;fixture.persist();});await p.reload();await p.locator('#one .dg-canvas img').waitFor();await p.locator('#one .yavc-notice').filter({hasText:'Recovered edits'}).waitFor();
+    const recoveredDownload=p.waitForEvent('download');await p.evaluate(()=>pudlCommands.run('export-source',null,document.querySelector('#one')));assert.equal((await recoveredDownload).suggestedFilename(),'Human File.d2');
+    assert.match(await recoveredSource.innerText(),/Keep dirty/);assert.deepEqual(await p.evaluate(()=>[typeof pcSiteFs,typeof pcConfig]),['undefined','undefined']);
     assert.deepEqual(badRequests,[]);assert.deepEqual(errors,[]);
     console.log(engine+': extracted assets, conditional saves, disposal, matching/stale/legacy recovery, quota refusal and future snapshot retention passed');
    }catch(e){await p.screenshot({path:path.join(evidence,engine+'-failure.png'),fullPage:true});throw e;}finally{await browser.close();}
