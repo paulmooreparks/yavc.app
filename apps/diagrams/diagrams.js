@@ -123,7 +123,7 @@
         var n = ++count, H = window.pudlHost || {};
         if (H.contentResources && H.snapshot && (H.snapshot.version !== 2 || typeof H.snapshot.join !== 'function')) throw new Error('This resource host needs snapshot version 2 before it can restore diagrams.');
         var resources = null, recovery = null, recoveryReady = false, recoveryKept = null;
-        var tabs = [], active = -1, untitled = 0, destroyed = false;
+        var tabs = [], active = -1, untitled = 0, destroyed = false, lifetime = new AbortController();
         var settings = Object.assign({}, SETTINGS);
         var CM = null, cm = null, langs = {}, drawTimer = 0, drawSeq = 0, waiters = [], quiet = false, lsp = null, lspComp = null, inlineText = null, inlineNumber = 0;
         var start = new URLSearchParams(String(opts.state || '').replace(/^\?/, ''));
@@ -1525,7 +1525,7 @@
 
         /* === Tabs ========================================================= */
 
-        function tabTitle(t) { return t.path ? baseName(t.path) : t.name; }
+        function tabTitle(t) { return t.resource && t.resource.name || t.name || (t.path ? baseName(t.path) : 'Untitled'); }
         var tabRowApi = window.yavcDocTabs ? window.yavcDocTabs.attach(el.tabsEl, {
             tabs: function () { return tabs.map(function (t) { return { name: tabTitle(t), path: t.path, modified: t.modified }; }); },
             active: function () { return active; },
@@ -1679,29 +1679,41 @@
         }
         async function saveAs() {
             var t = current();
-            if (!t || resources || !H.fs || !H.fs.save) { return; }
+            if (!t) return;
+            if (resources) {
+                if (!resources.canSaveAs()) return;
+                var captured = t.text;
+                return queueSave(t, async function (ticket) {
+                    var accepted = await resources.saveAs({ name: tabTitle(t), sourceResource: t.path }, captured, { host: root, signal: lifetime.signal });
+                    if (accepted) savedAs(t, accepted.resource, captured, ticket, accepted);
+                }).catch(function (err) { if (destroyed) return; if (tabs.indexOf(t) >= 0) say('Save As was not acknowledged: ' + err.message, true); throw err; });
+            }
+            if (!H.fs || !H.fs.save) return;
             var submitted = t.text, blob = new Blob([submitted], { type: 'text/plain' });
             return queueSave(t, async function (ticket) {
                 var res = await H.fs.save({ title: 'Save the Diagram As', name: tabTitle(t), host: root, start: t.path ? t.path.replace(/\/[^\/]*$/, '') : '~/Documents', blob: blob }).catch(function (e) { t.saveFailed = true; t.modified = true; say(e.message, true); return null; });
                 if (!res || destroyed || tabs.indexOf(t) < 0) { return; }
                 if (res.path) {
-                    saved(t, res.path, submitted, ticket, true);
-                    /* A new suffix may make it the other language. */
-                    var kind = kindOf(res.path, t.text);
-                    if (kind !== t.kind) {
-                        t.kind = kind;
-                        if (t === current()) { finishInlineText(false); stash(); }
-                        if (t.canvas) { t.canvas.destroy(); t.canvas = null; }
-                        if (t.cv) { t.cv.destroy(); t.cv = null; }
-                        t.svg = null; t.size = null; t.cvPending = null;
-                        t.state = stateFor(t, t.text);
-                        if (t === current()) { showTab(t); el.kind.textContent = KIND_NAME[kind]; root.setAttribute('data-kind', kind); drawNow(); }
-                    }
-                    if (t === current()) { el.where.textContent = t.path; el.where.title = el.where.textContent; say('Saved ' + t.path + (t.modified ? '; newer edits are still unsaved.' : '.')); announce(); }
+                    savedAs(t, res.path, submitted, ticket, null);
                 } else if (res.download) { window.yavcUtil.download(res.download, blob); say('Downloaded ' + res.download + '.'); }
                 commandsChanged();
                 keep();
             });
+        }
+        function savedAs(t, path, submitted, ticket, accepted) {
+            if (!saved(t, path, submitted, ticket, true)) return;
+            t.name = accepted && accepted.name || null;
+            if (accepted) { t.resource = accepted; t.recoveryBaseline = null; t.recoveryConflict = null; }
+            var kind = kindOf(accepted && accepted.name || path, t.text);
+            if (kind !== t.kind) {
+                t.kind = kind;
+                if (t === current()) { finishInlineText(false); stash(); }
+                if (t.canvas) { t.canvas.destroy(); t.canvas = null; }
+                if (t.cv) { t.cv.destroy(); t.cv = null; }
+                t.svg = null; t.size = null; t.cvPending = null; t.state = stateFor(t, t.text);
+                if (t === current()) { showTab(t); el.kind.textContent = KIND_NAME[kind]; root.setAttribute('data-kind', kind); drawNow(); }
+            }
+            if (t === current()) { window.yavcUtil.notice(el.tabsEl, ''); el.where.textContent = t.path; el.where.title = el.where.textContent; say('Saved ' + (accepted && accepted.name || path) + (t.modified ? '; newer edits are still unsaved.' : '.')); announce(); }
         }
         function newDiagram(style, kind) {
             openInTab(style.text, null, kind, null);
@@ -1841,7 +1853,7 @@
         function resourceSnapshot() {
             if (!recoveryReady) return recoveryKept;
             var value = { version: 2, tabs: tabs.map(function (t) {
-                return { path: t.path, name: t.name || null, kind: t.kind, text: t.modified || !t.path ? t.text : null, view: t.view || null,
+                return { path: t.path, name: t.resource && t.resource.name || t.name || null, kind: t.kind, text: t.modified || !t.path ? t.text : null, view: t.view || null,
                     baseline: t.path ? recovery.capture(resources, t.resource, t.recoveryBaseline) : null };
             }), active: active };
             recovery.validate(value);
@@ -1883,8 +1895,8 @@
                 cmd('new-mermaid', 'New Mermaid Diagram', 'file', null, { items: MERMAID_STYLES.map(function (s) { return { id: 'new-' + s.id, label: s.label, run: function () { newDiagram(s, 'mermaid'); } }; }) }),
                 cmd('new-canvas', 'New Canvas', 'file', null, { items: CANVAS_STYLES.map(function (s) { return { id: 'new-canvas-' + s[0], label: s[1], run: function () { return newCanvas(s[0]); } }; }) }),
                 cmd('open', 'Open…', 'folder', open, { shortcut: 'Mod+O' }),
-                cmd('save', 'Save', 'yavc-save', save, { shortcut: 'Mod+S', disabled: function () { var t = current(); return !t || (resources ? !resources.canWrite(t.resource) : !H.fs || !H.fs.writeText && !H.fs.save); }, reason: function () { var t = current(); return t && t.recoveryConflict ? 'Recovered edits have no matching file revision. Download the source before reopening the file.' : undefined; } }),
-                cmd('save-as', 'Save As…', 'yavc-save-as', saveAs, { disabled: function () { return !current() || !!resources || !H.fs || !H.fs.save; }, reason: function () { return resources || !H.fs || !H.fs.save ? 'This host does not offer Save As.' : undefined; } }),
+                cmd('save', 'Save', 'yavc-save', save, { shortcut: 'Mod+S', disabled: function () { var t = current(); return !t || (resources ? !t.path ? !resources.canSaveAs() : !resources.canWrite(t.resource) : !H.fs || !H.fs.writeText && !H.fs.save); }, reason: function () { var t = current(); return t && t.recoveryConflict ? 'Recovered edits have no matching file revision. Use Save As or download the source.' : undefined; } }),
+                cmd('save-as', 'Save As…', 'yavc-save-as', saveAs, { disabled: function () { return !current() || (resources ? !resources.canSaveAs() : !H.fs || !H.fs.save); }, reason: function () { return resources ? !resources.canSaveAs() ? 'This host does not offer Save As.' : undefined : !H.fs || !H.fs.save ? 'This host does not offer Save As.' : undefined; } }),
                 cmd('close-diagram', 'Close Diagram', null, function () { closeTab(active); }, { disabled: function () { return !current(); } }),
                 cmd('undo', 'Undo', 'yavc-undo', function () { if (cm) { CM.undo(cm); } }, { builtIn: 'Mod-z', glyphOnly: true }),
                 cmd('redo', 'Redo', 'yavc-redo', function () { if (cm) { CM.redo(cm); } }, { builtIn: 'Mod-y', glyphOnly: true }),
@@ -1976,7 +1988,7 @@
                 var resourceAPI = await once('resources', asset('content-kit/resources.js'), 'yavcContentResources');
                 resources = resourceAPI.create(H.contentResources);
                 recovery = await once('recovery', asset('content-kit/recovery.js'), 'yavcContentRecovery');
-                if (recovery.version !== 1 || typeof resources.baseline !== 'function') throw new Error('The content recovery modules are incompatible. Reload with matching package assets.');
+                if (recovery.version !== 1 || typeof resources.baseline !== 'function' || typeof resources.canSaveAs !== 'function') throw new Error('The content recovery modules are incompatible. Reload with matching package assets.');
             }
             CM = await got[0].libs();
             lspComp = new CM.Compartment();
@@ -2009,7 +2021,7 @@
                     if (destroyed) return;
                     if (text == null) { continue; }
                     var t = makeTab(text, k.path || null, Object.hasOwn(EXT, k.kind) ? k.kind : null, k.view);
-                    if (restored) { t.resource = restored.snapshot; t.recoveryBaseline = restored.baseline; t.recoveryConflict = restored.conflict; }
+                    if (restored) { t.resource = restored.snapshot; t.recoveryBaseline = restored.baseline; t.recoveryConflict = restored.conflict; if (k.name) t.name = k.name; }
                     if (!k.path && k.name && /^untitled-\d+\.(d2|mmd|canvas)$/.test(k.name)) { t.name = k.name; untitled = Math.max(untitled, +/\d+/.exec(k.name)[0]); }
                     t.modified = k.text != null;
                     tabs.push(t);
@@ -2022,7 +2034,7 @@
             if (!tabs.length) { tabs.push(makeTab(D2_STYLES[0].text, null, 'd2')); activateTab(0); }
             if (view && !file) { setView(view); }
             recoveryReady = true;
-            if (tabs.some(function (t) { return t.recoveryConflict; })) say('Recovered edits have no matching file revision. Download the source to keep a copy before reopening the file. The file has not been overwritten.', 'warn');
+            if (tabs.some(function (t) { return t.recoveryConflict; })) say('Recovered edits have no matching file revision. ' + (resources && resources.canSaveAs() ? 'Use Save As to keep a copy, or download the source.' : 'Download the source to keep a copy before reopening the file.') + ' The file has not been overwritten.', 'warn');
             announce();
         })().catch(function (err) { if (!destroyed) { root.innerHTML = '<div class="notice danger" role="alert"><div class="notice-content"><p class="notice-title">Diagrams could not start</p><p class="notice-body">' + esc(err.message) + '</p></div></div>'; } });
 
@@ -2076,7 +2088,13 @@
                 var submitted = t.text;
                 return queueSave(t, async function (ticket) {
                     var destination = input.path ? String(input.path) : t.path;
-                    if (resources && destination !== t.path) throw new Error('This host does not offer Save As.');
+                    if (resources && destination !== t.path) {
+                        if (!destination) throw new Error('Give an explicit destination for the new resource.');
+                        var created = await resources.create(destination, submitted);
+                        if (destroyed || tabs.indexOf(t) < 0) throw new Error('The resource was created after its diagram was closed.');
+                        savedAs(t, created.resource, submitted, ticket, created);
+                        return { output: summary(t, tabs.indexOf(t)) };
+                    }
                     if (input.path) {
                         /* An agent's diagram never takes the name of a file that
                            exists, or saving would overwrite it unasked. */
@@ -2211,6 +2229,7 @@
             destroy: function () {
                 if (commonToolbar) { commonToolbar.destroy(); }
                 destroyed = true;
+                lifetime.abort();
                 finishInlineText(false); inspectorSize.disconnect();
                 modeWatch.disconnect();
                 if (darkQuery) { darkQuery.removeEventListener('change', modeChanged); }
