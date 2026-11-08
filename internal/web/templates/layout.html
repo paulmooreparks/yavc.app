@@ -12,6 +12,7 @@
   <meta name="color-scheme" content="light dark">
   <title>{{.Title}}{{if ne .Title .Site}} · {{.Site}}{{end}}</title>
   <meta name="pc-public-origin" content="{{.SiteOrigin}}">
+  <meta name="yavc-document-grouping" content="{{.DocumentGrouping}}">
   <!-- Privacy-friendly analytics by Plausible; its start is static/plausible.js, since the page runs no inline script -->
   <script async src="https://plausible.io/js/pa-Mpi6L2yhPF8K0I-CeNLPh.js"></script>
   <script src="{{asset "/static/plausible.js"}}"></script>
@@ -50,6 +51,7 @@
        document-tab dependency must precede the loader and registry. */}}
   <script src="{{asset "/pudl/pudl-tabs.js"}}" defer></script>
   <script src="{{asset "/static/doc-tabs.js"}}" defer></script>
+  <script src="{{asset "/static/document-windows.js"}}" defer></script>
   <script src="{{asset "/pudl/pudl-applets.js"}}" defer></script>
   <script src="{{asset "/static/pudl-host-kit.js"}}" defer></script>
   <script src="{{asset "/static/command-toolbar.js"}}" defer></script>

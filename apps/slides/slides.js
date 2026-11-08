@@ -184,6 +184,17 @@
     /* === The applet ================================================== */
 
     function init(root, opts) {
+        var documentWindows = (window.pudlHost || {}).documentWindows, documentReady = false, receivingDocument = false, unbindDocuments = null;
+        async function routeDocument(operation, input) {
+            if (!documentWindows || documentWindows.mode(root) !== 'single' || !documentReady || receivingDocument || restoring) return null;
+            if (/^(open|open-file)$/.test(operation)) {
+                if (resources) await resources.read(input.path);
+                else if (!H.fs || await H.fs.readText(input.path) == null) throw new Error('The file could not be found.');
+            }
+            if (pageActive()) await page.sync(); stash();
+            if (!tab() || untouched(tab())) return null;
+            return {result: await documentWindows.open(root, 'slides', {operation: operation, input: input})};
+        }
         opts = opts || {};
         var n = ++count, H = window.pudlHost || {};
         var styledSections = new Set(), styleLifetime = new AbortController();
@@ -847,6 +858,7 @@
         async function activateTab(i) {
             if (!tabs[i]) { return; }
             if (i === active) { tabRow(); return; }
+            if (pageActive()) { await page.sync(); await page.enable(false); }
             abortOwnedDialogs(false); if (slideSearch) slideSearch.reset();
             stash();
             if (presenting) { await leave(); }
@@ -907,6 +919,7 @@
             tabRow();
         }
         async function openPath(p, slide) {
+            if (!tabs.some(function (t) { return t.path === p; })) { var routed = await routeDocument('open-file', {path: p, slide: slide}); if (routed) return true; }
             for (var i = 0; i < tabs.length; i++) {
                 if (tabs[i].path === p) { await activateTab(i); if (slide) { await goTo(slide - 1); } return true; }
             }
@@ -940,6 +953,7 @@
             var res = await H.fs.open({ title: 'Open a Deck', host: root, start: '~', accept: ['.md'] }).catch(function (err) { say('The file could not be opened: ' + err.message, true); return null; });
             if (!res) { return; }
             if (res.path) { await openPath(res.path); return; }
+            var routed = await routeDocument('load', {text: res.text}); if (routed) return;
             await openInTab(res.text, null);
             modified = true;
             say('Opened ' + res.name + '.');
@@ -1006,6 +1020,8 @@
             t.saveQueue = pending.catch(function () {}); return pending;
         }
         async function newDeck() {
+            var routed = await routeDocument('new-deck', {}); if (routed) return;
+            if (tab() && untouched(tab())) { load(NEW_DECK, null); commandsChanged(); return; }
             stash();
             tabs.push({ deck: parseDeck(NEW_DECK), path: null, modified: false, at: 0 });
             await activateTab(tabs.length - 1);
@@ -1256,6 +1272,7 @@
         async function importPPTXBuffer(buffer, name) {
             await loadScript(HERE + 'import-pptx.js' + STAMP);
             var got = await window.yavcSlidesImport.pptx(buffer, officeContext());
+            var routed = await routeDocument('load', {text: got.text}); if (routed) return got;
             await openInTab(got.text, null);
             modified = true;
             stash();
@@ -1579,6 +1596,13 @@
             await setMode(initial,false);
             if (tabs.some(function (t) { return !!t.conflict; })) say('Some recovered drafts no longer match their original revision. Use Save As to preserve a copy.', 'warn');
             if (start.get('present')) { present(parseInt(start.get('slide') || '1', 10) - 1); }
+            documentReady = true;
+            if (documentWindows && documentWindows.mode(root) === 'single' && tabs.length > 1) {
+                var oldTabs = tabs.slice(), front = tab(), split = await documentWindows.split(root, 'slides', takeSnapshot());
+                split.moved.forEach(function (i) { var at = tabs.indexOf(oldTabs[i]); if (at >= 0) tabs.splice(at, 1); });
+                active = -1; await activateTab(tabs.indexOf(front)); if (snap) snap.flush();
+                if (split.error) say('Some recovered documents remain together. ' + split.error, true);
+            }
             announce();
         })().catch(function (err) { startupFailed=true;if (!destroyed) { root.innerHTML = '<div class="notice danger" role="alert"><div class="notice-content"><p class="notice-title">Slides could not start</p><p class="notice-body">' + esc(err.message) + '</p></div></div>'; } });
 
@@ -1624,6 +1648,7 @@
                     var there = await H.fs.readText(String(input.path)).catch(function () { return ''; });
                     if (there != null) { throw new Error('there is already a file at ' + input.path + '; open it, or give the deck another name'); }
                 }
+                var routed = await routeDocument('load', input); if (routed) return routed.result;
                 if (presenting) { await leave(); }
                 await openInTab(String(input.text), input.path || null, input.slide);
                 if (resources) { tab().resource = null; tab().fresh = !!input.path; }
@@ -1655,6 +1680,7 @@
             },
             'open@1': async function (input) {
                 await booted;
+                if(!tabs.some(function (t) {return t.path===input.path;})){var routed=await routeDocument('open',input);if(routed)return routed.result;}
                 if (presenting) { await leave(); }
                 var ok = await openPath(input.path, input.slide);
                 if (!ok) { throw new Error('there is no file at ' + input.path); }
@@ -1795,6 +1821,14 @@
             if (original) liveActions[name + '@1'] = async function (input) { await booted; requireEditable(); return original(input); };
         });
         Object.keys(liveActions).forEach(function (id) {var handler=liveActions[id];liveActions[id]=async function (input) {await booted;if(destroyed || startupFailed)throw new Error('This workspace is no longer available.');return handler(input);};});
+        if (documentWindows) unbindDocuments = documentWindows.bind(root, {
+            application: 'slides', resource: function () {return path;},
+            accept: async function (request) { receivingDocument = true; try {
+                if (request.operation === 'new-deck') { await newDeck(); return {output: deckView()}; }
+                if (request.operation === 'open-file') { await openPath(request.input.path, request.input.slide); return {output: deckView()}; }
+                return await liveActions[request.operation + '@1'](request.input);
+            } finally { receivingDocument = false; } }, flush: function () { return !!snap && snap.flush(); }
+        });
         var detachLive = window.pudlApplets && window.pudlApplets.attach ? window.pudlApplets.attach('yavc.slides', liveActions) : null;
         var commonToolbar = H.commandToolbar ? H.commandToolbar.attach(root, { app: 'slides', label: 'Slides', table: commandTable,
             defaults: ['save', '-', 'undo', 'redo', '-', 'slide-new', 'slide-duplicate', 'layout', '-', 'style', 'bold', 'italic', 'link', '-', 'present', 'presenter', 'view-mode'] }) : null;
@@ -1815,6 +1849,7 @@
             },
             commandTable: commandTable, toolbars: toolbars, menus: menus,
             destroy: function () {
+                if (unbindDocuments) unbindDocuments();
                 if (commonToolbar) { commonToolbar.destroy(); }
                 destroyed = true;
                 abortOwnedDialogs(false); if (slideSearch) slideSearch.reset();

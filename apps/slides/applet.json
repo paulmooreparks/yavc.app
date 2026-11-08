@@ -1,7 +1,8 @@
 {
   "name": "slides",
   "title": "Slides",
-  "version": "0.33.5",
+  "version": "0.34.0",
+  "instances": 9,
   "description": "A slide deck from a Markdown file: edit it slide by slide, present it full screen with speaker notes, and export it as a page.",
   "license": "Apache-2.0",
   "src": "slides.js",

@@ -118,6 +118,7 @@
         pages: '/', pudl: '/pudl/',
         contentBytes: {version:1,read:function (request,context) {return fs().then(function (F) {return F.contentBytes.read(request,context);});}},
         snapshot: window.pcSnapshot,
+        documentWindows: window.yavcDocumentWindows,
         contentWorkspace: { version: 1,
             browser: function () { return withDialog().then(function (x) { return {F:x[0],FB:x[1]}; }); },
             split: {of:function (handle,change) {return window.pcSplit.of(handle,change);}},

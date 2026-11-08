@@ -1,5 +1,11 @@
 # Stem-to-stern review, November 2026
 
+## Document windows and view restoration, 2026-11-08
+
+The host now selects single-document windows or tabbed editing. All four apps route another document through the optional host capability, and yavc.app defaults to separate windows. Recovery migrates existing tabs only after the new windows acknowledge their snapshots. Capacity and failed acknowledgement retain the source tabs. Source review found that the old window could still be edited or closed while migration waited for another window; migration now pauses that window and cancels close until transfer finishes. Keyboard New now uses the same route as menu New.
+
+The pending-rich-draft defect recorded below is corrected. Activation awaits synchronization before changing the source owner and captures the outgoing source state after that synchronization. Async callers await activation. Recovery previously accepted only Visual and Split, coercing Document and Preview to Text; it now retains every supported view. The temporary source transition no longer changes the outgoing document's saved mode. The grouping fixture exercises New directly after a rich edit, without the old manual synchronization workaround.
+
 ## Active document window titles, 2026-11-08
 
 Editor, Docs, Slides and Diagrams now show the active filename and application in their window title. A leading dot, accessible unsaved label and full-path tooltip identify changes even when a single document hides its tab row. Rich drafts participate before source synchronization. The shared adapter retains unchanged tab buttons so a command-state refresh cannot interrupt a pointer click. Detached adapters cannot retitle a replacement window, and disposed text workspaces stop command refresh callbacks. The required module test covers those lifecycle and button-retention regressions. The browser fixture exercises all four applications through source/rich editing, tab switching, inactive dirty tabs, Save As and closing back to one document in Chromium, Firefox and WebKit.

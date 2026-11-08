@@ -14,6 +14,8 @@ Key Bindings is an application-owned preferences dialog. It uses host `config.se
 
 ## Host capabilities
 
+The optional document grouping capability is specified in `document-window-contract.md`. It controls whether opening another document stays in this workspace or requests a separate host window. Document operations synchronize the outgoing rich draft before its source owner changes. Recovery retains every supported per-document view, including Document and Preview.
+
 The resource, creation and recovery contracts remain in `content-resource-contract.md`, `content-creation-contract.md` and `content-recovery-contract.md`. They retain storage authority in the host. Opaque resource IDs are not treated as filenames; native-format checks use the returned display name. The optional Save As name check runs before a destination is committed.
 
 `pudlHost.contentWorkspace.version` is 1. A host can provide the following optional services without replacing its resource authority:

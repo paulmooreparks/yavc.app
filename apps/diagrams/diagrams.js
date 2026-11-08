@@ -123,6 +123,17 @@
         var n = ++count, H = window.pudlHost || {};
         if (H.contentResources && H.snapshot && (H.snapshot.version !== 2 || typeof H.snapshot.join !== 'function')) throw new Error('This resource host needs snapshot version 2 before it can restore diagrams.');
         var resources = null, recovery = null, recoveryReady = false, recoveryKept = null;
+        var documentWindows = H.documentWindows, documentReady = false, receivingDocument = false, unbindDocuments = null;
+        async function routeDocument(operation, input) {
+            if (!documentWindows || documentWindows.mode(root) !== 'single' || !documentReady || receivingDocument) return null;
+            if (operation === 'open-file') {
+                if (resources) await resources.read(input.path);
+                else if (!H.fs || await H.fs.readText(input.path) == null) throw new Error('The file could not be found.');
+            }
+            finishInlineText(true);
+            if (!current() || untouched(current())) return null;
+            return {result: await documentWindows.open(root, 'diagrams', {operation: operation, input: input})};
+        }
         var tabs = [], active = -1, untitled = 0, destroyed = false, startupFailed = false, lifetime = new AbortController();
         var settings = Object.assign({}, SETTINGS);
         var CM = null, cm = null, langs = {}, drawTimer = 0, drawSeq = 0, waiters = [], quiet = false, lsp = null, lspComp = null, inlineText = null, inlineNumber = 0;
@@ -1671,6 +1682,7 @@
         /* === Files ======================================================== */
 
         async function openPath(p, view) {
+            if (!tabs.some(function (t) { return t.path === p; })) { var routed = await routeDocument('open-file', {path: p, view: view}); if (routed) return true; }
             if (destroyed) return false;
             for (var i = 0; i < tabs.length; i++) {
                 if (tabs[i].path === p) { activateTab(i); if (view) { setView(view); } return true; }
@@ -1700,6 +1712,7 @@
             var res = await H.fs.open({ title: 'Open a Diagram', host: root, start: '~', accept: ['.d2', '.mmd', '.mermaid', '.canvas'] }).catch(function (err) { say('The file could not be opened: ' + ((err && err.message) || err), true); return null; });
             if (!res) { return; }
             if (res.path) { await openPath(res.path); return; }
+            var routed = await routeDocument('new', {text: res.text, kind: kindOf(res.name, res.text)}); if (routed) return;
             var t = openInTab(res.text, null, kindOf(res.name, res.text));
             t.modified = true;
             say('Opened ' + res.name + '.');
@@ -1792,13 +1805,14 @@
             }
             if (t === current()) { window.yavcUtil.notice(el.tabsEl, ''); el.where.textContent = t.path; el.where.title = el.where.textContent; say('Saved ' + (accepted && accepted.name || path) + (t.modified ? '; newer edits are still unsaved.' : '.')); announce(); }
         }
-        function newDiagram(style, kind) {
+        async function newDiagram(style, kind) {
+            var routed = await routeDocument('new', {text: style.text, kind: kind}); if (routed) return;
             openInTab(style.text, null, kind, null);
             say('This is a new ' + style.label.toLowerCase() + '. Save it to keep it.');
         }
         async function newCanvas(style) {
             await canvasEditor();
-            if (!destroyed) { newDiagram({ label: 'Canvas', text: window.yavcCanvasModel.template(style).text }, 'canvas'); }
+            if (!destroyed) { await newDiagram({ label: 'Canvas', text: window.yavcCanvasModel.template(style).text }, 'canvas'); }
         }
         function editInEditor() {
             var t = current();
@@ -2125,6 +2139,13 @@
             if (!tabs.length) { tabs.push(makeTab(D2_STYLES[0].text, null, 'd2')); activateTab(0); }
             if (view && !file) { setView(view); }
             recoveryReady = true;
+            documentReady = true;
+            if (documentWindows && documentWindows.mode(root) === 'single' && tabs.length > 1) {
+                var oldTabs = tabs.slice(), front = current(), split = await documentWindows.split(root, 'diagrams', resources ? resourceSnapshot() : legacySnapshot());
+                split.moved.forEach(function (i) { var at = tabs.indexOf(oldTabs[i]); if (at >= 0) { var removed = tabs.splice(at, 1)[0]; if (removed.canvas) removed.canvas.destroy(); if (removed.cv) removed.cv.destroy(); } });
+                active = -1; activateTab(tabs.indexOf(front)); if (snap) snap.flush();
+                if (split.error) say('Some recovered documents remain together. ' + split.error, 'warn');
+            }
             if (tabs.some(function (t) { return t.recoveryConflict; })) say('Recovered edits have no matching file revision. ' + (resources && resources.canSaveAs() ? 'Use Save As to keep a copy, or download the source.' : 'Download the source to keep a copy before reopening the file.') + ' The file has not been overwritten.', 'warn');
             announce();
         })().catch(function (err) { startupFailed=true;if (!destroyed) { root.innerHTML = '<div class="notice danger" role="alert"><div class="notice-content"><p class="notice-title">Diagrams could not start</p><p class="notice-body">' + esc(err.message) + '</p></div></div>'; } });
@@ -2150,6 +2171,7 @@
             },
             'new@1': async function (input) {
                 await booted;
+                var routed = await routeDocument('new', input); if (routed) return routed.result;
                 var kind = input.kind === 'mermaid' || input.kind === 'canvas' ? input.kind : 'd2';
                 var text;
                 if (kind === 'canvas') { await canvasEditor(); text = window.yavcCanvasModel.template(input.style || 'basic').text; }
@@ -2163,6 +2185,7 @@
             },
             'open-file@1': async function (input) {
                 await booted;
+                if(!tabs.some(function (t) {return t.path===input.path;})){var routed=await routeDocument('open-file',input);if(routed)return routed.result;}
                 var ok = await openPath(String(input.path), input.view);
                 if (!ok) { throw new Error('there is no file at ' + input.path); }
                 return { output: summary(current(), active) };
@@ -2307,6 +2330,11 @@
         };
         Object.keys(liveActions).forEach(function (id) {var handler=liveActions[id];liveActions[id]=async function (input) {await booted;if(destroyed || startupFailed)throw new Error('This workspace is no longer available.');return handler(input);};});
         var detachLive = window.pudlApplets && window.pudlApplets.attach ? window.pudlApplets.attach('yavc.diagrams', liveActions) : null;
+        if (documentWindows) unbindDocuments = documentWindows.bind(root, {
+            application: 'diagrams', resource: function () {return current() && current().path;},
+            accept: async function (request) { receivingDocument = true; try { return await liveActions[request.operation + '@1'](request.input); } finally { receivingDocument = false; } },
+            flush: function () { return !!snap && snap.flush(); }
+        });
         var commonToolbar = H.commandToolbar ? H.commandToolbar.attach(root, { app: 'diagrams', label: 'Diagrams', table: commandTable,
             defaults: ['save', '-', 'undo', 'redo', '-', 'drawing-tool', 'shape-add', 'connect', 'cv-new', 'cv-connect', '-', 'fit', 'cv-zoom-in', 'cv-zoom-out', 'view-mode'] }) : null;
 
@@ -2325,6 +2353,7 @@
             },
             commandTable: commandTable, toolbars: toolbars, menus: menus,
             destroy: function () {
+                if (unbindDocuments) unbindDocuments();
                 if (commonToolbar) { commonToolbar.destroy(); }
                 destroyed = true;
                 lifetime.abort();

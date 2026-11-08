@@ -51,7 +51,7 @@ const types={'.html':'text/html','.js':'text/javascript','.css':'text/css','.jso
     await p.evaluate(async()=>{try{await pudlCommands.run('save',null,document.querySelector('#one'));}catch(e){fixture.conflict=e.message;}});
     assert.equal(await p.evaluate(()=>fixture.records.get('memory:first.d2').text.includes('Conflict')),false);
     assert.equal(await p.locator('#one .doc-tab-dirty').count(),1);
-    await p.locator('#one .yavc-notice').filter({hasText:'Conflict'}).waitFor();
+    await p.locator('.toast.danger').filter({hasText:'Conflict'}).waitFor();
     assert.equal(await p.locator('#one [data-role="message"]').innerText(),'');
     assert.equal(await p.evaluate(()=>JSON.parse(fixture.records.get('memory:second.canvas').text).unknownFixture.preserve),true);
     await p.evaluate(()=>{

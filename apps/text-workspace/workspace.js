@@ -163,6 +163,20 @@
         var CM = null, F = null, view = null, destroyed = false, startupFailed = false, unsubscribe = null, styleLifetime = new AbortController();
         var tabs = [], active = -1, untitled = 0;
         var H = window.pudlHost || {}, resourceSession = null, resources = null, recovery = null;
+        var documentWindows = H.documentWindows, documentReady = false, receivingDocument = false, unbindDocuments = null;
+        async function routeDocument(operation, input) {
+            if (!documentWindows || documentWindows.mode(root) !== 'single' || !documentReady || receivingDocument || restoring) return null;
+            if (operation === 'open-file') {
+                var checked = resources ? await resources.read(input.path) : null;
+                requireNative(checked ? checked.name : input.path);
+                if (input.view && !supportsView({lang:languageFor(checked ? checked.name : input.path)},input.view)) throw new Error('This view is unavailable for this file.');
+                if (!resources && F && !F.resolve(F.home(), input.path)) throw new Error('The file could not be found.');
+            }
+            if (pageActive()) await visual.api.sync();
+            var t = current();
+            if (!t || (!t.path && !dirtyTab(t) && !view.state.doc.length)) return null;
+            return {result: await documentWindows.open(root, app, {operation: operation, input: input})};
+        }
         function resourceAsset(file) { return window.yavcUtil.versioned(new URL('../content-kit/' + file, SELF_SRC).href); }
         function refreshAccess(t, preserveRich) {
             var effects = [roComp.reconfigure([CM.EditorState.readOnly.of(!!t.readOnly), CM.EditorView.editable.of(!t.readOnly), CM.EditorView.contentAttributes.of({ 'aria-readonly': String(!!t.readOnly), tabindex: '0' })]), lspComp.reconfigure(languageAssistance(t))];
@@ -399,7 +413,7 @@
             application: isDocs ? 'Docs' : 'Editor',
             tabs: function () { return tabs.map(function (t) { return { name: t.name, path: t.path, modified: dirtyTab(t), note: t.readOnly ? '(read-only)' : '' }; }); },
             active: function () { return active; },
-            activate: function (i) { activate(i); view.focus(); },
+            activate: async function (i) { await activate(i); view.focus(); },
             close: closeTab
         }) : null;
         function renderTabs() {
@@ -449,12 +463,28 @@
             markOutline();
         }
 
+        async function leaveDocument() {
+            var owner = current(), mode = viewMode;
+            if (owner) owner.view = mode;
+            if (pageActive()) await visual.api.sync();
+            if (destroyed || current() !== owner) return;
+            if (visual.api) await visual.api.enable(false);
+            ++visual.gen;
+            viewMode = 'text';
+        }
+
+        var activationQueue = Promise.resolve();
         function activate(i) {
+            var target = tabs[i];
+            var next = activationQueue.catch(function () {}).then(function () { return activateNow(target ? tabs.indexOf(target) : i); });
+            activationQueue = next; return next;
+        }
+        async function activateNow(i) {
             var prev = current(), switching = i !== active;
-            if (prev && view) { prev.state = view.state; prev.scroll = scrollAnchor(); }
             /* Each tab keeps its own view. The page belongs to the file it
                was made for, so the one coming to the front makes its own. */
-            if (switching && viewMode !== 'text') { setView('text'); }
+            if (switching && viewMode !== 'text') { await leaveDocument(); if (destroyed) return; }
+            if (prev && view) { prev.state = view.state; prev.scroll = scrollAnchor(); }
             active = i;
             var t = current();
             if (!t) { view.setState(CM.EditorState.create({ doc: '' })); refreshStyles(); renderTabs(); announce(); return; }
@@ -474,19 +504,20 @@
             /* Each tab keeps its view: the one it had, or for a Markdown
                file the one the settings open Markdown in. */
             var want = resolvedView(t, t.view || markdownDefault());
-            if (want !== 'text' && t.lang === 'markdown' && want !== viewMode) { setView(want); }
+            if (want !== 'text' && t.lang === 'markdown' && want !== viewMode) { await setView(want); }
             markExplorer();
             say(t.external ? 'This file was changed somewhere else since you opened it.' : '', t.external ? 'warn' : false);
-            if (switching && t.view && t.view !== 'text' && canEditVisually()) { setView(t.view); }
         }
 
-        function addTab(t, text) {
+        async function addTab(t, text) {
+            await leaveDocument(); if (destroyed) return;
+            if (documentWindows && documentWindows.mode(root) === 'single' && !restoring && tabs.length === 1 && !current().path && !dirtyTab(current()) && !view.state.doc.length) { tabs = []; active = -1; }
             t.savedRaw = text;
             t.modified = false;
             t.state = stateFor(t, text);
             t.saved = t.state.doc.toString();
             tabs.push(t);
-            activate(tabs.length - 1);
+            await activate(tabs.length - 1);
             /* Focus would raise the Editor's window over one the reader has
                since brought forward, so it waits for the window to be in
                front. */
@@ -499,15 +530,19 @@
            dialog to show; otherwise the status line says why. */
         function requireNative(name) { if (isDocs && (!/\.(md|markdown)$/i.test(name) || /\.slides\.md$/i.test(name))) throw new Error('Docs opens Markdown documents. Open this source in Editor or its native application.'); if(!isDocs && /\.(docx|pptx|pdf)$/i.test(name))throw new Error('This container requires an importer or viewer. It cannot be saved as source text.'); }
         async function openPath(path, strict, currentRequest, requestedView) {
+            if (!tabs.some(function (t) { return t.path === path; })) {
+                var routed = await routeDocument('open-file', {path: path, view: requestedView});
+                if (routed) return true;
+            }
             function fail(msg) { if (strict) { throw new Error(msg); } say(msg, true); return false; }
             function validView(name) {if(requestedView && !supportsView({lang:languageFor(name)},requestedView))throw new Error('This view is unavailable for this file in '+(isDocs?'Docs':'Editor')+'.');}
             if (resources) {
-                for (var ri = 0; ri < tabs.length; ri++) if (tabs[ri].path === path) {validView(tabs[ri].name);activate(ri); return true; }
+                for (var ri = 0; ri < tabs.length; ri++) if (tabs[ri].path === path) {validView(tabs[ri].name);await activate(ri); return true; }
                 try {
                     var snapshot = await resources.read(path);
                     if (destroyed || currentRequest && !currentRequest()) return false;
                     var name = snapshot.name || String(path).split('/').pop(); requireNative(name);validView(name);
-                    addTab({ path: path, name: name, lang: languageFor(name), readOnly: !resources.canWrite(snapshot), resource: snapshot }, snapshot.text);
+                    await addTab({ path: path, name: name, lang: languageFor(name), readOnly: !resources.canWrite(snapshot), resource: snapshot }, snapshot.text);
                     return true;
                 } catch (err) { return fail(err.message); }
             }
@@ -519,7 +554,7 @@
             var node = F.resolve(F.home(), path);
             // A restored named draft is already open even though Save has not created its file.
             var display = node && !node.children ? F.displayPath(F.realOf(node)) : path;
-            for (var i = 0; i < tabs.length; i++) { if (tabs[i].path === display) { if (i !== active) { activate(i); } view.focus(); return true; } }
+            for (var i = 0; i < tabs.length; i++) { if (tabs[i].path === display) { if (i !== active) { await activate(i); } view.focus(); return true; } }
             if (!node) { return fail(path + ': no such file'); }
             if (node.children) { return fail(path + ' is a folder'); }
             var r = F.realOf(node);
@@ -530,7 +565,7 @@
             var readOnly = !r.home || !!F.mounted;
             /* A server file remembers its time, which tells a change made
                elsewhere from this tab's own save. */
-            addTab({ path: display, name: r.name, lang: languageFor(display), readOnly: readOnly, mtime: r.server ? +r.mtime : null }, text);
+            await addTab({ path: display, name: r.name, lang: languageFor(display), readOnly: readOnly, mtime: r.server ? +r.mtime : null }, text);
             say(readOnly
                 ? (F.mounted && F.sourceOf(r) ? 'This is the page as the site shows it, read-only. "Edit the source" opens the file it\'s made from.'
                     : 'This is part of the site, so it opens read-only. "Save a copy to ~" keeps an editable copy.')
@@ -540,17 +575,17 @@
 
         /* A file that does not exist yet, in a folder of ~: a tab that
            creates it when saved. */
-        function newNamed(path) {
+        async function newNamed(path) {
             requireNative(path);
-            if (resources) { addTab({path:path,name:String(path).split('/').pop(),lang:languageFor(path),readOnly:false,fresh:true}, ''); return; }
+            if (resources) { await addTab({path:path,name:String(path).split('/').pop(),lang:languageFor(path),readOnly:false,fresh:true}, ''); return; }
             var sp = F.splitPath(path), dir = F.resolve(F.home(), sp.dir);
             if (!dir || !dir.children || !dir.home || !F.validName(sp.base)) {
-                newTab();
+                await newTab();
                 say(path + ': no such file, and one can\'t be made there', true);
                 return;
             }
             var display = F.displayPath(dir).replace(/\/$/, '') + '/' + sp.base;
-            addTab({ path: display, name: sp.base, lang: languageFor(display), readOnly: false, fresh: true }, '');
+            await addTab({ path: display, name: sp.base, lang: languageFor(display), readOnly: false, fresh: true }, '');
             say(display + ' is a new file. Saving creates it.');
         }
 
@@ -558,20 +593,20 @@
            decision 17): the server marks the mount, and a new file is then
            a .docs.md document, which opens on its page. */
         var forDocuments = isDocs;
-        function newTab() {
+        async function newTab() {
             untitled++;
             if (forDocuments) {
-                addTab({ path: null, name: 'untitled-' + untitled + '.docs.md', lang: 'markdown', readOnly: false }, '');
+                await addTab({ path: null, name: 'untitled-' + untitled + '.docs.md', lang: 'markdown', readOnly: false }, '');
                 return;
             }
-            addTab({ path: null, name: 'untitled-' + untitled, lang: 'text', readOnly: false }, '');
+            await addTab({ path: null, name: 'untitled-' + untitled, lang: 'text', readOnly: false }, '');
         }
 
         async function closeTab(i) {
             var t = tabs[i];
             if (!t) { return; }
             if (dirtyTab(t)) {
-                if (active !== i) { activate(i); }
+                if (active !== i) { await activate(i); }
                 var choice = await window.yavcDialog.askSave(t.name);
                 if (choice == null) { return; }
                 if (choice === 'save' && (!(await save()) || dirtyTab(t))) { return; }
@@ -582,15 +617,16 @@
                activate() would keep the closed file's text in whichever tab
                slid into its place, and a save would write it there. */
             var wasActive = active;
+            if (i === active) await leaveDocument();
             tabs.splice(i, 1);
-            if (!tabs.length) { active = -1; newTab(); return; }
+            if (!tabs.length) { active = -1; await newTab(); return; }
             if (i !== wasActive) {
                 active = i < wasActive ? wasActive - 1 : wasActive;
                 renderTabs();
                 return;
             }
             active = -1;
-            activate(Math.min(i, tabs.length - 1));
+            await activate(Math.min(i, tabs.length - 1));
         }
 
         /* === Saving ====================================================== */
@@ -742,7 +778,7 @@
                 await loadScript(resourceAsset('text-codec.js'));
                 if (destroyed) return;
                 var codec=window.yavcTextCodec, text=codec.decode(codec.encode(chosen.text,'utf-8')).text;
-                importedDocument(chosen.name,text);
+                await importedDocument(chosen.name,text);
                 return;
             }
             var t = current(), node = t && t.path && F ? F.resolve(F.home(), t.path) : null;
@@ -770,10 +806,12 @@
             if(decoded.encoding !== 'utf-8')throw new Error('This encoding is not writable here. Keep the original file or convert a copy to UTF-8.');
             var text = decoded.text;
             if (text.indexOf('\0') >= 0) { return fail(file.name + ' isn\'t a text file, so the editor can\'t open it.'); }
-            importedDocument(file.name,text);
+            await importedDocument(file.name,text);
         }
-        function importedDocument(name,text) {
-            addTab({path:null,name:name,lang:languageFor(name),readOnly:false},text);
+        async function importedDocument(name,text) {
+            requireNative(name);
+            var routed = await routeDocument('import-source', {name: name, text: text}); if (routed) return routed.result;
+            await addTab({path:null,name:name,lang:languageFor(name),readOnly:false},text);
             var t=current();t.saved=null;t.modified=true;renderTabs();
             say('Opened '+name+'. Save As keeps a native copy through this host.');
         }
@@ -1284,6 +1322,7 @@
             var t = current();
             mode = resolvedView(t, mode);
             viewMode = mode;
+            if (t) t.view = mode;
             commandsChanged();
             root.classList.toggle('ed-previewing', mode !== 'text');
             root.classList.toggle('ed-visual-only', mode === 'visual' || mode === 'preview' || mode === 'document');
@@ -1302,6 +1341,7 @@
                 if (gen !== visual.gen || destroyed) { return; }
                 el.page.replaceChildren();
                 say('');
+                announce();
                 keep();
                 return;
             }
@@ -1333,7 +1373,7 @@
                 say('The page could not be made. Using ' + viewMode + ' view: ' + (err && err.message || err), 'warn');
                 return;
             }
-            keep();
+            announce(); keep();
         }
         function detachVisual() {
             clearTimeout(visual.timer);
@@ -1712,7 +1752,7 @@
             var f = fileFrom(s);
             if (!f || !CM) { return; }
             var ticket=++stateRequest,params=new URLSearchParams(s || ''),existed=tabs.some(function (t) {return t.path===f;});function currentRequest(){return !destroyed && ticket===stateRequest;}
-            return openPath(f,false,currentRequest,params.get('view')).then(async function (opened) {if(!currentRequest())return;if (!opened) {if(F && !F.resolve(F.home(), f))newNamed(f);else return;} var requested=params.get('view') || (!existed && initialMode(current(),params.get('initial-view')));if(requested){if(!supportsView(current(),requested))throw new Error('This view is unavailable here. Open the saved document in Docs for visual editing.');await setView(requested);}if(currentRequest())await restoreLine(Number(new URLSearchParams(s || '').get('line')) || 1); }).catch(function (err) {if(currentRequest())say(err.message,true);});
+            return openPath(f,false,currentRequest,params.get('view')).then(async function (opened) {if(!currentRequest())return;if (!opened) {if(F && !F.resolve(F.home(), f))await newNamed(f);else return;} var requested=params.get('view') || (!existed && initialMode(current(),params.get('initial-view')));if(requested){if(!supportsView(current(),requested))throw new Error('This view is unavailable here. Open the saved document in Docs for visual editing.');await setView(requested);}if(currentRequest())await restoreLine(Number(new URLSearchParams(s || '').get('line')) || 1); }).catch(function (err) {if(currentRequest())say(err.message,true);});
         }
         async function restoreLine(number) {
             var tab = current(); if (!view || !tab) { return; }
@@ -1850,7 +1890,7 @@
            history only fit the text they were taken from: the draft, or for
            a tab without changes, the file as it was then. A file changed
            since keeps its cursor near where it was, without its history. */
-        function applyKept(t, k) {
+        async function applyKept(t, k) {
             var text = typeof k.draft === 'string' ? k.draft : t.saved;
             var exact = typeof k.draft === 'string' || (k.sum != null && k.sum === fingerprint(t.saved));
             var state = null;
@@ -1874,13 +1914,13 @@
             }
             t.state = state;
             t.scroll = k.scroll;
-            t.view = k.view === 'visual' || k.view === 'split' ? k.view : 'text';
+            t.view = supportsView(t, k.view) ? k.view : resolvedView(t, markdownDefault());
             t.openSearch = !!(k.search && k.search.open);
             t.modified = text !== t.saved;
             /* The tab in front takes its new state through activate(), which
                would otherwise keep the old one. */
             var i = tabs.indexOf(t);
-            if (i === active) { active = -1; activate(i); }
+            if (i === active) { active = -1; await activate(i); }
         }
 
         /* The snapshot kept before the reload, or the Editor's own record
@@ -1905,7 +1945,7 @@
             restoring = true;
             try { frontTab = await reopen(all, back, kept.tabs[kept.front] || null); } finally { restoring = false; }
             if (!isDocs && all.some(function (k) {return k && /^(document|visual)$/.test(k.view);})) back.push('legacy document source (open saved documents in Docs for visual editing)');
-            if (frontTab) { var fi = tabs.indexOf(frontTab); if (fi >= 0) { activate(fi); } }
+            if (frontTab) { var fi = tabs.indexOf(frontTab); if (fi >= 0) { await activate(fi); } }
             var msg = back.length ? 'Your unsaved changes to ' + back.join(', ') + ' are back.' : '';
             if (resources && tabs.some(function (t) { return !!t.conflict; })) msg += ' Some drafts no longer match their original revision. Save As preserves a copy without replacing the changed file.';
             if (waiting.length) {
@@ -1937,9 +1977,9 @@
                     }
                     if (destroyed) return null;
                     var name = (restored.snapshot && restored.snapshot.name) || k.name || String(k.path).split('/').pop();
-                    addTab({ path: k.path, name: name, lang: languageFor(name), resource: restored.snapshot, baseline: restored.baseline, conflict: restored.conflict,
+                    await addTab({ path: k.path, name: name, lang: languageFor(name), resource: restored.snapshot, baseline: restored.baseline, conflict: restored.conflict,
                         readOnly: !!restored.snapshot && !resources.canWrite(restored.snapshot) }, restored.snapshot ? restored.snapshot.text : '');
-                    t = current(); applyKept(t, Object.assign({}, k, { draft: restored.modified ? restored.text : null }));
+                    t = current(); await applyKept(t, Object.assign({}, k, { draft: restored.modified ? restored.text : null }));
                     t.modified = restored.modified; t.conflict = restored.conflict;
                     if (t.modified) back.push(t.name);
                     if (k === frontKept) frontTab = t;
@@ -1949,12 +1989,12 @@
                     if (typeof k.draft !== 'string') { continue; }
                     var n = /^untitled-(\d+)(\.docs\.md)?$/.exec(k.name || '');
                     if (n) { untitled = Math.max(untitled, +n[1]); }
-                    addTab({ path: null, name: k.name || 'untitled', lang: k.lang || 'text', readOnly: false }, '');
+                    await addTab({ path: null, name: k.name || 'untitled', lang: k.lang || 'text', readOnly: false }, '');
                     t = current();
                 } else {
                     var node = F.resolve(F.home(), F.upgradePath(k.path));
                     if (!node && k.fresh) {
-                        newNamed(k.path);
+                        await newNamed(k.path);
                         t = current() && current().path === k.path ? current() : null;
                     } else if (node && await openPath(k.path)) {
                         t = current();
@@ -1967,7 +2007,7 @@
                     }
                 }
                 if (!t) { continue; }
-                applyKept(t, k);
+                await applyKept(t, k);
                 if (t.modified) { back.push(t.name); }
                 if (k === frontKept) { frontTab = t; }
             }
@@ -1989,7 +2029,7 @@
             saveAll: async function () {
                 for (var i = 0; i < tabs.length; i++) {
                     if (!dirtyTab(tabs[i])) { continue; }
-                    activate(i);
+                    await activate(i);
                     if (!(await save()) || dirtyTab(tabs[i])) { return false; }
                 }
                 return true;
@@ -2040,7 +2080,7 @@
         /* Every command a key can be bound to, by the name ~/.config/editor.json
            uses for it. */
         var COMMANDS = {
-            'new': newTab,
+            'new': function () { return liveActions['new@1']({}); },
             'open': openDialog,
             'save': save,
             'save-as': saveAs,
@@ -2188,11 +2228,12 @@
                 cmd('hide-navigation', 'Hide Side Panes', 'panel', hideNavigation, { hidden: function () { return el.explorer.hidden && !outlineVisible; } }),
                 cmd('section-up', 'Move Section Up', 'arrow-up', function () { return moveOutline('up'); }, { shortcut: key('section-up', 'Alt-Shift-ArrowUp'), disabled: function () { var entry = outlineEntries[outlineTarget]; return !editable || !entry || entry.previous < 0; } }),
                 cmd('section-down', 'Move Section Down', 'arrow-down', function () { return moveOutline('down'); }, { shortcut: key('section-down', 'Alt-Shift-ArrowDown'), disabled: function () { var entry = outlineEntries[outlineTarget]; return !editable || !entry || entry.next < 0; } }),
-                cmd('new', 'New', 'file', function () { newTab(); }),
-                cmd('new-markdown','New Markdown','document',function () {untitled++;addTab({path:null,name:'untitled-'+untitled+'.md',lang:'markdown',readOnly:false},'');},{hidden:function () {return !isDocs;}}),
+                cmd('new', 'New', 'file', function () { return liveActions['new@1']({}); }),
+                cmd('new-markdown','New Markdown','document',async function () {untitled++;await importedDocument('untitled-'+untitled+'.md','');},{hidden:function () {return !isDocs;}}),
                 cmd('open', 'Open…', 'folder', async function (input) {
                     if(!input || typeof input.resource!=='string')return openDialog();
                     if(input.view && !MARKDOWN_VIEWS.some(function (v) {return v[0]===input.view;}))throw new Error('This view is unavailable here.');
+                    if (!tabs.some(function (t) {return t.path===input.resource;})) { var routed=await routeDocument('open-file',{path:input.resource,view:input.view || input.initialView});if(routed)return true; }
                     var ticket=++stateRequest;function currentRequest(){return !destroyed && ticket===stateRequest;}
                     var existed=tabs.some(function (t) {return t.path===input.resource;});
                     var opened=await openPath(input.resource,true,currentRequest,input.view);
@@ -2385,13 +2426,13 @@
             var opened = startFile ? await openPath(startFile) : false;
             if(destroyed)return;
             if (!opened) {
-                if (startFile && F && !F.resolve(F.home(), startFile)) { newNamed(startFile); } else if (!tabs.length) { newTab(); }
+                if (startFile && F && !F.resolve(F.home(), startFile)) { await newNamed(startFile); } else if (!tabs.length) { await newTab(); }
             }
             restoring = false;
             if (restored && restored.text) { say(restored.text, restored.error); }
             /* The view showing before the reload comes back, which asks the
                server for the page, so it is not waited for. */
-            if (restored && restored.view && restored.view !== 'text' && viewsOffered) { setView(restored.view); }
+            if (restored && current() && supportsView(current(), current().view)) { await setView(current().view); }
             if (startFile && startLine > 1) { await setView(viewMode); await restoreLine(startLine); }
             var initialParams=new URLSearchParams(opts.state || (opts.ownsUrl ? location.search : ''));
             var requestedView = initialParams.get('view') || (!startExisted && current() && initialMode(current(),initialParams.get('initial-view')));
@@ -2400,6 +2441,16 @@
                search panel had it, which opening it did. */
             if (snap && snap.focused) { if (!view.dom.contains(document.activeElement)) { view.focus(); } }
             else if (!(opts.ownsUrl || root.closest('.win.active'))) { view.contentDOM.blur(); }
+            documentReady = true;
+            if (documentWindows && documentWindows.mode(root) === 'single' && tabs.length > 1) {
+                var snapshot = takeSnapshot(), front = current(), split = await documentWindows.split(root, app, snapshot);
+                split.moved.slice().reverse().forEach(function (i) {
+                    var saved = snapshot.tabs[i], at = tabs.findIndex(function (t) { return t.path === saved.path && t.name === saved.name; });
+                    if (at >= 0) tabs.splice(at, 1);
+                });
+                active = -1; await activate(tabs.indexOf(front)); renderTabs(); if (snap) snap.flush();
+                if (split.error) say('Some recovered documents remain together. ' + split.error, 'warn');
+            }
         }).catch(function (err) {
             if (destroyed) { return; }
             startupFailed=true;
@@ -2422,8 +2473,8 @@
             if (withText) { v.text = docText(i); }
             return v;
         }
-        function setDocText(i, text) {
-            if (i !== active) { activate(i); }
+        async function setDocText(i, text) {
+            if (i !== active) { await activate(i); }
             if (tabs[i].readOnly) { throw new Error('the document is read-only'); }
             view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: String(text) }, userEvent: 'input' });
             markModified(tabs[i]);
@@ -2494,17 +2545,19 @@
             'define@1': async function () { docNo(); if (pageActive()) { await visual.api.sync(); } return { output: (await documentEngine()).macros() }; },
             'documents@1': async function () { return { output: { active: active + 1, documents: tabs.map(function (t, i) { return docView(i, false); }) } }; },
             'document@1': async function (input) { var i = docNo(input.index); return { output: docView(i, true) }; },
-            'open-file@1': async function (input) { await openPath(String(input.path), true); return { output: docView(active, false) }; },
+            'open-file@1': async function (input) { if(!tabs.some(function (t) {return t.path===input.path;})){var routed=await routeDocument('open-file',input);if(routed)return routed.result;} await openPath(String(input.path), true); if(input.view && supportsView(current(),input.view))await setView(input.view); return { output: docView(active, false) }; },
             'new@1': async function (input) {
                 /* A new document never takes the name of a file that exists,
                    or the person's next Save would overwrite it unasked
                    (security review, 2026-11-03). */
                 if (input.path && F && F.resolve(F.home(), String(input.path))) { throw new Error('there is already a file at ' + input.path + '; open it, or give the new document another name'); }
-                if (input.path) { newNamed(String(input.path)); } else { newTab(); }
-                if (input.text != null) { setDocText(active, input.text); }
+                if (input.path) requireNative(input.path);
+                var routed = await routeDocument('new', input); if (routed) return routed.result;
+                if (input.path) { await newNamed(String(input.path)); } else { await newTab(); }
+                if (input.text != null) { await setDocText(active, input.text); }
                 return { output: docView(active, false) };
             },
-            'set-text@1': async function (input) { var i = docNo(input.index); setDocText(i, input.text); return { output: docView(i, false) }; },
+            'set-text@1': async function (input) { var i = docNo(input.index); await setDocText(i, input.text); return { output: docView(i, false) }; },
             'insert@1': async function (input) {
                 docNo();var tab=current();if(tab.readOnly)throw new Error('the document is read-only');
                 if(await insertText(String(input.text))===false || current()!==tab)throw new Error('The document or selection changed before insertion.');
@@ -2517,12 +2570,12 @@
                 var flags = (input.all !== false ? 'g' : '') + (input.ignoreCase ? 'i' : '');
                 var re = new RegExp(input.regex ? input.find : String(input.find).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), flags);
                 var out = text.replace(re, function () { n++; return input.regex ? String(input.replace).replace(/\$(\d)/g, function (m, d) { return arguments.length > 3 ? (arguments[d] || '') : m; }) : input.replace; });
-                if (n) { setDocText(i, out); }
+                if (n) { await setDocText(i, out); }
                 return { output: { replaced: n } };
             },
             'save@1': async function (input) {
                 var i = docNo(input.index);
-                if (i !== active) { activate(i); }
+                if (i !== active) { await activate(i); }
                 var t = tabs[i];
                 if (t.readOnly) { throw new Error('The document is read-only. Use Save As to create an editable copy.'); }
                 var path = input.path ? String(input.path) : t.path;
@@ -2545,6 +2598,13 @@
         };
         if (!isDocs) ['page-setup@1','typography@1','header-footer@1','export@1','print@1','document-zoom@1','table@1','format@1','define@1'].forEach(function (id) {if(liveActions[id])liveActions[id]=async function () {throw new Error('This document action moved to yavc.docs/'+id+'. Open the saved document in Docs.');};});
         Object.keys(liveActions).forEach(function (id) {var handler=liveActions[id];liveActions[id]=async function (input) {await boot;if(destroyed || startupFailed || !view)throw new Error('This workspace is no longer available.');return handler(input);};});
+        if (documentWindows) unbindDocuments = documentWindows.bind(root, {
+            application: app, resource: function () {return current() && current().path;},
+            accept: async function (request) { receivingDocument = true; try {
+                if (request.operation === 'import-source') { await importedDocument(request.input.name, request.input.text); return {output: docView(active, false)}; }
+                return await liveActions[request.operation + '@1'](request.input);
+            } finally { receivingDocument = false; } }, flush: function () { return !!snap && snap.flush(); }
+        });
         var detachLive = window.pudlApplets && window.pudlApplets.attach ? window.pudlApplets.attach('yavc.' + app, liveActions) : null;
         var commonToolbar = window.pudlHost && window.pudlHost.commandToolbar ? window.pudlHost.commandToolbar.attach(root, { app: app, label: isDocs ? 'Docs' : 'Editor', table: commandTable,
             defaults: ['save', '-', 'undo', 'redo', '-', 'style', 'bold', 'italic', 'link', 'insert', '-', 'find', '-', 'view-mode'] }) : null;
@@ -2556,6 +2616,7 @@
             commandTable: commandTable,
             toolbars: toolbars,
             destroy: function () {
+                if (unbindDocuments) unbindDocuments();
                 zoomObserver.disconnect();
                 if(paneLayoutObserver)paneLayoutObserver.disconnect();cancelAnimationFrame(paneLayoutFrame);
                 if (printFrame) { printFrame.remove(); }

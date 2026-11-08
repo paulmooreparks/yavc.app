@@ -63,6 +63,8 @@ type Server struct {
 	Sessions *session.Store
 	// Title is the site's name, shown in the topbar and the page titles.
 	Title string
+	// DocumentGrouping selects single-document windows or tabbed workspaces.
+	DocumentGrouping string
 
 	catalog appletCatalog
 	pages   *template.Template
@@ -587,7 +589,7 @@ func (s *Server) pageData(r *http.Request, title string) map[string]any {
 	}
 	return map[string]any{
 		"AboutSite": "/about" + suffix, "AboutPUDL": "/about/pudl" + suffix,
-		"Site": s.Title, "Title": title, "SiteURL": s.siteURL(r),
+		"Site": s.Title, "Title": title, "SiteURL": s.siteURL(r), "DocumentGrouping": s.DocumentGrouping,
 		"Appearance": s.appearanceOf(sess), "Skins": s.skinList, "Palettes": s.paletteList,
 		"State": state, "Config": config,
 		"Applets": s.appletEntries(r), "Dialog": "", "PUDLVersion": s.pudlVersion, "Retention": s.retention(), "StaticVersion": s.staticVersion, "SiteOrigin": strings.TrimSuffix(s.siteURL(r), "/"),
