@@ -158,7 +158,7 @@
            wrapped, the Markdown views offered, the formatting offered, a
            site page's source to open, and the file's address on the site. */
         var wrapOn = true, viewsOffered = false, formatOffered = false, sourceOffered = false, siteUrl = null;
-        function commandsChanged() { if (opts.commandsChanged) { opts.commandsChanged(); } }
+        function commandsChanged() { if (destroyed) { return; } if (opts.commandsChanged) { opts.commandsChanged(); } if (tabRow) { tabRow.render(); } }
 
         var CM = null, F = null, view = null, destroyed = false, startupFailed = false, unsubscribe = null, styleLifetime = new AbortController();
         var tabs = [], active = -1, untitled = 0;
@@ -396,7 +396,8 @@
             }
         });
         var tabRow = window.yavcDocTabs ? window.yavcDocTabs.attach(el.tabs, {
-            tabs: function () { return tabs.map(function (t) { return { name: t.name, path: t.path, modified: t.modified, note: t.readOnly ? '(read-only)' : '' }; }); },
+            application: isDocs ? 'Docs' : 'Editor',
+            tabs: function () { return tabs.map(function (t) { return { name: t.name, path: t.path, modified: dirtyTab(t), note: t.readOnly ? '(read-only)' : '' }; }); },
             active: function () { return active; },
             activate: function (i) { activate(i); view.focus(); },
             close: closeTab

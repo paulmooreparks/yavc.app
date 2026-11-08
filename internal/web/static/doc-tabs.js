@@ -5,6 +5,7 @@
    shows only while more than one document is open (Paul, 2026-11-03).
 
      var row = yavcDocTabs.attach(list, {
+       application: 'Docs',
        tabs: function () { return [{ name, path, modified, note }]; },
        active: function () { return index; },
        activate: function (i) { … },
@@ -20,11 +21,23 @@
     var esc = window.yavcUtil.esc;
 
     function attach(list, host) {
+        var win = list.closest('.win[data-win]'), rendered = null;
+        function renderTitle(tab) {
+            if (!list.isConnected || !win || !win.contains(list) || !host.application || !window.pudlWindows) { return; }
+            var name = tab && tab.name || '', dirty = !!(tab && tab.modified);
+            var title = (dirty ? '\u25cf ' : '') + (name ? name + ' \u00b7 ' : '') + host.application;
+            var heading = win.querySelector('.win-title');
+            if (!heading) { return; }
+            if (heading.textContent !== title) { window.pudlWindows.retitle(win.getAttribute('data-win'), title); }
+            heading.setAttribute('aria-label', (name ? name + ' \u00b7 ' : '') + host.application + (dirty ? ', Unsaved changes' : ''));
+            heading.title = (tab && (tab.path || tab.name) || host.application) + (dirty ? ', Unsaved changes' : '');
+        }
         function render() {
             var tabs = host.tabs() || [], active = host.active();
+            renderTitle(tabs[active]);
             list.hidden = tabs.length <= 1;
             var had = list.contains(document.activeElement) ? +document.activeElement.getAttribute('data-tab') : -1;
-            list.innerHTML = tabs.map(function (t, i) {
+            var markup = tabs.map(function (t, i) {
                 var on = i === active;
                 return '<button type="button" role="tab" data-tab="' + i + '" aria-selected="' + on + '" tabindex="' + (on ? '0' : '-1') + '" title="' + esc(t.path || t.name) + '">' +
                     esc(t.name) +
@@ -32,6 +45,9 @@
                     (t.modified ? '<span class="doc-tab-dirty">unsaved</span>' : '') +
                     '<span class="doc-tab-close" aria-hidden="true" title="Close"></span></button>';
             }).join('');
+            if (markup === rendered) { return; }
+            rendered = markup;
+            list.innerHTML = markup;
             if (had >= 0) {
                 var b = list.querySelector('[data-tab="' + Math.min(had, tabs.length - 1) + '"]');
                 if (b) { b.focus(); }

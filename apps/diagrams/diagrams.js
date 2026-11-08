@@ -1592,6 +1592,7 @@
 
         function tabTitle(t) { return t.resource && t.resource.name || t.name || (t.path ? baseName(t.path) : 'Untitled'); }
         var tabRowApi = window.yavcDocTabs ? window.yavcDocTabs.attach(el.tabsEl, {
+            application: 'Diagrams',
             tabs: function () { return tabs.map(function (t) { return { name: tabTitle(t), path: t.path, modified: t.modified }; }); },
             active: function () { return active; },
             activate: function (i) { activateTab(i); },

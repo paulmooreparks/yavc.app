@@ -837,7 +837,8 @@
             if (t) { t.deck = deck; t.path = path; t.modified = modified; t.at = at; }
         }
         var tabRowApi = window.yavcDocTabs ? window.yavcDocTabs.attach(el.tabsEl, {
-            tabs: function () { stash(); return tabs.map(function (t) { return { name: tabTitle(t), path: t.path, modified: t.modified }; }); },
+            application: 'Slides',
+            tabs: function () { stash(); return tabs.map(function (t) { return { name: tabTitle(t), path: t.path, modified: dirtyTab(t) }; }); },
             active: function () { return active; },
             activate: function (i) { activateTab(i); },
             close: function (i) { return closeTab(i); }

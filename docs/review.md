@@ -1,5 +1,11 @@
 # Stem-to-stern review, November 2026
 
+## Active document window titles, 2026-11-08
+
+Editor, Docs, Slides and Diagrams now show the active filename and application in their window title. A leading dot, accessible unsaved label and full-path tooltip identify changes even when a single document hides its tab row. Rich drafts participate before source synchronization. The shared adapter retains unchanged tab buttons so a command-state refresh cannot interrupt a pointer click. Detached adapters cannot retitle a replacement window, and disposed text workspaces stop command refresh callbacks. The required module test covers those lifecycle and button-retention regressions. The browser fixture exercises all four applications through source/rich editing, tab switching, inactive dirty tabs, Save As and closing back to one document in Chromium, Firefox and WebKit.
+
+The initial browser run also exposed an existing document-opening boundary problem. Calling the Docs `new` action directly while a rich draft is pending can lose that draft when activation changes the source owner before synchronization. The title fixture verifies the pending indicator, explicitly synchronizes through the public Text view operation, and then tests inactive dirty tabs. This does not close the opening-boundary defect. The single-document host work must fix and test rich-draft synchronization for every operation that replaces the active source owner. Original failure logs and the successful title runs are retained separately.
+
 ## PUDL 0.105.0 integration, 2026-11-08
 
 The official archive, checksum and tag commit were verified before replacing the complete 193-file distribution. The new provenance test checks all paths and bytes in the required commit gate. The host migration and browser coverage are recorded in `pudl-upgrade-0.105.0.md`.
