@@ -1,5 +1,13 @@
 # Stem-to-stern review, November 2026
 
+## Bounded source bytes and lossless uploads, 2026-11-08
+
+The read-only `contentBytes` host extension returns bounded complete bytes with the revision of their stored payload. It uses the guest VFS authority and does not add another store or permit writes. The portable client validates responses and owns its copy, including when the provider returns a typed-array subclass. The shared codec accepts strict UTF-8 and BOM-labelled UTF-16, retains BOM and newline code units, and refuses malformed source. Encoding refuses isolated surrogates instead of replacing them.
+
+Eligible computer uploads previously used `File.text()`, which can replace invalid UTF-8 and remove the signature. They now verify a complete UTF-8 round trip before storing a text record. Other inputs retain their original bytes. Appending text to a binary record is refused instead of discarding its previous content. Guest resource create/write also refuse unpaired surrogates before mutation. Existing server-mount upload and write policy remains unchanged.
+
+Six new module tests cover encoding, malformed sequences, independent limits, ownership, response validation and cancellation. Real Files uploads and host byte reads pass Chromium, Firefox and WebKit for UTF-8 BOM, all newline forms, non-BMP text, invalid UTF-8, NUL, both UTF-16 orders, large text and media. Reload retains the same bytes. Guest-store, dependency-import/cancellation, Editor/Slides resource and native-source/resolver regressions pass all three engines. The broader VFS-consumer suite passes Chromium and WebKit; Firefox again reports the pre-existing Diagrams reload crash recorded above. Independent source review has no remaining findings. UTF-16 writable provenance, Save As encoding, edited mixed-EOL mapping, route activation and the actual Docs/Editor split remain gates.
+
 ## Complete dialog review and shared forms, 2026-11-08
 
 `dialog-inventory.md` records every authored dialog and generated family, with the applicable rendered and behavioral evidence. The scope includes site and permission dialogs, all content applets, Files, Settings, Terminal and the remaining bundled applets. `shared-dialog-review.md` records the design changes, and `file-fields-contract.md` specifies the optional host-owned browsing and import capability.

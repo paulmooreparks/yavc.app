@@ -61,13 +61,14 @@
 
     /* === The site tree =================================================== */
 
-    var root = null;
+    var root = null, textCodec = null;
     var treeReady = null;
     function load() {
         if (!treeReady) {
             treeReady = fetch('/api/site/tree', { headers: { Accept: 'application/json' } })
                 .then(function (r) { if (!r.ok) { throw new Error('HTTP ' + r.status); } return r.json(); })
                 .then(async function (data) {
+                    textCodec = await window.yavcUtil.loadGlobal(window.yavcUtil.versioned('/applets/content-kit/text-codec.js'), 'yavcTextCodec');
                     if (!MOUNT) {
                         store = await window.yavcUtil.loadGlobal(window.yavcUtil.versioned('/static/home-store.js'), 'yavcHomeStore');
                         home.record = await store.initialize();
@@ -768,6 +769,7 @@
             if (!d.home) { return { error: 'files can only be created in your home directory (~)' + (MOUNT ? ', /wwwroot or /etc' : '') }; }
             if (!validName(name)) { return { error: name + ' is not a valid file name' }; }
         }
+        if (append && n && n.bin) return {error:path+': cannot append text to a binary file'};
         var full = append && n ? (n.server ? await serverRead(n) : readHome(n)) + content : content;
         if (d.settings) { return settingsPut(d, name, full, path); }
         if (d.server) {
@@ -776,6 +778,8 @@
             return serverPut(d, name, bytes, path, full);
         }
         if (full.length > FILE_MAX) { return { error: path + ': too large (the limit is 256 KB)' }; }
+        try { textCodec.encode(full, 'utf-8', {maxBytes:BLOB_MAX,maxText:FILE_MAX}); }
+        catch (err) { return {error:path+': '+err.message}; }
         var was = n && n.bin ? n.blob : null;
         if (n) {
             if (n.bin) { delete n.bin; delete n.blob; delete n.size; delete n.type; }
@@ -850,10 +854,14 @@
             return serverPut(dir, file.name, file, file.name, null);
         }
         var binary = /^(image|audio|video|font)\//.test(file.type) || /^application\/(pdf|zip|octet-stream)/.test(file.type);
+        if (file.size > BLOB_MAX) return {error:file.name+' is larger than the 8 MB upload limit.'};
         if (!binary && file.size <= FILE_MAX) {
-            var text = await file.text();
+            var raw = await file.arrayBuffer(), decoded;
             if(!operationCurrent(context))return {error:'The import was cancelled before saving.'};
-            if (text.indexOf('\0') < 0) { return write(dir, file.name, text, false); }
+            try { decoded = textCodec.decode(raw, {maxBytes:FILE_MAX,maxText:FILE_MAX}); }
+            catch (err) { /* Unsupported source remains a byte file. */ }
+            if (decoded && decoded.encoding === 'utf-8') return write(dir, file.name, decoded.text, false);
+            return writeBytes(dir, file.name, raw, file.type, context);
         }
         return writeBytes(dir, file.name, file, file.type,context);
     }
@@ -1187,6 +1195,24 @@
         if (MOUNT) throw new Error('The server mount does not support conditional resource saves.');
         return resource.slice(1);
     }
+    var contentBytes = Object.freeze({version:1,read:function (request, context) {
+        var resource = request.resource, maximum = request.maxBytes;
+        if (!Number.isSafeInteger(maximum) || maximum < 1 || maximum > BLOB_MAX) return Promise.reject(new Error('Invalid byte read limit.'));
+        return queued(async function () {
+            if (!operationCurrent(context)) throw new Error('The byte read was cancelled.');
+            var path = resourcePath(resource), record = await store.read(), entry = store.parse(record.raw).files[path];
+            if (!entry || !['f','b'].includes(entry.t)) throw new Error('The byte resource does not exist.');
+            var value;
+            if (entry.t === 'b') {
+                if (entry.s > maximum) throw new Error('The byte resource exceeds the read limit.');
+                value = await blobGet(entry.id);
+                if (value.byteLength !== entry.s) throw new Error('The saved bytes are incomplete.');
+            } else value = textCodec.encode(entry.c, 'utf-8', {maxBytes:maximum,maxText:FILE_MAX});
+            if (!operationCurrent(context)) throw new Error('The byte read was cancelled.');
+            if (value.byteLength > maximum) throw new Error('The byte resource exceeds the read limit.');
+            return {resource:resource,revision:entry.revision,bytes:value instanceof ArrayBuffer ? value.slice(0) : value.buffer.slice(value.byteOffset,value.byteOffset+value.byteLength),name:path.slice(path.lastIndexOf('/')+1),mediaType:entry.t==='b' ? entry.y || '' : ''};
+        });
+    }});
     var contentResources = Object.freeze({
         version: 1,
         read: function (request) {
@@ -1202,6 +1228,7 @@
             return queued(async function () {
                 var path = resourcePath(request.resource);
                 if (typeof request.text !== 'string' || request.text.length > FILE_MAX) throw new Error('The resource exceeds the 256 KB text limit.');
+                textCodec.encode(request.text,'utf-8',{maxText:FILE_MAX});
                 var record = await store.update(function (current) {
                     if (context && context.signal && context.signal.aborted) throw new DOMException('The save was cancelled.', 'AbortError');
                     var data = store.parse(current.raw), parent = path.slice(0, path.lastIndexOf('/'));
@@ -1219,6 +1246,7 @@
             return queued(async function () {
                 var path = resourcePath(request.resource);
                 if (typeof request.text !== 'string' || request.text.length > FILE_MAX) throw new Error('The resource exceeds the 256 KB text limit.');
+                textCodec.encode(request.text,'utf-8',{maxText:FILE_MAX});
                 if (typeof request.expectedRevision !== 'string' || !request.expectedRevision || request.expectedRevision.length > 4096) throw new Error('A baseline revision is required.');
                 var record = await store.update(function (current) {
                     if (context && context.signal && context.signal.aborted) throw new DOMException('The save was cancelled.', 'AbortError');
@@ -1262,6 +1290,7 @@
         save: saveCapturedTree,
         sync: homeSync,
         contentResources: contentResources,
+        contentBytes: contentBytes,
         /* The admin mount (edit origin only). */
         mounted: !!MOUNT,
         user: function () { return home.dir ? home.dir.name : 'guest'; },

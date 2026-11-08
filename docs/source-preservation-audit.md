@@ -12,6 +12,8 @@ The Markdown parser/serializer already retains original source metadata and prot
 
 ## Evidence and limits
 
+The bounded byte stage in `text-bytes-contract.md` adds a host-owned read-only byte snapshot and a strict shared Unicode codec. New eligible UTF-8 uploads retain signatures and newline bytes; malformed or unsupported text remains a binary file instead of receiving replacement characters. Real Files upload, reload and authority-bound tests run in all three engines. The stage also refuses isolated-surrogate writes, because UTF-8 cannot represent those code units without replacement. It does not yet make UTF-16 writable or provide edited mixed-EOL transaction mapping.
+
 `scripts/test-content-preservation-routing.cjs` exercises Editor no-op saves and Slides no-op saves across empty content, BOM, CRLF, mixed endings, legacy CR endings, trailing whitespace, fences containing separators and missing final newlines. It also edits one slide and deck metadata while checking untouched source spans. The separate resource/Save As/recovery regression and Slides HTML/PPTX/PDF/exclusion checks cover shared consumers.
 
 The resource contract still carries decoded strings. This is not a UTF-16/byte-preserving file API, and the bounded byte read/identify/decode/encode contract remains open. Edited mixed-EOL source in CodeMirror still needs a maintained raw-to-canonical transaction mapping, including Undo and recovery. A touched Slides span can use canonical source and does not promise preservation of every whitespace choice inside that edited span. Arbitrary extension support and the full unsupported-syntax corpus remain split gates. Those limits must be closed or enforced by declared format capabilities before activating the separate writable Docs package.
