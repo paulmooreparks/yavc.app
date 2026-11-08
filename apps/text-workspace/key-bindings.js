@@ -6,7 +6,7 @@
         var U=window.yavcUtil, esc=U.esc, api, busy=false, draft=Object.assign(Object.create(null),opts.keys || {}), id='key-bindings-'+(++sequence);
         var labels=new Map(opts.commands.map(function (c) { return [c.id,c.label]; }));
         function commandOptions() {
-            return opts.commands.map(function (c) {return '<option value="'+esc(c.id)+'">'+esc(c.label)+(c.label===c.id?'':' ('+esc(c.id)+')')+'</option>';}).join('');
+            return opts.commands.map(function (c) {return '<option value="'+esc(c.id)+'">'+esc(c.label)+'</option>';}).join('');
         }
         function problem(message,field) {
             var notice=U.notice(api.body.querySelector('[data-bindings-errors]'),message,true);
@@ -44,7 +44,7 @@
             body:'<p>Changes apply to '+esc(opts.title)+'. Choose Default to restore a shortcut, or Disabled to turn it off.</p>'+
                 '<div class="form-group"><label class="form-label" for="'+id+'-filter">Find a Shortcut</label><input class="form-input" type="search" id="'+id+'-filter" data-bindings-filter></div>'+
                 '<div class="ed-bindings-list"><table class="data-table"><thead><tr><th scope="col">Shortcut</th><th scope="col">Command</th></tr></thead><tbody></tbody></table></div>'+
-                '<fieldset><legend>Add a Shortcut</legend><div class="ed-binding-add"><div class="form-group"><label class="form-label" for="'+id+'-new-key">Shortcut</label><input class="form-input" id="'+id+'-new-key" data-new-key maxlength="100" placeholder="Mod-Shift-k"></div>'+
+                '<fieldset class="form-fieldset"><legend>Add a Shortcut</legend><div class="ed-binding-add"><div class="form-group"><label class="form-label" for="'+id+'-new-key">Shortcut</label><input class="form-input" id="'+id+'-new-key" data-new-key maxlength="100" placeholder="Mod-Shift-k"></div>'+
                 '<div class="form-group"><label class="form-label" for="'+id+'-new-command">Command</label><span class="form-select-wrap"><select class="form-select" id="'+id+'-new-command" data-new-command><option value="">Choose a command</option><option value="!disabled">Disabled</option>'+commandOptions()+'</select></span></div><button type="button" class="btn" data-add-binding>Add</button></div><p class="muted">Use names such as Mod-s or Ctrl-Shift-k. Mod means Ctrl on Windows and Command on macOS.</p></fieldset>'+
                 '<button type="button" class="btn" data-reset-bindings>Restore Defaults</button><div data-bindings-errors></div>',
             buttons:[{id:'cancel',label:'Cancel'},{id:'apply',label:'Apply',primary:true}],

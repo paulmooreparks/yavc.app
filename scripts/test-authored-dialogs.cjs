@@ -37,7 +37,7 @@ async function populate(p,app,dialog,index){
      await p.evaluate(theme=>pudlSetTheme(theme),width===360?'dark':'light');
      const measurement=await dialog.evaluate(el=>({width:el.getBoundingClientRect().width,overflow:el.scrollWidth>el.clientWidth+2,viewport:innerWidth}));
      entry.layouts.push(measurement);
-     await p.screenshot({animations:'disabled',path:path.join(out,engine+'-'+app+'-'+i+'-'+width+'.png')});
+     await dialog.screenshot({animations:'disabled',path:path.join(out,engine+'-'+app+'-'+i+'-'+width+'.png')});
      assert.ok(measurement.width<=width+1,app+' '+title+' exceeds viewport');assert.equal(measurement.overflow,false,app+' '+title+' has horizontal overflow');
     }
     for(let step=0;step<8;step++){await p.keyboard.press('Tab');assert.equal(await dialog.evaluate(el=>el.contains(document.activeElement)||el===document.activeElement),true,app+' '+title+' loses keyboard focus');}

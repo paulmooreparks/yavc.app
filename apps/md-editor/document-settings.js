@@ -112,7 +112,7 @@
         var id = 'doc-options-' + (++count);
         var body = '<p>Use {page}, {pages}, {title}, {author} and {date}. Text, emphasis and links are supported.</p>';
         fields.forEach(function (key, index) {
-            if (index % 3 === 0) { body += '<fieldset class="md-furniture-fields"><legend>' + (index ? 'Footer' : 'Header') + '</legend><div class="md-document-options">'; }
+            if (index % 3 === 0) { body += '<fieldset class="form-fieldset md-furniture-fields"><legend>' + (index ? 'Footer' : 'Header') + '</legend><div class="md-document-options">'; }
             var value, label;
             var parts = key.split('-'), existing = props[parts[0]] || ''; value = typeof existing === 'string' ? parts[1] === 'center' ? existing : '' : existing[parts[1]] || ''; label = parts.map(function (s) { return s[0].toUpperCase() + s.slice(1); }).join(' ');
             body += '<div class="form-group"><label class="form-label" for="' + id + '-' + key + '">' + label + '</label><input class="form-input" id="' + id + '-' + key + '" data-doc-option="' + key + '" value="' + esc(value) + '" maxlength="256"></div>';

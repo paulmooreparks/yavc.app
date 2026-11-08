@@ -2,7 +2,7 @@
 const assert=require('node:assert/strict'),pw=require('playwright'),fs=require('node:fs'),os=require('node:os'),path=require('node:path');
 const port=process.env.YAVC_CHROME_TEST_PORT||'8442',out=path.join(os.tmpdir(),'yavc-files-dialog-evidence');fs.mkdirSync(out,{recursive:true});
 const command=(p,id)=>p.evaluate(id=>{window.filesCommand=pudlCommands.run(id,null,document.querySelector('[data-applet]'));},id);
-async function inspect(p,d,name,engine){for(const width of [1200,360]){await p.setViewportSize({width,height:900});assert.equal(await d.evaluate(el=>el.scrollWidth>el.clientWidth+2),false);await p.screenshot({animations:'disabled',path:path.join(out,engine+'-'+name+'-'+width+'.png')});}for(let i=0;i<6;i++){await p.keyboard.press(i%2?'Tab':'Shift+Tab');assert.equal(await d.evaluate(el=>el.contains(document.activeElement)),true);}await p.setViewportSize({width:1200,height:900});}
+async function inspect(p,d,name,engine){for(const width of [1200,360]){await p.setViewportSize({width,height:900});assert.equal(await d.evaluate(el=>el.scrollWidth>el.clientWidth+2),false);await d.screenshot({animations:'disabled',path:path.join(out,engine+'-'+name+'-'+width+'.png')});}for(let i=0;i<6;i++){await p.keyboard.press(i%2?'Tab':'Shift+Tab');assert.equal(await d.evaluate(el=>el.contains(document.activeElement)),true);}await p.setViewportSize({width:1200,height:900});}
 (async()=>{for(const engine of process.argv.slice(2).length?process.argv.slice(2):['chromium','firefox','webkit']){
  const b=await pw[engine].launch({headless:true}),p=await b.newPage({viewport:{width:1200,height:900}});p.setDefaultTimeout(15000);let phase='boot';
  try{

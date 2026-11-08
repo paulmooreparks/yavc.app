@@ -163,7 +163,7 @@
   .deck-print .deck-canvas { position: relative; left: auto; top: auto; transform: none !important; width: 1280px; height: 720px; page-break-after: always; box-shadow: none; margin: 0 auto; }
   @page { size: 1280px 720px; margin: 0; }
 }
-.deck-dialog { width: min(32rem, 92vw); }
+.deck-dialog { width: min(32rem, 92vw); max-width: 92vw; }
 
 /* Keep file locations readable without making the status strip taller. */
 .deck-status { min-width: 0; overflow: hidden; white-space: nowrap; }

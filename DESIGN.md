@@ -156,6 +156,8 @@ Each decision is dated and numbered so that later documents and cards can refer 
 
 78. **Shortcut preferences are owned by their application** (2026-11-08). Docs and Editor edit bindings in a shared preferences dialog backed by the host configuration service. No preference JSON is opened as a Docs document, and settings files do not acquire document-write authority. Apply validates and persists an override map; Cancel discards it, and concurrent settings changes require reopening. The rich surface reads updated bindings without replacing its editor state or Undo history.
 
+79. **Dialog layout follows its content** (2026-11-08, Paul). Dialogs retain PUDL's title, fields and action bands. An application that needs more than the default width sets both width and max-width, while respecting the viewport. Related fields use PUDL fieldsets; separate sections and secondary actions have explicit spacing. Paired measurements and custom-property rows stack before their editable text becomes cramped. Browser acceptance includes populated controls, readable command names and visible separation between sections, alongside overflow and keyboard checks.
+
 ## Addresses
 
 `yavc.app` serves the desktop, which is windowed only (decision 26). A window's content comes from `/win/{key}`. `yavc.app/{slug}` opens the desktop with that application's window, or draws a site page as a page of its own. `{slug}.yavc.app` serves the same application standalone, and it is the application's page form. The engine answers both from one deployment: a wildcard DNS record points every subdomain at it, and the engine reads the host header to choose the standalone layout for the application whose slug matches. A subdomain whose slug matches no application redirects to the desktop.

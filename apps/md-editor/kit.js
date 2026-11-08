@@ -1467,12 +1467,12 @@
         var byKey = {}; ((front && front.entries) || []).forEach(function (e) { byKey[e.key] = e; });
         var stockKeys = {}; STOCK.forEach(function (f) { stockKeys[f.key] = true; });
         var custom = ((front && front.entries) || []).filter(function (e) { return !stockKeys[e.key] && !hidden[e.key]; });
-        var n = ++dlgCount, id = 'md-props-' + n + '-';
+        var n = ++dlgCount, id = 'md-props-' + n + '-', customIndex = 0;
         function customRow(e, k) {
-            var locked = e && !e.editable;
+            var locked = e && !e.editable, rowId = id + 'custom-' + (++customIndex);
             return '<div class="md-prop-row" data-row data-was="' + esc(e ? e.key : '') + '"' + (locked ? ' data-locked' : '') + '>' +
-                '<input class="form-input" data-name aria-label="Name" placeholder="name" value="' + esc(e ? e.key : '') + '" autocomplete="off" spellcheck="false"' + (locked ? ' readonly' : '') + '>' +
-                '<input class="form-input" data-value aria-label="Value" placeholder="value" value="' + esc(e ? e.value : '') + '" autocomplete="off"' + (locked ? ' readonly title="Written in a form this dialog does not change; edit it in the text."' : '') + '>' +
+                '<div class="form-group"><label class="form-label" for="' + rowId + '-name">Name</label><input class="form-input" id="' + rowId + '-name" data-name value="' + esc(e ? e.key : '') + '" autocomplete="off" spellcheck="false"' + (locked ? ' readonly' : '') + '></div>' +
+                '<div class="form-group"><label class="form-label" for="' + rowId + '-value">Value</label><input class="form-input" id="' + rowId + '-value" data-value value="' + esc(e ? e.value : '') + '" autocomplete="off"' + (locked ? ' readonly title="Written in a form this dialog does not change; edit it in the text."' : '') + '></div>' +
                 (locked ? '<span class="md-prop-note">In the text</span>' : '<button type="button" class="btn" data-act="remove-row" aria-label="Take Out This Property">Remove</button>') + '</div>';
         }
         var html = '<div class="md-props-stock">' + STOCK.map(function (f) {
