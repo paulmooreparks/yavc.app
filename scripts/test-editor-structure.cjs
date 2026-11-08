@@ -96,9 +96,9 @@ async function sourceContains(page, fragment) { await page.waitForFunction(fragm
             await action(page, 'editor', 'new', { path: '~/narrow.md', text: source }); await action(page, 'editor', 'view', { mode: 'visual' });
             await page.setViewportSize({ width: 380, height: 850 }); await page.evaluate(() => pudlSetTheme('dark')); await command(page, 'toggle-outline');
             if (!(await tree.isVisible())) { await command(page, 'toggle-outline'); }
-            await tree.waitFor(); assert.ok(await page.locator('.ed-explorer').evaluate(element => element.scrollWidth <= element.clientWidth + 1));
+            await tree.waitFor(); assert.ok(await page.locator('.ed-outline-pane').evaluate(element => element.scrollWidth <= element.clientWidth + 1));
             await page.screenshot({ path: path.join(evidence, engine + '-narrow.png'), animations: 'disabled' });
-            await tree.getByRole('treeitem', { name: 'Third', exact: true }).click(); await page.waitForFunction(() => document.querySelector('.ed-explorer').hidden);
+            await tree.getByRole('treeitem', { name: 'Third', exact: true }).click(); await page.waitForFunction(() => !document.querySelector('[data-applet]').classList.contains('ed-compact-outline'));
             await page.setViewportSize({ width: 1500, height: 1000 });
             phase = 'Retain rich draft after source conflict';
             await action(page, 'editor', 'new', { path: '~/conflict.md', text: '# First\n\nOriginal body.\n\n# Second\n\nOther body.\n' });

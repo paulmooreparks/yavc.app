@@ -5,6 +5,7 @@ const http = require('node:http'), fs = require('node:fs'), path = require('node
 const pw = require('playwright');
 const root = path.resolve(__dirname, '../internal/web/static');
 const server = http.createServer((req, res) => {
+    if (req.url.split('?')[0] === '/applets/content-kit/text-codec.js') { res.setHeader('Content-Type','application/javascript');return res.end(fs.readFileSync(path.resolve(__dirname,'../apps/content-kit/text-codec.js'))); }
     if (req.url.startsWith('/static/')) {
         const name = req.url.split('?')[0].slice(8);
         if (!['home-store.js', 'sitefs.js', 'yavc-util.js'].includes(name)) { res.writeHead(404); return res.end(); }

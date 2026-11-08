@@ -160,6 +160,8 @@ Progressive enhancement applies to the server-rendered application catalog, link
 
 ## 12. Implementation order and acceptance
 
+The immediate implementation target after the byte-preservation and picker candidate is the shared-workspace extraction and separate Docs/Editor registration. The resource-authority and recovery groundwork is installed; the byte reader is prepared in PR #55. Further encoding coverage is not a separate prerequisite release. The extracted packages must enforce their supported-format boundaries, keeping unsupported writable encodings and unsafe edits unavailable with a reason. Snapshot migration, independent identities, shared code and reintegration remain part of the split itself. This follows the acceptance gates below without claiming that every source format is writable.
+
 1. Remove automatic identity switching from PR #46, retain the independent Slide glyph correction, and land the reviewed design. Do not implement the split in a design-only release.
 2. Audit the priority applets against documented PUDL/host-kit capabilities, establish the portable host boundary and minimal unrelated-host harness, and prove Diagrams with synthetic resources. Keep yavc.app on the same portable artifact. Reuse the receiving host's existing resource/writer contracts.
 3. Add the pure resolver, versioned host-owned capability registry, explanations and File Associations settings. Preserve current routing through adapters, add a bounded byte-read/text-decoding capability, and provide documented revision-checked writes or documented exclusive-writer enforcement before enabling the writable split.

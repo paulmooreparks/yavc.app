@@ -32,8 +32,7 @@
     /* The Editor's settings are its own toolbar's Wrap lines and Explorer
        controls, which remember themselves in ~/.config/editor.json
        (js/config.js), so they follow the reader wherever ~ does. */
-    var SETTINGS = { wrap: true, explorer: null, explorerWidth: null, keys: null, markdownView: 'document', documentView: 'document', documentZoom: '100', navigation: 'files' };
-    var navigationCount = 0;
+    var SETTINGS = { wrap: true, explorer: null, explorerWidth: null, outline: null, outlineWidth: null, keys: null, markdownView: 'document', documentView: 'document', documentZoom: '100', navigation: 'files' };
     var MARKDOWN_VIEWS = [['document', 'Document'], ['visual', 'Visual'], ['text', 'Text'], ['split', 'Split'], ['preview', 'Preview']];
     function supportsView(tab, mode) { return !!tab && (mode === 'text' || (tab.lang === 'markdown' && MARKDOWN_VIEWS.some(function (entry) { return entry[0] === mode; }))); }
     function resolvedView(tab, preferred) {
@@ -112,13 +111,17 @@
                table and toolbars() (PUDL 0.68.0), folding its groups as the
                window narrows. */
             '<div class="ed-toolbar-slot" data-toolbar-slot></div>' +
-            '<div class="tablist doc-tabs ed-tabs" role="tablist" aria-label="Open Files" data-role="tabs"></div>' +
             /* PUDL's splitter divides the Explorer from the work. */
             '<div class="ed-panes split" data-role="panes">' +
               /* The Explorer: the shared file browser's tree, files and all
                  (js/filebrowser.js), filled once the filesystem loads. */
-              '<aside class="ed-explorer split-pane" data-role="explorer" aria-label="Document Navigation" hidden></aside>' +
-              '<div class="split-handle ed-split" data-role="explorer-split" aria-label="Resize the Navigation Pane" data-split-min="160" data-split-max="50%" hidden></div>' +
+              '<aside class="ed-explorer split-pane" data-role="explorer" aria-label="Files" hidden></aside>' +
+              '<div class="split-handle ed-split" data-role="explorer-split" aria-label="Resize Files" data-split-min="160" data-split-max="50%" hidden></div>' +
+              '<div class="ed-document-space split-pane">' +
+              '<div class="tablist doc-tabs ed-tabs" role="tablist" aria-label="Open Files" data-role="tabs"></div>' +
+              '<div class="ed-document-body split" data-role="document-panes">' +
+              '<aside class="ed-outline-pane split-pane" data-role="outline-pane" aria-label="Document Outline" hidden></aside>' +
+              '<div class="split-handle ed-split" data-role="outline-split" aria-label="Resize Outline" data-split-min="140" data-split-max="40%" hidden></div>' +
               '<div class="ed-work split-pane">' +
                 '<div class="code-surface ed-surface" data-role="surface"></div>' +
                 /* The page: the document as its page (page-view.js), edited
@@ -136,8 +139,7 @@
               '<span class="ed-readonly" data-role="readonly" hidden><span class="glyph" style="--glyph: var(--glyph-pencil-off)" aria-hidden="true"></span>Read-only</span>' +
               '<span data-role="where"></span><span data-role="lang"></span><span data-role="count"></span><span data-role="pages"></span><span data-role="pos"></span>' +
               '<span class="ed-message" data-role="message" role="status" aria-live="polite"></span>' +
-            '</div>' +
-            '';
+            '</div></div></div>';
 
         var q = function (sel) { return root.querySelector(sel); };
         var el = {
@@ -145,7 +147,7 @@
             panes: q('[data-role="panes"]'), pageBox: q('[data-role="page-box"]'), scroll: q('[data-role="scroll"]'), page: q('[data-role="page"]'), findPlace: q('[data-role="find-place"]'),
             lang: q('[data-role="lang"]'), count: q('[data-role="count"]'), pages: q('[data-role="pages"]'), pos: q('[data-role="pos"]'), message: q('[data-role="message"]'),
             readonly: q('[data-role="readonly"]'),
-            explorer: q('[data-role="explorer"]'), explorerSplit: q('[data-role="explorer-split"]')
+            explorer: q('[data-role="explorer"]'), explorerSplit: q('[data-role="explorer-split"]'),outline:q('[data-role="outline-pane"]'),outlineSplit:q('[data-role="outline-split"]')
         };
         var FB = null, explorer = null;
         /* What the toolbar's commands show (the command table below): lines
@@ -774,13 +776,10 @@
         /* === The Explorer pane ============================================ */
 
         function setupExplorer() {
-            var id = 'ed-navigation-' + (++navigationCount);
-            el.explorer.innerHTML = '<div class="tabs ed-navigation" data-tabs-size="each"><button type="button" class="btn btn-sm ed-navigation-back" data-close-navigation><span class="glyph" style="--glyph:var(--glyph-back)" aria-hidden="true"></span>Back to Document</button><div class="tablist" role="tablist" aria-label="Navigation Pane">' +
-                '<button type="button" role="tab" id="' + id + '-files-tab" aria-controls="' + id + '-files" aria-selected="true">Files</button>' +
-                '<button type="button" role="tab" id="' + id + '-outline-tab" aria-controls="' + id + '-outline" aria-selected="false" data-outline-tab>Outline</button></div>' +
-                '<section class="ed-files-panel" role="tabpanel" id="' + id + '-files" aria-labelledby="' + id + '-files-tab">' + FB.markup.body({ list: false, treeLabel: 'Files' }) + '</section>' +
-                '<section class="ed-outline-panel" role="tabpanel" id="' + id + '-outline" aria-labelledby="' + id + '-outline-tab">' +
-                '<div class="ed-outline-tools" role="group" aria-label="Section Order"><button type="button" class="btn btn-sm" data-section-move="up"><span class="glyph" style="--glyph:var(--glyph-arrow-up)" aria-hidden="true"></span>Move Up</button><button type="button" class="btn btn-sm" data-section-move="down"><span class="glyph" style="--glyph:var(--glyph-arrow-down)" aria-hidden="true"></span>Move Down</button></div><div data-outline-tree></div></section></div>';
+            var back='<button type="button" class="btn btn-sm ed-navigation-back" data-close-navigation><span class="glyph" style="--glyph:var(--glyph-back)" aria-hidden="true"></span>Back to Document</button>';
+            el.explorer.innerHTML=back+'<h3 class="ed-pane-title">Files</h3><div class="ed-files-panel">'+FB.markup.body({list:false,treeLabel:'Files'})+'</div>';
+            el.outline.innerHTML=back+'<h3 class="ed-pane-title">Outline</h3><div class="ed-outline-tools" role="group" aria-label="Section Order"><button type="button" class="btn btn-sm" data-section-move="up"><span class="glyph" style="--glyph:var(--glyph-arrow-up)" aria-hidden="true"></span>Move Up</button><button type="button" class="btn btn-sm" data-section-move="down"><span class="glyph" style="--glyph:var(--glyph-arrow-down)" aria-hidden="true"></span>Move Down</button></div><div class="ed-outline-panel" data-outline-tree></div>';
+            el.explorer.querySelector('[data-close-navigation]').addEventListener('click',function () {compactNavigation('document');});
             explorer = FB.create(el.explorer.querySelector('.ed-files-panel'), F, {
                 treeFiles: true,
                 toggleFolders: true,
@@ -792,42 +791,36 @@
                         if (url) { window.open(url, '_blank', 'noopener'); } else { say(node.name + ' isn\'t a file the editor can open.', true); }
                         return;
                     }
-                    openPath(F.displayPath(r));
+                    openPath(F.displayPath(r)).then(function (opened) {if(opened && root.clientWidth<=700)compactNavigation('document');});
                 },
                 say: function (m, isError) { if (m) { say(m, isError); } }
             });
             showExplorer(explorerWanted(settings));
             markExplorer();
             explorer.onChange(keep);
-            if (window.pudlTabs) { window.pudlTabs.enhance(); }
-            navigationObserver = new MutationObserver(function () {
-                var selected = el.explorer.querySelector('[data-outline-tab]').getAttribute('aria-selected') === 'true';
-                if (selected !== outlineVisible) { outlineVisible = selected; saveSetting({ navigation: selected ? 'outline' : 'files' }); refreshOutline(); commandsChanged(); }
-            });
-            navigationObserver.observe(el.explorer.querySelector('.tablist'), { attributes: true, attributeFilter: ['aria-selected'], subtree: true });
-            el.explorer.addEventListener('click', function (event) {
-                if (event.target.closest('[data-close-navigation]')) { hideNavigation(); return; }
+            showOutline(typeof settings.outline==='boolean'?settings.outline:settings.navigation==='outline');
+            el.outline.addEventListener('click', function (event) {
+                if (event.target.closest('[data-close-navigation]')) { compactNavigation('document'); return; }
                 var move = event.target.closest('[data-section-move]'); if (move) { moveOutline(move.dataset.sectionMove); return; }
                 var link = event.target.closest('[data-outline-index]'); if (!link || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) { return; }
                 event.preventDefault(); navigateOutline(Number(link.dataset.outlineIndex));
             });
-            el.explorer.addEventListener('focusin', function (event) { var link = event.target.closest('[data-outline-index]'); if (link) { outlineTarget = Number(link.dataset.outlineIndex); outlineControls(); } });
-            el.explorer.addEventListener('keydown', function (event) { if (event.altKey && event.shiftKey && !event.ctrlKey && !event.metaKey && /^(ArrowUp|ArrowDown)$/.test(event.key)) { event.preventDefault(); event.stopPropagation(); moveOutline(event.key === 'ArrowUp' ? 'up' : 'down'); } }, true);
-            el.explorer.addEventListener('dragstart', function (event) {
+            el.outline.addEventListener('focusin', function (event) { var link = event.target.closest('[data-outline-index]'); if (link) { outlineTarget = Number(link.dataset.outlineIndex); outlineControls(); } });
+            el.outline.addEventListener('keydown', function (event) { if (event.altKey && event.shiftKey && !event.ctrlKey && !event.metaKey && /^(ArrowUp|ArrowDown)$/.test(event.key)) { event.preventDefault(); event.stopPropagation(); moveOutline(event.key === 'ArrowUp' ? 'up' : 'down'); } }, true);
+            el.outline.addEventListener('dragstart', function (event) {
                 var link = event.target.closest('[data-outline-index]'); if (!link || !current() || current().readOnly) { event.preventDefault(); return; }
                 outlineDrag = { index: Number(link.dataset.outlineIndex), text: outlineText, tab: current() }; event.dataTransfer.setData('text/plain', link.textContent); event.dataTransfer.effectAllowed = 'move';
             });
-            el.explorer.addEventListener('dragover', function (event) { var link = event.target.closest('[data-outline-index]'); if (link && outlineDrag) { var from = outlineEntries[outlineDrag.index], to = outlineEntries[Number(link.dataset.outlineIndex)]; if (from && to && from.level === to.level && from.parent === to.parent) { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; } } });
-            el.explorer.addEventListener('drop', function (event) {
+            el.outline.addEventListener('dragover', function (event) { var link = event.target.closest('[data-outline-index]'); if (link && outlineDrag) { var from = outlineEntries[outlineDrag.index], to = outlineEntries[Number(link.dataset.outlineIndex)]; if (from && to && from.level === to.level && from.parent === to.parent) { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; } } });
+            el.outline.addEventListener('drop', function (event) {
                 var link = event.target.closest('[data-outline-index]'), drag = outlineDrag; outlineDrag = null;
                 if (!link || !drag || drag.tab !== current() || drag.text !== view.state.doc.toString()) { return; }
                 event.preventDefault(); var target = Number(link.dataset.outlineIndex); moveOutline(null, drag.index, target, event.clientY > link.getBoundingClientRect().top + link.getBoundingClientRect().height / 2);
             });
-            el.explorer.addEventListener('dragend', function () { outlineDrag = null; });
-            if (settings.navigation === 'outline') { el.explorer.querySelector('[data-outline-tab]').click(); }
+            el.outline.addEventListener('dragend', function () { outlineDrag = null; });
         }
 
-        var outlineVisible = false, outlineEntries = [], outlineText = '', outlineOwner = null, outlineRenderedOwner = null, outlineRenderedShape = '', outlinePendingFocus = null, outlineTarget = -1, outlineDrag = null, outlineRevision = 0, outlineTimer = 0, navigationObserver = null;
+        var outlineVisible = false, outlineEntries = [], outlineText = '', outlineOwner = null, outlineRenderedOwner = null, outlineRenderedShape = '', outlinePendingFocus = null, outlineTarget = -1, outlineDrag = null, outlineRevision = 0, outlineTimer = 0;
         function suspendOutline(place) {
             var link = document.activeElement && document.activeElement.closest('[data-outline-index]');
             if (link && place.contains(link) && outlineOwner === current()) {
@@ -838,19 +831,19 @@
         }
         function restoreOutlineFocus(place) {
             var pending = outlinePendingFocus; outlinePendingFocus = null;
-            if (!pending || pending.owner !== current() || !outlineVisible || el.explorer.hidden || document.activeElement !== document.body && !place.contains(document.activeElement)) { return; }
+            if (!pending || pending.owner !== current() || !outlineVisible || el.outline.hidden || document.activeElement !== document.body && !place.contains(document.activeElement)) { return; }
             var matches = outlineEntries.map(function (entry, i) { return outlineKey(outlineEntries, entry) === pending.key ? i : -1; }).filter(function (i) { return i >= 0; });
             if (matches.length === 1) { var link = place.querySelector('[data-outline-index="' + matches[0] + '"]'); if (link) { link.focus(); } }
         }
         function scheduleOutline() {
             clearTimeout(outlineTimer);
-            var place = el.explorer.querySelector('[data-outline-tree]');
+            var place = el.outline.querySelector('[data-outline-tree]');
             if (place && view && (current() !== outlineOwner || view.state.doc.toString() !== outlineText)) { suspendOutline(place); }
             outlineTimer = setTimeout(refreshOutline, 150);
         }
         function outlineControls() {
             var entry = outlineEntries[outlineTarget], editable = current() && !current().readOnly;
-            el.explorer.querySelectorAll('[data-section-move]').forEach(function (button) { button.disabled = !editable || !entry || (button.dataset.sectionMove === 'up' ? entry.previous : entry.next) < 0; });
+            el.outline.querySelectorAll('[data-section-move]').forEach(function (button) { button.disabled = !editable || !entry || (button.dataset.sectionMove === 'up' ? entry.previous : entry.next) < 0; });
         }
         function currentHeadingIndex() {
             if (!view || current() !== outlineOwner) { return -1; }
@@ -860,8 +853,8 @@
         function markOutline() {
             if (!view || !outlineEntries.length || current() !== outlineOwner) { outlineControls(); return; }
             var index = currentHeadingIndex();
-            if (!el.explorer.contains(document.activeElement)) { outlineTarget = index; }
-            el.explorer.querySelectorAll('[data-outline-index]').forEach(function (link) { if (Number(link.dataset.outlineIndex) === index) { link.setAttribute('aria-current', 'location'); } else { link.removeAttribute('aria-current'); } });
+            if (!el.outline.contains(document.activeElement)) { outlineTarget = index; }
+            el.outline.querySelectorAll('[data-outline-index]').forEach(function (link) { if (Number(link.dataset.outlineIndex) === index) { link.setAttribute('aria-current', 'location'); } else { link.removeAttribute('aria-current'); } });
             outlineControls();
         }
         function headingHref(entry) {
@@ -873,13 +866,13 @@
         function refreshOutline() { return loadOutline().catch(function (err) { if (!destroyed) { say('The outline could not be updated: ' + err.message, true); } }); }
         async function loadOutline() {
             var revision = ++outlineRevision, tab = current();
-            if (!view || !el.explorer.querySelector('[data-outline-tree]')) { return; }
-            var pendingPlace = el.explorer.querySelector('[data-outline-tree]');
+            if (!view || !el.outline.querySelector('[data-outline-tree]')) { return; }
+            var pendingPlace = el.outline.querySelector('[data-outline-tree]');
             if (tab !== outlineOwner || view.state.doc.toString() !== outlineText) { suspendOutline(pendingPlace); }
             var text = view.state.doc.toString(), m = await mdEngine();
             if (destroyed || revision !== outlineRevision || current() !== tab || view.state.doc.toString() !== text) { return; }
-            var place = el.explorer.querySelector('[data-outline-tree]'), focus = document.activeElement && document.activeElement.closest('[data-outline-index]'), oldFocus = focus && el.explorer.contains(focus) ? Number(focus.dataset.outlineIndex) : null;
-            var expanded = {}; el.explorer.querySelectorAll('[data-outline-index][aria-expanded]').forEach(function (link) { expanded[link.dataset.outlineIndex] = link.getAttribute('aria-expanded'); });
+            var place = el.outline.querySelector('[data-outline-tree]'), focus = document.activeElement && document.activeElement.closest('[data-outline-index]'), oldFocus = focus && el.outline.contains(focus) ? Number(focus.dataset.outlineIndex) : null;
+            var expanded = {}; el.outline.querySelectorAll('[data-outline-index][aria-expanded]').forEach(function (link) { expanded[link.dataset.outlineIndex] = link.getAttribute('aria-expanded'); });
             var entries = tab && tab.lang === 'markdown' ? m.outline(text) : [];
             var sameShape = tab === outlineOwner && JSON.stringify(entries.map(function (entry) { return [entry.level, entry.title]; })) === JSON.stringify(outlineEntries.map(function (entry) { return [entry.level, entry.title]; }));
             outlineEntries = entries; outlineText = text; outlineOwner = tab; outlineDrag = null;
@@ -925,14 +918,14 @@
             else if (readsAsPreview()) { var block = el.page.querySelector('[data-line="' + entry.line + '"]'); if (block) { block.scrollIntoView({ block: 'center' }); } }
             else { view.focus(); }
             tab.navigationLine = entry.line; outlineTarget = index; markOutline(); announce(true);
-            if (window.matchMedia('(max-width: 700px)').matches) { showExplorer(false); }
+            if (root.clientWidth<=700)compactNavigation('document');
         }
         function outlineKey(list, heading) {
             var parts = []; for (var node = heading; node; node = node.parent >= 0 ? list[node.parent] : null) { parts.unshift([node.level, node.title]); } return JSON.stringify(parts);
         }
         async function moveOutline(direction, index, target, after) {
             var tab = current(); if (!tab || tab.readOnly || !view) { return; }
-            index = index == null ? el.explorer.querySelector('.ed-outline-panel').contains(document.activeElement) ? outlineTarget : currentHeadingIndex() : index;
+            index = index == null ? el.outline.querySelector('.ed-outline-panel').contains(document.activeElement) ? outlineTarget : currentHeadingIndex() : index;
             var entry = outlineEntries[index], originalEntries = outlineEntries, destination = target == null ? null : outlineEntries[target];
             if (!entry || tab !== outlineOwner) { return; }
             try {
@@ -956,27 +949,29 @@
                 if (next >= 0 && pageActive()) { visual.api.goToHeading(next); }
                 outlineTarget = next; outlineControls();
                 if (next >= 0) { tab.navigationLine = outlineEntries[next].line; announce(); }
-                if (next >= 0) { var link = el.explorer.querySelector('[data-outline-index="' + next + '"]'); if (link) { link.focus(); } }
+                if (next >= 0) { var link = el.outline.querySelector('[data-outline-index="' + next + '"]'); if (link) { link.focus(); } }
                 say('The section moved. Undo restores its previous position.');
             } catch (err) { if (!destroyed) { say(err.message, true); } }
         }
         function toggleOutline() {
             if (!explorer) { return; }
-            if (!el.explorer.hidden && outlineVisible) { showExplorer(false); saveSetting({ explorer: false }); return; }
-            showExplorer(true); saveSetting({ explorer: true, navigation: 'outline' }); el.explorer.querySelector('[data-outline-tab]').click(); refreshOutline();
+            var on=!outlineVisible || root.clientWidth<=700 && !root.classList.contains('ed-compact-outline');showOutline(on);saveSetting({outline:on});if(on)compactNavigation('outline');
         }
-        function hideNavigation() { showExplorer(false); saveSetting({ explorer: false }); }
+        function hideNavigation() { showExplorer(false);showOutline(false);compactNavigation('document');saveSetting({explorer:false,outline:false}); }
 
         /* The settings, as last read or changed, and a change arriving from
            elsewhere: another Editor, another tab, or the file edited. */
-        var settings = Object.assign({}, SETTINGS), unConfig = null;
+        var settings = Object.assign({}, SETTINGS), unConfig = null, pendingSettings = {};
         function applySettings(s) {
             settings = Object.assign({}, SETTINGS, s);
+            Object.keys(pendingSettings).forEach(function (key) { settings[key] = pendingSettings[key].value; });
             documentZoom = /^(width|page)$/.test(String(settings.documentZoom)) || Number(settings.documentZoom) >= 25 && Number(settings.documentZoom) <= 400 ? String(settings.documentZoom) : '100'; applyDocumentZoom();
             if (wrapOn !== !!settings.wrap) { setWrap(!!settings.wrap, false); }
             if (explorer && typeof settings.explorer === 'boolean' && el.explorer.hidden === settings.explorer) { showExplorer(settings.explorer); }
             if (explorerSplit) { explorerSplit.set(typeof settings.explorerWidth === 'number' ? settings.explorerWidth : null); }
-            if (explorer && (settings.navigation === 'outline') !== outlineVisible) { var tab = settings.navigation === 'outline' ? el.explorer.querySelector('[data-outline-tab]') : el.explorer.querySelector('[role="tab"]:not([data-outline-tab])'); if (tab) { tab.click(); } }
+            if(outlineSplit)outlineSplit.set(typeof settings.outlineWidth==='number'?settings.outlineWidth:null);
+            if(explorer)showOutline(typeof settings.outline==='boolean'?settings.outline:settings.navigation==='outline');
+            schedulePaneLayout();
             if (view && keyComp) {
                 view.dispatch({ effects: keyComp.reconfigure(keyBindings()) });
                 if (keyProblems) { say(keyProblems, true); }
@@ -985,31 +980,50 @@
 
         /* The Explorer's width, dragged at its divider and kept with the
            other settings. */
-        var explorerSplit = null;
+        var explorerSplit = null,outlineSplit=null,paneLayoutObserver=null,paneLayoutFrame=0,paneFocus=false;
         function setupExplorerSplit() {
             if (!window.pcSplit) { return; }
             explorerSplit = window.pcSplit.of(el.explorerSplit, function (w) { saveSetting({ explorerWidth: w }); });
             explorerSplit.set(typeof settings.explorerWidth === 'number' ? settings.explorerWidth : null);
+            outlineSplit=window.pcSplit.of(el.outlineSplit,function (w) {saveSetting({outlineWidth:w});});outlineSplit.set(typeof settings.outlineWidth==='number'?settings.outlineWidth:null);
+            paneLayoutObserver=new ResizeObserver(schedulePaneLayout);paneLayoutObserver.observe(root);schedulePaneLayout();
         }
         function saveSetting(changes) {
             Object.assign(settings, changes);
-            loadConfig().then(function (c) { return c.set('editor', changes); }).catch(function () { });
+            var ticket = {};
+            Object.keys(changes).forEach(function (key) { pendingSettings[key] = { value: changes[key], ticket: ticket }; });
+            return loadConfig().then(function (c) { return c.set('editor', changes); }).catch(function () { }).finally(function () {
+                Object.keys(changes).forEach(function (key) { if (pendingSettings[key] && pendingSettings[key].ticket === ticket) { delete pendingSettings[key]; } });
+            });
         }
 
         function showExplorer(on) {
             el.explorer.hidden = !on;
             el.explorerSplit.hidden = !on;
-            root.classList.toggle('ed-navigation-visible', !!on);
-            if (on && outlineVisible) { scheduleOutline(); }
+            if (!on && root.classList.contains('ed-compact-files')) { compactNavigation('document'); }
             if (on && window.pudlSplit) { window.pudlSplit.refresh(); }
             commandsChanged();
+            schedulePaneLayout();
         }
         function toggleExplorer() {
             if (!explorer) { return; }
-            var on = el.explorer.hidden || outlineVisible;
+            var on = el.explorer.hidden || root.clientWidth<=700 && !root.classList.contains('ed-compact-files');
             showExplorer(on);
-            if (on) { el.explorer.querySelector('[role="tab"]:not([data-outline-tab])').click(); }
-            saveSetting({ explorer: on, navigation: 'files' });
+            if(on)compactNavigation('files');else compactNavigation('document');
+            saveSetting({ explorer: on });
+        }
+        function compactNavigation(pane) {root.classList.toggle('ed-compact-files',pane==='files');root.classList.toggle('ed-compact-outline',pane==='outline');paneFocus=pane==='document' && root.clientWidth<=700;schedulePaneLayout();}
+        function showOutline(on) {outlineVisible=!!on;el.outline.hidden=!on;el.outlineSplit.hidden=!on;if(!on && root.classList.contains('ed-compact-outline'))compactNavigation('document');if(on)scheduleOutline();schedulePaneLayout();commandsChanged();}
+        function schedulePaneLayout() {
+            if(paneLayoutFrame || destroyed)return;
+            paneLayoutFrame=requestAnimationFrame(function () {
+                paneLayoutFrame=0;if(destroyed)return;
+                var compact=root.clientWidth<=700,body=el.outline.parentElement;
+                if(compact){el.panes.setAttribute('data-split-pane',root.classList.contains('ed-compact-files')?'first':'second');body.setAttribute('data-split-pane',root.classList.contains('ed-compact-outline')?'first':'second');}
+                else {el.panes.removeAttribute('data-split-pane');body.removeAttribute('data-split-pane');if(explorerSplit)explorerSplit.set(typeof settings.explorerWidth==='number'?settings.explorerWidth:null);if(outlineSplit)outlineSplit.set(typeof settings.outlineWidth==='number'?settings.outlineWidth:null);}
+                if(window.pudlSplit)window.pudlSplit.refresh();
+                if(paneFocus){paneFocus=false;if(formatsThePage() && visual.api)visual.api.focus();else if(view)view.focus();}
+            });
         }
         /* Wrap lines, as the toolbar, the View menu or a key switches it,
            kept with the settings when the reader changes it. */
@@ -2179,9 +2193,9 @@
                     disabled: function () { return !ready; }, run: run }, more || {});
             }
             var table = [
-                cmd('toggle-files', 'Files', 'folder', toggleExplorer, { checked: function () { return !el.explorer.hidden && !outlineVisible; } }),
-                cmd('toggle-outline', 'Outline', 'list', toggleOutline, { checked: function () { return !el.explorer.hidden && outlineVisible; }, shortcut: key('toggle-outline', 'Mod-Alt-o') }),
-                cmd('hide-navigation', 'Hide Navigation Pane', 'panel', hideNavigation, { hidden: function () { return el.explorer.hidden; } }),
+                cmd('toggle-files', 'Files', 'folder', toggleExplorer, { checked: function () { return !el.explorer.hidden; } }),
+                cmd('toggle-outline', 'Outline', 'list', toggleOutline, { checked: function () { return outlineVisible; }, shortcut: key('toggle-outline', 'Mod-Alt-o') }),
+                cmd('hide-navigation', 'Hide Side Panes', 'panel', hideNavigation, { hidden: function () { return el.explorer.hidden && !outlineVisible; } }),
                 cmd('section-up', 'Move Section Up', 'arrow-up', function () { return moveOutline('up'); }, { shortcut: key('section-up', 'Alt-Shift-ArrowUp'), disabled: function () { var entry = outlineEntries[outlineTarget]; return !editable || !entry || entry.previous < 0; } }),
                 cmd('section-down', 'Move Section Down', 'arrow-down', function () { return moveOutline('down'); }, { shortcut: key('section-down', 'Alt-Shift-ArrowDown'), disabled: function () { var entry = outlineEntries[outlineTarget]; return !editable || !entry || entry.next < 0; } }),
                 cmd('new', 'New', 'file', function () { newTab(); }),
@@ -2204,7 +2218,7 @@
                 cmd('insert-date', 'Insert Date', null, COMMANDS['insert-date'], { disabled: function () { return !ready || !editable; } }),
                 cmd('stamp-modified', 'Update Last-Modified', null, stampModified, { disabled: function () { return !ready || !editable; } }),
                 cmd('key-bindings', 'Key Bindings…', null, editKeys),
-                cmd('insert', 'Insert', 'plus', null, { items: insertItems, hidden: function () { return !formatOffered; }, shortcut: undefined }),
+                cmd('insert', 'Other', 'more', null, { items: insertItems, hidden: function () { return !formatOffered; }, shortcut: undefined }),
                 cmd('source', 'Edit the Source', 'code', openSource, { hidden: function () { return !sourceOffered; } }),
                 cmd('preview', 'Preview', 'new-window', preview, { hidden: function () { return !siteUrl; } }),
                 /* A deck (a file named .slides.md) presents in Slides, where
@@ -2513,10 +2527,11 @@
             toolbars: toolbars,
             destroy: function () {
                 zoomObserver.disconnect();
+                if(paneLayoutObserver)paneLayoutObserver.disconnect();cancelAnimationFrame(paneLayoutFrame);
                 if (printFrame) { printFrame.remove(); }
                 if (previewPages) { previewPages.destroy(); }
                 var finalSync = Promise.resolve().then(function () { if (visual.api) { return visual.api.sync(); } });
-                outlineRevision++; clearTimeout(outlineTimer); if (navigationObserver) { navigationObserver.disconnect(); }
+                outlineRevision++; clearTimeout(outlineTimer);
                 window.removeEventListener('popstate', locationChanged);
                 if (commonToolbar) { commonToolbar.destroy(); }
                 /* The session as the Editor closes, for when it opens again. */

@@ -112,6 +112,7 @@
             attach: function (root, options) { return window.yavcCommandToolbar.attach(root, Object.assign({}, options, { config: window.pudlHost.config })); }
         },
         pages: '/', pudl: '/pudl/',
+        contentBytes: {version:1,read:function (request,context) {return fs().then(function (F) {return F.contentBytes.read(request,context);});}},
         snapshot: window.pcSnapshot,
         /* Plan-only extension. Existing file routing remains until Docs and its migration gates are ready. */
         fileResolution: { version: 1, resolve: async function (request) {
