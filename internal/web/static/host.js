@@ -128,7 +128,6 @@
             browser: function () { return withDialog().then(function (x) { return {F:x[0],FB:x[1]}; }); },
             split: {of:function (handle,change) {return window.pcSplit.of(handle,change);}},
             openPage: function (href) { if(!window.pudlWindows || !document.querySelector('[data-win-layer]'))return false;var url=new URL(href,location.href),match=url.origin===location.origin && /^\/page\/([A-Za-z0-9_-]+)$/.exec(url.pathname);if(!match)return false;var key=match[1],win=document.querySelector('.win[data-win="'+key+'"]');if(win && window.pudlWindows.state().open.indexOf(key)>=0){window.pudlWindows.raise(key);if(window.pcLoadWindow)window.pcLoadWindow(win,'',true).catch(function () {});}else window.pudlWindows.open(key);return true;},
-            shortcodes: function () { return fetch('/api/admin/editor/shortcodes', {credentials:'same-origin',headers:{Accept:'application/json'}}).then(function (r) {return r.json().catch(function () {return {};}).then(function (body) {return r.ok ? body : {shortcodes:[]};});}); },
             legacySession: {
                 read: function (app) { return JSON.parse(localStorage.getItem('pc-'+app+'-session') || 'null'); },
                 write: function (app, value) { if(value)localStorage.setItem('pc-'+app+'-session',JSON.stringify(value));else localStorage.removeItem('pc-'+app+'-session'); }

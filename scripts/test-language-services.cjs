@@ -15,9 +15,6 @@ async function run(engine) {
             page.on('console', m => { if (m.type() === 'error') errors.push(m.text() + ' at ' + m.location().url); });
             page.on('request', r => { const u = new URL(r.url()); if (u.protocol.startsWith('http') && !u.hostname.endsWith('localhost') && !(u.hostname === 'plausible.io' && u.pathname.startsWith('/js/') && r.method() === 'GET')) remote.push(r.url()); });
             await page.route('https://plausible.io/**', route => route.fulfill({ status: 200, contentType: 'application/javascript', body: '' }));
-            // The inherited Editor requests a Parks admin catalog that yavc.app
-            // does not serve. Isolate that existing empty-catalog fallback.
-            await page.route('**/api/admin/editor/shortcodes', route => route.fulfill({ status: 200, contentType: 'application/json', body: '{"shortcodes":[]}' }));
             await page.addInitScript(() => {
                 const Original = window.Worker;
                 window.lspEvidence = { out: [], incoming: [], held: [], hold: [], workers: [] };
@@ -130,6 +127,7 @@ async function run(engine) {
             } catch (err) {
                 await page.screenshot({ path: path.join(evidence, engine + '-' + app + '-failure.png') });
                 const wire = await page.evaluate(() => {
+                    if(!window.CM)return {out:window.lspEvidence&&lspEvidence.out,incoming:window.lspEvidence&&lspEvidence.incoming,unavailable:'CodeMirror did not load'};
                     const view = CM.EditorView.findFromDOM(document.querySelector('.cm-editor'));
                     return { out: lspEvidence.out, incoming: lspEvidence.incoming, status: CM.completionStatus(view.state), completions: CM.currentCompletions(view.state).map(c => c.label), selection: view.state.selection.main.toJSON(), tooltips: Array.from(document.querySelectorAll('.cm-tooltip')).map(e => e.outerHTML) };
                 });

@@ -57,6 +57,7 @@
             }
             var api = { preview: call('preview'), doc: call('doc'), markdown: call('markdown'), blocks: call('blocks'), source: call('source'), container: call('container'), inline: call('inline'), glyphs: call('glyphs'), front: call('front'), frontset: call('frontset'), styles: call('styles') };
             api.outline = call('outline'); api.outlineState = call('outline-state'); api.moveSection = call('section-move');
+            api.shortcodes = call('shortcodes');
             api.withMacros = function (definitions, shared) {
                 var context = Object.create(api), run = call('macro-context');
                 context.exportPreview = function (text) { return call('export-preview')({ text: text, definitions: definitions || '', shared: shared || '' }); };

@@ -381,6 +381,8 @@ func (p problem) Error() string { return p.why }
 type def struct {
 	name, title, what, example string
 	kind                       kind
+	params                     []Param
+	argumentRequired           bool
 	// render draws an inline or block shortcode; wrap gives a container's
 	// HTML before and after its body.
 	render func(c Call, doc ast.Node, src []byte) (string, error)
@@ -456,12 +458,24 @@ func OpenLine(name, args string) string {
 
 // Definitions lists the shortcodes, for an editor's Insert menu.
 type Definition struct {
-	Name, Title, Description, Example string
-	Kind                              string
+	Name             string  `json:"name"`
+	Title            string  `json:"title"`
+	Description      string  `json:"description"`
+	Example          string  `json:"example"`
+	Kind             string  `json:"kind"`
+	Params           []Param `json:"params"`
+	ArgumentRequired bool    `json:"argumentRequired"`
+}
+
+// Param describes an accepted named argument, including a positional alias.
+type Param struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Required    bool   `json:"required"`
 }
 
 func Definitions() []Definition {
-	var out []Definition
+	out := make([]Definition, 0, len(order))
 	for _, name := range order {
 		d := table[name]
 		k := "inline"
@@ -472,7 +486,11 @@ func Definitions() []Definition {
 		} else if d.kind == span {
 			k = "span"
 		}
-		out = append(out, Definition{Name: d.name, Title: d.title, Description: d.what, Example: d.example, Kind: k})
+		required := d.argumentRequired
+		for _, param := range d.params {
+			required = required || param.Required
+		}
+		out = append(out, Definition{Name: d.name, Title: d.title, Description: d.what, Example: d.example, Kind: k, Params: append([]Param{}, d.params...), ArgumentRequired: required})
 	}
 	return out
 }
@@ -753,7 +771,7 @@ func init() {
 			}
 			return `<pre><code` + cls + ` data-code-src="` + Esc(s) + `"></code></pre>`, nil
 		}})
-	add(&def{name: "color", kind: span, title: "Colour", what: "Words in a colour: one of the site's (ink, muted, accent, danger, warn, positive), or any CSS colour such as #c0392b or tomato. Markdown works inside it.",
+	add(&def{name: "color", kind: span, title: "Color", what: "Words in a color: one of the site's (ink, muted, accent, danger, warn, positive), or any CSS color such as #c0392b or tomato. Markdown works inside it.",
 		example: "{{color:accent}}these words{{/color}}",
 		wrap: func(c Call) (string, string, error) {
 			v, ok := c.Get("colour", 0)
@@ -880,9 +898,27 @@ func init() {
 		wrap: func(c Call) (string, string, error) {
 			return `<div class="sc-caption">`, `</div>`, nil
 		}})
-	for _, name := range []string{"expand", "status", "toc", "anchor", "page", "figure", "applet", "video", "code", "color", "class", "style", "kbd", "glyph", "columns", "column", "no-export", "draft-note", "slide", "notes", "mark", "sup", "sub", "page-break", "caption"} {
+	for _, name := range []string{"expand", "status", "toc", "anchor", "page", "figure", "diagram", "applet", "video", "code", "color", "class", "style", "kbd", "glyph", "columns", "column", "no-export", "draft-note", "slide", "notes", "mark", "sup", "sub", "page-break", "caption"} {
 		order = append(order, name)
 	}
+	for name, params := range map[string][]Param{
+		"toc":     {{"min", "First heading level, from 1 to 6.", false}, {"max", "Last heading level, from 1 to 6.", false}},
+		"anchor":  {{"name", "The local anchor name.", true}},
+		"page":    {{"slug", "A public page slug.", true}, {"text", "The visible link text.", false}},
+		"figure":  {{"src", "A picture path or supported image address.", true}, {"alt", "A description of the picture.", false}, {"width", "A CSS width, such as 80%.", false}, {"caption", "The caption in inline Markdown.", false}},
+		"diagram": {{"src", "A local D2, Mermaid or Canvas file.", true}, {"alt", "A description of the diagram.", false}, {"width", "A whole percentage from 1% to 100%.", false}, {"caption", "The caption in inline Markdown.", false}},
+		"applet":  {{"name", "An available applet name.", true}, {"fit", "Use flow or fill.", false}, {"state", "The applet's initial state.", false}},
+		"video":   {{"src", "A supported video URL or service name.", true}, {"id", "The video ID when a service name is used.", false}, {"title", "A description of the video.", false}},
+		"code":    {{"src", "A local source file.", true}, {"lang", "The listing's language.", false}},
+		"color":   {{"colour", "The color value; the positional form is preferred.", true}},
+		"class":   {{"name", "A class from the document stylesheet.", true}},
+		"glyph":   {{"name", "A PUDL glyph name.", true}},
+		"slide":   {{"layout", "The slide layout.", false}, {"background", "The background color.", false}, {"image", "The slide's background image address.", false}, {"reveal", "The reveal setting.", false}, {"transition", "The transition setting.", false}, {"class", "The slide's style class.", false}},
+	} {
+		table[name].params = params
+	}
+	table["status"].argumentRequired = true
+	table["kbd"].argumentRequired = true
 }
 
 var (

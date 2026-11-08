@@ -242,8 +242,8 @@
            A {{shortcode}} is marked as one, its name and its arguments in
            their own colours; {{ offers the shortcodes' names and, inside a
            call, its parameters; and the pointer over one says what it is
-           and takes. All from the server's table (/api/admin/editor/shortcodes),
-           which the Insert menu reads too. */
+           and takes. The bundled engine supplies the built-in catalog;
+           optional host metadata can add names to it. */
         var SHORTCODE = /\{\{\/?[a-z][a-z0-9-]*(?::(?:[^}]|\}(?!\}))*)?\}\}/g;
         var shortcodeHighlight = null, shortcodeHover = null;
         /* Built when first asked for, since CodeMirror loads only when the
@@ -276,10 +276,10 @@
                     return {
                         from: name.from + (closing ? 3 : 2),
                         validFor: /^[a-z0-9-]*$/,
-                        options: list.filter(function (s) { return !closing || s.kind === 'container'; }).map(function (s) {
+                        options: list.filter(function (s) { return !closing || s.kind === 'container' || s.kind === 'span'; }).map(function (s) {
                             /* The braces close themselves as {{ is typed (closeBrackets), so only the name goes in, with a colon where arguments follow. */
                             return { label: s.name, type: 'keyword', detail: s.title, info: s.description + (s.example ? '\n\n' + s.example : ''),
-                                apply: !closing && s.params.length ? s.name + ':' : s.name };
+                                apply: !closing && (s.argumentRequired || s.params.some(function(p){return p.required;})) ? s.name + ':' : s.name };
                         })
                     };
                 });
@@ -489,6 +489,7 @@
             var t = current();
             if (!t) { view.setState(CM.EditorState.create({ doc: '' })); refreshStyles(); renderTabs(); announce(); return; }
             view.setState(t.state);
+            if(t.lang==='markdown')loadShortcodes().then(commandsChanged);
             refreshStyles();
             scheduleOutline();
             /* A tab kept from before the key bindings last changed takes
@@ -916,7 +917,7 @@
             if (!view || !el.outline.querySelector('[data-outline-tree]')) { return; }
             var pendingPlace = el.outline.querySelector('[data-outline-tree]');
             if (tab !== outlineOwner || view.state.doc.toString() !== outlineText) { suspendOutline(pendingPlace); }
-            var text = view.state.doc.toString(), m = await mdEngine();
+            var text = view.state.doc.toString(), m = tab && tab.lang === 'markdown' ? await mdEngine() : null;
             if (destroyed || revision !== outlineRevision || current() !== tab || view.state.doc.toString() !== text) { return; }
             var place = el.outline.querySelector('[data-outline-tree]'), focus = document.activeElement && document.activeElement.closest('[data-outline-index]'), oldFocus = focus && el.outline.contains(focus) ? Number(focus.dataset.outlineIndex) : null;
             var expanded = {}; el.outline.querySelectorAll('[data-outline-index][aria-expanded]').forEach(function (link) { expanded[link.dataset.outlineIndex] = link.getAttribute('aria-expanded'); });
@@ -1277,7 +1278,7 @@
                 inserts: function () {
                     var extra = [];
                     if (F && F.mounted && shortcodes) {
-                        shortcodes.filter(function (s) { return s.name !== 'column' && !SHORTCODES.some(function (i) { return i.name === s.name; }); }).forEach(function (s) {
+                        shortcodes.filter(function (s) { return !s.builtin && s.name !== 'column' && !SHORTCODES.some(function (i) { return i.name === s.name; }); }).forEach(function (s) {
                             extra.push({ id: 'insert-' + s.name, label: s.title, words: s.name + ' ' + s.title.toLowerCase(), markdown: s.example });
                         });
                     }
@@ -1650,15 +1651,28 @@
         }
         function applyFormat(name) { window.yavcMdEditor.apply(name, editCtx()); }
 
-        /* The insert menu lists the shortcodes, from the server's table, in
-           alphabetical order of the titles it shows. */
+        /* The engine supplies built-in completion metadata. Optional host
+           additions do not replace the authored insertion forms. */
         var shortcodes = null, shortcodesLoading = null;
+        function shortcodeCatalog(builtin, extra) {
+            var found=new Map(),units=0;
+            [builtin,extra].forEach(function(list,origin){if(!Array.isArray(list))return;list.slice(0,256).forEach(function(s){
+                if(found.size>=256||!s||typeof s.name!=='string'||!/^[a-z][a-z0-9-]{0,63}$/.test(s.name)||found.has(s.name)||!['inline','block','container','span'].includes(s.kind)||typeof s.title!=='string'||!s.title.trim()||s.title.length>256||typeof s.description!=='string'||s.description.length>4096)return;
+                var params=Array.isArray(s.params)?s.params.slice(0,32).filter(function(p){return p&&typeof p.name==='string'&&/^[a-z][a-z0-9-]{0,63}$/.test(p.name)&&typeof p.description==='string'&&p.description.length<=2048;}).map(function(p){return {name:p.name,description:p.description,required:p.required===true};}):[];
+                if(typeof s.example==='string'&&s.example.length>4096)return;
+                var example=typeof s.example==='string'?s.example:'',size=s.name.length+s.title.length+s.description.length+example.length+params.reduce(function(n,p){return n+p.name.length+p.description.length;},0);if(units+size>128*1024)return;units+=size;
+                found.set(s.name,{name:s.name,title:s.title,description:s.description,kind:s.kind,params:params,example:example,argumentRequired:s.argumentRequired===true,builtin:origin===0});
+            });});return Array.from(found.values());
+        }
         function loadShortcodes() {
             if (shortcodes) { return Promise.resolve(shortcodes); }
             if (!shortcodesLoading) {
-                shortcodesLoading = Promise.resolve(hostServices.shortcodes ? hostServices.shortcodes() : {shortcodes:[]})
-                    .then(function (b) { shortcodes = (b.shortcodes || []).map(function (s) { s.params = s.params || []; return s; }); return shortcodes; })
-                    .catch(function () { shortcodes = []; return shortcodes; });
+                shortcodesLoading = mdEngine().then(function(m){
+                    if(destroyed)return [];
+                    var builtin=m.shortcodes().shortcodes;shortcodes=shortcodeCatalog(builtin,[]);
+                    if(hostServices.shortcodes)Promise.resolve().then(function(){if(destroyed)return null;return hostServices.shortcodes({signal:styleLifetime.signal,current:function(){return !destroyed;}});}).then(function(body){if(!destroyed){shortcodes=shortcodeCatalog(builtin,body&&body.shortcodes);commandsChanged();}}).catch(function(){});
+                    return shortcodes;
+                }).catch(function(){shortcodesLoading=null;return [];});
             }
             return shortcodesLoading;
         }
@@ -1671,10 +1685,9 @@
             var custom = customShortcodes();
             if (custom.length) { items.push('-'); custom.forEach(function (s) { items.push({ id: 'insert-custom-' + s.name, label: s.name, run: function () { insertCustom(s.name); } }); }); }
             if (F && F.mounted && shortcodes) {
-                items.push('-');
-                shortcodes.filter(function (s) { return s.name !== 'column'; }).sort(function (a, b) {
+                var extra=shortcodes.filter(function (s) { return !s.builtin && s.name !== 'column'; }).sort(function (a, b) {
                     return a.title.localeCompare(b.title, undefined, { sensitivity: 'base' });
-                }).forEach(function (s) {
+                });if(extra.length)items.push('-');extra.forEach(function (s) {
                     items.push({ id: 'insert-' + s.name, label: s.title, run: function () { insertShortcode(s.name); } });
                 });
             }
@@ -2424,7 +2437,7 @@
             if (destroyed) { return; }
             wrapOn = !!settings.wrap;
             /* The shortcodes for the Insert menu, which draws again once they are here. */
-            loadShortcodes().then(commandsChanged);
+            if(isDocs)loadShortcodes().then(commandsChanged);
             loadKit().then(function () { FORMATS = window.yavcMdEditor.FORMATS; STYLES = window.yavcMdEditor.STYLES; INSERTS = window.yavcMdEditor.INSERTS; SHORTCODES = window.yavcMdEditor.SHORTCODES; commandsChanged(); });
             setupExplorer();
             setupExplorerSplit();

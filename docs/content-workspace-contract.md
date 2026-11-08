@@ -23,13 +23,15 @@ The resource, creation and recovery contracts remain in `content-resource-contra
 | Service | Contract |
 | --- | --- |
 | `directory(resource)` | Returns a dependency base understood by that host's file resolver, or null. The workspace does not derive a base from opaque IDs. |
-| `shortcodes()` | Returns the host's accepted shortcode metadata as `{shortcodes:[]}`. Absence supplies no site-specific shortcode catalog. |
+| `shortcodes(context)` | Returns extra accepted shortcode metadata as `{shortcodes:[]}`. Optional context carries the workspace lifetime `signal` and `current()` predicate. Existing no-argument providers remain compatible. Built-ins always come from the bundled engine and cannot be replaced. A missing, failed or malformed extra catalog leaves built-ins available. |
 | `openPage(href)` | Handles an explicit public-page navigation request and returns whether it was handled. Absence uses the ordinary safe external-page link. |
 | `split.of(handle, changed)` | Adapts documented PUDL split events and width preferences. Absence retains the workspace's default layout. |
 | `browser()` | Provides the existing yavc browser adapter `{F,FB}`. This optional compatibility adapter is implemented by yavc.app through its existing VFS and browser. Other hosts can omit it and offer their own `fs.open`; the editing and recovery paths do not require the adapter. |
 | `legacySession` and `legacyWork` | Provide old host-owned recovery inputs. Other hosts omit them. The workspace never reads browser storage itself. |
 
 PUDL's host kit supplies the identity/menu helpers. The host supplies resource/snapshot services and may supply `config`, `fs`, `commandToolbar` and `fileResolution`. Missing optional file selection, toolbars or browsing does not install yavc.app's filesystem. A host without revision-safe resources cannot write through the old server-mount path. Its legacy source can be inspected or downloaded, and old drafts remain retained.
+
+The merged catalog accepts at most 256 unique names and 128 Ki UTF-16 text units. Each entry has a bounded title, description, example and at most 32 named parameters. Invalid or oversized entries are omitted; examples are never truncated into partial source. The engine catalog is available before an optional host request completes. Disposal prevents a delayed engine load from starting a host request, and late metadata cannot update a disposed workspace.
 
 ## Presenter capability
 

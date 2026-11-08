@@ -1,5 +1,11 @@
 # Stem-to-stern review, November 2026
 
+## Portable shortcode assistance, 2026-11-09
+
+Built-in shortcode metadata now comes from the shared engine, including the previously omitted diagram definition. The public endpoint exposes the same table without starting a session. Editor and Docs use it locally for completion and hover; optional host additions are bounded and cannot override built-ins. Optional-only parameters no longer force a colon, and closing completion includes span shortcodes. The inherited admin endpoint is removed. The cold-source test exposed an unconditional Outline engine load for non-Markdown files, which now returns an empty outline without loading Markdown.
+
+Native catalog/API tests, six offline browser cases and the unrelated-host catalog-merge fixture pass. Review found a delayed engine load could invoke the optional provider after disposal; both invocation boundaries now guard the workspace lifetime and the provider receives its signal/current predicate. A held-engine disposal test passes in all three browsers. The existing JSON assistance regression passes in Chromium for Editor and Diagrams after removing the old catalog stub. Its first invocation used the wrong test-port environment variable; the failure artifact remains separate. Hover positioning was corrected to target actual text rather than the center of a full-width editor line. `historical-pr-audit.md` records the two obsolete proposals and the verified relay-test fix.
+
 ## Heading and authored block keeps, 2026-11-09
 
 The shared planner now keeps a fitting heading/content chain together. Explicit breaks win, long chains are resolved once, and a group taller than a page falls back to the existing whole-block behavior. Stock heading CSS provides an `avoid` fallback because the isolated Firefox engine does not support `avoid-page`. Review also found that preview wrappers exposed keep intent only for headings. The effective-block reader now covers authored paragraph and other single-child blocks, with matching direct/wrapped fixtures.

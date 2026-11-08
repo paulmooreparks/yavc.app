@@ -59,7 +59,8 @@ func render(text string) ([]preview.Block, []problem) {
 }
 
 var functions = map[string]func(string) (any, error){
-	"outline": func(source string) (any, error) { return outline(source), nil },
+	"shortcodes": func(string) (any, error) { return map[string]any{"shortcodes": shortcodes.Definitions()}, nil },
+	"outline":    func(source string) (any, error) { return outline(source), nil },
 	"outline-state": func(source string) (any, error) {
 		return map[string]any{"entries": outline(source), "revision": sourceRevision(source)}, nil
 	},

@@ -246,6 +246,7 @@ func New(s *Server) (*Server, error) {
 	m.HandleFunc("GET /api/site/text/{slug}", s.siteText)
 	m.HandleFunc("GET /api/site/texts", s.siteTexts)
 	m.HandleFunc("GET /api/site/home", s.homeSeedHandler)
+	m.HandleFunc("GET /api/shortcodes", s.shortcodeList)
 	m.HandleFunc("GET /page/{slug}", s.pageRedirect)
 	m.HandleFunc("GET /state/{key}", s.getState)
 	m.HandleFunc("PUT /state/{key}", s.putState)

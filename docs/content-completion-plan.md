@@ -18,4 +18,6 @@ Slides history and presentation are committed at `8bd96a3`, installed locally an
 
 The fifth batch adds source-free heading/authored block keeps to the shared measured planner and corresponding Office keep intent. Explicit breaks and author opt-outs remain effective. Line splitting, full widow/orphan behavior and page footnotes remain open; fitting whole-block chains are the current boundary.
 
+The sixth batch repairs built-in Markdown shortcode assistance through a bundled engine catalog, optional bounded host additions and a matching public API. Its plain-source startup, offline completion/hover and disposal checks pass across the supported engines. JSON/JSON Canvas remains the current LSP server coverage; additional language servers are still open. `historical-pr-audit.md` records obsolete PRs #4/#5 and the existing deterministic relay fix. Closing those proposals can accompany an approved merge of the replacement work.
+
 Each batch uses the required repository gate, focused cross-browser regressions and source review. Browser automation stays isolated from Paul's desktop. Independent-host and installed-image checks cover changes to shared packages. Earlier failed test evidence remains separate from successful runs.
