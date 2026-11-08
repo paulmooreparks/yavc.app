@@ -1376,6 +1376,14 @@
        (apps/diagram-kit/d2.js; docs/diagrams-design.md), loaded the first
        time a page has one, since the engine is large. */
     var d2Ready = null;
+    var canvasReady = null;
+    function drawCanvas(place, source) {
+        if (!canvasReady) {
+            canvasReady = loadScript(window.yavcUtil.versioned(new URL('../diagram-kit/canvas-embed.js', HERE).href)).then(function () { return window.yavcCanvasEmbed; });
+            canvasReady.catch(function () { canvasReady = null; });
+        }
+        return canvasReady.then(function (engine) { return engine.draw(place, source); }).catch(function (error) { if (place.isConnected) diagramFailed(place, error); });
+    }
     function drawD2(place, source) {
         if (!d2Ready) {
             d2Ready = loadScript(window.yavcUtil.versioned(new URL('../diagram-kit/d2.js', HERE).href)).then(function () { return window.yavcD2Engine; });
@@ -1423,6 +1431,7 @@
                     var place = f.el.querySelector('[data-preview-diagram="' + CSS.escape(d.id) + '"]');
                     if (place && d.language === 'mermaid') { drawDiagram(place, d.source); }
                     else if (place && d.language === 'd2') { drawD2(place, d.source); }
+                    else if (place && d.language === 'canvas') { drawCanvas(place, d.source); }
                 });
             }
             if (opts.applets !== false && window.pudlApplets && window.pudlApplets.boot && f.el.querySelector('[data-applet]')) { try { window.pudlApplets.boot(f.el); } catch (err) { } }

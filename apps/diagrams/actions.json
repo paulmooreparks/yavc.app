@@ -6,6 +6,32 @@
   "description": "Diagrams as D2, Mermaid or JSON Canvas text files: read, write and draw the diagrams open in Diagrams, read a D2 diagram's structure and change it shape by shape, and export the drawing.",
   "actions": [
     {
+      "ref": "yavc.diagrams/convert@1",
+      "title": "Convert a Diagram Copy",
+      "description": "Return a D2 or Canvas copy and its conversion warnings without modifying or saving the original diagram. The destination kind must differ from the current kind.",
+      "live": true,
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["format"],
+        "properties": {
+          "index": {"type": "integer", "minimum": 1},
+          "format": {"enum": ["d2", "canvas"]}
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": ["kind", "text", "warnings"],
+        "properties": {
+          "kind": {"enum": ["d2", "canvas"]},
+          "text": {"type": "string"},
+          "warnings": {"type": "array", "items": {"type": "string"}}
+        }
+      },
+      "capabilities": ["files.read"],
+      "replay": "once"
+    },
+    {
       "ref": "yavc.diagrams/open@1",
       "title": "Open in Diagrams",
       "description": "Open a diagram file (.d2, .mmd, .mermaid or .canvas) in Diagrams for the person at the page, in a new tab of its window.",

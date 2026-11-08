@@ -150,7 +150,7 @@
             '<div class="dg-main" data-role="main">' +
               '<div class="dg-work split" data-role="work">' +
                 '<div class="dg-stagebox split-pane" data-role="stagebox">' +
-                  '<div class="dg-visual-row"><aside class="dg-outline" data-role="outline" aria-label="Canvas Outline" hidden></aside>' +
+                  '<div class="dg-visual-row"><aside class="dg-outline" data-role="outline" aria-label="Diagram Outline" hidden></aside>' +
                   '<div class="dg-body split" data-role="body" data-split-pane="first">' +
                     '<div class="dg-stage split-pane" data-role="stage" tabindex="0" role="region" aria-label="The Drawing" aria-describedby="dg-keys-' + n + '"><div class="dg-canvas" data-role="canvas"></div></div>' +
                     '<div class="split-handle dg-inspector-split" aria-label="Resize the Inspector" data-split-min="176"></div>' +
@@ -228,9 +228,18 @@
             var t = current(), p = new URLSearchParams();
             if (t && t.path) { p.set('file', t.path); }
             if (t && t.view && t.view !== settings.view) { p.set('view', t.view); }
+            if (t && t.kind === 'd2' && t.canvas && t.canvas.selected()) { p.set('item', t.canvas.selected()); }
             return p.toString().replace(/%2F/g, '/').replace(/%7E/g, '~');
         }
-        function announce() { if (opts.changed) { opts.changed(stateString()); } keep(); }
+        function announce() {
+            var state = stateString();
+            if (opts.ownsUrl) {
+                var url = new URL(location.href), values = new URLSearchParams(state);
+                ['file', 'view', 'item'].forEach(function (key) { if (values.has(key)) url.searchParams.set(key, values.get(key)); else url.searchParams.delete(key); });
+                if (url.href !== location.href) history.replaceState(history.state, '', url);
+            }
+            if (opts.changed) { opts.changed(state); } keep();
+        }
 
         /* === The text (CodeMirror) ======================================= */
 
@@ -296,6 +305,7 @@
             if (!t) { return; }
             if (inlineText && !inlineText.writing) { finishInlineText(false); }
             t.text = text;
+            if (t.kind === 'd2') renderOutline();
             if (t.cv) { t.cv.cancel(); t.place.classList.add('sc-diagram-stale'); }
             if (!t.modified) { t.modified = true; commandsChanged(); }
             scheduleDraw();
@@ -373,7 +383,7 @@
                 ? d2().then(function (E) { return E.draw(t.place, text, { keep: true, report: false, alt: altOf(t) }); })
                 : t.kind === 'canvas' ? drawCanvas(t, text, function () { return seq === drawSeq && t === current() && t.text === text; })
                 : kit().then(function (K) { return K.drawMermaid(t.place, text, { keep: true, report: false, alt: altOf(t) }); });
-            return drawn.then(function (out) {
+            return drawn.then(async function (out) {
                 /* No answer means another drawing of this place replaced
                    this one; if this is still the newest, it draws again. */
                 if (!out) { if (seq === drawSeq) { scheduleDraw(); } return; }
@@ -381,7 +391,8 @@
                 if (seq === drawSeq && t === current()) {
                     t.problems = problems;
                     if (!problems.length) { t.svg = out.svg; t.size = out.width ? { w: out.width, h: out.height } : sizeOfSvg(out.svg); }
-                    if (!problems.length && t.kind === 'd2') { showCanvas(t, out, text); }
+                    if (!problems.length && t.kind === 'd2') { await showCanvas(t, out, text); }
+                    if (destroyed || seq !== drawSeq || t !== current() || t.text !== text) return;
                     showOutcome(t);
                 }
                 t.settled = { text: text, problems: problems };
@@ -605,10 +616,54 @@
             commandsChanged(); renderInspector(); renderOutline();
         }
         var outlineText = null, outlineOwner = null, outlineAnchor = null;
+        function d2ItemURL(key) {
+            var p = new URLSearchParams(stateString()), url = new URL(location.href), param = root.getAttribute('data-applet-param');
+            p.set('item', key);
+            if (current()) p.set('view', viewOf(current()));
+            if (param) url.searchParams.set(param, p.toString());
+            else ['file', 'view', 'item'].forEach(function (name) { if (p.has(name)) url.searchParams.set(name, p.get(name)); else url.searchParams.delete(name); });
+            return url.href;
+        }
+        function renderD2Outline(t) {
+            var ready = !!(t.canvas && t.outline && t.outlineText === t.text && !(t.problems || []).length);
+            var key = t.canvas && t.canvas.selected(), shapes = t.outline && t.outline.shapes || [], connections = t.outline && t.outline.connections || [];
+            if (outlineOwner !== t || outlineText !== t.outlineText) {
+                var focused = el.outline.contains(document.activeElement) ? document.activeElement.dataset.d2Outline : null;
+                if (outlineOwner === t) el.outline.querySelectorAll('[data-d2-outline][aria-expanded]').forEach(function (a) { (t.outlineOpen || (t.outlineOpen = {}))[a.dataset.d2Outline] = a.getAttribute('aria-expanded') === 'true'; });
+                outlineOwner = t; outlineText = t.outlineText;
+                var children = new Map(), known = new Set(shapes.map(function (s) { return s.id; })), byId = new Map(shapes.map(function (s) { return [s.id, s]; }));
+                shapes.forEach(function (s) { var parent = known.has(s.parent) ? s.parent : ''; if (!children.has(parent)) children.set(parent, []); children.get(parent).push(s); });
+                function ancestors(id) { var result = [], item = byId.get(id); while (item && item.parent && result.length < 64) { result.push(item.parent); item = byId.get(item.parent); } result.push(''); return result; }
+                connections.forEach(function (c) {
+                    var right = new Set(ancestors(c.to)), parent = ancestors(c.from).find(function (id) { return right.has(id); }) || '';
+                    if (!children.has(parent)) children.set(parent, []);
+                    children.get(parent).push(Object.assign({}, c, {label:c.label || c.from + ' → ' + c.to}));
+                });
+                function link(item, nested) {
+                    var label = item.label || item.id;
+                    return '<a data-d2-outline="' + esc(item.id) + '" href="' + esc(d2ItemURL(item.id)) + '" title="' + esc(item.id) + '"' + (nested ? ' aria-expanded="' + (!(t.outlineOpen && t.outlineOpen[item.id] === false)) + '"' : '') + '>' + optionGlyph(['', '', isConnection(item.id) ? 'yavc-connect' : 'square']) + '<span>' + esc(label) + '</span></a>';
+                }
+                function branch(parent, depth) { return (children.get(parent) || []).map(function (s) { var nested = depth < 64 && children.has(s.id); return '<li>' + link(s, nested) + (nested ? '<ul>' + branch(s.id, depth + 1) + '</ul>' : '') + '</li>'; }).join(''); }
+                el.outline.innerHTML = '<h3 class="dg-inspector-title">Outline</h3><ul class="tree" aria-label="Shapes and Connections">' + branch('', 0) + '</ul>';
+                if (window.pudlTree) window.pudlTree.enhance(el.outline.querySelector('.tree'));
+                if (focused) { var back = Array.from(el.outline.querySelectorAll('[data-d2-outline]')).find(function (a) { return a.dataset.d2Outline === focused; }); if (back) back.focus({preventScroll:true}); }
+            }
+            el.outline.querySelectorAll('[data-d2-outline]').forEach(function (a) {
+                a.href = d2ItemURL(a.dataset.d2Outline);
+                a.setAttribute('aria-disabled', String(!ready));
+                if (a.dataset.d2Outline === key) {
+                    a.setAttribute('aria-current', 'true');
+                    for (var group = a.parentElement.parentElement; group && group !== el.outline.querySelector('.tree') && group.tagName === 'UL'; group = group.parentElement.parentElement) {
+                        var parent = group.previousElementSibling; if (parent && parent.hasAttribute('aria-expanded')) parent.setAttribute('aria-expanded', 'true');
+                    }
+                } else a.removeAttribute('aria-current');
+            });
+        }
         function renderOutline() {
-            var t = current(), show = settings.outline && t && t.kind === 'canvas' && !!t.cv;
+            var t = current(), show = settings.outline && t && (t.kind === 'd2' || t.kind === 'canvas' && !!t.cv);
             el.outline.hidden = !show;
             if (!show) { outlineOwner = null; outlineText = null; el.outline.replaceChildren(); return; }
+            if (t.kind === 'd2') { renderD2Outline(t); return; }
             var items = canvasItems(t), selected = canvasSelections();
             if (outlineOwner !== t || outlineText !== t.cvText) {
                 var focused = el.outline.contains(document.activeElement) ? document.activeElement.dataset.outline : null;
@@ -628,6 +683,15 @@
         }
         function toggleOutline() { settings.outline = !settings.outline; keepSetting('outline', settings.outline); renderOutline(); commandsChanged(); }
         el.outline.addEventListener('click', function (e) {
+            var link = e.target.closest('[data-d2-outline]');
+            if (link) {
+                if (e.target.closest('.tree-toggle')) return;
+                link.href = d2ItemURL(link.dataset.d2Outline);
+                if (link.getAttribute('aria-disabled') !== 'true' && (e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey)) return;
+                e.preventDefault(); var owner = current();
+                if (owner && owner.kind === 'd2' && owner.outlineText === owner.text && !(owner.problems || []).length) { selectKey(owner, link.dataset.d2Outline, 'outline'); if(owner.canvas)owner.canvas.reveal(); }
+                return;
+            }
             var button = e.target.closest('[data-outline]'); if (!button || canvasWhy(false)) { return; }
             var t = current(), items = canvasItems(t), i = Number(button.dataset.outline), item = items[i], chosen = [item];
             if (e.shiftKey && outlineAnchor !== null && outlineAnchor < items.length) { chosen = items.slice(Math.min(i, outlineAnchor), Math.max(i, outlineAnchor) + 1); }
@@ -646,14 +710,14 @@
         });
         /* F6 leaves item cycling and reaches each editing pane directly. */
         root.addEventListener('keydown', function (e) {
-            if (e.key !== 'F6' || !isCanvas()) { return; }
+            if (e.defaultPrevented || e.isComposing || e.key !== 'F6' || e.altKey || e.ctrlKey || e.metaKey || !isCanvas() && !isD2() || e.target.closest('dialog, [role="dialog"]') || e.target.closest('[data-applet]') !== root) { return; }
             var panes = [el.stage, el.outline, el.inspector, el.text].filter(function (p) { return p.getClientRects().length && getComputedStyle(p).visibility !== 'hidden'; });
             var at = panes.findIndex(function (p) { return p === document.activeElement || p.contains(document.activeElement); });
             var next = panes[(at + (e.shiftKey ? panes.length - 1 : 1) + panes.length) % panes.length];
             if (!next) { return; } e.preventDefault(); e.stopPropagation();
             if (next === el.text) { cm.focus(); }
             else if (next === el.stage) { el.stage.focus(); }
-            else { var first = next.querySelector('button:not(:disabled), input:not(:disabled), textarea:not(:disabled), select:not(:disabled)'); if (first) { first.focus(); } else { next.tabIndex = -1; next.focus(); } }
+            else { var first = next.querySelector('a[tabindex="0"], button:not(:disabled), input:not(:disabled), textarea:not(:disabled), select:not(:disabled)'); if (first) { first.focus(); } else { next.tabIndex = -1; next.focus(); } }
         }, true);
         function followCanvasCursor(t, pos) {
             if (!t.cv || t.cvText !== t.text) { return; }
@@ -1067,9 +1131,12 @@
            or a key selects one, its text is selected beside it, and every
            change is one of D2's own edits to the text (decision 5), which
            Undo takes back like any typing. */
-        function showCanvas(t, out, text) {
-            canvasLib().then(function (C) {
-                if (destroyed) { return; }
+        async function showCanvas(t, out, text) {
+            try {
+                var parts = await Promise.all([canvasLib(), d2().then(function (E) { return E.call('outline', {text:text}, 'outline-' + n); })]);
+                if (destroyed || t !== current() || t.text !== text) { return; }
+                var C = parts[0], o = parts[1];
+                t.outline = o; t.outlineText = text;
                 if (!t.canvas) {
                     t.canvas = C.attach(t.place, {
                         selected: function (key, how) { canvasSelected(t, key, how); },
@@ -1083,14 +1150,10 @@
                 }
                 t.canvas.show(out);
                 if (t.pending != null) { var k = t.pending; t.pending = null; selectKey(t, k, 'edit'); }
-            }).catch(function (err) { say('The drawing cannot be edited here: ' + ((err && err.message) || err), true); });
-            /* Where each shape and connection is written, for the selection
-               in the text, and the labels the commands start from. */
-            d2().then(function (E) { return E.call('outline', { text: text }, 'outline-' + n); }).then(function (o) {
-                if (o && t.text === text) { t.outline = o; commandsChanged(); renderInspector(); }
-            }).catch(function () { });
+                commandsChanged(); renderInspector();
+            } catch (err) { if (!destroyed && t === current() && t.text === text) say('The drawing cannot be edited here: ' + ((err && err.message) || err), true); }
         }
-        function isConnection(key) { return /^\(/.test(key || ''); }
+        function isConnection(key) { var t = current(); return !!(t && t.outline && (t.outline.connections || []).some(function (c) { return c.id === key; })); }
         function shapeOf(t, key) { return ((t.outline && t.outline.shapes) || []).find(function (s) { return s.id === key; }) || null; }
         function connectionOf(t, key) { return ((t.outline && t.outline.connections) || []).find(function (c) { return c.id === key; }) || null; }
         function describe(t, key) {
@@ -1121,6 +1184,7 @@
             } else if (how !== 'redraw') { say(''); }
             commandsChanged();
             renderInspector();
+            if (how !== 'redraw') announce();
         }
         /* === The inspector ================================================
            The selected shape's or connection's settings as a form of
@@ -1331,14 +1395,14 @@
         function followCursor(pos) {
             var t = current();
             if (t && t.kind === 'canvas') { followCanvasCursor(t, pos); return; }
-            if (!t || !t.canvas || !t.outline) { return; }
+            if (!t || !t.canvas || !t.outline || t.outlineText !== t.text) { return; }
             var best = null, size = Infinity;
             [].concat(t.outline.shapes || [], t.outline.connections || []).forEach(function (it) {
                 (it.places || []).forEach(function (p) {
                     if (pos >= p.from && pos <= p.to && p.to - p.from < size) { best = it.id; size = p.to - p.from; }
                 });
             });
-            if (best && best !== t.canvas.selected()) { t.canvas.select(best); canvasSelected(t, best, 'cursor'); }
+            if (best !== t.canvas.selected()) { t.canvas.select(best); canvasSelected(t, best, 'cursor'); }
         }
 
         /* One of D2's edits to the front diagram's text (internal/d2api
@@ -1552,7 +1616,7 @@
         el.stage.addEventListener('keydown', function (e) {
             var t = current();
             if (t && t.cv && e.target === el.stage) { canvasKey(e); return; }
-            if (!t || !t.canvas || e.target !== el.stage) { return; }
+            if (!t || !t.canvas || e.target !== el.stage || e.defaultPrevented || e.isComposing || t.outlineText !== t.text || (t.problems || []).length) { return; }
             if (connecting && e.key === 'Escape') { e.preventDefault(); stopConnect('Stopped connecting.'); return; }
             if (tool && e.key === 'Escape') { e.preventDefault(); setTool(null); say('Back to Select.'); return; }
             if (connecting && e.key === 'Enter') {
@@ -1773,21 +1837,14 @@
                 if (!resources.canSaveAs()) return;
                 var captured = t.text;
                 return queueSave(t, async function (ticket) {
-                    var accepted = await resources.saveAs({ name: tabTitle(t), sourceResource: t.path }, captured, { host: root, signal: lifetime.signal });
+                    var accepted = await resources.saveAs({ name: tabTitle(t), sourceResource: t.path }, captured, { host: root, signal: lifetime.signal, checkName:function(name){
+                        var suffix=/\.(d2|mmd|mermaid|canvas)$/i.exec(String(name||'')), kind=suffix && (suffix[1].toLowerCase()==='mmd'||suffix[1].toLowerCase()==='mermaid'?'mermaid':suffix[1].toLowerCase());
+                        return kind===t.kind?null:'Keep the '+EXT[t.kind]+' extension. Use Convert to create a different diagram format.';
+                    } });
                     if (accepted) savedAs(t, accepted.resource, captured, ticket, accepted);
                 }).catch(function (err) { if (destroyed) return; if (tabs.indexOf(t) >= 0) say('Save As was not acknowledged: ' + err.message, true); throw err; });
             }
-            if (!H.fs || !H.fs.save) return;
-            var submitted = t.text, blob = new Blob([submitted], { type: 'text/plain' });
-            return queueSave(t, async function (ticket) {
-                var res = await H.fs.save({ title: 'Save the Diagram As', name: tabTitle(t), host: root, start: t.path ? t.path.replace(/\/[^\/]*$/, '') : '~/Documents', blob: blob }).catch(function (e) { t.saveFailed = true; t.modified = true; say(e.message, true); return null; });
-                if (!res || destroyed || tabs.indexOf(t) < 0) { return; }
-                if (res.path) {
-                    savedAs(t, res.path, submitted, ticket, null);
-                } else if (res.download) { window.yavcUtil.download(res.download, blob); say('Downloaded ' + res.download + '.'); }
-                commandsChanged();
-                keep();
-            });
+            throw new Error('This host does not offer conditional Save As. Download the source to keep a copy.');
         }
         function savedAs(t, path, submitted, ticket, accepted) {
             if (!saved(t, path, submitted, ticket, true)) return;
@@ -1813,6 +1870,38 @@
         async function newCanvas(style) {
             await canvasEditor();
             if (!destroyed) { await newDiagram({ label: 'Canvas', text: window.yavcCanvasModel.template(style).text }, 'canvas'); }
+        }
+        async function conversion(format) {
+            var owner = current(), text = owner && owner.text;
+            if (!owner || format === owner.kind || !['d2', 'canvas'].includes(owner.kind) || !['d2', 'canvas'].includes(format)) throw new Error('Convert between D2 and Canvas diagrams.');
+            await jcanvas();
+            var C = await once('conversion', asset('diagram-kit/conversion.js'), 'yavcDiagramConversion'), E = await d2(), result;
+            if (owner.kind === 'd2') {
+                var parts = await Promise.all([E.compile({text:text}), E.call('outline', {text:text})]);
+                result = C.toCanvas(parts[0], parts[1]);
+            } else {
+                var got = window.yavcCanvas.read(text), fault = got.problems.find(function (p) { return !p.warning; });
+                if (!got.doc || fault) throw new Error(fault ? fault.message : 'The canvas cannot be read.');
+                var quoted = await E.call('quote', {values:C.labels(got.doc)});
+                result = C.toD2(got.doc, quoted && quoted.values);
+                var compiled = await E.compile({text:result.text});
+                if (!compiled || (compiled.problems || []).length) throw new Error('D2 cannot represent this copy: ' + (compiled && compiled.problems && compiled.problems[0] ? compiled.problems[0].message : 'the result was replaced by another request.'));
+            }
+            if (destroyed || owner !== current() || owner.text !== text) throw new Error('The diagram changed during conversion. Try again.');
+            return result;
+        }
+        async function convertDiagram(format) {
+            var owner = current(), text = owner && owner.text;
+            try {
+                var result = await conversion(format), title = format === 'canvas' ? 'Convert to Canvas' : 'Convert to D2';
+                var accepted = await window.yavcDialog.open({title:title,className:'dg-conversion-dialog',
+                    body:'<p>The conversion creates an unsaved copy and keeps the original open.</p><ul>' + result.warnings.map(function (warning) { return '<li>' + esc(warning) + '</li>'; }).join('') + '</ul>',
+                    signal:lifetime.signal,buttons:[{id:'cancel',label:'Cancel'},{id:'create',label:'Create Copy',primary:true}]});
+                if (accepted.value !== 'create' || destroyed) return;
+                if (owner !== current() || owner.text !== text) throw new Error('The diagram changed. Convert it again.');
+                if (documentWindows && documentWindows.mode(root) === 'single') { await documentWindows.open(root, 'diagrams', {operation:'new',input:{kind:format,text:result.text}}); return; }
+                stash();var t = makeTab(result.text, null, format, 'preview'); t.modified = true; tabs.push(t); activateTab(tabs.length - 1); await drawNow();
+            } catch (error) { if (!destroyed) say(error.message, true); }
         }
         function editInEditor() {
             var t = current();
@@ -1886,8 +1975,9 @@
         function copyEmbed() {
             var t = current();
             if (!t) { return; }
-            var fence = /```/.test(t.text) ? '~~~~' : '```';
-            var block = fence + (t.kind === 'd2' ? 'd2' : 'mermaid') + '\n' + t.text.replace(/\s+$/, '') + '\n' + fence + '\n';
+            var longest = (t.text.match(/`+/g) || []).reduce(function (length, run) { return Math.max(length, run.length); }, 2);
+            var fence = '`'.repeat(longest + 1);
+            var block = fence + (t.kind === 'canvas' ? 'canvas' : t.kind === 'd2' ? 'd2' : 'mermaid') + '\n' + t.text.replace(/\s+$/, '') + '\n' + fence + '\n';
             if (!navigator.clipboard || !navigator.clipboard.writeText) { say('This browser does not let the page write to the clipboard.', true); return; }
             navigator.clipboard.writeText(block).then(function () { say('Copied as a fenced block. Paste it into a document in the Editor or a slide.'); },
                 function () { say('The clipboard could not be written to.', true); });
@@ -1980,7 +2070,7 @@
             if (t && t.kind === 'canvas') { return canvasWhy(needs); }
             if (!t || t.kind !== 'd2') { return 'Only D2 diagrams and canvases are edited on their drawings.'; }
             if (t.problems && t.problems.length) { return 'The text has a mistake in it; put it right first.'; }
-            if (!t.canvas) { return 'The drawing is not ready yet.'; }
+            if (!t.canvas || t.outlineText !== t.text) { return 'The drawing is not ready yet.'; }
             var k = t.canvas.selected();
             if (needs === true && !k) { return 'Select a shape or a connection first.'; }
             if (needs === 'shape' && (!k || isConnection(k))) { return 'Select a shape first.'; }
@@ -1991,9 +2081,11 @@
                 cmd('new', 'New Diagram', 'file', null, { items: D2_STYLES.map(function (s) { return { id: 'new-' + s.id, label: s.label, run: function () { newDiagram(s, 'd2'); } }; }) }),
                 cmd('new-mermaid', 'New Mermaid Diagram', 'file', null, { items: MERMAID_STYLES.map(function (s) { return { id: 'new-' + s.id, label: s.label, run: function () { newDiagram(s, 'mermaid'); } }; }) }),
                 cmd('new-canvas', 'New Canvas', 'file', null, { items: CANVAS_STYLES.map(function (s) { return { id: 'new-canvas-' + s[0], label: s[1], run: function () { return newCanvas(s[0]); } }; }) }),
+                cmd('convert-canvas', 'Convert to Canvas…', 'copy', function () { return convertDiagram('canvas'); }, {hidden:function(){return !isD2();}}),
+                cmd('convert-d2', 'Convert to D2…', 'copy', function () { return convertDiagram('d2'); }, {hidden:function(){return !isCanvas();}}),
                 cmd('open', 'Open…', 'folder', open, { shortcut: 'Mod+O' }),
-                cmd('save', 'Save', 'yavc-save', save, { shortcut: 'Mod+S', disabled: function () { var t = current(); return !t || (resources ? !t.path ? !resources.canSaveAs() : !resources.canWrite(t.resource) : !H.fs || !H.fs.writeText && !H.fs.save); }, reason: function () { var t = current(); return mutationWhy(t) || (t && t.recoveryConflict ? 'Recovered edits have no matching file revision. Use Save As or download the source.' : undefined); } }),
-                cmd('save-as', 'Save As…', 'yavc-save-as', saveAs, { disabled: function () { return !current() || (resources ? !resources.canSaveAs() : !H.fs || !H.fs.save); }, reason: function () { return resources ? !resources.canSaveAs() ? 'This host does not offer Save As.' : undefined : !H.fs || !H.fs.save ? 'This host does not offer Save As.' : undefined; } }),
+                cmd('save', 'Save', 'yavc-save', save, { shortcut: 'Mod+S', disabled: function () { var t = current(); return !t || (resources ? !t.path ? !resources.canSaveAs() : !resources.canWrite(t.resource) : !t.path || !H.fs || !H.fs.writeText); }, reason: function () { var t = current(); return mutationWhy(t) || (!resources && t && !t.path ? 'This host cannot create a destination. Download the source.' : t && t.recoveryConflict ? 'Recovered edits have no matching file revision. Use Save As or download the source.' : undefined); } }),
+                cmd('save-as', 'Save As…', 'yavc-save-as', saveAs, { disabled: function () { return !current() || !resources || !resources.canSaveAs(); }, reason: function () { return !resources || !resources.canSaveAs() ? 'This host does not offer conditional Save As. Download the source to keep a copy.' : undefined; } }),
                 cmd('close-diagram', 'Close Diagram', null, function () { closeTab(active); }, { disabled: function () { return !current(); } }),
                 cmd('undo', 'Undo', 'yavc-undo', function () { if (cm && !readOnly(current())) { CM.undo(cm); } }, { builtIn: 'Mod-z', glyphOnly: true, disabled: function () { return readOnly(current()); }, reason: function () { return mutationWhy(); } }),
                 cmd('redo', 'Redo', 'yavc-redo', function () { if (cm && !readOnly(current())) { CM.redo(cm); } }, { builtIn: 'Mod-y', glyphOnly: true, disabled: function () { return readOnly(current()); }, reason: function () { return mutationWhy(); } }),
@@ -2004,7 +2096,7 @@
                 cmd('export-svg', 'Download as SVG', 'download', downloadSVG, { disabled: function () { return !drawable(); } }),
                 cmd('export-png', 'Download as PNG', 'download', null, { disabled: function () { return !drawable(); }, items: [1, 2, 3].map(function (k) { return { id: 'export-png-' + k, label: k === 1 ? 'Actual Size' : k + ' Times the Size', run: function () { downloadPNG(k); } }; }) }),
                 cmd('export-source', 'Download the Text', 'download', downloadSource, { disabled: function () { return !current(); } }),
-                cmd('copy-embed', 'Copy as Embed', 'copy', copyEmbed, { hidden: function () { return isCanvas(); }, disabled: function () { return !current(); } }),
+                cmd('copy-embed', 'Copy as Embed', 'copy', copyEmbed, { disabled: function () { return !current(); } }),
                 cmd('format-text', 'Tidy the Text', 'code', formatText, { hidden: function () { return !isD2() && !isCanvas(); }, disabled: function () { return readOnly(current()); }, reason: function () { return mutationWhy(); } }),
                 cmd('shape-add', 'Add Shape', 'plus', function () { addShape(false); }, { builtIn: 'n', hidden: function () { return !isD2(); }, disabled: function () { return !!whyNot(false); }, reason: function () { return whyNot(false); } }),
                 cmd('shape-add-inside', 'Add Shape Inside', null, function () { addShape(true); }, { builtIn: 'Shift-n', hidden: function () { return !isD2(); }, disabled: function () { return !!whyNot('shape'); }, reason: function () { return whyNot('shape'); } }),
@@ -2026,7 +2118,7 @@
                 cmd('shape-delete', 'Delete', 'yavc-bin', deleteSelected, { builtIn: 'Delete', danger: true, hidden: function () { return !isD2(); }, disabled: function () { return !!whyNot(true); }, reason: function () { return whyNot(true); } }),
                 cmd('redraw', 'Draw Again', 'reload', function () { drawNow(); }),
                 cmd('toggle-inspector', 'Show the Inspector', 'panel', toggleInspector, { hidden: function () { return !isD2() && !isCanvas(); }, checked: function () { return !!settings.inspector; } }),
-                cmd('toggle-outline', 'Show the Outline', 'panel', toggleOutline, { hidden: function () { return !isCanvas(); }, checked: function () { return !!settings.outline; } }),
+                cmd('toggle-outline', 'Show the Outline', 'panel', toggleOutline, { hidden: function () { return !isCanvas() && !isD2(); }, checked: function () { return !!settings.outline; } }),
                 cmd('fit', 'Fit the Drawing to the Pane', 'maximize', function () { if (isCanvas()) { var t = current(); if (t.cv) { t.cv.fit(); } return; } settings.fit = !settings.fit; applyFit(); keepSetting('fit', settings.fit); commandsChanged(); }, { checked: function () { return !isCanvas() && !!settings.fit; } }),
                 { id: 'dock', label: 'Drawing', glyph: 'dock', current: function () { var d = DOCKS.find(function (x) { return x[0] === settings.dock; }); return d ? d[1] : null; },
                     items: DOCKS.map(function (d) { return { id: 'dock-' + d[0], label: d[1], choice: 'dg-dock', value: d[0], checked: function () { return settings.dock === d[0]; }, run: function () { setDock(d[0]); } }; }) }
@@ -2053,7 +2145,7 @@
         function menus() {
             return { titles: [
                 { label: 'Diagrams', glyph: 'document', items: H.identity ? H.identity(root, []) : [] },
-                { id: 'file', label: 'File', glyph: 'file', items: ['new', 'new-mermaid', 'new-canvas', 'open', 'save', 'save-as', '-', 'edit-in-editor', '-', 'export-svg', 'export-png', 'export-source', '-', 'close-diagram'] },
+                { id: 'file', label: 'File', glyph: 'file', items: ['new', 'new-mermaid', 'new-canvas', 'open', 'save', 'save-as', '-', 'convert-canvas', 'convert-d2', 'edit-in-editor', '-', 'export-svg', 'export-png', 'export-source', '-', 'close-diagram'] },
                 { id: 'edit', label: 'Edit', glyph: 'pencil', items: ['undo', 'redo', '-', 'cv-copy', 'cv-paste', 'cv-duplicate', 'cv-delete', 'copy-embed', '-', 'cv-select-all', 'cv-select-items', '-', 'find', 'go-to-line', 'cv-next', 'cv-previous', '-', 'format-text', 'redraw', 'language-restart'] },
                 { id: 'shape', label: 'Shape', glyph: 'square', items: (isD2() || isCanvas() ? [{ label: 'Drawing Tool', glyph: 'square', items: ['tool-select'].concat(PALETTE.map(function (k) { return 'tool-' + k[0]; })) }, '-'] : []).concat(['shape-add', 'shape-add-inside', 'connect', 'cv-new', 'cv-group', 'cv-connect', 'cv-reconnect-start', 'cv-reconnect-end', 'cv-resize', 'cv-edit-text', '-', { label: 'Align and Distribute', items: ['cv-align-left', 'cv-align-center', 'cv-align-right', 'cv-align-top', 'cv-align-middle', 'cv-align-bottom', '-', 'cv-distribute-horizontal', 'cv-distribute-vertical'] }, '-', 'shape-label', 'shape-rename', 'shape-type', '-', 'shape-move-into', 'shape-move-top', 'cv-left', 'cv-right', 'cv-up', 'cv-down', 'cv-forward', 'cv-back', '-', 'shape-delete']) }
             ], into: { view: ['view-preview', 'view-text', 'view-split', '-', 'dock', 'fit', 'toggle-inspector', 'toggle-outline'].concat(commonToolbar ? ['-', 'common-toolbar-show', 'common-toolbar-customize'] : [], ['-', 'cv-pan', 'cv-pan-left', 'cv-pan-right', 'cv-pan-up', 'cv-pan-down', 'cv-zoom-in', 'cv-zoom-out', 'cv-actual']) } };
@@ -2080,7 +2172,7 @@
         if (darkQuery) { darkQuery.addEventListener('change', modeChanged); }
 
         var booted = (async function () {
-            var got = await Promise.all([kit(), modes()]);
+            var got = await Promise.all([kit(), modes(), once('tree', (H.pudl || '/pudl/') + 'pudl-tree.js', 'pudlTree')]);
             var resourceHost = H.contentResources;
             if (!resourceHost && H.contentResourceAdapter && H.snapshot && H.snapshot.version === 2 && typeof H.contentResourceAdapter.available === 'function' && await H.contentResourceAdapter.available()) resourceHost = H.contentResourceAdapter;
             if (destroyed) return;
@@ -2138,6 +2230,7 @@
             if (destroyed) return;
             if (!tabs.length) { tabs.push(makeTab(D2_STYLES[0].text, null, 'd2')); activateTab(0); }
             if (view && !file) { setView(view); }
+            if (start.has('item') && current() && current().kind === 'd2') { current().pending = start.get('item'); await drawNow(); }
             recoveryReady = true;
             documentReady = true;
             if (documentWindows && documentWindows.mode(root) === 'single' && tabs.length > 1) {
@@ -2200,6 +2293,7 @@
             'save@1': async function (input) {
                 await booted;
                 var t = await front(input.index);
+                if (!resources && (!t.path || input.path && input.path !== t.path)) throw new Error('This host cannot create a destination. Download the source to keep a copy.');
                 var submitted = t.text;
                 return queueSave(t, async function (ticket) {
                     var destination = input.path ? String(input.path) : t.path;
@@ -2251,6 +2345,7 @@
                 var out = await (await d2()).call('outline', { text: t.text });
                 return { output: { shapes: out.shapes || [], connections: out.connections || [], boards: out.boards || [], problems: out.problems || [] } };
             },
+            'convert@1': async function (input) { await booted; await front(input.index); return {output:await conversion(input.format)}; },
             'format@1': async function (input) {
                 await booted;
                 var t = await front(input.index);
@@ -2343,12 +2438,17 @@
             state: stateString,
             setState: function (s) {
                 var p = new URLSearchParams(String(s || '').replace(/^\?/, ''));
-                booted.then(function () {
+                booted.then(async function () {
                     if (destroyed || startupFailed) return;
                     var file = p.get('file'), view = p.get('view');
                     var t = current();
-                    if (file) { open({resource:file,view:view,initialView:p.get('initial-view')}).catch(function (err) { say(String((err && err.message) || err), true); }); }
+                    if (file) { try { await open({resource:file,view:view,initialView:p.get('initial-view')}); } catch (err) { say(String((err && err.message) || err), true); return; } }
                     else if (view) { setView(view==='visual'?'preview':view); }
+                    t = current();
+                    if (t && t.kind === 'd2' && p.has('item')) {
+                        if (t.canvas && t.outlineText === t.text) { selectKey(t, p.get('item'), 'state'); t.canvas.reveal(); }
+                        else { t.pending = p.get('item'); }
+                    }
                 });
             },
             commandTable: commandTable, toolbars: toolbars, menus: menus,

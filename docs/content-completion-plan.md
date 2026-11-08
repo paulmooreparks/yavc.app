@@ -14,4 +14,6 @@ Paul authorized continuous implementation and automatic local installation of ve
 
 The upstream numeric-control extension remains external work. PUDL 0.105.0 cannot separate unrestricted typed precision from the wheel increment. The host retains `step="any"` until a documented upstream capability exists.
 
+Slides history and presentation are committed at `8bd96a3`, installed locally and passing installed-image checks in Chromium, Firefox and WebKit. The Diagrams batch covers D2 Outline, portable Canvas fences, copy conversion and format-level compatibility. Reference-based embeds/live dependency updates and actual Obsidian saving remain in the diagram work. The current Office writers explicitly refuse diagram blocks. No downstream desktop integration has been claimed from a portable browser fixture.
+
 Each batch uses the required repository gate, focused cross-browser regressions and source review. Browser automation stays isolated from Paul's desktop. Independent-host and installed-image checks cover changes to shared packages. Earlier failed test evidence remains separate from successful runs.

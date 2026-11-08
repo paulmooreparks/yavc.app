@@ -71,7 +71,7 @@ type Problem struct {
 }
 
 // diagramLanguages are the fenced-code languages the page draws as diagrams.
-var diagramLanguages = map[string]bool{"mermaid": true, "d2": true}
+var diagramLanguages = map[string]bool{"mermaid": true, "d2": true, "canvas": true}
 
 // frontMatterLines is the number of leading lines a document's front
 // matter takes, its opening line, its body and its closing line, or 0 when

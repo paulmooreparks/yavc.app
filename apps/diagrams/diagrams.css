@@ -2,6 +2,8 @@
 .dg-item-dialog { width: min(38rem, calc(100vw - 2rem)); max-width: calc(100vw - 2rem); }
 .dg-item-list { max-height: 45svh; overflow: auto; }
 .dg-item-list .listbox-title, .dg-item-list .listbox-detail { overflow-wrap: anywhere; }
+.dg-conversion-dialog.dialog { width: min(44rem, calc(100vw - 2rem)); max-width: calc(100vw - 2rem); }
+.dg-conversion-dialog .dialog-body { max-height: 65svh; overflow: auto; overflow-wrap: anywhere; }
 /* Diagrams (diagrams.js, docs/diagrams-design.md): the chrome is Slides'
    (slides.css), so the toolbar, the tabs, the splitter and the status line
    sit where they sit there, and the drawing takes the canvas's place. */
@@ -23,6 +25,9 @@
 .dg-visual-row { display: flex; flex: 1 1 auto; min-height: 0; min-width: 0; }
 .dg-outline { flex: 0 1 13rem; min-width: 8rem; max-width: 25%; overflow: auto; padding: var(--space-2); border-inline-end: 1px solid var(--border); background: var(--surface-alt); }
 .dg-outline[hidden] { display: none; }
+.dg-outline .tree { margin-block: var(--space-2); }
+.dg-outline .tree a > span:last-child { overflow-wrap: anywhere; min-width: 0; }
+.dg-outline .tree a[aria-disabled="true"] { opacity: .55; cursor: default; }
 .dg-outline ul { list-style: none; padding: 0; margin: var(--space-2) 0; }
 .dg-outline li + li { margin-block-start: var(--space-1); }
 .dg-outline button { width: 100%; justify-content: flex-start; gap: var(--space-2); }

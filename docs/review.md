@@ -1,5 +1,13 @@
 # Stem-to-stern review, November 2026
 
+## Diagram navigation, conversion and Canvas embeds, 2026-11-09
+
+D2 now exposes a PUDL navigation tree with its containers, shapes and connections. Drawing/source selection updates the tree, source navigation clears stale selection, and F6 reaches visible editing panes without swallowing dialog or nested-app keys. A matching compile and outline must complete before stale items activate. Outline links retain normal modified-click behavior and refresh their resource/view/window context after Save As or address changes. Standalone state now retains the selected item in its URL.
+
+Canvas fences draw through the shared static renderer in Docs, Editor preview and Slides. Their contents disclosure no longer invokes the source-block editor. The original JSON survives rich serialization and theme changes. Copy as Embed chooses a safe fence delimiter. D2/Canvas conversion creates an independent unsaved copy after an explicit loss review; literal formatting uses D2's own API. `diagram-conversion-embedding.md` records the mapping and remaining limits.
+
+Three-engine tests cover Outline hierarchy/selection/panes/URL restore, Canvas embedding and malformed/oversized input, both conversion directions, loss-dialog cancellation and stale-source refusal. Visual review found nested D2 connections misclassified by a key-prefix heuristic. Exact compiled membership now determines shape/connection behavior, including the Inspector and label form. The current Canvas gesture/export suite also passes all three engines. The older combined Canvas fixture first timed out because it intercepted retired `fs.writeText`; that evidence remains at `%TEMP%/yavc-diagram-canvas-regression.log`. The corrected fixture intercepts the current resource authority and passes delayed saves, ordering, inactive Save As and recovery in all three engines. Save As validates native suffixes before commit, and legacy hosts decline unsupported destination creation. The resource-host fixture's stale-label check now uses the current Apply button and passes all three engines. Format round-trip fixtures cover the standard Canvas fields and unknown-property retention in our own writer; actual Obsidian saving remains untested.
+
 ## Slides deck history and presentation, 2026-11-09
 
 Slides now owns one bounded Undo timeline for source/rich edits, slide operations, properties and whole-deck replacement. Slide-setting updates previously assigned the source before asking the change handler to compare it, suppressing dirty state. They now enter the same timeline and compare against the source acknowledged by Save. Navigation separates typing groups, and Save As does not replace history with a different resource identity.
