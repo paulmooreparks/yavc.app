@@ -1,13 +1,13 @@
 // Copyright 2026 Paul Parks. SPDX-License-Identifier: Apache-2.0
 const assert=require('node:assert/strict'),fs=require('node:fs'),os=require('node:os'),path=require('node:path'),pw=require('playwright');
 const port=process.env.YAVC_CHROME_TEST_PORT||'8425', evidence=path.join(os.tmpdir(),'yavc-document-furniture-evidence');fs.mkdirSync(evidence,{recursive:true});
-const action=(page,name,input={})=>page.evaluate(({name,input})=>pudlActions.run('yavc.editor/'+name+'@1',input,{grant:'all'}),{name,input});
+const action=(page,name,input={})=>page.evaluate(({name,input})=>pudlActions.run('yavc.docs/'+name+'@1',input,{grant:'all'}),{name,input});
 const command=(page,id)=>page.evaluate(id=>{pudlCommands.run(id,null,document.querySelector('[data-applet]'));},id);
 const source='---\n# Keep this comment.\ntitle: "A <literal> title"\nauthor: Tester\ndate: 2026-11-06\npage: letter\nmargins: 1in\n---\n\n# Document furniture\n\n'+Array.from({length:35},(_,i)=>'Paragraph '+i+'. '+'Content stays editable and printable. '.repeat(14)).join('\n\n');
 (async()=>{for(const engine of process.argv.slice(2).length?process.argv.slice(2):['chromium','firefox','webkit']){
  const browser=await pw[engine].launch({headless:true}),page=await browser.newPage({viewport:{width:1500,height:1000}});page.setDefaultTimeout(20000);const errors=[];page.on('pageerror',e=>errors.push(e.message));let phase='open';
  try {
-  await page.goto(`http://editor.localhost:${port}/`,{waitUntil:'domcontentloaded'});await page.locator('.cm-editor').waitFor();
+  await page.goto(`http://docs.localhost:${port}/`,{waitUntil:'domcontentloaded'});await page.locator('.cm-editor').waitFor({state:'attached'});
   await action(page,'new',{path:'~/furniture.docs.md',text:source});await page.locator('.doc-paginated .ProseMirror').waitFor();
   phase='header dialog';await command(page,'header-footer');await page.getByLabel('Header Left',{exact:true}).fill('**{title}**');await page.getByLabel('Footer Right',{exact:true}).fill('Page {page} of {pages}');await page.getByLabel('Show Header on First Page',{exact:true}).uncheck();await page.getByRole('button',{name:'Apply',exact:true}).click();
   await page.waitForFunction(()=>document.querySelectorAll('.doc-footer').length>1&&document.querySelector('.doc-footer').textContent.includes('Page 1 of'));

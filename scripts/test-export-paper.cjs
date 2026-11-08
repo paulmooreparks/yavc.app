@@ -7,9 +7,9 @@ const source = fs.readFileSync(path.join(__dirname, '../site/home/Howto/Feature 
     for (const engine of process.argv.slice(2).length ? process.argv.slice(2) : ['chromium','firefox','webkit']) {
         const browser = await playwright[engine].launch({ headless: true }), page = await browser.newPage();
         try {
-            await page.goto(`http://editor.localhost:${port}/`); await page.locator('.cm-editor').waitFor();
-            await page.evaluate(text => pudlActions.run('yavc.editor/new@1', { path: '~/paper.docs.md', text }, { grant: 'all' }), source);
-            await page.evaluate(() => pudlActions.run('yavc.editor/view@1', { mode: 'text' }, { grant: 'all' }));
+            await page.goto(`http://docs.localhost:${port}/`); await page.locator('.cm-editor').waitFor({state:'attached'});
+            await page.evaluate(text => pudlActions.run('yavc.docs/new@1', { path: '~/paper.docs.md', text }, { grant: 'all' }), source);
+            await page.evaluate(() => pudlActions.run('yavc.docs/view@1', { mode: 'text' }, { grant: 'all' }));
             for (const theme of ['light', 'dark']) {
                 await page.evaluate(theme => pudlSetTheme(theme), theme);
                 const pending = page.waitForEvent('download');
@@ -33,8 +33,8 @@ const source = fs.readFileSync(path.join(__dirname, '../site/home/Howto/Feature 
             assert.deepEqual(colors, { plain: ['ffffff','202124'], authored: ['fff1dc','203040'], shared: ['dceeff','123456'], inline: ['eaf4e8','123456'], pdf: '#fff1dc', alpha: true, alphaPaper: true });
             const bytes = await page.evaluate(async () => Array.from(new Uint8Array(await paperAuthoredBlob.arrayBuffer())));
             fs.writeFileSync(path.join(evidence, engine + '-authored.docx'), Buffer.from(bytes));
-            await page.evaluate(() => pudlActions.run('yavc.editor/new@1', { path: '~/paper-colors.docs.md', text: '{{style}}\n--doc-page:#fff1dc;--doc-ink:#203040;\n{{/style}}\n\n# Paper colors\n\nAn authored paper and ink pair.' }, { grant: 'all' }));
-            await page.evaluate(() => pudlActions.run('yavc.editor/view@1', { mode: 'split' }, { grant: 'all' }));
+            await page.evaluate(() => pudlActions.run('yavc.docs/new@1', { path: '~/paper-colors.docs.md', text: '{{style}}\n--doc-page:#fff1dc;--doc-ink:#203040;\n{{/style}}\n\n# Paper colors\n\nAn authored paper and ink pair.' }, { grant: 'all' }));
+            await page.evaluate(() => pudlActions.run('yavc.docs/view@1', { mode: 'split' }, { grant: 'all' }));
             await page.waitForFunction(() => { const page = document.querySelector('.ProseMirror')?.closest('.doc-page'); return page && getComputedStyle(page).backgroundColor === 'rgb(255, 241, 220)' && getComputedStyle(page).color === 'rgb(32, 48, 64)'; });
             await page.screenshot({ path: path.join(evidence, engine + '-paper-preview.png') });
             console.log(engine + ': explicit paper, light/dark parity and default/shared/inline color precedence passed');

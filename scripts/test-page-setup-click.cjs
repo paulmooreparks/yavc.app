@@ -5,9 +5,9 @@ const port = process.env.YAVC_CHROME_TEST_PORT || '8423';
     for (const engine of process.argv.slice(2).length ? process.argv.slice(2) : ['chromium', 'firefox', 'webkit']) {
         const browser = await pw[engine].launch({ headless: true }), page = await browser.newPage(); page.setDefaultTimeout(15000);
         try {
-            await page.goto(`http://editor.localhost:${port}/`, { waitUntil: 'domcontentloaded' });
-            await page.locator('.cm-editor').waitFor();
-            await page.evaluate(() => pudlActions.run('yavc.editor/new@1', { path: '~/click.docs.md', text: '# Dropdown regression' }, { grant: 'all' }));
+            await page.goto(`http://docs.localhost:${port}/`, { waitUntil: 'domcontentloaded' });
+            await page.locator('.cm-editor').waitFor({state:'attached'});
+            await page.evaluate(() => pudlActions.run('yavc.docs/new@1', { path: '~/click.docs.md', text: '# Dropdown regression' }, { grant: 'all' }));
             await page.waitForFunction(() => !!document.querySelector('.doc-paginated'));
             await page.evaluate(() => { pudlCommands.run('page-setup', null, document.querySelector('[data-applet]')); });
             const dialog = page.locator('.md-page-setup[open]'); await dialog.waitFor();

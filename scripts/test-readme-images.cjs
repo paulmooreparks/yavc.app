@@ -11,14 +11,14 @@ const picture = (width, height) => `<svg xmlns="http://www.w3.org/2000/svg" widt
 async function run(engine) {
     const browser = await playwright[engine].launch(), page = await browser.newPage({ viewport: { width: 1500, height: 1000 } }), errors = [];
     page.on('pageerror', e => errors.push(e.message));
-    const action = (name, input = {}) => page.evaluate(({ name, input }) => pudlActions.run('yavc.editor/' + name + '@1', input, { grant: 'all' }), { name, input });
+    const action = (name, input = {}) => page.evaluate(({ name, input }) => pudlActions.run('yavc.docs/' + name + '@1', input, { grant: 'all' }), { name, input });
     try {
         await page.route('https://plausible.io/**', r => r.fulfill({ status: 200, contentType: 'application/javascript', body: '' }));
         await page.route('**/api/admin/editor/shortcodes', r => r.fulfill({ status: 200, contentType: 'application/json', body: '{"shortcodes":[]}' }));
         await page.route('https://img.shields.io/**', r => r.fulfill({ status: 200, contentType: 'image/svg+xml', body: picture(100, 20) }));
         await page.route('https://example.invalid/right.svg', r => r.fulfill({ status: 200, contentType: 'image/svg+xml', body: picture(100, 20) }));
         await page.route('**/mock-lantern.svg', r => r.fulfill({ status: 200, contentType: 'image/svg+xml', body: picture(256, 256) }));
-        await page.goto(`http://editor.localhost:${port}/`); await page.locator('.cm-editor').waitFor();
+        await page.goto(`http://docs.localhost:${port}/`); await page.locator('.cm-editor').waitFor({state:'attached'});
         await action('new', { path: '~/readme-images.md', text: source }); await action('view', { mode: 'preview' });
         const badges = page.locator('.doc-page a > img[src^="https://img.shields.io/"]');
         await badges.first().waitFor(); assert.equal(await badges.count(), 6);

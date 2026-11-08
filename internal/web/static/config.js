@@ -69,7 +69,7 @@
         if (!e) { return; }
         /* Each listener gets its own copy, so one that changes what it was
            given can't change what another holds. */
-        e.listeners.slice().forEach(function (fn) { try { fn(merged(e)); } catch (err) { if (window.console) { console.error(err); } } });
+        e.listeners.slice().forEach(function (fn) { try { fn(merged(e),own(e.values)); } catch (err) { if (window.console) { console.error(err); } } });
     }
 
     /* A change to ~ may be a settings file changed elsewhere: in another
@@ -156,6 +156,13 @@
         return null;
     }
 
+    async function adopt(name, defaults, marker) {
+        pathOf(name);if(!plain(defaults))throw new TypeError('Migration defaults must be an object.');
+        var F=await fs(),e=entry(name);if(!e.loaded)await load(name,{});e.version++;e.saving++;
+        var turn=(e.queue || Promise.resolve()).then(async function () {var text=await F.adoptSettings(name,own(defaults),marker);e.text=text;e.values=own(JSON.parse(text));tell(name);return merged(e);});
+        e.queue=turn.catch(function () {});try{return await turn;}finally{e.saving--;}
+    }
+
     function onChange(name, fn) {
         pathOf(name);
         var e = entry(name);
@@ -168,5 +175,5 @@
         };
     }
 
-    window.pcConfig = { load: load, get: get, set: set, onChange: onChange };
+    window.pcConfig = { load: load, stored:async function (name) {await load(name,{});return own(entry(name).values);}, get: get, set: set, adopt: adopt, onChange: onChange };
 })();

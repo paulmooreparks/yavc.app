@@ -109,12 +109,27 @@
 
     window.pudlHost = kit.host({
         commandToolbar: {
-            attach: function (root, options) { return window.yavcCommandToolbar.attach(root, Object.assign({}, options, { config: window.pudlHost.config })); }
+            attach: function (root, options) {
+                var service=window.pudlHost.config;
+                if(options.app==='docs')service=Object.assign({},service,{load:async function (name,defaults) {var original=window.pudlHost.config,all=await original.load(name,defaults);if(name!=='command-toolbars')return all;return original.adopt(name,{docs:all.editor || {version:1,visible:true,inRibbon:true,items:options.defaults.slice()}},'docsWorkspaceMigration');}});
+                return window.yavcCommandToolbar.attach(root,Object.assign({},options,{config:service}));
+            }
         },
         pages: '/', pudl: '/pudl/',
         contentBytes: {version:1,read:function (request,context) {return fs().then(function (F) {return F.contentBytes.read(request,context);});}},
         snapshot: window.pcSnapshot,
-        /* Plan-only extension. Existing file routing remains until Docs and its migration gates are ready. */
+        contentWorkspace: { version: 1,
+            browser: function () { return withDialog().then(function (x) { return {F:x[0],FB:x[1]}; }); },
+            split: {of:function (handle,change) {return window.pcSplit.of(handle,change);}},
+            openPage: function (href) { if(!window.pudlWindows || !document.querySelector('[data-win-layer]'))return false;var url=new URL(href,location.href),match=url.origin===location.origin && /^\/page\/([A-Za-z0-9_-]+)$/.exec(url.pathname);if(!match)return false;var key=match[1],win=document.querySelector('.win[data-win="'+key+'"]');if(win && window.pudlWindows.state().open.indexOf(key)>=0){window.pudlWindows.raise(key);if(window.pcLoadWindow)window.pcLoadWindow(win,'',true).catch(function () {});}else window.pudlWindows.open(key);return true;},
+            shortcodes: function () { return fetch('/api/admin/editor/shortcodes', {credentials:'same-origin',headers:{Accept:'application/json'}}).then(function (r) {return r.json().catch(function () {return {};}).then(function (body) {return r.ok ? body : {shortcodes:[]};});}); },
+            legacySession: {
+                read: function (app) { return JSON.parse(localStorage.getItem('pc-'+app+'-session') || 'null'); },
+                write: function (app, value) { if(value)localStorage.setItem('pc-'+app+'-session',JSON.stringify(value));else localStorage.removeItem('pc-'+app+'-session'); }
+            },
+            legacyWork: function (app, remove) {if(app!=='editor')return null;var value=JSON.parse(sessionStorage.getItem('pc-editor-work') || 'null');if(remove)sessionStorage.removeItem('pc-editor-work');return value;}
+        },
+        /* The host resolves handlers before invoking a distinct PUDL request verb. */
         fileResolution: { version: 1, resolve: async function (request) {
             var resolver = await fileResolver(), preferenceError = null;
             var preferences = await window.pudlHost.config.load('file-associations', { version: 1, rules: [] });
@@ -123,6 +138,27 @@
             var installed = window.pudlApplets && window.pudlApplets.definitions ? Object.keys(window.pudlApplets.definitions()) : [];
             var result = resolver.resolve(request, { installed: installed, preferences: validAssociations || { version: 1, rules: [] } });
             return Object.assign({}, result, { preferenceError: preferenceError });
+        }, open: async function (request, context) {
+            var F=await fs(),node=F.resolve(F.home(),request.resource);
+            if(!node || node.children || !F.isText(node))throw new Error('Choose a supported text file.');
+            var real=F.realOf(node),path=F.displayPath(real);
+            var result=await window.pudlHost.fileResolution.resolve({name:real.name,intent:'edit',applet:request.applet,view:request.view,verifiedText:true,readable:true,writable:!!real.home});
+            if(result.status!=='resolved')throw new Error(result.reason || 'No installed application supports this file.');
+            if(!F.resolve(F.home(),path))throw new Error('The file is no longer available.');
+            var plan=result.plan;
+            if(plan.dispatch && window.pudlWindows && document.querySelector('[data-win-layer]')){
+                var keys=window.pudlWindows.state().open.filter(function (key) {return key===plan.applet || new RegExp('^'+plan.applet+'-[2-9]$').test(key);});
+                var opened=await window.pudlWindows.open(keys.length ? keys[keys.length-1] : plan.applet,context && context.host);
+                if(opened.status!=='opened' && opened.status!=='existing')throw opened.error || new Error('The application could not open.');
+                await window.pudlApplets.start(opened.key);
+                if(!opened.window || !opened.window.isConnected || opened.window.querySelector('[data-applet-state="error"]'))throw new Error('The application could not start.');
+                var mount=opened.window.querySelector('[data-applet="'+plan.applet+'"]');if(!mount)throw new Error('The application mount is unavailable.');
+                var accepted=await window.pudlCommands.run(plan.dispatch.command,{resource:path,view:request.view,initialView:plan.view},mount);
+                if(accepted===false)throw new Error('The file opening was cancelled or refused.');
+                return result;
+            }
+            if(!window.pudlApplets.request(plan.operation,{path:path,kind:plan.kind,view:request.view,'initial-view':plan.view},context && context.host))throw new Error('The selected application is unavailable.');
+            return result;
         } },
         fileFields: { version: 1, choose: async function (request) {
             var fields = await U.loadGlobal(versioned('/static/file-fields.js'), 'yavcFileFields');
@@ -154,7 +190,7 @@
                 return withDialog().then(function (x) {
                     var F = x[0], FB = x[1];
                     return FB.pick(F, {
-                        mode: 'open', title: o.title, host: o.host, start: startIn(F, o.start), accept: o.accept || [], computer: true,
+                        mode: 'open', title: o.title, host: o.host, start: startIn(F, o.start), accept: o.accept || [], computer: true, signal:o.signal,
                         check: function (node) {
                             if (!F.isText(node)) { return node.name + ' isn\'t a text file.'; }
                             return o.check ? o.check(F.displayPath(node)) : null;
@@ -232,6 +268,8 @@
             mkdir: function (path) { return fs().then(function (f) { return f.mkdir(null, path, true); }); }
         },
         config: {
+            stored: function (name) {return config().then(function (c) {return c.stored(name);});},
+            adopt: function (name, defaults, marker) {return config().then(function (c) {return c.adopt(name,defaults,marker);});},
             load: function (name, defaults) { return config().then(function (c) { return c.load(name, defaults); }); },
             get: function (name) { return window.pcConfig ? window.pcConfig.get(name) : null; },
             set: function (name, changes) { return config().then(function (c) { return c.set(name, changes); }); },

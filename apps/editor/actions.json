@@ -1,14 +1,14 @@
 {
   "id": "yavc.editor",
-  "version": "2.5.0",
+  "version": "3.0.0",
   "apiVersion": 1,
   "title": "Editor",
-  "description": "The text and Markdown editor: the documents it has open, their text, and everything its commands do to them.",
+  "description": "Text and source editing. Document formatting actions return migration guidance to yavc.docs.",
   "actions": [
     {
       "ref": "yavc.editor/page-setup@1",
       "title": "Set Page Layout",
-      "description": "Change the current Markdown document page size, orientation or margins as one undoable source edit. Dimensions and returned margins are in points, in left, top, right, bottom order.",
+      "description": "This action moved to yavc.docs/page-setup@1. Editor returns migration guidance without changing content.",
       "live": true,
       "inputSchema": {
         "type": "object",
@@ -61,7 +61,7 @@
     {
       "ref": "yavc.editor/export@1",
       "title": "Export Document",
-      "description": "Export the current Markdown document as editable Word DOCX or a PDF with selectable text. Exclusions and draft notes are removed before layout. Returns a file artifact without the Markdown source.",
+      "description": "This action moved to yavc.docs/export@1. Editor returns migration guidance without changing content.",
       "live": true,
       "inputSchema": {
         "type": "object",
@@ -264,7 +264,7 @@
     {
       "ref": "yavc.editor/table@1",
       "title": "Edit Selected Table",
-      "description": "Apply a table operation at the current rich selection in Visual or Split view. Alignment changes every cell in the selected columns.",
+      "description": "This action moved to yavc.docs/table@1. Editor returns migration guidance without changing content.",
       "live": true,
       "inputSchema": {
         "type": "object",
@@ -310,7 +310,7 @@
     {
       "ref": "yavc.editor/format@1",
       "title": "Format Selection",
-      "description": "Apply formatting at the current text or rich selection. Quote toggles a block quote while preserving nested content.",
+      "description": "This action moved to yavc.docs/format@1. Editor returns migration guidance without changing content.",
       "live": true,
       "inputSchema": {
         "type": "object",
@@ -363,7 +363,7 @@
     {
       "ref": "yavc.editor/define@1",
       "title": "Read Custom Shortcode Definitions",
-      "description": "Read this document's validated custom shortcode definitions, shared definitions, parameter metadata, source ranges and problems. Ranges use UTF-16 positions in the corresponding source.",
+      "description": "This action moved to yavc.docs/define@1. Editor returns migration guidance without changing content.",
       "live": true,
       "inputSchema": {
         "type": "object",
@@ -568,7 +568,7 @@
     {
       "ref": "yavc.editor/open-file@1",
       "title": "Open a File",
-      "description": "Open one of the person's files (~/\u00c3\u00a2\u00e2\u201a\u00ac\u00c2\u00a6) or a page of the site in the Editor, and make it current. A file already open comes to the front.",
+      "description": "Open one of the person's files (~/Ã¢â‚¬Â¦) or a page of the site in the Editor, and make it current. A file already open comes to the front.",
       "live": true,
       "inputSchema": {
         "type": "object",
@@ -1032,7 +1032,7 @@
     {
       "ref": "yavc.editor/header-footer@1",
       "title": "Set Header and Footer",
-      "description": "Change the current document settings as one undoable source edit.",
+      "description": "This action moved to yavc.docs/header-footer@1. Editor returns migration guidance without changing content.",
       "live": true,
       "inputSchema": {
         "type": "object",
@@ -1108,7 +1108,7 @@
     {
       "ref": "yavc.editor/typography@1",
       "title": "Set Document Typography",
-      "description": "Change the current document settings as one undoable source edit.",
+      "description": "This action moved to yavc.docs/typography@1. Editor returns migration guidance without changing content.",
       "live": true,
       "inputSchema": {
         "type": "object",
@@ -1161,7 +1161,7 @@
     {
       "ref": "yavc.editor/document-zoom@1",
       "title": "Set Document Zoom",
-      "description": "Change the current document view magnification without changing source.",
+      "description": "This action moved to yavc.docs/document-zoom@1. Editor returns migration guidance without changing content.",
       "live": true,
       "inputSchema": {
         "type": "object",

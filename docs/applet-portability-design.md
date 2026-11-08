@@ -93,4 +93,10 @@ The first portable release must pass source/format preservation tests, the full 
 - The receiving host's prior useful editing behavior passes its own parity corpus, and rollback recovers edits made during the proof rather than only restoring an old executable.
 - The yavc.app release and minimal-host proof report the same extracted artifact/dependency hashes. Runtime loading and deployment inputs show no legacy implementation fallback, and the final integration preserves guest files, snapshots, associations, commands, applet identities and existing pins through its recorded migration policy.
 
-The host harness, yavc.app reintegration and actual receiving-webview tests are separate gates. The current design/source review establishes none of those implementation results. Public package publication, downstream editor replacement and data migration remain separate release/adoption decisions.
+The host harness, yavc.app reintegration and actual receiving-webview tests are separate gates. Public package publication, downstream editor replacement and data migration remain separate release/adoption decisions.
+
+## Extraction candidate, 2026-11-08
+
+The Docs/Editor candidate extracts the shared workspace and registers separate packages, while packaging Slides and Diagrams in the same release set. A clean local build and Docker's build produce digest `040551c7458eb07cf108bafcd6ea8557f5f45fdc75acfc4b97b4d52e26d3e5d4`. The serving fixture verifies the manifest and all 216 content assets from the isolated Docker host. The unrelated browser host loads Editor, Docs and Slides together without site storage/configuration globals; its source and rich writes remain isolated in Chromium, Firefox and WebKit.
+
+The Diagrams proof passes in Chromium and WebKit. Firefox completes the functional cases but crashes while taking the final screenshot, repeating the earlier automation failure; a passing earlier artifact run does not close that failure. The review record retains this limitation. Actual receiving-application webview acceptance and offline packaging are still required before downstream adoption.

@@ -7,24 +7,24 @@ const evidence = path.join(os.tmpdir(), 'yavc-editor-structure-evidence'); fs.mk
 const source = '---\ntitle: Structure test\n---\n\n# First 😀\n\nIntro.\n\n> A **rich quote**.\nlazy continuation\n>\n> - One\n> - Two\n\n| Left | Center | Right |\n| :----- | :----: | ----: |\n| A | B | C |\n\n## Child\n\nKeep this with First.\n\n```md\n# Example\n```\n\n{{define:card}}\n## Template\n{{content}}\n{{/define}}\n\n# Second\n\nSecond body.\n\n# Third\n\nThird body.\n';
 function action(page, app, name, input = {}) { return page.evaluate(({ app, name, input }) => pudlActions.run('yavc.' + app + '/' + name + '@1', input, { grant: 'all' }), { app, name, input }); }
 function command(page, id) { return page.evaluate(id => { window.structureCommand = pudlCommands.run(id, null, document.querySelector('[data-applet]')); return true; }, id); }
-function getText(page) { return action(page, 'editor', 'document').then(result => result.text); }
+function getText(page) { return action(page, 'docs', 'document').then(result => result.text); }
 async function sourceContains(page, fragment) { await page.waitForFunction(fragment => CM.EditorView.findFromDOM(document.querySelector('.cm-editor')).state.doc.toString().includes(fragment), fragment); }
 (async () => {
     for (const engine of process.argv.slice(2).length ? process.argv.slice(2) : ['chromium', 'firefox', 'webkit']) {
         const browser = await playwright[engine].launch({ headless: true }); const page = await browser.newPage({ viewport: { width: 1500, height: 1000 } }); page.setDefaultTimeout(15000);
         let phase = 'Editor start';
         try {
-            await page.goto(`http://editor.localhost:${port}/`); await page.locator('.cm-editor').waitFor();
-            await action(page, 'editor', 'new', { path: '~/Documents/structure.md', text: source }); await action(page, 'editor', 'view', { mode: 'split' });
+            await page.goto(`http://docs.localhost:${port}/`); await page.locator('.cm-editor').waitFor({state:'attached'});
+            await action(page, 'docs', 'new', { path: '~/Documents/structure.md', text: source }); await action(page, 'docs', 'view', { mode: 'split' });
             await page.locator('.ProseMirror blockquote').waitFor(); await page.locator('.ProseMirror table').waitFor();
             assert.equal(await getText(page), source);
             phase = 'Outline action revision';
-            const outline = await action(page, 'editor', 'outline');
+            const outline = await action(page, 'docs', 'outline');
             assert.deepEqual(outline.entries.map(entry => entry.title), ['First 😀', 'Child', 'Second', 'Third']);
             assert.match(outline.revision, /^[a-f0-9]{64}$/);
-            await action(page, 'editor', 'move-section', { from: outline.entries[2].from, after: outline.entries[3].from, revision: outline.revision });
+            await action(page, 'docs', 'move-section', { from: outline.entries[2].from, after: outline.entries[3].from, revision: outline.revision });
             await sourceContains(page, '# Third\n\nThird body.\n# Second');
-            await assert.rejects(action(page, 'editor', 'move-section', { from: outline.entries[2].from, direction: 'up', revision: outline.revision }), /changed/);
+            await assert.rejects(action(page, 'docs', 'move-section', { from: outline.entries[2].from, direction: 'up', revision: outline.revision }), /changed/);
             await command(page, 'undo');
             await page.waitForFunction(source => CM.EditorView.findFromDOM(document.querySelector('.cm-editor')).state.doc.toString() === source, source);
             phase = 'Outline navigation'; await command(page, 'toggle-outline');
@@ -65,20 +65,20 @@ async function sourceContains(page, fragment) { await page.waitForFunction(fragm
             phase = 'Aligned table editing';
             await page.locator('.ProseMirror[aria-busy="false"]').waitFor();
             await page.locator('.ProseMirror tbody tr').nth(1).locator('td').first().click();
-            await page.waitForFunction(() => yavcMdEditor._page.marks().table); await action(page, 'editor', 'table', { op: 'align-center' });
+            await page.waitForFunction(() => yavcMdEditor._page.marks().table); await action(page, 'docs', 'table', { op: 'align-center' });
             await page.waitForFunction(() => [...document.querySelectorAll('.ProseMirror tr')].every(row => row.children[0].style.textAlign === 'center'));
             await sourceContains(page, '| :---: | :---: | ---: |');
             await command(page, 'undo'); await page.waitForFunction(() => [...document.querySelectorAll('.ProseMirror tr')].every(row => row.children[0].style.textAlign === 'left'));
             phase = 'Structural edits retain table alignment';
             await page.locator('.ProseMirror tbody tr').nth(1).locator('td').first().click();
             await page.waitForFunction(() => yavcMdEditor._page.marks().table);
-            await action(page, 'editor', 'table', { op: 'row-below' });
+            await action(page, 'docs', 'table', { op: 'row-below' });
             assert.equal(await page.locator('.ProseMirror tr').count(), 3);
             assert.ok(await page.locator('.ProseMirror tr').evaluateAll(rows => rows.every(row => row.children[0].style.textAlign === 'left' && row.children[1].style.textAlign === 'center' && row.children[2].style.textAlign === 'right')));
             await command(page, 'undo'); await page.waitForFunction(() => document.querySelectorAll('.ProseMirror tr').length === 2);
             await page.locator('.ProseMirror tbody tr').nth(1).locator('td').first().click();
             await page.waitForFunction(() => yavcMdEditor._page.marks().table);
-            await action(page, 'editor', 'table', { op: 'column-after' });
+            await action(page, 'docs', 'table', { op: 'column-after' });
             assert.ok(await page.locator('.ProseMirror tr').evaluateAll(rows => rows.every(row => row.children.length === 4 && row.children[0].style.textAlign === 'left' && row.children[1].style.textAlign === '' && row.children[2].style.textAlign === 'center' && row.children[3].style.textAlign === 'right')));
             await command(page, 'undo'); await page.waitForFunction(() => document.querySelector('.ProseMirror tr').children.length === 3);
             phase = 'Unquote a nested list';
@@ -88,12 +88,12 @@ async function sourceContains(page, fragment) { await page.waitForFunction(fragm
             assert.equal(await page.locator('.ProseMirror ul li').count(), 2); await sourceContains(page, '- One\n- Two');
             await command(page, 'undo'); await page.locator('.ProseMirror blockquote li').first().waitFor();
             phase = 'Text quote toggling';
-            await action(page, 'editor', 'new', { path: '~/text-quote.md', text: 'First line\nSecond line\nAfter.' }); await action(page, 'editor', 'view', { mode: 'text' });
+            await action(page, 'docs', 'new', { path: '~/text-quote.md', text: 'First line\nSecond line\nAfter.' }); await action(page, 'docs', 'view', { mode: 'text' });
             await page.locator('.cm-editor').evaluate(element => { const view = CM.EditorView.findFromDOM(element); view.dispatch({ selection: { anchor: 0, head: view.state.doc.line(3).from } }); view.focus(); });
-            await action(page, 'editor', 'format', { op: 'quote' }); assert.equal(await getText(page), '> First line\n> Second line\nAfter.');
+            await action(page, 'docs', 'format', { op: 'quote' }); assert.equal(await getText(page), '> First line\n> Second line\nAfter.');
             await command(page, 'quote'); assert.equal(await getText(page), 'First line\nSecond line\nAfter.');
             phase = 'Narrow navigation';
-            await action(page, 'editor', 'new', { path: '~/narrow.md', text: source }); await action(page, 'editor', 'view', { mode: 'visual' });
+            await action(page, 'docs', 'new', { path: '~/narrow.md', text: source }); await action(page, 'docs', 'view', { mode: 'visual' });
             await page.setViewportSize({ width: 380, height: 850 }); await page.evaluate(() => pudlSetTheme('dark')); await command(page, 'toggle-outline');
             if (!(await tree.isVisible())) { await command(page, 'toggle-outline'); }
             await tree.waitFor(); assert.ok(await page.locator('.ed-outline-pane').evaluate(element => element.scrollWidth <= element.clientWidth + 1));
@@ -101,8 +101,8 @@ async function sourceContains(page, fragment) { await page.waitForFunction(fragm
             await tree.getByRole('treeitem', { name: 'Third', exact: true }).click(); await page.waitForFunction(() => !document.querySelector('[data-applet]').classList.contains('ed-compact-outline'));
             await page.setViewportSize({ width: 1500, height: 1000 });
             phase = 'Retain rich draft after source conflict';
-            await action(page, 'editor', 'new', { path: '~/conflict.md', text: '# First\n\nOriginal body.\n\n# Second\n\nOther body.\n' });
-            await action(page, 'editor', 'view', { mode: 'split' });
+            await action(page, 'docs', 'new', { path: '~/conflict.md', text: '# First\n\nOriginal body.\n\n# Second\n\nOther body.\n' });
+            await action(page, 'docs', 'view', { mode: 'split' });
             await command(page, 'toggle-outline'); if (!(await tree.isVisible())) { await command(page, 'toggle-outline'); }
             await tree.getByRole('treeitem', { name: 'First', exact: true }).waitFor();
             await page.locator('.ProseMirror[aria-busy="false"] p').first().click();
@@ -119,7 +119,7 @@ async function sourceContains(page, fragment) { await page.waitForFunction(fragm
                     engine.markdown = markdown;
                     document.querySelector('[data-outline-index="0"]').click();
                     const revision = engine.outlineState(cm.state.doc.toString()).revision;
-                    const moveRefused = await pudlActions.run('yavc.editor/move-section@1', { from: 0, direction: 'down', revision }, { grant: 'all' }).then(() => false, () => true);
+                    const moveRefused = await pudlActions.run('yavc.docs/move-section@1', { from: 0, direction: 'down', revision }, { grant: 'all' }).then(() => false, () => true);
                     const reloadRefused = await api.reload().then(() => false, () => true);
                     const closeRefused = await api.enable(false).then(() => false, () => true);
                     const retained = api.active() && api.pending() && !!document.querySelector('.ProseMirror blockquote');

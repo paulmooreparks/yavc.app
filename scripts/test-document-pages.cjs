@@ -4,7 +4,7 @@ const playwright = require('playwright');
 const evidence = path.join(os.tmpdir(), 'yavc-document-pages-evidence'); fs.mkdirSync(evidence, { recursive: true });
 const port = process.env.YAVC_CHROME_TEST_PORT || '8421';
 const source = '---\ntitle: Document pages\npage: letter\nmargins: 1in\n---\n\n# Document pages\n\n' + Array.from({length: 45}, (_, i) => `Paragraph ${i + 1}. ` + 'This text stays editable across page boundaries. '.repeat(7)).join('\n\n') + '\n';
-const action = (page, name, input = {}) => page.evaluate(({name,input}) => pudlActions.run('yavc.editor/' + name + '@1', input, {grant:'all'}), {name,input});
+const action = (page, name, input = {}) => page.evaluate(({name,input}) => pudlActions.run('yavc.docs/' + name + '@1', input, {grant:'all'}), {name,input});
 const command = (page, id) => page.evaluate(id => { pudlCommands.run(id, null, document.querySelector('[data-applet]')); }, id);
 const text = page => action(page, 'document').then(r => r.text);
 const margin = page => page.locator('[data-measure="all"]').locator('..').getByRole('spinbutton');
@@ -14,7 +14,7 @@ const margin = page => page.locator('[data-measure="all"]').locator('..').getByR
         const page = await browser.newPage({viewport:{width:1500,height:1000}}); page.setDefaultTimeout(15000);
         const errors = []; page.on('pageerror', err => errors.push(err.message));
         try {
-            await page.goto(`http://editor.localhost:${port}/`,{waitUntil:'domcontentloaded'}); await page.locator('.cm-editor').waitFor();
+            await page.goto(`http://docs.localhost:${port}/`,{waitUntil:'domcontentloaded'}); await page.locator('.cm-editor').waitFor({state:'attached'});
             await action(page, 'new', {path:'~/pages.docs.md',text:source});
             await page.waitForFunction(() => +document.querySelector('[data-page-count]')?.dataset.pageCount > 1);
             assert.equal(await text(page), source);
@@ -80,7 +80,7 @@ const margin = page => page.locator('[data-measure="all"]').locator('..').getByR
             assert.doesNotMatch(printed.html,/SECRET NOTE/); assert.match(printed.text,/Before/); assert.match(printed.text,/After/); assert.equal(printed.pages,2);
             const html = await page.locator('.ed-print-frame').evaluate(frame => frame.contentDocument.documentElement.outerHTML);
             const printPage = await browser.newPage({viewport:{width:1000,height:1200}});
-            await printPage.goto(`http://editor.localhost:${port}/`); await printPage.setContent(html);
+            await printPage.goto(`http://docs.localhost:${port}/`); await printPage.setContent(html);
             await printPage.evaluate(() => document.fonts.ready);
             await printPage.screenshot({path:path.join(evidence,engine+'-print.png'),fullPage:true});
             if(engine === 'chromium') { await printPage.pdf({path:path.join(evidence,'document-pages.pdf'),preferCSSPageSize:true,printBackground:true}); }

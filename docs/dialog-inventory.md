@@ -34,12 +34,12 @@ The executable evidence includes the site, content, authored, block, formatting,
 | Files | Rename | Current item and collision validation | Files sweep, all three engines; commits and cancellation checked |
 | Files | Move | Directory chooser plus direct destination input | Files sweep, all three engines; commits and cancellation checked |
 | Files | Delete | Named target and safe cancellation | Files sweep, all three engines; commits and cancellation checked |
-| Editor | Properties | Stock and custom metadata, original tab and source ownership | Content sweep, all three engines |
-| Editor | Document Zoom | Bounded numeric percent and forwarded validation | Content sweep, all three engines; bounds tested by document-view suites |
-| Editor/Docs | Text Style in source | Parser-confirmed ordinary text, current style, removal, one undo step | Content and source/rich formatting suites, all three engines |
-| Editor/Docs | Text Style in rich view | Current/mixed marks, collapsed typing marks and style preview | Content and source/rich formatting suites, all three engines |
-| Editor/Docs | Text Color in source | Theme/default/custom selection, native picker and CSS validation | Content and source/rich formatting suites, all three engines |
-| Editor/Docs | Text Color in rich view | Current/mixed marks and captured selection | Content and source/rich formatting suites, all three engines |
+| Docs | Properties | Stock and custom metadata, original tab and source ownership | Content sweep, all three engines |
+| Docs | Document Zoom | Bounded numeric percent and forwarded validation | Content sweep, all three engines; bounds tested by document-view suites |
+| Docs | Text Style in source | Parser-confirmed ordinary text, current style, removal, one undo step | Content and source/rich formatting suites, all three engines |
+| Docs | Text Style in rich view | Current/mixed marks, collapsed typing marks and style preview | Content and source/rich formatting suites, all three engines |
+| Docs | Text Color in source | Theme/default/custom selection, native picker and CSS validation | Content and source/rich formatting suites, all three engines |
+| Docs | Text Color in rich view | Current/mixed marks and captured selection | Content and source/rich formatting suites, all three engines |
 | Slides | Text Style in source | Deck and current-slide classes only | Content and source/rich formatting suites, all three engines |
 | Slides | Text Style in rich view | Deck and current-slide classes only, current/mixed marks | Content and source/rich formatting suites, all three engines |
 | Slides | Text Color in source | Shared color contract and slide ownership | Content and source/rich formatting suites, all three engines |
@@ -60,7 +60,7 @@ The executable evidence includes the site, content, authored, block, formatting,
 | Shortcodes | Generated number parameter | Bounded value and visible enhanced-field validation | Content sweep, all three engines; visible invalid input and correction checked |
 | Shortcodes | Generated select parameter | Current and unknown value retention, asynchronous catalog | Content sweep, all three engines |
 | Shortcodes | Generated file parameter | Shared Browse/import and owning document lifetime | Content sweep, all three engines |
-| Shortcodes | Block arguments | Information, Note, Tip, Warning, Expand and Style Class; original block retained | Block-argument sweep in Editor and Slides, all three engines |
+| Shortcodes | Block arguments | Information, Note, Tip, Warning, Expand and Style Class; original block retained | Block-argument sweep in Docs and Slides, all three engines |
 | Shortcodes | Custom inline arguments | Captured definition, document and selection | Content sweep, all three engines; custom-shortcode behavior suite all three |
 | Shortcodes | Custom container arguments | Body retained while opening arguments change | Content sweep, all three engines; custom-shortcode behavior suite all three |
 | Shortcodes | Definition manager | Shared/local scope, add/change/remove, errors and Browse/import | Content sweep, all three engines; custom-shortcode behavior suite all three |
@@ -117,3 +117,5 @@ The executable evidence includes the site, content, authored, block, formatting,
 The native operating-system file picker, color picker and browser permission prompt cannot be restyled as PUDL controls. The review covers their invocation, keyboard-accessible fallback, cancellation, bounded input and late-result handling. It includes VFS uploads and dependencies, Slides PPTX input, Barcode Tool linked files, Theme Studio CSS files, Sight Reader MusicXML/MXL input, Scanner image/layout input and camera permission. Device camera hardware and every platform's native picker remain separate manual environments; synthetic permission stubs must be identified as such in the evidence.
 
 Flashcards has no authored dialog. Its navigation commands still require menu-ownership review, and it shares the host's permission and file flows when those are used.
+
+The Docs/Editor split retains the shared dialog implementation. Rich formatting, page layout and stylesheet dialogs belong to Docs and Slides where applicable. Editor exposes source commands and safe read-only previews. Switching applications with an unsaved document offers Save and Open, Open Saved Version, or Cancel; the scoped dispatch suite covers all three choices.

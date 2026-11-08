@@ -219,6 +219,8 @@ rules.push({ id: 'pudl-script-loaded', run() {
 // (security review, 2026-11-03). The few that only echo what the agent
 // itself just gave are listed with the reason.
 const ECHOES = {
+  'yavc.docs/set-text@1': 'returns the text the agent set',
+  'yavc.docs/new@1': 'a new, empty document',
   'yavc.editor/set-text@1': 'returns the text the agent set',
   'yavc.editor/new@1': 'a new, empty document',
   'yavc.slides/set-text@1': 'returns the slide the agent wrote',
@@ -363,6 +365,17 @@ rules.push({ id: 'title-case-labels', run() {
     });
   }
 } });
+
+// The extracted workspace cannot regain the site's storage or route assumptions.
+// Optional host capabilities belong in its documented adapter instead.
+rules.push({id:'workspace-host-boundary',run(){
+  for(const f of js.filter(f=>f.startsWith('apps/text-workspace/'))){
+    each(/\b(?:pcSiteFs|pcConfig|pcSnapshot|pcAdmin|pcLoadWindow|localStorage|sessionStorage)\b|['"]\/(?:static|applets)\//g,text.get(f),m=>report('workspace-host-boundary',f,m.index,'a site storage/global/path dependency escaped the host adapter'));
+  }
+  for(const f of ['apps/editor/editor.js','apps/docs/docs.js']){
+    each(/\b(?:EditorView|EditorState|CodeMirror|ProseMirror)\b/g,text.get(f)||'',m=>report('workspace-host-boundary',f,m.index,'editing implementation belongs in the shared workspace'));
+  }
+}});
 
 let ran = 0;
 for (const r of rules) {
