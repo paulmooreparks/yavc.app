@@ -57,14 +57,17 @@ const margin = page => page.locator('[data-measure="all"]').locator('..').getByR
             await page.screenshot({path:path.join(evidence,engine+'-narrow.png')});
             await page.setViewportSize({width:1500,height:1000});
             await page.evaluate(() => { const append = document.body.append.bind(document.body); document.body.append = function(...nodes) { append(...nodes); nodes.forEach(n => { if(n.tagName === 'IFRAME') n.contentWindow.print = () => { window.printCalled = true; }; }); }; });
-            const groups = await page.locator('.ProseMirror').evaluate(flow => { const out=[[]]; Array.from(flow.children).forEach(node => { if(node.classList.contains('doc-page-gap')) out.push([]); else out[out.length-1].push(node.textContent); }); return out; });
+            const groups = await page.locator('.ProseMirror').evaluate(flow => {
+                const P=yavcDocumentPages,blocks=P.blocks(flow),layout=P.plan(blocks,P.settings({page:'letter',margins:'1in'})),starts=[0,...layout.gaps.map(g=>g.index),blocks.length];
+                return starts.slice(0,-1).map((at,i)=>{const holder=document.createElement('div');holder.append(yavcPageLines.fragment(flow,blocks,at,starts[i+1]));return [...holder.children].filter(n=>!n.classList.contains('doc-page-gap')).map(n=>n.textContent.trim());});
+            });
             await command(page,'print-document'); await page.waitForFunction(() => window.printCalled);
             const printGroups = await page.locator('.ed-print-frame').evaluate(frame => Array.from(frame.contentDocument.querySelectorAll('.doc-page-flow')).map(flow => Array.from(flow.children).map(node => node.textContent.trim())));
             fs.writeFileSync(path.join(evidence,engine+'-geometry.json'), JSON.stringify(await page.evaluate(() => {
                 function geometry(flow) { return {html:flow.children[0].outerHTML,root:flow.parentElement.outerHTML.slice(0,400),items:Array.from(flow.children).slice(0,8).map(node => {const r=node.getBoundingClientRect(),s=node.ownerDocument.defaultView.getComputedStyle(node);return {tag:node.tagName,height:r.height,top:r.top,width:r.width,margin:s.margin,font:s.font,lineHeight:s.lineHeight,display:s.display};})}; }
                 return {editing:geometry(document.querySelector('.ProseMirror')),printing:geometry(document.querySelector('iframe.ed-print-frame').contentDocument.querySelector('.doc-page-flow'))};
             }),null,2));
-            assert.deepEqual(printGroups.map(g=>g.map(t=>t.slice(0,15))),groups.map(g=>g.map(t=>t.slice(0,15))),'Print and editing view disagree on whole-block page breaks');
+            assert.deepEqual(printGroups.map(g=>g.map(t=>t.slice(0,15))),groups.map(g=>g.map(t=>t.slice(0,15))),'Print and editing view disagree on measured page fragments');
             await page.locator('.ed-print-frame').evaluate(frame => frame.contentWindow.dispatchEvent(new Event('afterprint')));
             await page.evaluate(() => { window.printCalled=false; });
             await page.evaluate(() => pudlSetTheme('dark'));
@@ -87,7 +90,7 @@ const margin = page => page.locator('[data-measure="all"]').locator('..').getByR
             await printPage.close();
             await page.locator('.ed-print-frame').evaluate(frame => frame.contentWindow.dispatchEvent(new Event('afterprint')));
             assert.equal(await page.locator('.ed-print-frame').count(),0);
-            await action(page,'new',{path:'~/oversized.docs.md',text:Array.from({length:100},(_,i)=>'- List item '+i).join('\n')});
+            await action(page,'new',{path:'~/oversized.docs.md',text:'{{style}}\n.too-tall {height:1200px;}\n{{/style}}\n\n<div class="too-tall">An atomic HTML block</div>\n'});
             await page.waitForFunction(() => document.querySelector('[data-role="page-problems"]')?.textContent.includes('taller than the page'));
             await command(page,'print-document');
             await page.locator('.toast.danger').filter({hasText:'could not be printed'}).waitFor();

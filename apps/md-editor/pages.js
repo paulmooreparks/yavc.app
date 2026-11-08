@@ -1,5 +1,5 @@
 /* Copyright 2026 Paul Parks. SPDX-License-Identifier: Apache-2.0 */
-/* Physical page settings and measured, block-boundary pagination. */
+/* Physical page settings and measured source-free pagination. */
 (function () {
     'use strict';
     var GAP = 24, LIMIT = 1000;
@@ -56,7 +56,7 @@
         });
         return d;
     }
-    // The input positions exclude existing page widgets. Each block stays intact.
+    // Input units exclude existing widgets. A unit is a line or an atomic block.
     function plan(blocks, page) {
         var d = dimensions(page), gaps = [], sheet = 0, added = 0, oversized = false, ends = [];
         // Resolve keep chains once, so a long run of headings stays linear.
@@ -74,25 +74,55 @@
         });
         return { gaps: gaps, count: sheet + 1, oversized: oversized };
     }
-    function blocksOf(dom, positions) {
+    function blocksOf(dom, positions, position) {
         var host = dom.closest('.doc-paginated'), scale = host ? Number(host.style.zoom) || 1 : 1;
-        var offset = 0, top = dom.getBoundingClientRect().top, blocks = [];
-        Array.from(dom.children).forEach(function (node) {
-            if (node.classList.contains('doc-page-gap')) { offset += node.getBoundingClientRect().height / scale; return; }
+        var top = dom.getBoundingClientRect().top, blocks = [], sourceIndex = 0;
+        var gaps = Array.from(dom.querySelectorAll('.doc-page-gap')).map(function (node) { var r = node.getBoundingClientRect(); return { bottom: r.bottom, height: r.height / scale }; });
+        function clean(y) { return (y - top) / scale - gaps.reduce(function (sum, gap) { return sum + (gap.bottom <= y + .5 ? gap.height : 0); }, 0); }
+        function emit(node, suppliedPosition) {
+            if (node.classList.contains('doc-page-gap')) return;
             var rect = node.getBoundingClientRect(), css = getComputedStyle(node), content=node;
             while(content.matches('.doc-block,.pm-source,.dinah-src,.dinah-block')&&content.childElementCount===1)content=content.firstElementChild;
             var contentCSS=getComputedStyle(content),previous=blocks[blocks.length-1];
-            blocks.push({ node: node, pos: positions ? positions[blocks.length] : 0, top: (rect.top - top) / scale - offset,
-                height: rect.height / scale + Math.max(0, parseFloat(css.marginBottom) || 0),
-                keepNext:/^(avoid|avoid-page)$/.test(css.breakAfter)||/^(avoid|avoid-page)$/.test(contentCSS.breakAfter),
+            var container = content.matches('ul,ol,blockquote,.pm-task-body,table,thead,tbody') || content.matches('li') && !!content.querySelector(':scope > p,:scope > ul,:scope > ol,:scope > blockquote,:scope > .pm-task-body');
+            if (!node.matches('.pm-source') && !/^(avoid|avoid-page)$/.test(contentCSS.breakInside) && container) {
+                var firstBlock = blocks.length;
+                Array.from(content.children).forEach(function (child) {
+                    var before = position ? position(child.parentNode, Array.prototype.indexOf.call(child.parentNode.childNodes, child)) : 0;
+                    emit(child, before);
+                });
+                if (blocks.length > firstBlock) {
+                    blocks[firstBlock].breakBefore = blocks[firstBlock].breakBefore || /^(page|always)$/.test(contentCSS.breakBefore);
+                    var lastBlock = blocks[blocks.length - 1];
+                    lastBlock.keepNext = lastBlock.keepNext || /^(avoid|avoid-page)$/.test(contentCSS.breakAfter);
+                    lastBlock.breakAfter = lastBlock.breakAfter || /^(page|always)$/.test(contentCSS.breakAfter);
+                }
+                return;
+            }
+            var gapNode = node.parentElement && node.parentElement.matches('li') && node.parentElement.firstElementChild === node ? node.parentElement : node;
+            if (gapNode !== node && position) suppliedPosition = position(gapNode.parentNode, Array.prototype.indexOf.call(gapNode.parentNode.childNodes, gapNode));
+            var block = { node: gapNode, pos: suppliedPosition, top: clean(rect.top), row: node.tagName === 'TR', columns: node.cells ? node.cells.length : 0,
+                height: clean(rect.bottom) - clean(rect.top) + Math.max(0, parseFloat(css.marginBottom) || 0),
+                keepNext:/^(avoid|avoid-page)$/.test(css.breakAfter)||/^(avoid|avoid-page)$/.test(contentCSS.breakAfter)||node.tagName==='TR'&&!!node.querySelector('th'),
                 breakAfter:/^(page|always)$/.test(css.breakAfter)||/^(page|always)$/.test(contentCSS.breakAfter),
                 control:node.matches('.sc-page-break')||!!node.querySelector('.sc-page-break'),
-                breakBefore: /^(page|always)$/.test(css.breakBefore)||/^(page|always)$/.test(contentCSS.breakBefore)||!!(previous&&(previous.control||previous.breakAfter)) });
-        });
+                breakBefore: /^(page|always)$/.test(css.breakBefore)||/^(page|always)$/.test(contentCSS.breakBefore)||!!(previous&&(previous.control||previous.breakAfter)) };
+            var lines = window.yavcPageLines && window.yavcPageLines.measure(content, top, scale, gaps, position);
+            if (lines) {
+                lines.forEach(function (line, i) {
+                    blocks.push(Object.assign({}, block, line, { anchor: i ? line.anchor : null, pos: i ? line.pos : block.pos,
+                        breakBefore: i === 0 && block.breakBefore, breakAfter: i === lines.length - 1 && block.breakAfter,
+                        keepNext: i < line.orphans - 1 || i >= lines.length - line.widows && i < lines.length - 1 || i === lines.length - 1 && block.keepNext }));
+                });
+            } else blocks.push(block);
+        }
+        Array.from(dom.children).forEach(function (node) { if (node.classList.contains('doc-page-gap')) return; emit(node, positions ? positions[sourceIndex] : 0); sourceIndex++; });
         return blocks;
     }
-    function spacer(height) {
-        var node = document.createElement('div'); node.className = 'doc-page-gap'; node.style.height = height + 'px';
+    function spacer(height, inline, block) {
+        var list = block && block.node.parentElement && block.node.parentElement.matches('ul,ol');
+        var node = document.createElement(inline ? 'span' : block && block.row ? 'tr' : list ? 'li' : 'div'); node.className = 'doc-page-gap' + (inline ? ' doc-page-gap-inline' : ''); node.style.height = height + 'px';
+        if (block && block.row) { var cell = document.createElement('td'); cell.colSpan = block.columns; node.append(cell); }
         node.setAttribute('aria-hidden', 'true'); node.contentEditable = 'false'; return node;
     }
     function preview(o) {
@@ -109,9 +139,11 @@
                     var d = surface(o.host, page); o.host.style.minHeight = (layout.count * (d.height + GAP) - GAP) + 'px'; o.host.setAttribute('data-page-count', layout.count);
                     o.changed(layout);
                     if (next !== signature) {
+                        o.flow.querySelectorAll('.doc-page-gap').forEach(function (node) { node.remove(); }); o.flow.normalize();
+                        blocks = blocksOf(o.flow); layout = plan(blocks, page);
                         if (window.yavcDocumentSettings) { window.yavcDocumentSettings.decorate(o.host, page, layout.count); }
-                        signature = next; o.flow.querySelectorAll(':scope > .doc-page-gap').forEach(function (node) { node.remove(); });
-                        layout.gaps.forEach(function (gap) { o.flow.insertBefore(spacer(gap.height), blocks[gap.index].node); });
+                        signature = JSON.stringify([page, layout.gaps, layout.count, layout.oversized]);
+                        layout.gaps.slice().reverse().forEach(function (gap) { var block = blocks[gap.index]; window.yavcPageLines.insert(o.flow, block, spacer(gap.height, !!block.anchor, block)); });
                     }
                 } catch (err) { o.problem(err.message); }
             });
@@ -134,7 +166,7 @@
                 if (!v.dom.getClientRects().length || v.dom.getBoundingClientRect().width === 0) { return; }
                 try {
                     var d = surface(o.page, page), positions = []; v.state.doc.forEach(function (n, pos) { positions.push(pos); });
-                    var blocks = blocksOf(v.dom, positions), layout = plan(blocks, page);
+                    var blocks = blocksOf(v.dom, positions, function (node, offset) { return v.posAtDOM(node, offset); }), layout = plan(blocks, page);
                     var next = JSON.stringify([page, layout.gaps, layout.count, layout.oversized]);
                     o.page.style.minHeight = (layout.count * (d.height + GAP) - GAP) + 'px';
                     o.page.setAttribute('data-page-count', layout.count);
@@ -142,7 +174,7 @@
                     if (next !== signature) {
                         signature = next;
                         if (window.yavcDocumentSettings) { window.yavcDocumentSettings.decorate(o.page, page, layout.count); }
-                        var widgets = layout.gaps.map(function (gap) { return PM.Decoration.widget(gap.pos, function () { return spacer(gap.height); }, { side: -1, key: gap.pos + ':' + gap.height, ignoreSelection: true }); });
+                        var widgets = layout.gaps.map(function (gap) { return PM.Decoration.widget(gap.pos, function () { return spacer(gap.height, !!blocks[gap.index].anchor, blocks[gap.index]); }, { side: -1, key: gap.pos + ':' + gap.height, ignoreSelection: true }); });
                         v.dispatch(v.state.tr.setMeta(key, PM.DecorationSet.create(v.state.doc, widgets)).setMeta('addToHistory', false));
                     }
                 } catch (err) { if (o.paginationProblem) { o.paginationProblem(err.message); } }

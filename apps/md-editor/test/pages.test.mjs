@@ -58,3 +58,14 @@ test('keep chains move together only when they fit and never cross explicit brea
     assert.equal(P.plan([{top:0,height:20,keepNext:true},{top:20,height:d.content+1}],page).oversized,true);
     assert.equal(P.plan([{top:0,height:20,keepNext:true}],page).count,1);
 });
+
+test('line keep groups prevent single-line paragraph fragments and retain forced boundaries',()=>{
+    const page=P.settings({page:'300pt x 300pt',margins:'20pt'});
+    // Six lines fit. The first and last pairs carry the two-line defaults.
+    const lines=Array.from({length:13},(_,i)=>({top:i*50,height:50,pos:i+1,keepNext:i===0||i===11}));
+    const layout=P.plan(lines,page);
+    const boundaries=[0,...layout.gaps.map(g=>g.index),lines.length];
+    for(let i=1;i<boundaries.length;i++)assert.ok(boundaries[i]-boundaries[i-1]>=2);
+    assert.equal(layout.oversized,false);
+    assert.equal(P.plan(lines.map((line,i)=>({...line,breakBefore:i===1})),page).gaps[0].index,1);
+});

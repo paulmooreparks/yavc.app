@@ -1,5 +1,11 @@
 # Stem-to-stern review, November 2026
 
+## Measured paragraph, list and row fragments, 2026-11-09
+
+Document view now inserts source-free gaps inside paragraphs and lists and between table rows. Two-line keep groups protect paragraph starts and ends. Print clones partial formatted ranges, preserves ordered-list numbering and suppresses repeated continuation markers and margins. Atomic source blocks and oversized table rows still produce an explicit refusal.
+
+Owned browser fixtures cover stable measurements, rich edits and Undo, unchanged Markdown, multi-page list items, continued numbering, printed content and physical fragment heights. Existing document-page checks now compare measured fragments; their oversized example uses atomic HTML because long lists are no longer indivisible. Source review found counter advancement by gap list items and repeated printed item markers; both have dedicated assertions. The print-height check also exposed repeated fragment margins and tight-list inline traversal, which were corrected before acceptance. The first browser attempt excluded ProseMirror's standard pre-wrap mode, and the Firefox edit fixture needed an explicit DOM selection instead of assuming Control+Home placed it. These failures remain separate from passing verification.
+
 ## CSS and HTML source assistance, 2026-11-09
 
 Editor now recognizes HTML and uses the shared bounded LSP session for CSS and HTML completion, hover and explicit formatting. CSS diagnostics use the Microsoft service; HTML does not claim general validation. Failure can no longer install JSON fallback errors on these sources. Format Source retains its existing command identity so saved bindings keep working. Both new providers use pinned browser bundles with no filesystem or network provider.

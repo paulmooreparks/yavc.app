@@ -1134,7 +1134,7 @@
         function pagedView(mode) { return mode === 'document'; }
         function pageLayout(layout) {
             el.pages.textContent = layout.count + (layout.count === 1 ? ' page' : ' pages');
-            pageNotice(layout.oversized ? 'A block is taller than the page. Shorten it or enlarge the page before printing. Line-level pagination is not available yet.' : '');
+            pageNotice(layout.oversized ? 'An indivisible block is taller than the page. Shorten it or enlarge the page before printing.' : '');
         }
         function pageNotice(message) {
             var notice = root.querySelector('[data-role="page-problems"]');
@@ -1209,7 +1209,7 @@
                         var at = 0, starts = [0].concat(layout.gaps.map(function (gap) { return gap.index; })).concat(blocks.length);
                         for (var i = 0; i < starts.length - 1; i++) {
                             var sheet = surface.cloneNode(false); sheet.classList.add('doc-print-sheet'); var body = doc.createElement('div'); body.className = 'doc-page-flow'; sheet.append(body);
-                            for (at = starts[i]; at < starts[i + 1]; at++) { body.append(blocks[at].node.cloneNode(true)); }
+                            body.append(window.yavcPageLines.fragment(flow, blocks, starts[i], starts[i + 1]));
                             var layer = doc.createElement('div'); layer.className = 'doc-furniture';
                             var header = window.yavcDocumentSettings.row(page, 'header', i + 1, starts.length - 1, doc), footer = window.yavcDocumentSettings.row(page, 'footer', i + 1, starts.length - 1, doc);
                             header.style.top = (page.margins[1] / 1.5 - 8) + 'px'; footer.style.top = ((page.height - page.margins[3] / 2) / .75 - 8) + 'px'; layer.append(header, footer); sheet.append(layer);

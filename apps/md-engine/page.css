@@ -150,6 +150,12 @@
 .doc-paginated > :is(.ProseMirror, .doc-page-flow) { display: flow-root; padding: 0; margin: 0; min-height: 0; }
 .doc-paginated > :is(.ProseMirror, .doc-page-flow) > * { margin-top: 0; }
 .doc-paginated > :is(.ProseMirror, .doc-page-flow) > .doc-page-gap { display: block; padding: 0; margin: 0; border: 0; pointer-events: none; }
+.doc-paginated .doc-page-gap-inline { display: block; padding: 0; margin: 0; border: 0; line-height: 0; pointer-events: none; }
+.doc-paginated li.doc-page-gap { display: block; counter-increment: none; list-style: none; padding: 0; margin: 0; }
+.doc-paginated li.doc-list-continuation { list-style-type: none; }
+.doc-paginated .doc-fragment-open-start { margin-top: 0 !important; }
+.doc-paginated .doc-fragment-open-end { margin-bottom: 0 !important; }
+.doc-paginated tr.doc-page-gap > td { padding: 0; border: 0; }
 .doc-paginated > .doc-page-flow > .doc-block { display: flow-root; }
 .doc-paginated > .doc-page-flow > .doc-block > :first-child { margin-top: 0; }
 .doc-furniture { position: absolute; inset: 0; pointer-events: none; font-size: 9pt; line-height: 1.25; color: var(--doc-muted); }
