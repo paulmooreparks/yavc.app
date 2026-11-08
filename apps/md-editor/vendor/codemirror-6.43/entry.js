@@ -22,6 +22,7 @@ export { closeBrackets, closeBracketsKeymap, autocompletion, completionKeymap, s
 export { markdown } from '@codemirror/lang-markdown';
 export { json, jsonParseLinter } from '@codemirror/lang-json';
 export { css } from '@codemirror/lang-css';
+export { html } from '@codemirror/lang-html';
 export { shell } from '@codemirror/legacy-modes/mode/shell';
 export { tags } from '@lezer/highlight';
 export { LSPClient, LSPPlugin, serverCompletion, serverCompletionSource, hoverTooltips, serverDiagnostics, formatDocument } from '@codemirror/lsp-client';

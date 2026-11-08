@@ -234,10 +234,11 @@
             if (/\.(md|markdown)$/i.test(p)) { return 'markdown'; }
             if (/\.(json|canvas)$/i.test(p)) { return 'json'; }
             if (/\.css$/i.test(p)) { return 'css'; }
+            if (/\.html?$/i.test(p)) { return 'html'; }
             if (/^~\/bin\/|^\/bin\/|\.sh$/i.test(p)) { return 'script'; }
             return 'text';
         }
-        var LANG_NAMES = { markdown: 'Markdown', json: 'JSON', css: 'CSS', script: 'Script', text: 'Plain Text' };
+        var LANG_NAMES = { markdown: 'Markdown', json: 'JSON', css: 'CSS', html: 'HTML', script: 'Script', text: 'Plain Text' };
         /* === Shortcodes in the text =========================================
            A {{shortcode}} is marked as one, its name and its arguments in
            their own colours; {{ offers the shortcodes' names and, inside a
@@ -327,6 +328,7 @@
             if (lang === 'markdown') { return [CM.markdown(), shortcodeExtensions()]; }
             if (lang === 'json') { return CM.json(); }
             if (lang === 'css') { return CM.css(); }
+            if (lang === 'html') { return CM.html(); }
             if (lang === 'script') { return CM.StreamLanguage.define(CM.shell); }
             return [];
         }
@@ -341,7 +343,7 @@
             return CM.EditorState.create({ doc: text, extensions: extensionsFor(tab) });
         }
         function languageAssistance(tab) {
-            return lsp && tab.lang === 'json' ? lsp.extension(/\.canvas$/i.test(tab.path || tab.name) ? 'canvas' : 'json', !!tab.readOnly) : [];
+            return lsp && ['json','css','html'].indexOf(tab.lang) >= 0 ? lsp.extension(/\.canvas$/i.test(tab.path || tab.name) ? 'canvas' : tab.lang, !!tab.readOnly) : [];
         }
         function extensionsFor(tab) {
             return [
@@ -2278,8 +2280,8 @@
                 cmd('undo', 'Undo', 'yavc-undo', function () { return editing().history('undo'); }, { builtIn: 'Mod-z', glyphOnly: true, disabled: function () { return !editing() || !editing().canHistory('undo'); } }),
                 cmd('redo', 'Redo', 'yavc-redo', function () { return editing().history('redo'); }, { builtIn: 'Mod-y', glyphOnly: true, disabled: function () { return !editing() || !editing().canHistory('redo'); } }),
                 cmd('find', 'Find and Replace…', 'search', openFind, { builtIn: 'Mod-f' }),
-                cmd('json-format', 'Format JSON', 'code', function () { if (lsp) { lsp.format(view); } }, { shortcut: 'Shift+Alt+F', hidden: function () { return isDocs || !tab || tab.lang !== 'json'; }, disabled: function () { return !editable || !lsp; } }),
-                cmd('language-restart', 'Restart Language Assistance', 'reload', function () { if (lsp) { lsp.restart(); view.dispatch({ effects: lspComp.reconfigure(languageAssistance(current())) }); } }, { hidden: function () { return isDocs || !tab || tab.lang !== 'json'; }, disabled: function () { return !ready || !lsp; } }),
+                cmd('json-format', 'Format Source', 'code', function () { if (lsp) { lsp.format(view); } }, { shortcut: 'Shift+Alt+F', hidden: function () { return isDocs || !tab || ['json','css','html'].indexOf(tab.lang) < 0; }, disabled: function () { return !editable || !lsp; } }),
+                cmd('language-restart', 'Restart Language Assistance', 'reload', function () { if (lsp) { lsp.restart(); view.dispatch({ effects: lspComp.reconfigure(languageAssistance(current())) }); } }, { hidden: function () { return isDocs || !tab || ['json','css','html'].indexOf(tab.lang) < 0; }, disabled: function () { return !ready || !lsp; } }),
                 cmd('go-to-line', 'Go to Line…', null, goToLine, { builtIn: 'Mod-Alt-g' }),
                 cmd('toggle-wrap', 'Wrap Lines', 'yavc-wrap', function () { setWrap(!wrapOn, true); }, { checked: function () { return wrapOn; } }),
                 cmd('insert-timestamp', 'Insert Date and Time', null, COMMANDS['insert-timestamp'], { disabled: function () { return !ready || !editable; } }),

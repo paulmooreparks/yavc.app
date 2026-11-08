@@ -1,6 +1,6 @@
 # Building the shared language services
 
-The checked-in browser artifacts require no package installation at runtime. Both Editor and Diagrams load the same CodeMirror client and browser worker through `yavcMdEditor.languageServices()`. The worker uses Microsoft's JSON language service behind a JSON-RPC LSP adapter.
+The checked-in browser artifacts require no package installation at runtime. Editor and Diagrams load the same CodeMirror client and browser worker through `yavcMdEditor.languageServices()`. The worker uses Microsoft's JSON, CSS and HTML language services behind a JSON-RPC LSP adapter. CSS provides diagnostics, completion, hover and formatting. HTML provides completion, hover and formatting, with no general validation API. No filesystem provider or network loader is configured.
 
 `package-lock.json` pins the build inputs. The existing CodeMirror and Lezer versions remain pinned while `@codemirror/lsp-client` 6.3.0 is added. The worker uses `vscode-json-languageservice` 5.6.4 and `vscode-languageserver-textdocument` 1.0.12. esbuild 0.28.2 produces classic, self-contained browser bundles without runtime imports.
 
@@ -23,4 +23,6 @@ The npm archive for `@vscode/l10n` 0.0.18 omits its license file. `licenses/vsco
 
 The public contracts used here are documented by [CodeMirror's LSP client](https://code.haverbeke.berlin/codemirror/lsp-client), [Microsoft's JSON language service](https://github.com/microsoft/vscode-json-languageservice) and [LSP 3.17](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/). The schema adds the [yavc extension](../../../docs/canvas-extension.md) to JSON Canvas. The canvas reader still owns reference and semantic validation.
 
-Run `scripts/test-language-services.cjs chromium firefox webkit` with Playwright available through `NODE_PATH` against a disposable local server on port 8412. The suite supplies an empty shortcode catalog because the inherited Editor requests an admin endpoint absent from yavc.app. It does not establish that Markdown shortcode catalog completion works in this host.
+Run `scripts/test-language-services.cjs chromium firefox webkit` with Playwright available through `NODE_PATH` against a disposable local server on port 8412. Set `YAVC_LSP_TEST_PORT` to use another disposable server. `scripts/test-web-languages.cjs` checks CSS and HTML completion after the context goes offline, real completion application and undoable formatting. Markdown catalog assistance has its own fixture in `scripts/test-shortcode-catalog.cjs` and does not use an admin endpoint.
+
+The CSS and HTML service versions are pinned to 6.3.10 and 5.6.2. Their documented APIs are described in the upstream [CSS service](https://github.com/microsoft/vscode-css-languageservice) and [HTML service](https://github.com/microsoft/vscode-html-languageservice) repositories. These services run on the opened source only. Embedded JavaScript inside HTML and project-wide symbol resolution remain outside their scope.

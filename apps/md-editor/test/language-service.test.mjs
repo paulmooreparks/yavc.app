@@ -49,6 +49,36 @@ test('the browser JSON server speaks LSP completion, hover and formatting', asyn
     s.notify('textDocument/didClose', { textDocument: { uri } });
     assert.equal((await s.request('textDocument/hover', { textDocument: { uri }, position: { line: 0, character: 1 } })).error.code, -32801);
 });
+
+test('CSS and HTML share bounded LSP sessions without treating their source as JSON', async () => {
+    const s = server(); await s.request('initialize', {});
+    for (const [kind, text, position, label] of [
+        ['css', 'p { col }', 7, 'color'],
+        ['html', '<but', 4, 'button']
+    ]) {
+        const uri = 'yavc-lsp://test/style.' + kind;
+        s.notify('textDocument/didOpen', { textDocument: { uri, version: 1, languageId: kind, text } });
+        const completion = await s.request('textDocument/completion', { textDocument: { uri }, position: { line: 0, character: position } });
+        assert.ok(completion.result.items.some(item => item.label === label), kind + ' completion');
+        const formatting = await s.request('textDocument/formatting', { textDocument: { uri }, options: { tabSize: 2, insertSpaces: true } });
+        assert.ok(Array.isArray(formatting.result), kind + ' formatting');
+        s.notify('textDocument/didClose', { textDocument: { uri } });
+    }
+    const uri = 'yavc-lsp://test/broken.css';
+    s.notify('textDocument/didOpen', { textDocument: { uri, version: 1, languageId: 'css', text: 'p { color red; }' } });
+    await new Promise(resolve => setTimeout(resolve, 220));
+    const diagnostics = s.notifications.filter(n => n.params.uri === uri);
+    assert.ok(diagnostics.at(-1).params.diagnostics.length);
+    s.notify('textDocument/didChange', { textDocument: { uri, version: 2 }, contentChanges: [{ text: 'p { color: red; }' }] });
+    await new Promise(resolve => setTimeout(resolve, 220));
+    assert.deepEqual(s.notifications.filter(n => n.params.uri === uri).at(-1).params.diagnostics, []);
+    const hover = await s.request('textDocument/hover', { textDocument: { uri }, position: { line: 0, character: 6 } });
+    assert.ok(hover.result.contents);
+    s.notify('textDocument/didClose', { textDocument: { uri } });
+    const unsupported = 'yavc-lsp://test/unknown.go';
+    s.notify('textDocument/didOpen', { textDocument: { uri: unsupported, version: 1, languageId: 'go', text: '{}' } });
+    assert.equal((await s.request('textDocument/hover', { textDocument: { uri: unsupported }, position: { line: 0, character: 0 } })).error.code, -32801);
+});
 test('validation is revisioned and external schemas never fetch', async () => {
     const s = server(), uri = 'yavc-lsp://test/two.canvas'; await s.request('initialize', {});
     s.notify('textDocument/didOpen', { textDocument: { uri, version: 1, text: '{"nodes":false}' } });

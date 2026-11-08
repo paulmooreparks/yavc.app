@@ -1,5 +1,11 @@
 # Stem-to-stern review, November 2026
 
+## CSS and HTML source assistance, 2026-11-09
+
+Editor now recognizes HTML and uses the shared bounded LSP session for CSS and HTML completion, hover and explicit formatting. CSS diagnostics use the Microsoft service; HTML does not claim general validation. Failure can no longer install JSON fallback errors on these sources. Format Source retains its existing command identity so saved bindings keep working. Both new providers use pinned browser bundles with no filesystem or network provider.
+
+Protocol tests cover completion, formatting, CSS diagnostics and hover, repaired diagnostics, and refusal of unsupported language identities. Owned headless Chromium, Firefox and WebKit pass real completion application after going offline and formatting with Undo. The existing JSON/Canvas browser suite passes in Chromium, and the read-only source review found no actionable issues. Firefox page creation fails inside the filesystem sandbox; the same owned fixture passes when launched outside it. The repository gate initially misclassified upstream documentation embedded in the generated worker as executable project code. Its generated-output exclusion now matches the existing vendor policy, while source scans and manifest-hash tests remain enforced.
+
 ## Portable shortcode assistance, 2026-11-09
 
 Built-in shortcode metadata now comes from the shared engine, including the previously omitted diagram definition. The public endpoint exposes the same table without starting a session. Editor and Docs use it locally for completion and hover; optional host additions are bounded and cannot override built-ins. Optional-only parameters no longer force a colon, and closing completion includes span shortcodes. The inherited admin endpoint is removed. The cold-source test exposed an unconditional Outline engine load for non-Markdown files, which now returns an empty outline without loading Markdown.

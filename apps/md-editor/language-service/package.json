@@ -8,6 +8,8 @@
   "dependencies": {
     "@codemirror/lsp-client": "6.3.0",
     "vscode-json-languageservice": "5.6.4",
+    "vscode-css-languageservice": "6.3.10",
+    "vscode-html-languageservice": "5.6.2",
     "vscode-languageserver-textdocument": "1.0.12",
     "@codemirror/state": "6.7.6",
     "@codemirror/view": "6.43.13",
@@ -19,6 +21,7 @@
     "@codemirror/lang-markdown": "6.5.2",
     "@codemirror/lang-json": "6.0.2",
     "@codemirror/lang-css": "6.3.1",
+    "@codemirror/lang-html": "6.4.12",
     "@codemirror/legacy-modes": "6.5.4",
     "@lezer/highlight": "1.2.5"
   },
