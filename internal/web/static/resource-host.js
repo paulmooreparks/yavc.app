@@ -47,6 +47,8 @@
                     canSaveIn: function (dir) { return dir && dir.home && !dir.server && !dir.settings ? null : 'Choose a folder in your guest home directory.'; },
                     commit: async function (choice) {
                         if (context && context.signal && context.signal.aborted) return false;
+                        var invalid=context && context.checkName && context.checkName(choice.name || F.splitPath(choice.path).base);
+                        if(invalid)throw new Error(invalid);
                         var change = { resource: choice.path, text: request.text, expectedRevision: choice.expectedRevision };
                         pending = choice.expectedRevision === null ? F.contentResources.create(change, context) : F.contentResources.write(change, context);
                         try { accepted = await pending; } finally { pending = null; }

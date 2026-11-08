@@ -123,7 +123,7 @@
         var n = ++count, H = window.pudlHost || {};
         if (H.contentResources && H.snapshot && (H.snapshot.version !== 2 || typeof H.snapshot.join !== 'function')) throw new Error('This resource host needs snapshot version 2 before it can restore diagrams.');
         var resources = null, recovery = null, recoveryReady = false, recoveryKept = null;
-        var tabs = [], active = -1, untitled = 0, destroyed = false, lifetime = new AbortController();
+        var tabs = [], active = -1, untitled = 0, destroyed = false, startupFailed = false, lifetime = new AbortController();
         var settings = Object.assign({}, SETTINGS);
         var CM = null, cm = null, langs = {}, drawTimer = 0, drawSeq = 0, waiters = [], quiet = false, lsp = null, lspComp = null, inlineText = null, inlineNumber = 0;
         var start = new URLSearchParams(String(opts.state || '').replace(/^\?/, ''));
@@ -1582,7 +1582,7 @@
             settings.view = view;
             keepSetting('view', view);
             applyDock();
-            if (view !== 'preview' && cm) { cm.focus(); }
+            if (view !== 'preview' && cm && (opts.ownsUrl || !root.closest('.win') || root.closest('.win.active'))) { cm.focus(); }
             commandsChanged();
             if (window.pudlMenubar) { window.pudlMenubar.refresh(); }
             announce();
@@ -1685,7 +1685,17 @@
             say('Opened ' + p + '.');
             return true;
         }
-        async function open() {
+        async function open(input) {
+            if(destroyed || startupFailed)return false;
+            if(input && typeof input.resource==='string'){
+                var existed=tabs.some(function (t) {return t.path===input.resource;});
+                var preferences=H.config && H.config.stored ? await H.config.stored('diagrams') : {};
+                if(destroyed)return false;
+                var desired=input.view || (!existed && !VIEWS.some(function (v) {return v[0]===preferences.view;}) && input.initialView);
+                var mode=desired==='visual'?'preview':desired;
+                if(mode && !VIEWS.some(function (v) {return v[0]===mode;}))throw new Error('This view is unavailable in Diagrams.');
+                return openPath(input.resource,mode);
+            }
             if (!H.fs || !H.fs.open) { say('There is no file service here, so nothing can be opened.', true); return; }
             var res = await H.fs.open({ title: 'Open a Diagram', host: root, start: '~', accept: ['.d2', '.mmd', '.mermaid', '.canvas'] }).catch(function (err) { say('The file could not be opened: ' + ((err && err.message) || err), true); return null; });
             if (!res) { return; }
@@ -2108,6 +2118,8 @@
                 if (tabs.length) { activateTab(Math.max(0, Math.min(kept.active || 0, tabs.length - 1))); }
             }
             var file = start.get('file'), view = start.get('view');
+            if(!view && file && start.get('initial-view')){var preference=H.config && H.config.stored ? await H.config.stored('diagrams') : {};if(destroyed)return;if(!VIEWS.some(function (v) {return v[0]===preference.view;}))view=start.get('initial-view');}
+            if(view==='visual')view='preview';
             if (file) { await openPath(file, view).catch(function (err) { say(err.message, true); return false; }); }
             if (destroyed) return;
             if (!tabs.length) { tabs.push(makeTab(D2_STYLES[0].text, null, 'd2')); activateTab(0); }
@@ -2115,7 +2127,7 @@
             recoveryReady = true;
             if (tabs.some(function (t) { return t.recoveryConflict; })) say('Recovered edits have no matching file revision. ' + (resources && resources.canSaveAs() ? 'Use Save As to keep a copy, or download the source.' : 'Download the source to keep a copy before reopening the file.') + ' The file has not been overwritten.', 'warn');
             announce();
-        })().catch(function (err) { if (!destroyed) { root.innerHTML = '<div class="notice danger" role="alert"><div class="notice-content"><p class="notice-title">Diagrams could not start</p><p class="notice-body">' + esc(err.message) + '</p></div></div>'; } });
+        })().catch(function (err) { startupFailed=true;if (!destroyed) { root.innerHTML = '<div class="notice danger" role="alert"><div class="notice-content"><p class="notice-title">Diagrams could not start</p><p class="notice-body">' + esc(err.message) + '</p></div></div>'; } });
 
         /* === The live actions (actions.json, decision 13) ================= */
 
@@ -2293,6 +2305,7 @@
                 return { output: { name: stem(t) + '.svg', width: t.size ? t.size.w : 0, height: t.size ? t.size.h : 0 }, artifacts: [{ key: 'svg', name: stem(t) + '.svg', mime: 'image/svg+xml', data: t.svg }] };
             }
         };
+        Object.keys(liveActions).forEach(function (id) {var handler=liveActions[id];liveActions[id]=async function (input) {await booted;if(destroyed || startupFailed)throw new Error('This workspace is no longer available.');return handler(input);};});
         var detachLive = window.pudlApplets && window.pudlApplets.attach ? window.pudlApplets.attach('yavc.diagrams', liveActions) : null;
         var commonToolbar = H.commandToolbar ? H.commandToolbar.attach(root, { app: 'diagrams', label: 'Diagrams', table: commandTable,
             defaults: ['save', '-', 'undo', 'redo', '-', 'drawing-tool', 'shape-add', 'connect', 'cv-new', 'cv-connect', '-', 'fit', 'cv-zoom-in', 'cv-zoom-out', 'view-mode'] }) : null;
@@ -2303,11 +2316,11 @@
             setState: function (s) {
                 var p = new URLSearchParams(String(s || '').replace(/^\?/, ''));
                 booted.then(function () {
-                    if (destroyed) return;
+                    if (destroyed || startupFailed) return;
                     var file = p.get('file'), view = p.get('view');
                     var t = current();
-                    if (file && (!t || file !== t.path)) { openPath(file, view).catch(function (err) { say(String((err && err.message) || err), true); }); }
-                    else if (view) { setView(view); }
+                    if (file) { open({resource:file,view:view,initialView:p.get('initial-view')}).catch(function (err) { say(String((err && err.message) || err), true); }); }
+                    else if (view) { setView(view==='visual'?'preview':view); }
                 });
             },
             commandTable: commandTable, toolbars: toolbars, menus: menus,

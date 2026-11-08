@@ -1,7 +1,7 @@
 // Copyright 2026 Paul Parks. SPDX-License-Identifier: Apache-2.0
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),os=require('node:os'),pw=require('playwright');
 const port=process.env.YAVC_CHROME_TEST_PORT||'8426',evidence=path.join(os.tmpdir(),'yavc-typography-dialog-evidence');fs.mkdirSync(evidence,{recursive:true});
-const action=(page,name,input={})=>page.evaluate(({name,input})=>pudlActions.run('yavc.editor/'+name+'@1',input,{grant:'all'}),{name,input});
+const action=(page,name,input={})=>page.evaluate(({name,input})=>pudlActions.run('yavc.docs/'+name+'@1',input,{grant:'all'}),{name,input});
 const command=(page,id)=>page.evaluate(id=>{pudlCommands.run(id,null,document.querySelector('[data-applet]'));},id);
 const number=(page,key)=>page.locator('[data-type-field="'+key+'"]').locator('..').getByRole('spinbutton');
 const text=page=>action(page,'document').then(r=>r.text);
@@ -9,7 +9,7 @@ async function open(page){await command(page,'typography');await page.locator('.
 (async()=>{for(const engine of process.argv.slice(2).length?process.argv.slice(2):['chromium','firefox','webkit']){
  const browser=await pw[engine].launch({headless:true}),page=await browser.newPage({viewport:{width:1500,height:1000}});page.setDefaultTimeout(15000);const errors=[];page.on('pageerror',e=>errors.push(e.message));let phase='open';
  try{
- await page.goto(`http://editor.localhost:${port}/`,{waitUntil:'domcontentloaded'});await page.locator('.cm-editor').waitFor();const source='---\ntitle: Typography\npage: letter\nmargins: 1in\n---\n\n# Typography\n\nA document to edit.';
+ await page.goto(`http://docs.localhost:${port}/`,{waitUntil:'domcontentloaded'});await page.locator('.cm-editor').waitFor({state:'attached'});const source='---\ntitle: Typography\npage: letter\nmargins: 1in\n---\n\n# Typography\n\nA document to edit.';
  await action(page,'new',{path:'~/typography.docs.md',text:source});await page.locator('.ProseMirror').waitFor();await open(page);
  assert.equal(await page.getByRole('combobox',{name:'Body Font',exact:true}).getAttribute('role'),'combobox');assert.equal(+await number(page,'size').inputValue(),11);
  assert.equal(await page.getByRole('button',{name:'Use Stylesheet Default for Font Size',exact:true}).isDisabled(),true);

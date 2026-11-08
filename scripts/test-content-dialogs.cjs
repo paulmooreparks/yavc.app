@@ -20,11 +20,11 @@ async function review(p,app,id,engine){
 }
 (async()=>{const results=[];for(const engine of process.argv.slice(2).length?process.argv.slice(2):['chromium','firefox','webkit']){
  const browser=await pw[engine].launch({headless:true});
- try{for(const app of ['editor','slides','diagrams']){
+ try{for(const app of ['docs','slides','diagrams']){
   const p=await browser.newPage({viewport:{width:1200,height:900}});p.setDefaultTimeout(20000);let phase='boot';
   try{
    await p.goto(`http://${app}.localhost:${port}/`);await p.locator('[data-applet][data-applet-state="running"]').waitFor();
-   if(app==='editor')await p.locator('.cm-content').waitFor({state:'attached'});
+   if(app==='docs')await p.locator('.cm-content').waitFor({state:'attached'});
    if(app==='diagrams'){
     await action(p,app,'new',{kind:'canvas'});await action(p,app,'set-text',{text:JSON.stringify({nodes:[{id:'a',type:'text',x:0,y:0,width:160,height:80,text:'First shape'},{id:'b',type:'text',x:240,y:80,width:160,height:80,text:'Second shape'}],edges:[{id:'ab',fromNode:'a',toNode:'b'}]})});
     for(const id of ['cv-select-items','cv-connect','cv-resize','cv-reconnect-start','cv-reconnect-end','common-toolbar-customize']){phase=id;await action(p,app,'canvas-view',{op:'select',kind:id.includes('reconnect')?'edge':'node',key:id.includes('reconnect')?'ab':'a'});await command(p,id);results.push(await review(p,app,id,engine));}
@@ -33,13 +33,13 @@ async function review(p,app,id,engine){
     for(const id of ['shape-label','shape-rename','shape-move-into']){phase=id;await p.locator('.dg-hit-shape').first().click({force:true});await command(p,id);results.push(await review(p,app,id,engine));}
     phase='connection label';await p.locator('.dg-hit-line .dg-hit-wide').first().click({force:true});await command(p,'shape-label');results.push(await review(p,app,'connection-label',engine));
    }else{
-    if(app==='editor')await action(p,app,'new',{path:'~/dialog-review.docs.md',text:'# Review\n\nEditable paragraph.\n'});
+    if(app==='docs')await action(p,app,'new',{path:'~/dialog-review.docs.md',text:'# Review\n\nEditable paragraph.\n'});
     else await action(p,app,'load',{text:'# Review\n\nEditable paragraph.\n\n---\n\n# Second\n\nOther paragraph.\n'});
     await action(p,app,'view',{mode:'visual'});await p.locator('.ProseMirror').waitFor();
-    const before=(await action(p,app,app==='editor'?'document':'text')).text;
-    const base=app==='editor'?['page-setup','typography','header-footer','properties','stylesheet','custom-shortcodes','document-zoom-custom']:['deck-colours','slide-colours','deck-stylesheet','deck-style-block','custom-shortcodes','slide-class','background-image','deck-title','slide-delete'];
+    const before=(await action(p,app,app==='docs'?'document':'text')).text;
+    const base=app==='docs'?['page-setup','typography','header-footer','properties','stylesheet','custom-shortcodes','document-zoom-custom']:['deck-colours','slide-colours','deck-stylesheet','deck-style-block','custom-shortcodes','slide-class','background-image','deck-title','slide-delete'];
     const ids=base.concat(['color','class','link','common-toolbar-customize'],['figure','video','applet','code','toc','status','kbd','glyph','page','anchor'].map(n=>'insert-sc-'+n));
-    for(const id of ids){phase=id;await p.locator('.ProseMirror h1').first().click();await command(p,id);results.push(await review(p,app,id,engine));assert.equal((await action(p,app,app==='editor'?'document':'text')).text,before,app+' '+id+' changed on cancellation');}
+    for(const id of ids){phase=id;if(app==='docs')await action(p,app,'view',{mode:['page-setup','header-footer','document-zoom-custom'].includes(id)?'document':'visual'});await p.locator('.ProseMirror h1').first().click();await command(p,id);results.push(await review(p,app,id,engine));assert.equal((await action(p,app,app==='docs'?'document':'text')).text,before,app+' '+id+' changed on cancellation');}
    }
    assert.equal(await p.locator('.site-menubar .menubar-title[data-menu-id="go"]').count(),0);console.log(engine+' '+app+': content dialog rendering and cancellation checked');
   }catch(error){await p.screenshot({animations:'disabled',path:path.join(out,engine+'-'+app+'-failed.png')}).catch(()=>{});throw new Error(engine+' '+app+' '+phase+': '+error.message);}finally{await p.close();}

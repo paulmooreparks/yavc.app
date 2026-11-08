@@ -248,6 +248,7 @@ func New(s *Server) (*Server, error) {
 	m.HandleFunc("PUT /state/{key}", s.putState)
 	m.HandleFunc("GET /config/{name}", s.getConfig)
 	m.HandleFunc("PUT /config/{name}", s.putConfig)
+	m.HandleFunc("POST /config/{name}/adopt", s.adoptConfig)
 	m.HandleFunc("DELETE /config/{name}", s.deleteConfig)
 	m.HandleFunc("GET /config", s.listConfig)
 	m.HandleFunc("GET /appearance", s.getAppearance)
@@ -354,12 +355,8 @@ type hostAlias struct {
 }
 
 // hostAliases are the subdomains that serve an applet under another name.
-// docs is the Editor started for documents (docs-design, decision 17). An
-// alias is looked up before the applets, so an applet given the same name
-// later does not take the address over silently.
-var hostAliases = map[string]hostAlias{
-	"docs": {applet: "editor", title: "Docs", start: "documents"},
-}
+// Aliases are looked up before installed applets. Docs is a real package.
+var hostAliases = map[string]hostAlias{}
 
 // aliasOf is the alias the request's host is, if it is one.
 func (s *Server) aliasOf(r *http.Request) (hostAlias, bool) {

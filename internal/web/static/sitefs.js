@@ -1289,6 +1289,13 @@
         move: mutation(move, [0, 1], false),
         save: saveCapturedTree,
         sync: homeSync,
+        adoptSettings: async function (name, defaults, marker) {
+            if(!SETTINGS_FILE.test(name+'.json'))throw new Error('Invalid settings name.');
+            var response=await fetch('/config/'+name+'/adopt',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({marker:marker,defaults:defaults})});
+            if(!response.ok)throw new Error(await settingsError(response,name));
+            await loadSettings();settingsChanged();
+            var node=childNamed(home.settingsDir,name+'.json');return node ? node.content : '{}';
+        },
         contentResources: contentResources,
         contentBytes: contentBytes,
         /* The admin mount (edit origin only). */

@@ -177,7 +177,7 @@
         { id: 'insert-code', label: 'Code Block', markdown: '```\ncode\n```' }
     ];
     var SHORTCODES = [
-        ['figure', 'Picture', '{{figure:/static/icon.svg alt="What it shows" width=60%}}'],
+        ['figure', 'Picture', '{{figure:src="" alt="What it shows" width=60%}}'],
         ['columns', 'Columns', '{{columns}}\n' + PLACEHOLDER + '\n\n{{column}}\n\nThe second column.\n{{/columns}}'],
         ['tip', 'Tip', '{{tip:A title}}\n' + PLACEHOLDER + '\n{{/tip}}'],
         ['note', 'Note', '{{note:A title}}\n' + PLACEHOLDER + '\n{{/note}}'],
@@ -958,7 +958,7 @@
                 return '{{applet:' + name + ' fit=' + (v.fit === 'fill' ? 'fill' : 'flow') + (plain(v.state) ? ' state=' + quoteArg(plain(v.state)) : '') + '}}';
             } },
         code: { title: 'A Code Listing from a File', fields: [
-            { key: 'src', label: 'File', placeholder: '~/bin/hello or /applets/dice/dice.js', browse: true, maxBytes: 256 * 1024, help: 'A file of yours under ~, or one of the site\'s; the page shows it as it is when the page is read.' },
+            { key: 'src', label: 'File', placeholder: '~/code/example.js', browse: true, maxBytes: 256 * 1024, help: 'A file accepted by this host; the page shows it as it is when the page is read.' },
             { key: 'lang', label: 'Language', placeholder: 'From the file name', help: 'Optional, such as javascript or go, for syntax coloring.' }],
             read: function (sc) { return { src: sc.named.src || sc.positional[0] || '', lang: sc.named.lang || '' }; },
             write: function (v) {

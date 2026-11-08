@@ -23,7 +23,7 @@
     function create(input) {
         var catalog = JSON.parse(JSON.stringify(input));
         object(catalog, ['version', 'types', 'handlers', 'associations'], 'file catalog');
-        if (catalog.version !== 1) fail('Unsupported file catalog version.');
+        if (catalog.version !== 1 && catalog.version !== 2) fail('Unsupported file catalog version.');
         list(catalog.types, 'type', 128).forEach(function (type) { object(type, ['id', 'text', 'matches'], 'type'); id(type.id); if (typeof type.text !== 'boolean') fail('A type must declare whether it is text.'); list(type.matches || [], 'native match', 128).forEach(match); });
         unique(catalog.types, function (t) { return t.id; }, 'type');
         var types = new Map(catalog.types.map(function (t) { return [t.id, t]; }));
@@ -31,7 +31,8 @@
         catalog.types.forEach(function (type) { (type.matches || []).forEach(function (m) { nativeMatches.push({ type: type.id, match: m }); }); });
         unique(nativeMatches, function (r) { var m = match(r.match); return m.key + ':' + m.value; }, 'native type match');
         list(catalog.handlers, 'handler', 128).forEach(function (handler) {
-            object(handler, ['applet', 'operation', 'kind', 'formats'], 'handler'); id(handler.applet); id(handler.operation); id(handler.kind);
+            object(handler, catalog.version===2 ? ['applet', 'operation', 'kind', 'formats','dispatch'] : ['applet', 'operation', 'kind', 'formats'], 'handler'); id(handler.applet); id(handler.operation); id(handler.kind);
+            if(handler.dispatch){object(handler.dispatch,['command'],'dispatch');id(handler.dispatch.command);Object.freeze(handler.dispatch);}
             list(handler.formats, 'format', 128).forEach(function (format) {
                 object(format, ['type', 'intents', 'views', 'defaultView'], 'format');
                 if (!types.has(format.type)) fail('Unknown handler type.');
@@ -86,7 +87,7 @@
             var base = { intent: intent, type: type ? type.id : null, rule: rule ? rule.id : null };
             if (request.readable === false) return Object.freeze(Object.assign(base, { status: 'access-denied', reason: 'The host has not granted access to this resource.', alternatives: [] }));
             var candidates = capabilities.filter(function (c) { return type && c.format.type === type.id && c.intent === intent && installed.includes(c.handler.applet) && !(type.text && request.verifiedText === false); });
-            function plan(c, view, why) { return Object.freeze({ applet: c.handler.applet, operation: c.handler.operation, kind: c.handler.kind, view: view || c.format.defaultView, supportedViews: Object.freeze(c.format.views.slice()), intent: intent, type: type.id, rule: base.rule, requiredRead: type.text ? 'text' : 'bytes', readOnly: request.writable !== true, reason: why }); }
+            function plan(c, view, why) { return Object.freeze(Object.assign({ applet: c.handler.applet, operation: c.handler.operation, kind: c.handler.kind, view: view || c.format.defaultView, supportedViews: Object.freeze(c.format.views.slice()), intent: intent, type: type.id, rule: base.rule, requiredRead: type.text ? 'text' : 'bytes', readOnly: request.writable !== true, reason: why },c.handler.dispatch ? {dispatch:c.handler.dispatch} : {})); }
             var alternatives = candidates.map(function (c) { return plan(c, null, 'An available handler for this content type.'); });
             var applet = request.applet || (rule && rule.applet) || (type && type.id === 'text' ? 'editor' : null);
             var selected = candidates.find(function (c) { return c.handler.applet === applet && (request.applet || !rule || c.handler.operation === rule.operation); });

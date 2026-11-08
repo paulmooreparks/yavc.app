@@ -78,12 +78,11 @@ func TestRibbonSlot(t *testing.T) {
 // An alias address serves its applet standalone under its own title, with
 // the mount marked so the applet starts its own way, and the rest of the
 // applet's address (help, files) behaves as at the applet's own address.
-// docs is the Editor started for documents (docs-design, decision 17).
 func TestHostAlias(t *testing.T) {
-	if a := hostAliases["docs"]; a.applet != "editor" || a.title != "Docs" || a.start != "documents" {
-		t.Fatalf("docs alias is %+v", a)
+	if _, exists := hostAliases["docs"]; exists {
+		t.Fatal("Docs must be an independent package, not an Editor alias")
 	}
-	if _, err := os.Stat(filepath.Join("..", "..", "apps", "editor", "applet.json")); err != nil {
+	if _, err := os.Stat(filepath.Join("..", "..", "apps", "docs", "applet.json")); err != nil {
 		t.Fatalf("docs serves an applet that is not installed: %v", err)
 	}
 	hostAliases["roll"] = hostAlias{applet: "dice", title: "Roll", start: "quick"}

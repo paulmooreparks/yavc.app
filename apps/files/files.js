@@ -194,7 +194,8 @@
         function canOpen(verb, kind) { return window.pudlApplets.can(verb, kind); }
         function request(verb, req) { return window.pudlApplets.request(verb, req, root); }
 
-        function openInEditor(node) {
+        function openInEditor(node, applet) {
+            if(window.pudlHost && window.pudlHost.fileResolution && window.pudlHost.fileResolution.open){window.pudlHost.fileResolution.open({resource:F.displayPath(F.realOf(node)),applet:applet},{host:root}).catch(function (error) {say(error.message,true);});return;}
             /* A deck (a file named .slides.md) opens in Slides, where the site has it. */
             if (/\.slides\.md$/i.test(node.name) && window.pudlApplets.can && window.pudlApplets.can('present') && request('present', { path: F.displayPath(F.realOf(node)) })) { return; }
             /* A diagram (.d2, .mmd, .mermaid or .canvas) opens in Diagrams, where the site has it (docs/diagrams-design.md, decision 1). */
@@ -249,7 +250,7 @@
                 case 'up': b.up(); return;
                 case 'home': b.go(F.home()); return;
                 case 'open': if (c) { openEntry(c); } return;
-                case 'edit': if (c) { openInEditor(c); } return;
+                case 'edit': if (c) { openInEditor(c, 'editor'); } return;
                 case 'run': if (c) { openTerminal(c.name); } return;
                 case 'terminal': openTerminal(null); return;
                 case 'hidden':

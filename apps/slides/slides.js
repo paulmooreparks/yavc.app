@@ -20,7 +20,7 @@
     var STAMP = SELF_SRC && SELF_SRC.indexOf('?') >= 0 ? SELF_SRC.slice(SELF_SRC.indexOf('?')) : '';
     /* The editing kit (apps/md-editor): the page view, CodeMirror, Mermaid,
        the formats, Insert and the dialogs, shared with the Editor. */
-    var KIT = '/applets/md-editor/';
+    var KIT = new URL('../md-editor/', SELF_SRC).href;
     function kit() {
         if (window.yavcMdEditor) { return Promise.resolve(window.yavcMdEditor); }
         return loadScript(window.yavcUtil.versioned(KIT + 'kit.js')).then(function () { return window.yavcMdEditor; });
@@ -37,7 +37,7 @@
     var DOCKS = [['left', 'Left'], ['right', 'Right'], ['top', 'Top'], ['bottom', 'Bottom'], ['float', 'Floating']];
     var NEW_DECK = '---\ntitle: A new deck\nauthor: \ntheme: plain\nsize: 16:9\ntransition: fade\n---\n\n{{slide:layout=title}}\n# A new deck\n## What it is about\n\n---\n\n{{slide}}\n## The first point\n\n- One thing\n- Another\n- A third\n\n{{notes}}\nWhat to say here.\n{{/notes}}\n';
     var NEW_SLIDE = { content: '{{slide}}\n## A heading\n\nText.\n', title: '{{slide:layout=title}}\n# A title\n## A subtitle\n', section: '{{slide:layout=section}}\n## A section\n',
-        'two-column': '{{slide:layout=two-column}}\n## Side by side\n\n{{columns}}\nLeft.\n\n{{column}}\n\nRight.\n{{/columns}}\n', image: '{{slide:layout=image}}\n## A picture\n\n{{figure:/static/icon.svg alt="What it shows"}}\n',
+        'two-column': '{{slide:layout=two-column}}\n## Side by side\n\n{{columns}}\nLeft.\n\n{{column}}\n\nRight.\n{{/columns}}\n', image: '{{slide:layout=image}}\n## A picture\n\nChoose Insert, Picture to add an image.\n',
         quote: '{{slide:layout=quote}}\n> Something said.\n>\n> Who said it\n', blank: '{{slide:layout=blank}}\n' };
     var count = 0;
 
@@ -46,7 +46,7 @@
        whose calls throw on the engine's errors. ENGINE is it once loaded. */
     var ENGINE = null;
     function engine() {
-        return loadScript(window.yavcUtil.versioned('/applets/md-engine/loader.js')).then(function () { return window.yavcMdEngine(); })
+        return loadScript(window.yavcUtil.versioned(new URL('../md-engine/loader.js', SELF_SRC).href)).then(function () { return window.yavcMdEngine(); })
             .then(function (m) { ENGINE = m; return m; });
     }
     function pageView() { return engine().then(kit).then(function (k) { return k.pageView(); }); }
@@ -187,7 +187,7 @@
         opts = opts || {};
         var n = ++count, H = window.pudlHost || {};
         var styledSections = new Set(), styleLifetime = new AbortController();
-        var deck = parseDeck(NEW_DECK), path = null, modified = false, at = 0, destroyed = false;
+        var deck = parseDeck(NEW_DECK), path = null, modified = false, at = 0, destroyed = false, startupFailed = false;
         /* The open decks, one tab each; deck, path, modified and at are the
            front tab's, copied back into it by stash() before a switch. */
         var tabs = [], active = -1;
@@ -520,12 +520,12 @@
         }) : null;
         if (floatRO) { floatRO.observe(el.stagebox); }
 
-        async function setMode(next) {
+        async function setMode(next, persist) {
             mode = ['visual', 'text', 'split'].indexOf(next) >= 0 ? next : 'visual';
             settings.view = mode;
             root.setAttribute('data-view', mode);
             applyDock();
-            if (mode !== 'visual') { await makeCM(); if (cm) { setCM(current().text); } }
+            if (mode !== 'visual') { await makeCM(); if(destroyed)return; if (cm) { setCM(current().text); } }
             if (mode !== 'text') {
                 try {
                     await pageView();
@@ -538,7 +538,7 @@
             fit();
             commandsChanged();
             if (window.pudlMenubar) { window.pudlMenubar.refresh(); }
-            keepSetting('view', mode);
+            if(persist!==false)keepSetting('view', mode);
         }
 
         /* === The filmstrip ============================================= */
@@ -925,7 +925,16 @@
             say('Opened ' + p + '.');
             return true;
         }
-        async function open() {
+        async function open(input) {
+            if(destroyed || startupFailed)return false;
+            if(input && typeof input.resource==='string'){
+                if(input.view && !['visual','text','split'].includes(input.view))throw new Error('This view is unavailable in Slides.');
+                var existed=tabs.some(function (t) {return t.path===input.resource;}),before=mode;
+                var preferences=H.config && H.config.stored ? await H.config.stored('slides') : {};
+                if(destroyed)return false;var opened=await openPath(input.resource);if(!opened || destroyed)return false;
+                var requested=input.view || (!existed && before===mode && !['visual','text','split'].includes(preferences.view) && input.initialView);
+                if(requested && ['visual','text','split'].includes(requested))await setMode(requested,!!input.view);return true;
+            }
             if (!H.fs || !H.fs.open) { return; }
             var res = await H.fs.open({ title: 'Open a Deck', host: root, start: '~', accept: ['.md'] });
             if (!res) { return; }
@@ -1182,7 +1191,7 @@
             var unchanged = await captureExport();
             await installStyle();
             await loadScript(HERE + 'present.js' + STAMP);
-            var css = await fetch('/applets/md-engine/page.css').then(function (r) { return r.text(); }) + '\n' + await fetch(HERE + 'slides.css' + STAMP).then(function (r) { return r.text(); }) + '\n' + deckCSS();
+            var css = await fetch(new URL('../md-engine/page.css', SELF_SRC).href).then(function (r) { return r.text(); }) + '\n' + await fetch(HERE + 'slides.css' + STAMP).then(function (r) { return r.text(); }) + '\n' + deckCSS();
             var js = await fetch(HERE + 'present.js' + STAMP).then(function (r) { return r.text(); });
             var pudl = document.querySelector('link[href*="/pudl/pudl.css"]');
             var pudlHref = pudl ? new URL(pudl.getAttribute('href'), location.href).href : 'https://yavc.app/pudl/pudl.css';
@@ -1229,7 +1238,7 @@
             var unchanged = await captureExport();
             await loadScript(HERE + 'export-pdf.js' + STAMP);
             var ctx = officeContext();
-            ctx.pageCSS = await fetch('/applets/md-engine/page.css' + (window.yavcStaticVersion ? '?v=' + encodeURIComponent(window.yavcStaticVersion) : '')).then(function (r) { return r.text(); }).catch(function () { return ''; });
+            ctx.pageCSS = await fetch(window.yavcUtil.versioned(new URL('../md-engine/page.css', SELF_SRC).href)).then(function (r) { return r.text(); }).catch(function () { return ''; });
             unchanged(); var bytes = await window.yavcSlidesPdf.build(ctx, progress); unchanged(); return bytes;
         }
         async function exportPPTX() {
@@ -1558,15 +1567,19 @@
                 }
                 if (tabs.length) { await activateTab(Math.max(0, Math.min(kept.active || 0, tabs.length - 1))); }
             }
+            var startExisted=tabs.some(function (t) {return t.path===file;});
             if (file) { await openPath(file, parseInt(start.get('slide') || '1', 10)).catch(function (err) { say(err.message, true); return false; }); }
             if (!tabs.length) { load(NEW_DECK, null); }
             restoring = false;
             listenForPresenter();
-            await setMode(kept && kept.mode ? kept.mode : settings.view);
+            var stored=H.config && H.config.stored ? await H.config.stored('slides') : {};
+            if(destroyed)return;
+            var initial=start.get('view') || (startExisted && kept && kept.mode) || (['visual','text','split'].includes(stored.view) ? stored.view : start.get('initial-view')) || settings.view;
+            await setMode(initial,false);
             if (tabs.some(function (t) { return !!t.conflict; })) say('Some recovered drafts no longer match their original revision. Use Save As to preserve a copy.', true);
             if (start.get('present')) { present(parseInt(start.get('slide') || '1', 10) - 1); }
             announce();
-        })().catch(function (err) { if (!destroyed) { root.innerHTML = '<div class="notice danger" role="alert"><div class="notice-content"><p class="notice-title">Slides could not start</p><p class="notice-body">' + esc(err.message) + '</p></div></div>'; } });
+        })().catch(function (err) { startupFailed=true;if (!destroyed) { root.innerHTML = '<div class="notice danger" role="alert"><div class="notice-content"><p class="notice-title">Slides could not start</p><p class="notice-body">' + esc(err.message) + '</p></div></div>'; } });
 
         /* === The live actions ============================================ */
 
@@ -1780,6 +1793,7 @@
             var original = liveActions[name + '@1'];
             if (original) liveActions[name + '@1'] = async function (input) { await booted; requireEditable(); return original(input); };
         });
+        Object.keys(liveActions).forEach(function (id) {var handler=liveActions[id];liveActions[id]=async function (input) {await booted;if(destroyed || startupFailed)throw new Error('This workspace is no longer available.');return handler(input);};});
         var detachLive = window.pudlApplets && window.pudlApplets.attach ? window.pudlApplets.attach('yavc.slides', liveActions) : null;
         var commonToolbar = H.commandToolbar ? H.commandToolbar.attach(root, { app: 'slides', label: 'Slides', table: commandTable,
             defaults: ['save', '-', 'undo', 'redo', '-', 'slide-new', 'slide-duplicate', 'layout', '-', 'style', 'bold', 'italic', 'link', '-', 'present', 'presenter', 'view-mode'] }) : null;
@@ -1791,11 +1805,12 @@
                 var p = new URLSearchParams(String(s || '').replace(/^\?/, ''));
                 var file = p.get('file');
                 if (p.get('presenter')) { return; }
-                booted.then(function () {
+                booted.then(async function () {
+                    if(destroyed || startupFailed)return;
                     var slide = parseInt(p.get('slide') || '1', 10);
-                    if (file && file !== path) { openPath(file, slide).then(function () { if (p.get('present')) { present(slide - 1); } }); }
-                    else { goTo(slide - 1); if (p.get('present')) { present(slide - 1); } }
-                });
+                    if(file){await open({resource:file,view:p.get('view'),initialView:p.get('initial-view')});if(destroyed)return;}
+                    await goTo(slide-1);if(p.get('present') && !destroyed)present(slide-1);
+                }).catch(function (err) {if(!destroyed)say(err.message,true);});
             },
             commandTable: commandTable, toolbars: toolbars, menus: menus,
             destroy: function () {

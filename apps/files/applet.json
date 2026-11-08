@@ -1,7 +1,7 @@
 {
   "name": "files",
   "title": "Files",
-  "version": "32.8.0",
+  "version": "32.9.0",
   "description": "Browse the site and keep your own files, as the Terminal and the Editor see them.",
   "license": "Apache-2.0",
   "src": "files.js",

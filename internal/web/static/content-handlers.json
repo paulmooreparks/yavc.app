@@ -1,56 +1,486 @@
 {
-  "version": 1,
+  "version": 2,
   "types": [
-    {"id":"text","text":true,"matches":[{"suffix":".txt"},{"suffix":".go"},{"suffix":".cpp"},{"suffix":".json"},{"suffix":".html"},{"suffix":".css"},{"suffix":".xfer"}]},
-    {"id":"markdown","text":true,"matches":[{"suffix":".md"},{"suffix":".markdown"}]},
-    {"id":"document","text":true,"matches":[{"suffix":".docs.md"}]},
-    {"id":"slides","text":true,"matches":[{"suffix":".slides.md"}]},
-    {"id":"canvas","text":true,"matches":[{"suffix":".canvas"}]},
-    {"id":"d2","text":true,"matches":[{"suffix":".d2"}]},
-    {"id":"mermaid","text":true,"matches":[{"suffix":".mmd"},{"suffix":".mermaid"}]},
-    {"id":"docx","text":false,"matches":[{"suffix":".docx"}]},
-    {"id":"pptx","text":false,"matches":[{"suffix":".pptx"}]}
+    {
+      "id": "text",
+      "text": true,
+      "matches": [
+        {
+          "suffix": ".txt"
+        },
+        {
+          "suffix": ".go"
+        },
+        {
+          "suffix": ".cpp"
+        },
+        {
+          "suffix": ".json"
+        },
+        {
+          "suffix": ".html"
+        },
+        {
+          "suffix": ".css"
+        },
+        {
+          "suffix": ".xfer"
+        }
+      ]
+    },
+    {
+      "id": "markdown",
+      "text": true,
+      "matches": [
+        {
+          "suffix": ".md"
+        },
+        {
+          "suffix": ".markdown"
+        }
+      ]
+    },
+    {
+      "id": "document",
+      "text": true,
+      "matches": [
+        {
+          "suffix": ".docs.md"
+        }
+      ]
+    },
+    {
+      "id": "slides",
+      "text": true,
+      "matches": [
+        {
+          "suffix": ".slides.md"
+        }
+      ]
+    },
+    {
+      "id": "canvas",
+      "text": true,
+      "matches": [
+        {
+          "suffix": ".canvas"
+        }
+      ]
+    },
+    {
+      "id": "d2",
+      "text": true,
+      "matches": [
+        {
+          "suffix": ".d2"
+        }
+      ]
+    },
+    {
+      "id": "mermaid",
+      "text": true,
+      "matches": [
+        {
+          "suffix": ".mmd"
+        },
+        {
+          "suffix": ".mermaid"
+        }
+      ]
+    },
+    {
+      "id": "docx",
+      "text": false,
+      "matches": [
+        {
+          "suffix": ".docx"
+        }
+      ]
+    },
+    {
+      "id": "pptx",
+      "text": false,
+      "matches": [
+        {
+          "suffix": ".pptx"
+        }
+      ]
+    }
   ],
   "handlers": [
-    {"applet":"editor","operation":"open","kind":"file","formats":[
-      {"type":"text","intents":["edit","view"],"views":["text"],"defaultView":"text"},
-      {"type":"markdown","intents":["edit","view"],"views":["text"],"defaultView":"text"},
-      {"type":"document","intents":["edit","view"],"views":["text"],"defaultView":"text"},
-      {"type":"slides","intents":["edit","view"],"views":["text"],"defaultView":"text"},
-      {"type":"canvas","intents":["edit","view"],"views":["text"],"defaultView":"text"},
-      {"type":"d2","intents":["edit","view"],"views":["text"],"defaultView":"text"},
-      {"type":"mermaid","intents":["edit","view"],"views":["text"],"defaultView":"text"}
-    ]},
-    {"applet":"docs","operation":"document","kind":"file","formats":[
-      {"type":"markdown","intents":["edit","view"],"views":["document","visual","text","split","preview"],"defaultView":"visual"},
-      {"type":"document","intents":["edit","view"],"views":["document","visual","text","split","preview"],"defaultView":"document"}
-    ]},
-    {"applet":"slides","operation":"present","kind":"file","formats":[
-      {"type":"slides","intents":["edit","view"],"views":["visual","text","split"],"defaultView":"visual"}
-    ]},
-    {"applet":"diagrams","operation":"diagram","kind":"file","formats":[
-      {"type":"canvas","intents":["edit","view"],"views":["visual","text","split"],"defaultView":"visual"},
-      {"type":"d2","intents":["edit","view"],"views":["visual","text","split"],"defaultView":"split"},
-      {"type":"mermaid","intents":["edit","view"],"views":["text","split"],"defaultView":"split"}
-    ]}
+    {
+      "applet": "editor",
+      "operation": "open",
+      "kind": "file",
+      "dispatch": {
+        "command": "open"
+      },
+      "formats": [
+        {
+          "type": "text",
+          "intents": [
+            "edit",
+            "view"
+          ],
+          "views": [
+            "text"
+          ],
+          "defaultView": "text"
+        },
+        {
+          "type": "markdown",
+          "intents": [
+            "edit",
+            "view"
+          ],
+          "views": [
+            "text",
+            "split",
+            "preview"
+          ],
+          "defaultView": "text"
+        },
+        {
+          "type": "document",
+          "intents": [
+            "edit",
+            "view"
+          ],
+          "views": [
+            "text",
+            "split",
+            "preview"
+          ],
+          "defaultView": "text"
+        },
+        {
+          "type": "slides",
+          "intents": [
+            "edit",
+            "view"
+          ],
+          "views": [
+            "text"
+          ],
+          "defaultView": "text"
+        },
+        {
+          "type": "canvas",
+          "intents": [
+            "edit",
+            "view"
+          ],
+          "views": [
+            "text"
+          ],
+          "defaultView": "text"
+        },
+        {
+          "type": "d2",
+          "intents": [
+            "edit",
+            "view"
+          ],
+          "views": [
+            "text"
+          ],
+          "defaultView": "text"
+        },
+        {
+          "type": "mermaid",
+          "intents": [
+            "edit",
+            "view"
+          ],
+          "views": [
+            "text"
+          ],
+          "defaultView": "text"
+        }
+      ]
+    },
+    {
+      "applet": "docs",
+      "operation": "document",
+      "kind": "file",
+      "dispatch": {
+        "command": "open"
+      },
+      "formats": [
+        {
+          "type": "markdown",
+          "intents": [
+            "edit",
+            "view"
+          ],
+          "views": [
+            "document",
+            "visual",
+            "text",
+            "split",
+            "preview"
+          ],
+          "defaultView": "visual"
+        },
+        {
+          "type": "document",
+          "intents": [
+            "edit",
+            "view"
+          ],
+          "views": [
+            "document",
+            "visual",
+            "text",
+            "split",
+            "preview"
+          ],
+          "defaultView": "document"
+        }
+      ]
+    },
+    {
+      "applet": "slides",
+      "operation": "present",
+      "kind": "file",
+      "dispatch": {
+        "command": "open"
+      },
+      "formats": [
+        {
+          "type": "slides",
+          "intents": [
+            "edit",
+            "view"
+          ],
+          "views": [
+            "visual",
+            "text",
+            "split"
+          ],
+          "defaultView": "visual"
+        }
+      ]
+    },
+    {
+      "applet": "diagrams",
+      "operation": "diagram",
+      "kind": "file",
+      "dispatch": {
+        "command": "open"
+      },
+      "formats": [
+        {
+          "type": "canvas",
+          "intents": [
+            "edit",
+            "view"
+          ],
+          "views": [
+            "visual",
+            "text",
+            "split"
+          ],
+          "defaultView": "visual"
+        },
+        {
+          "type": "d2",
+          "intents": [
+            "edit",
+            "view"
+          ],
+          "views": [
+            "visual",
+            "text",
+            "split"
+          ],
+          "defaultView": "split"
+        },
+        {
+          "type": "mermaid",
+          "intents": [
+            "edit",
+            "view"
+          ],
+          "views": [
+            "text",
+            "split"
+          ],
+          "defaultView": "split"
+        }
+      ]
+    }
   ],
   "associations": [
-    {"id":"markdown","match":{"suffix":".md"},"type":"markdown","applet":"docs","operation":"document","view":"visual"},
-    {"id":"markdown-long","match":{"suffix":".markdown"},"type":"markdown","applet":"docs","operation":"document","view":"visual"},
-    {"id":"document","match":{"suffix":".docs.md"},"type":"document","applet":"docs","operation":"document","view":"document"},
-    {"id":"deck","match":{"suffix":".slides.md"},"type":"slides","applet":"slides","operation":"present","view":"visual"},
-    {"id":"canvas","match":{"suffix":".canvas"},"type":"canvas","applet":"diagrams","operation":"diagram","view":"visual"},
-    {"id":"d2","match":{"suffix":".d2"},"type":"d2","applet":"diagrams","operation":"diagram","view":"split"},
-    {"id":"mermaid","match":{"suffix":".mmd"},"type":"mermaid","applet":"diagrams","operation":"diagram","view":"split"},
-    {"id":"mermaid-long","match":{"suffix":".mermaid"},"type":"mermaid","applet":"diagrams","operation":"diagram","view":"split"},
-    {"id":"text-file","match":{"suffix":".txt"},"type":"text","applet":"editor","operation":"open","view":"text"},
-    {"id":"json","match":{"suffix":".json"},"type":"text","applet":"editor","operation":"open","view":"text"},
-    {"id":"go","match":{"suffix":".go"},"type":"text","applet":"editor","operation":"open","view":"text"},
-    {"id":"cpp","match":{"suffix":".cpp"},"type":"text","applet":"editor","operation":"open","view":"text"},
-    {"id":"html","match":{"suffix":".html"},"type":"text","applet":"editor","operation":"open","view":"text"},
-    {"id":"css","match":{"suffix":".css"},"type":"text","applet":"editor","operation":"open","view":"text"},
-    {"id":"xfer","match":{"suffix":".xfer"},"type":"text","applet":"editor","operation":"open","view":"text"},
-    {"id":"mime-markdown","match":{"mime":"text/markdown"},"type":"markdown","applet":"docs","operation":"document","view":"visual"},
-    {"id":"mime-text","match":{"mime":"text/plain"},"type":"text","applet":"editor","operation":"open","view":"text"}
+    {
+      "id": "markdown",
+      "match": {
+        "suffix": ".md"
+      },
+      "type": "markdown",
+      "applet": "docs",
+      "operation": "document",
+      "view": "visual"
+    },
+    {
+      "id": "markdown-long",
+      "match": {
+        "suffix": ".markdown"
+      },
+      "type": "markdown",
+      "applet": "docs",
+      "operation": "document",
+      "view": "visual"
+    },
+    {
+      "id": "document",
+      "match": {
+        "suffix": ".docs.md"
+      },
+      "type": "document",
+      "applet": "docs",
+      "operation": "document",
+      "view": "document"
+    },
+    {
+      "id": "deck",
+      "match": {
+        "suffix": ".slides.md"
+      },
+      "type": "slides",
+      "applet": "slides",
+      "operation": "present",
+      "view": "visual"
+    },
+    {
+      "id": "canvas",
+      "match": {
+        "suffix": ".canvas"
+      },
+      "type": "canvas",
+      "applet": "diagrams",
+      "operation": "diagram",
+      "view": "visual"
+    },
+    {
+      "id": "d2",
+      "match": {
+        "suffix": ".d2"
+      },
+      "type": "d2",
+      "applet": "diagrams",
+      "operation": "diagram",
+      "view": "split"
+    },
+    {
+      "id": "mermaid",
+      "match": {
+        "suffix": ".mmd"
+      },
+      "type": "mermaid",
+      "applet": "diagrams",
+      "operation": "diagram",
+      "view": "split"
+    },
+    {
+      "id": "mermaid-long",
+      "match": {
+        "suffix": ".mermaid"
+      },
+      "type": "mermaid",
+      "applet": "diagrams",
+      "operation": "diagram",
+      "view": "split"
+    },
+    {
+      "id": "text-file",
+      "match": {
+        "suffix": ".txt"
+      },
+      "type": "text",
+      "applet": "editor",
+      "operation": "open",
+      "view": "text"
+    },
+    {
+      "id": "json",
+      "match": {
+        "suffix": ".json"
+      },
+      "type": "text",
+      "applet": "editor",
+      "operation": "open",
+      "view": "text"
+    },
+    {
+      "id": "go",
+      "match": {
+        "suffix": ".go"
+      },
+      "type": "text",
+      "applet": "editor",
+      "operation": "open",
+      "view": "text"
+    },
+    {
+      "id": "cpp",
+      "match": {
+        "suffix": ".cpp"
+      },
+      "type": "text",
+      "applet": "editor",
+      "operation": "open",
+      "view": "text"
+    },
+    {
+      "id": "html",
+      "match": {
+        "suffix": ".html"
+      },
+      "type": "text",
+      "applet": "editor",
+      "operation": "open",
+      "view": "text"
+    },
+    {
+      "id": "css",
+      "match": {
+        "suffix": ".css"
+      },
+      "type": "text",
+      "applet": "editor",
+      "operation": "open",
+      "view": "text"
+    },
+    {
+      "id": "xfer",
+      "match": {
+        "suffix": ".xfer"
+      },
+      "type": "text",
+      "applet": "editor",
+      "operation": "open",
+      "view": "text"
+    },
+    {
+      "id": "mime-markdown",
+      "match": {
+        "mime": "text/markdown"
+      },
+      "type": "markdown",
+      "applet": "docs",
+      "operation": "document",
+      "view": "visual"
+    },
+    {
+      "id": "mime-text",
+      "match": {
+        "mime": "text/plain"
+      },
+      "type": "text",
+      "applet": "editor",
+      "operation": "open",
+      "view": "text"
+    }
   ]
 }

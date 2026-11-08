@@ -3,7 +3,7 @@ const assert = require('node:assert/strict'), fs = require('node:fs'), path = re
 const pw = require('playwright'), port = process.env.YAVC_CHROME_TEST_PORT || '8422';
 const evidence = path.join(os.tmpdir(),'yavc-page-setup-evidence'); fs.mkdirSync(evidence,{recursive:true});
 const source = '---\n# Keep this comment.\ntitle: Setup test\npage: letter\nmargins: 1in\ncustom: preserved\n---\n\n# Page setup\n\n' + Array.from({length:30},(_,i)=>'Paragraph '+i+'. '+'Editable document text. '.repeat(12)).join('\n\n');
-const action = (page,name,input={}) => page.evaluate(({name,input})=>pudlActions.run('yavc.editor/'+name+'@1',input,{grant:'all'}),{name,input});
+const action = (page,name,input={}) => page.evaluate(({name,input})=>pudlActions.run('yavc.docs/'+name+'@1',input,{grant:'all'}),{name,input});
 const command = (page,id) => page.evaluate(id=>{pudlCommands.run(id,null,document.querySelector('[data-applet]'));},id);
 const measure = (page,key) => page.locator('[data-measure="'+key+'"]').locator('..').getByRole('spinbutton');
 const choice = (page,key) => page.locator('[data-choice="'+key+'"]');
@@ -16,7 +16,7 @@ async function setup(page) { await command(page,'page-setup'); await page.locato
   const browser=await pw[engine].launch({headless:true}),page=await browser.newPage({viewport:{width:1400,height:1000}});page.setDefaultTimeout(15000);
   const errors=[];page.on('pageerror',e=>errors.push(e.message));let phase='start';
   try {
-   await page.goto(`http://editor.localhost:${port}/`,{waitUntil:'domcontentloaded'});await page.locator('.cm-editor').waitFor();
+   await page.goto(`http://docs.localhost:${port}/`,{waitUntil:'domcontentloaded'});await page.locator('.cm-editor').waitFor({state:'attached'});
    await action(page,'new',{path:'~/setup.docs.md',text:source});await page.waitForFunction(()=>+document.querySelector('[data-page-count]')?.dataset.pageCount>1);
    phase='catalog and independent margins';await setup(page);
    assert.ok(await choice(page,'paper').locator('option').count()>200);
@@ -72,7 +72,7 @@ async function setup(page) { await command(page,'page-setup'); await page.locato
    await page.screenshot({path:path.join(evidence,engine+'-document-restored.png')});
    await action(page,'new',{path:'~/flow.md',text:'# Ordinary Markdown\n\nWrap to the pane.'});await action(page,'view',{mode:'visual'});
    assert.equal(await page.locator('.doc-paginated').count(),0);await action(page,'view',{mode:'preview'});assert.equal(await page.locator('.doc-paginated').count(),0);
-   phase='stale dialog';await setup(page);await action(page,'set-text',{text:'# Replaced while dialog was open.'});await apply(page);
+   phase='stale dialog';await action(page,'view',{mode:'document'});await setup(page);await action(page,'set-text',{text:'# Replaced while dialog was open.'});await apply(page);
    assert.equal(await page.locator('.md-page-setup[open]').count(),1);assert.equal(await read(page),'# Replaced while dialog was open.');await close(page);
    assert.deepEqual(errors,[]);console.log(engine+': catalog, custom dimensions, units, separate/linked margins, presets, Undo, validation, stale dialog, narrow/dark and view retention passed');
   } catch(err) { await page.screenshot({path:path.join(evidence,engine+'-failure.png')});console.error(engine+' failed at '+phase);throw err; }

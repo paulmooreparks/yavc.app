@@ -1,5 +1,7 @@
 # Initial content applet host audit
 
+This is the historical first-batch audit. The subsequent Docs/Editor extraction, separate applets and Docker reintegration are recorded in `content-workspace-contract.md` and the extraction receipt in `applet-portability-design.md`. Its remaining downstream webview gate is still open.
+
 The first implementation batch uses source baseline `02ce1da` and PUDL 0.103.0. The audit covers current source dependencies and documented contracts; it does not assert that an actual downstream host or the full editing extraction has passed acceptance.
 
 | Area | Existing contract or dependency | First-batch result and remaining work |

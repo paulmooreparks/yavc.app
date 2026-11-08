@@ -18,7 +18,7 @@ type startCategory struct {
 }
 
 var startTaxonomy = []startCategory{
-	{Key: "create", Label: "Create", Glyph: "pencil", Apps: []string{"diagrams", "editor", "slides", "theme-studio"}},
+	{Key: "create", Label: "Create", Glyph: "pencil", Apps: []string{"diagrams", "docs", "editor", "slides", "theme-studio"}},
 	{Key: "tools", Label: "Tools", Glyph: "folder", Apps: []string{"files", "terminal", "diff"}},
 	{Key: "barcodes", Label: "Barcodes", Glyph: "app", Apps: []string{"barcode-scanner", "barcodes", "flashcards"}},
 	{Key: "learning", Label: "Learning", Glyph: "document", Apps: []string{"flashcards", "sight-reader", "conway"}},

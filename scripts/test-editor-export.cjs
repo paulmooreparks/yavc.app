@@ -5,7 +5,7 @@ const playwright = require('playwright');
 const port = process.env.YAVC_CHROME_TEST_PORT || '8419';
 const evidence = path.join(os.tmpdir(), 'yavc-editor-export-evidence'); fs.mkdirSync(evidence, { recursive: true });
 const source = '---\ntitle: Export test\nauthor: Test author\npage: letter\nmargins: 1in\n---\n\n# Export test\n\nBefore {{no-export}}SECRET_INLINE{{/no-export}}after. Café.\n\n{{no-export}}\n## SECRET_HEADING\n\nSECRET_BLOCK\n\n{{page-break}}\n\n![secret](https://invalid.example/SECRET_IMAGE.png)\n{{/no-export}}\n\n{{draft-note}}\nSECRET_DRAFT\n{{/draft-note}}\n\n## Visible heading\n\nA **bold** and *italic* paragraph with <u>underlined</u> text.\n\n> A quote.\n\n- First\n- Second\n\n| Left | Right |\n| :--- | ---: |\n| One | Two |\n';
-async function action(page, name, input = {}) { return page.evaluate(({ name, input }) => pudlActions.run('yavc.editor/' + name + '@1', input, { grant: 'all' }), { name, input }); }
+async function action(page, name, input = {}) { return page.evaluate(({ name, input }) => pudlActions.run('yavc.docs/' + name + '@1', input, { grant: 'all' }), { name, input }); }
 async function download(page, format, name) {
     const pending = page.waitForEvent('download');
     await page.evaluate(format => pudlCommands.run('export-' + format, null, document.querySelector('[data-applet]')), format);
@@ -16,7 +16,7 @@ async function download(page, format, name) {
         const browser = await playwright[engine].launch({ headless: true }); const page = await browser.newPage({ viewport: { width: 1450, height: 950 } }); page.setDefaultTimeout(45000);
         const requests = []; page.on('request', request => requests.push(request.url()));
         try {
-            await page.goto(`http://editor.localhost:${port}/`); await page.locator('.cm-editor').waitFor();
+            await page.goto(`http://docs.localhost:${port}/`); await page.locator('.cm-editor').waitFor({state:'attached'});
             await action(page, 'new', { path: '~/exports.md', text: source }); await action(page, 'view', { mode: 'split' });
             await page.locator('.sc-no-export').first().waitFor();
             await action(page, 'view', { mode: 'text' }); requests.length = 0;

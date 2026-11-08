@@ -5,7 +5,7 @@ const port = process.env.YAVC_CHROME_TEST_PORT || '8428';
 const evidence = path.join(os.tmpdir(),'yavc-editing-commands-evidence'); fs.mkdirSync(evidence,{recursive:true});
 const action=(p,app,name,input={})=>p.evaluate(({app,name,input})=>pudlActions.run('yavc.'+app+'/'+name+'@1',input,{grant:'all'}),{app,name,input});
 const command=(p,id)=>p.evaluate(id=>{pudlCommands.run(id,null,document.querySelector('[data-applet]'));},id);
-const text=(p,app)=>action(p,app,app==='editor'?'document':'text').then(r=>r.text);
+const text=(p,app)=>action(p,app,app==='docs'?'document':'text').then(r=>r.text);
 const state=async(p,id)=>({disabled:await p.locator('.yavc-command-toolbar [data-command="'+id+'"]').first().isDisabled()});
 async function initClipboard(page) {
  await page.addInitScript(()=>{
@@ -25,10 +25,10 @@ async function waitText(p,app,needle,present=true){await p.waitForFunction(({nee
   const browser=await pw[engine].launch({headless:true}),p=await browser.newPage({viewport:{width:1500,height:1000}});p.setDefaultTimeout(15000);await initClipboard(p);let phase='start';const errors=[];p.on('pageerror',e=>errors.push(e.message));
   try{
    await p.route('**/api/site/tree',async route=>{const response=await route.fetch({url:`http://127.0.0.1:${port}/api/site/tree`}),tree=await response.json();tree.children.push({name:'editing-readonly.md',kind:'script',source:'# Read only heading\n\nRead only body.'});await route.fulfill({response,json:tree});});
-   for(const app of ['editor','slides']){
+   for(const app of ['docs','slides']){
     phase=app+' start';await p.goto(`http://${app}.localhost:${port}/`,{waitUntil:'domcontentloaded'});await p.waitForFunction(()=>{const b=document.querySelector('.yavc-command-toolbar [data-command=save]');return b&&!b.disabled;});
-    let draft=0;const open=async(source)=>action(p,app,app==='editor'?'new':'load',app==='editor'?{path:'~/Editing-'+(++draft)+'.docs.md',text:source}:{text:source});
-    if(app==='editor'){await open('');await action(p,app,'view',{mode:'text'});assert.equal((await state(p,'undo')).disabled,true);assert.equal((await state(p,'redo')).disabled,true);}
+    let draft=0;const open=async(source)=>action(p,app,app==='docs'?'new':'load',app==='docs'?{path:'~/Editing-'+(++draft)+'.docs.md',text:source}:{text:source});
+    if(app==='docs'){await open('');await action(p,app,'view',{mode:'text'});assert.equal((await state(p,'undo')).disabled,true);assert.equal((await state(p,'redo')).disabled,true);}
     await open('# Clipboard\n\nAlpha Beta.\n');await action(p,app,'view',{mode:'text'});
     phase=app+' history and clipboard';assert.equal((await state(p,'undo')).disabled,app==='slides');assert.equal((await state(p,'redo')).disabled,true);
     await selectText(p,'Alpha');await command(p,'copy');await p.waitForFunction(()=>mockClipboard.text==='Alpha');assert.match(await text(p,app),/Alpha Beta/);
@@ -43,7 +43,7 @@ async function waitText(p,app,needle,present=true){await p.waitForFunction(({nee
     phase=app+' rich keyboard history';await p.locator('.ProseMirror[aria-busy=false]').waitFor();await p.locator('.ProseMirror').click();await p.keyboard.press('ControlOrMeta+z');await p.waitForFunction(()=>!document.querySelector('.ProseMirror').textContent.includes('Rich addition'));await p.locator('.ProseMirror[aria-busy=false]').waitFor();assert.equal(await p.evaluate(()=>!!document.activeElement.closest('.ProseMirror')),true);await p.keyboard.press('ControlOrMeta+Shift+z');await p.waitForFunction(()=>document.querySelector('.ProseMirror').textContent.includes('Rich addition'));
     phase=app+' rich paste';await command(p,'select-all');await p.evaluate(()=>{mockClipboard.text='Pasted heading\n\nSafe body';mockClipboard.html='<h2>Pasted heading</h2><p>Safe <strong>body</strong></p><script>window.clipboardInjected=true</script>';});await command(p,'paste');await p.locator('.ProseMirror h2').filter({hasText:'Pasted heading'}).waitFor();assert.equal(await p.evaluate(()=>!!window.clipboardInjected),false);await p.locator('.ProseMirror strong').filter({hasText:'body'}).waitFor();
     phase=app+' stale Cut across tabs';await action(p,app,'view',{mode:'text'});await selectText(p,'Safe');await p.evaluate(()=>mockClipboard.holdWrite=true);await command(p,'cut');await p.waitForFunction(()=>!!mockClipboard.releaseWrite);await open('# Other document\n\nKeep this.\n');const other=await text(p,app);await p.evaluate(()=>{mockClipboard.holdWrite=false;mockClipboard.releaseWrite();});await p.waitForFunction(()=>document.body.textContent.includes('was not removed'));assert.equal(await text(p,app),other);
-    if(app==='editor'){
+    if(app==='docs'){
      phase='Editor readonly clipboard';await action(p,app,'open-file',{path:'/site/editing-readonly.md'});await action(p,app,'view',{mode:'text'});await command(p,'select-all');await command(p,'copy');await p.waitForFunction(()=>mockClipboard.text.includes('Read only body'));
      await p.locator('.menubar-title[data-menu-id=edit]').click();for(const name of ['Cut','Paste','Undo','Redo'])assert.equal(await p.getByRole('menuitem',{name:new RegExp('^'+name+'\\b')}).isDisabled(),true);assert.equal(await p.getByRole('menuitem',{name:/^Copy\b/}).isDisabled(),false);await p.keyboard.press('Escape');
      await action(p,app,'view',{mode:'preview'});await p.waitForFunction(()=>document.querySelector('[data-role=page]')?.textContent.includes('Read only body'));await command(p,'select-all');await command(p,'copy');await p.waitForFunction(()=>mockClipboard.text.includes('Read only body')&&!mockClipboard.text.includes('# Read'));

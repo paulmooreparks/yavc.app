@@ -148,11 +148,13 @@ Each decision is dated and numbered so that later documents and cards can refer 
 
 74. **Files surrounds the document workspace, while Outline belongs to its active document** (2026-11-08, Paul). Files occupies an independent pane from below the toolbar to the window bottom. Document tabs span the space to its right. Outline lives below those tabs inside the document workspace and follows the active document. Files and Outline have separate visibility and width preferences. Container width controls compact navigation, including floating windows on wide screens. Closing either compact pane returns to the document; temporary compact placement must preserve wide-layout widths. This supersedes the earlier shared Files/Outline tabs in the Docs design.
 
+75. **Docs and Editor mount one shared workspace under fixed identities** (2026-11-08, Paul). The source and rich workspace moves to `apps/text-workspace`; the `docs` and `editor` packages register separate thin shells. Docs owns Markdown authoring and page forms. Editor offers source editing and read-only supported previews. Each shell has its own preference and recovery namespace. Existing Editor drafts stay in Editor as recoverable source; migration never partitions or deletes them based on a suffix. Host services provide optional file browsing and legacy recovery inputs, while revision-safe resource services retain persistence authority. The extraction must run under a different asset base without site storage or route dependencies before the candidate is accepted. The installed release remains v0.2.47 while this work proceeds.
+
 ## Addresses
 
 `yavc.app` serves the desktop, which is windowed only (decision 26). A window's content comes from `/win/{key}`. `yavc.app/{slug}` opens the desktop with that application's window, or draws a site page as a page of its own. `{slug}.yavc.app` serves the same application standalone, and it is the application's page form. The engine answers both from one deployment: a wildcard DNS record points every subdomain at it, and the engine reads the host header to choose the standalone layout for the application whose slug matches. A subdomain whose slug matches no application redirects to the desktop.
 
-A few subdomains are aliases that serve an application started another way, listed in the engine's `hostAliases`. `docs.yavc.app` is the only one so far. It serves the Editor standalone under the title Docs and marks the Editor's mount so that it starts for documents (docs/docs-design.md, decision 17).
+Docs is an independent package at `docs.yavc.app`, with its own desktop key and recovery namespace (decision 75). The former Editor alias is removed. The engine retains the alias mechanism for future separately declared aliases.
 
 The PUDL applet definition's `page` field for each application is its subdomain address, so Open as a page from a window goes to `{slug}.yavc.app`, and `ownsUrl` is true only there.
 

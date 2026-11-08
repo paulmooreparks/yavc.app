@@ -1,0 +1,15 @@
+/* Copyright 2026 Paul Parks. SPDX-License-Identifier: Apache-2.0 */
+(function () {
+ 'use strict';
+ var records=new Map([['memory:source.md',{text:'# Source\n\nRetained source.\n',revision:1,name:'Source.md'}],['memory:document.docs.md',{text:'# Document\n\nEditable words.\n',revision:1,name:'Document.docs.md'}],['memory:deck.slides.md',{text:'# Slide one\n\nFirst.\n\n---\n\n# Slide two\n\nSecond.\n',revision:1,name:'Deck.slides.md'}]]),snapshots=new Map(),preferences=new Map(),writes=[];
+ window.fixture={records:records,writes:writes,snapshots:snapshots};
+ window.pudlHost=pudlHostKit.host({pages:'/',pudl:new URL('../pudl/',location.href).href,contentWorkspace:{version:1},
+  config:{load:async function (app,defaults) {return Object.assign({},defaults,preferences.get(app));},set:async function (app,value) {preferences.set(app,Object.assign({},preferences.get(app),value));},onChange:function () {return function () {}; }},
+  fs:{readText:async function (resource) {return records.has(resource)?records.get(resource).text:null;}},
+  snapshot:{version:2,remembersClosed:true,join:function (root,take,options) {var key=root.id,kept=snapshots.get(key)||null;if(options.validate)options.validate(kept);return {kept:kept,focused:false,changed:function () {},flush:function () {snapshots.set(key,take());return true;},leave:function () {}};}},
+  contentResources:{version:1,read:async function (request) {var record=records.get(request.resource);if(!record)throw new Error('Missing resource');return {resource:request.resource,revision:String(record.revision),text:record.text,name:record.name,writable:true};},
+   write:async function (request) {var record=records.get(request.resource);if(!record || request.expectedRevision!==String(record.revision))throw new Error('Resource conflict');writes.push(request);record.text=request.text;record.revision++;return {resource:request.resource,revision:String(record.revision),name:record.name,writable:true};}}
+ });
+ document.addEventListener('pudl:applet-state',function (event) {event.detail.state='file='+encodeURIComponent(event.target.id==='source'?'memory:source.md':event.target.id==='document'?'memory:document.docs.md':'memory:deck.slides.md');});
+ Promise.all(['editor','docs','slides'].map(function (app) {return pudlHostKit.install(new URL('../content/'+app+'/applet.json',location.href).href);})).catch(function (err) {document.body.textContent=err.message;});
+})();

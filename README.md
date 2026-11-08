@@ -37,11 +37,11 @@ An application is a [PUDL applet package](https://github.com/paulmooreparks/pudl
 
 A page is a Markdown file in `pages/`, served at `/{slug}` with the site's bar and opened in a window on the desktop by its slug; its first heading is its title. The privacy policy, the terms, the author's page and the guides for Files and the Terminal are pages.
 
-Files, the Editor and the Terminal share one file system (`internal/web/static/sitefs.js`, from parkscomputing.com): the site under `/site`, as `/api/site/tree` serves it, the built-in commands under `/bin`, and the reader's home, `~`, which is kept in the browser's local storage alone and never sent to the site (DESIGN.md, decision 11). A script in `site/bin/` is listed under `/site/bin` and runs in the Terminal by name.
+Files, Docs, Editor, Slides, Diagrams and Terminal use the host virtual file system. Guest home files are stored in the browser for the current origin. Desktop applets share that origin; standalone subdomains have separate guest storage. Portable content packages receive file access through the host resource interface. The site tree and built-in commands remain available through the host adapter.
 
-## The Editor's Markdown engine
+## Docs and Editor
 
-The Editor's Visual, Split and Preview views come from Dinah Desktop's page view. Their Markdown engine, the preview renderer and the page view's parser and serializer in `internal/preview` and `internal/pageview`, is compiled to WebAssembly from `cmd/yavc-md` and runs in the browser, so a document's text is never sent to the site. Build it with
+Docs provides rich Markdown editing, paginated documents and direct source access. Editor handles general text and code, with read-only Markdown previews. Both use the shared workspace in `apps/text-workspace`. The rich surface comes from Dinah Desktop's page view. Their Markdown engine, the preview renderer and the page view's parser and serializer in `internal/preview` and `internal/pageview`, is compiled to WebAssembly from `cmd/yavc-md` and runs in the browser, so a document's text is never sent to the site. Build it with
 
 ```
 GOOS=js GOARCH=wasm go build -trimpath -ldflags="-s -w" -o apps/md-engine/yavc-md.wasm ./cmd/yavc-md
@@ -50,21 +50,25 @@ cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" apps/md-engine/
 
 The Docker image builds it itself. Neither file is committed.
 
-The engine includes parkscomputing.com's shortcodes (`internal/shortcodes`): `{{tip:Title}} … {{/tip}}` and the other notices, `{{expand}}`, `{{columns}}` with `{{column}}`, `{{figure:/path alt="…"}}`, `{{applet:name}}`, `{{video:youtube ID}}`, `{{code:~/bin/hello}}`, `{{toc}}`, `{{status:green Done}}`, `{{kbd:Ctrl+S}}`, `{{glyph:check}}`, `{{page:slug}}`, `{{anchor:name}}` and `{{draft-note}}`. The Editor's Insert menu offers each with an example.
+The engine includes parkscomputing.com's shortcodes (`internal/shortcodes`): `{{tip:Title}} … {{/tip}}` and the other notices, `{{expand}}`, `{{columns}}` with `{{column}}`, `{{figure:/path alt="…"}}`, `{{applet:name}}`, `{{video:youtube ID}}`, `{{code:~/bin/hello}}`, `{{toc}}`, `{{status:green Done}}`, `{{kbd:Ctrl+S}}`, `{{glyph:check}}`, `{{page:slug}}`, `{{anchor:name}}` and `{{draft-note}}`. Docs and Slides offer these through their Insert menus.
 
 The `color` shortcode (`colour` is an alias) is the engine's first paired inline shortcode, `{{color:accent}}words{{/color}}`, matched within a paragraph and open to Markdown inside; a project adds another by giving a definition the kind `span`. The page view edits a colour span as a mark, so a coloured heading stays rich text.
 
 ## Slides
 
-Slides (`apps/slides`, design in [docs/slides-design.md](docs/slides-design.md)) makes a slide deck from a Markdown file named `something.slides.md`: slides divided by `---`, a `{{slide:layout=title}}` line for a slide's settings, `{{notes}}` for the speaker's notes, and the front matter for the deck's title, theme, size and transition. The current slide is edited on its canvas, as the Editor's Visual view edits a page, or as its Markdown, and the deck presents full screen with a presenter window and exports as a page that presents itself, as a PowerPoint file (structural, editable) and as a PDF (each slide as drawn); a PowerPoint file imports as a deck. The libraries for those, PptxGenJS, pdf-lib and JSZip, are vendored under `apps/slides/vendor` with their MIT licences.
+Slides (`apps/slides`, design in [docs/slides-design.md](docs/slides-design.md)) makes a slide deck from a Markdown file named `something.slides.md`: slides divided by `---`, a `{{slide:layout=title}}` line for a slide's settings, `{{notes}}` for the speaker's notes, and the front matter for the deck's title, theme, size and transition. The current slide is edited on its canvas, as Docs' Visual view edits a page, or as its Markdown, and the deck presents full screen with a presenter window and exports as a page that presents itself, as a PowerPoint file (structural, editable) and as a PDF (each slide as drawn); a PowerPoint file imports as a deck. The libraries for those, PptxGenJS, pdf-lib and JSZip, are vendored under `apps/slides/vendor` with their MIT licences.
 
 ## The editing kit
 
-`apps/md-editor` is the editing layer the Editor and Slides share, beside the Markdown engine in `apps/md-engine`: the page view (`page-view.js`, from Dinah Desktop), the vendored CodeMirror, ProseMirror and Mermaid, and `kit.js`, which gives an application the formats, the paragraph styles, Insert, the / menu's items, formatting on Markdown text and the dialogs, as `window.yavcMdEditor`. An application passes a small context saying where a format goes and takes the kit's command entries into its own command table.
+`apps/md-editor` is the editing layer Docs and Slides share, beside the Markdown engine in `apps/md-engine`: the page view (`page-view.js`, from Dinah Desktop), the vendored CodeMirror, ProseMirror and Mermaid, and `kit.js`, which gives an application the formats, the paragraph styles, Insert, the / menu's items, formatting on Markdown text and the dialogs, as `window.yavcMdEditor`. An application passes a small context saying where a format goes and takes the kit's command entries into its own command table.
+
+## Portable content packages
+
+`go run ./cmd/yavc-content -out <new-directory>` assembles Editor, Docs, Slides and Diagrams with their shared assets and a SHA256 manifest. Docker reintegrates this same release set. The receiving-host contract is documented in [docs/content-workspace-contract.md](docs/content-workspace-contract.md).
 
 ## For agents
 
-Every application's commands are an API (design in [docs/agents-design.md](docs/agents-design.md)). Each package under `apps/` has an `actions.json` (provider ids `yavc.files`, `yavc.editor`, `yavc.terminal`, `yavc.settings`, `yavc.slides`) in PUDL's applet actions form, with a JSON Schema for every action's input and output; `GET /api/actions` is the catalogue of all of them, with no sign-in, and `POST /mcp` is a Model Context Protocol server offering `applet_discover`, `applet_invoke`, `applet_status`, `applet_cancel` and `applet_artifact`. An invocation is relayed to a page the person has open, because their files and the applications are in the browser: the page keeps an event stream from the engine (`static/bridge.js`), runs the action through PUDL's broker and posts the record back. A person pairs an agent in Settings, under Agents, with a token the agent sends as a bearer token; the page asks the person before an action does more than the token allows. The page at `/agents` says the same for an agent to read.
+Every application's commands are an API (design in [docs/agents-design.md](docs/agents-design.md)). Each package under `apps/` has an `actions.json` (provider ids `yavc.files`, `yavc.editor`, `yavc.docs`, `yavc.terminal`, `yavc.settings`, `yavc.slides`) in PUDL's applet actions form, with a JSON Schema for every action's input and output; `GET /api/actions` is the catalogue of all of them, with no sign-in, and `POST /mcp` is a Model Context Protocol server offering `applet_discover`, `applet_invoke`, `applet_status`, `applet_cancel` and `applet_artifact`. An invocation is relayed to a page the person has open, because their files and the applications are in the browser: the page keeps an event stream from the engine (`static/bridge.js`), runs the action through PUDL's broker and posts the record back. A person pairs an agent in Settings, under Agents, with a token the agent sends as a bearer token; the page asks the person before an action does more than the token allows. The page at `/agents` says the same for an agent to read.
 
 ## Licence
 
