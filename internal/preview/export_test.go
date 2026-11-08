@@ -20,6 +20,25 @@ func exportHTML(t *testing.T, source string) string {
 	return out.String()
 }
 
+func TestExcludedFootnoteReferencesDoNotExportTheirDefinitions(t *testing.T) {
+	source := "Visible[^visible] and again[^visible]. {{no-export}}SECRET_REF[^hidden]{{/no-export}}\n\n[^hidden]: SECRET_NOTE ![secret](SECRET_IMAGE.png)\n\n[^unused]: UNUSED_NOTE\n\n[^visible]: The **visible** note.\n"
+	out := exportHTML(t, source)
+	if strings.Contains(out, "SECRET_") || strings.Contains(out, "UNUSED_NOTE") {
+		t.Fatal(out)
+	}
+	if strings.Count(out, `data-footnote-ref="visible"`) != 2 || !strings.Contains(out, `data-footnote-number="1"`) || !strings.Contains(out, "<strong>visible</strong>") {
+		t.Fatal(out)
+	}
+	blocks, _ := Render(source)
+	var editing strings.Builder
+	for _, block := range blocks {
+		editing.WriteString(block.HTML)
+	}
+	if !strings.Contains(editing.String(), "UNUSED_NOTE") || !strings.Contains(editing.String(), "SECRET_NOTE") {
+		t.Fatal("Export pruning changed the editing tree")
+	}
+}
+
 func TestExportExclusionsPrecedeContentsAndAssetDiscovery(t *testing.T) {
 	source := "{{toc:min=1 max=3}}\n\n# Visible\n\nBefore{{no-export}}SECRET_INLINE{{/no-export}}after.\n\n{{no-export}}\n## SECRET_HEADING\n\n![SECRET_IMAGE](secret.png)\n\n{{page-break}}\n{{/no-export}}\n\n{{draft-note}}\nSECRET_DRAFT\n{{/draft-note}}\n\nLast.\n"
 	out := exportHTML(t, source)

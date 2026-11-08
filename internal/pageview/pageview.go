@@ -22,9 +22,11 @@ import (
 	"html"
 	"reflect"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"unicode"
+	"yavc.app/internal/footnotes"
 	"yavc.app/internal/shortcodes"
 
 	"github.com/yuin/goldmark"
@@ -63,6 +65,10 @@ func Parse(part string) (*Node, error) {
 
 // ParseWithMacros retains custom invocations as inline atoms.
 func ParseWithMacros(part string, registry *shortcodes.MacroRegistry) (*Node, error) {
+	return parseWithNotes(part, registry, nil)
+}
+
+func parseWithNotes(part string, registry *shortcodes.MacroRegistry, notes map[string]int) (*Node, error) {
 	part = strings.TrimRight(part, "\n")
 	if strings.TrimSpace(part) == "" || strings.Contains(part, "\r") {
 		return nil, ErrNotEditable
@@ -72,10 +78,27 @@ func ParseWithMacros(part string, registry *shortcodes.MacroRegistry) (*Node, er
 	if registry != nil {
 		engine = goldmark.New(goldmark.WithExtensions(extension.GFM, shortcodes.WithMacros(registry)))
 	}
+	if len(notes) > 0 {
+		extensions := []goldmark.Extender{extension.GFM, shortcodes.WithMacros(registry), footnotes.Extension}
+		engine = goldmark.New(goldmark.WithExtensions(extensions...))
+		var labels []string
+		for label := range notes {
+			if footnotes.ValidLabel(label) {
+				labels = append(labels, label)
+			}
+		}
+		sort.Strings(labels)
+		for _, label := range labels {
+			src = append(src, []byte("\n\n[^"+label+"]: Note context.\n")...)
+		}
+	}
 	root := engine.Parser().Parse(text.NewReader(src))
-	p := parser{src: src, registry: registry}
+	p := parser{src: src, registry: registry, notes: notes}
 	doc := &Node{Type: "doc"}
 	for n := root.FirstChild(); n != nil; n = n.NextSibling() {
+		if _, ok := n.(*extast.Footnote); ok {
+			continue
+		}
 		block, err := p.block(n)
 		if err != nil {
 			return nil, err
@@ -177,6 +200,7 @@ func tableRow(line string) string {
 type parser struct {
 	src      []byte
 	registry *shortcodes.MacroRegistry
+	notes    map[string]int
 }
 
 func (p parser) block(n ast.Node) (*Node, error) {
@@ -394,6 +418,16 @@ func (p parser) walk(n ast.Node, marks []Mark, out *[]*Node) error {
 			if err := p.walk(node, withMark(marks, link), out); err != nil {
 				return err
 			}
+		case *extast.FootnoteLink:
+			if err := flush(); err != nil {
+				return err
+			}
+			value, _ := node.AttributeString("data-footnote-ref")
+			label, ok := value.(string)
+			if !ok || !footnotes.ValidLabel(label) {
+				return ErrNotEditable
+			}
+			*out = append(*out, &Node{Type: "footnote_ref", Attrs: map[string]any{"label": label, "number": p.notes[label]}, Marks: marks})
 		case *ast.RawHTML:
 			// Underlining is the one piece of inline HTML the documents use, as
 			// <u> and </u> around a run of text.
@@ -931,6 +965,12 @@ func serializeInline(nodes []*Node, cell bool) (string, error) {
 			}
 		case "shortcode":
 			b.WriteString(stringAttr(n, "src"))
+		case "footnote_ref":
+			label := stringAttr(n, "label")
+			if !footnotes.ValidLabel(label) {
+				return "", fmt.Errorf("invalid footnote label")
+			}
+			b.WriteString("[^" + label + "]")
 		default:
 			return "", fmt.Errorf("a %s cannot be written inline", n.Type)
 		}

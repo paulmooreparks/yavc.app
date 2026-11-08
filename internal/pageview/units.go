@@ -17,12 +17,13 @@ import (
 // preview draws for it, the diagrams that HTML holds, and any marked parts
 // inside it.
 type Unit struct {
-	Start    int
-	End      int
-	Kind     string
-	HTML     string
-	Diagrams []preview.Diagram
-	Children []Unit
+	Start     int
+	End       int
+	Kind      string
+	HTML      string
+	Diagrams  []preview.Diagram
+	Children  []Unit
+	Footnotes map[string]int
 }
 
 // Units reads the parts of a page from the preview's blocks, outermost
@@ -31,6 +32,9 @@ func Units(blocks []preview.Block) []Unit {
 	var out []Unit
 	for _, b := range blocks {
 		units := unitsIn(b.HTML)
+		if len(units) > 0 {
+			units[0].Footnotes = b.Footnotes
+		}
 		for i := range units {
 			attachDiagrams(&units[i], b.Diagrams)
 		}

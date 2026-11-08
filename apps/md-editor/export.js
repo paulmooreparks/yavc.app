@@ -44,6 +44,7 @@
                 if (text) { out.push(Object.assign({ text: text, collapse: collapse, field: parent.dataset.docField, link: link ? link.getAttribute('href') : null }, typography(parent))); } return;
             }
             if (node.nodeType !== 1) { return; }
+            if (node.matches('sup.doc-footnote-ref[data-footnote-ref]')) { out.push(Object.assign({text:node.textContent,footnote:node.getAttribute('data-footnote-ref')},typography(node))); return; }
             if (node.matches('br')) { if (out.length && out[out.length - 1].collapse) { out[out.length - 1].text = out[out.length - 1].text.replace(/ $/, ''); } out.push({ text: '\n' }); return; }
             if (node.matches('img')) { throw new Error('Place pictures on their own line before exporting.'); }
             if (node.matches('input[type="checkbox"]')) { out.push({ text: node.checked ? '[x] ' : '[ ] ' }); return; }
@@ -90,6 +91,7 @@
         boundary.setAttribute('aria-hidden', 'true'); boundary.inert = true;
         surface.className = 'doc-page'; surface.style.cssText = 'padding:0;min-height:0;min-width:0;';
         surface.append(fragment); boundary.append(surface); document.body.append(boundary);
+        K.scopeFootnotes(surface);
         var controller;
         try {
             var D = await K.styles();
@@ -98,10 +100,16 @@
             await controller.update({ identity: source, inline: engine.styles(source).map(function (b) { return b.css; }), stylesheet: options.stylesheet || '' });
             if (controller.state().problems.length) { throw new Error(controller.state().problems.join(' ')); }
             page.background = rgb(getComputedStyle(surface).backgroundColor);
+            var noteContext=rendered.blocks.reduce(function(notes,block){return Object.assign(notes,block.footnotes||{});},Object.create(null)),noteNodes=new Map(),trustedNotes=new WeakSet();
+            surface.querySelectorAll('aside.doc-footnote[data-footnote]').forEach(function(node){
+                var label=node.getAttribute('data-footnote'),number=noteContext[label];
+                if(!Number.isInteger(number)||number<1||number>256||number!==Number(node.getAttribute('data-footnote-number'))||noteNodes.has(label)||!node.querySelector(':scope > .doc-footnote-body'))throw new Error('A footnote definition is ambiguous or unsupported. Check its label in the source.');
+                noteNodes.set(label,node);trustedNotes.add(node);
+            });
             [surface].concat(Array.from(surface.querySelectorAll('*'))).forEach(function (element) {
                 var css = getComputedStyle(element);
                 if (css.display === 'none') { return; }
-                if (/^(flex|grid|inline-flex|inline-grid)$/.test(css.display) || css.float !== 'none' || css.columnCount !== 'auto' && +css.columnCount > 1 || css.columnWidth !== 'auto' || +css.opacity !== 1) { throw new Error('This document uses a layout that Office export cannot represent yet.'); }
+                if (/^(flex|grid|inline-flex|inline-grid)$/.test(css.display) && !(trustedNotes.has(element)&&css.display==='grid') || css.float !== 'none' || css.columnCount !== 'auto' && +css.columnCount > 1 || css.columnWidth !== 'auto' || +css.opacity !== 1) { throw new Error('This document uses a layout that Office export cannot represent yet.'); }
             });
             var images = new Map(), totalImageBytes = 0;
             for (var pair of pictures) {
@@ -125,11 +133,12 @@
                 await Promise.all(Array.from(surface.querySelectorAll('img')).map(function (node) { return node.decode(); }));
                 return await options.renderPages(surface, page);
             }
-            var blocks = [];
+            var blocks = [],notes=[];
             function children(parent, target) { parent.childNodes.forEach(function (node) { block(node, target); }); }
             function block(node, target) {
                 if (node.nodeType === 3) { if (node.textContent.trim()) { target.push({ kind: 'paragraph', runs: [{ text: node.textContent }], style: typography(node.parentElement) }); } return; }
                 if (node.nodeType !== 1 || getComputedStyle(node).display === 'none') { return; }
+                if(trustedNotes.has(node))return;
                 if (node.matches('img')) { target.push(images.get(node)); return; }
                 if (node.matches('.sc-page-break')) { target.push({ kind: 'break' }); return; }
                 if (node.matches('hr')) { target.push({ kind: 'rule' }); return; }
@@ -161,15 +170,17 @@
                 children(node, target);
             }
             children(surface, blocks);
-            return { blocks: blocks, page: page, furniture: running, properties: props, warnings: ['PDF uses Roboto instead of the document font.'] };
+            noteNodes.forEach(function(node,label){var content=[];children(node.querySelector(':scope > .doc-footnote-body'),content);function check(items){items.forEach(function(b){if(b.kind==='table'||b.kind==='break')throw new Error('Footnote export supports paragraphs, lists, quotations and pictures. Move tables or page breaks into the document body.');if((b.runs||[]).some(function(r){return r.footnote;}))throw new Error('A footnote cannot contain another footnote reference in Office export.');if(b.blocks)check(b.blocks);(b.items||[]).forEach(check);});}check(content);notes.push({label:label,number:noteContext[label],blocks:content});});
+            return { blocks: blocks, footnotes:notes, page: page, furniture: running, properties: props, warnings: ['PDF uses Roboto instead of the document font.'] };
         } finally { if (controller) { controller.destroy(); } boundary.remove(); }
     }
     function docxDocument(model, D) {
-        var numbering = [], listCount = 0, bookmarks = new Map();
+        var numbering = [], listCount = 0, bookmarks = new Map(),notes=new Map((model.footnotes||[]).map(function(note){return [note.label,note];})),referenced=new Set();
         function bookmark(id) { if (!bookmarks.has(id)) { bookmarks.set(id, 'yavc_' + (bookmarks.size + 1)); } return bookmarks.get(id); }
         function runs(items) {
             return items.flatMap(function (r) {
                 var options = { bold: r.bold, italics: r.italic, underline: r.underline ? {} : undefined, strike: r.strike, superScript: r.sup, subScript: r.sub, highlight: r.mark ? 'yellow' : undefined, size: (r.size || 11) * 2, color: r.color || '202124', font: r.font || 'Arial' };
+                if(r.footnote){var note=notes.get(r.footnote);if(!note)throw new Error('A footnote reference has no exported definition.');var id='yavc_note_'+note.number;if(referenced.has(r.footnote))return [new D.SimpleField('NOTEREF '+id+' \\h \\f',String(note.number))];referenced.add(r.footnote);return [new D.Bookmark({id:id,children:[new D.FootnoteReferenceRun(note.number)]})];}
                 if (r.field) { return [new D.TextRun(Object.assign({}, options, { children: [r.field === 'page' ? D.PageNumber.CURRENT : D.PageNumber.TOTAL_PAGES] }))]; }
                 var children = String(r.text).split('\n').map(function (text, i) { return new D.TextRun(Object.assign({}, options, { text: text, break: i ? 1 : undefined })); });
                 if (r.link && r.link[0] === '#') { return [new D.InternalHyperlink({ anchor: bookmark(r.link.slice(1)), children: children })]; }
@@ -205,7 +216,8 @@
             var content = cells.length ? [new D.Table({ width: { size: 100, type: D.WidthType.PERCENTAGE }, borders: Object.fromEntries(['top','bottom','left','right','insideHorizontal','insideVertical'].map(function (key) { return [key, { style: D.BorderStyle.NONE, size: 0 }]; })), rows: [new D.TableRow({ children: cells.map(function (cell) { return new D.TableCell({ children: [new D.Paragraph({ children: runs(cell.runs), alignment: cell.align })] }); }) })] })] : [new D.Paragraph({})];
             return kind === 'header' ? new D.Header({ children: content }) : new D.Footer({ children: content });
         }
-        return new D.Document({ title: p.title || '', creator: p.author || '', subject: p.subject || '', keywords: p.keywords || '', description: '', background: { color: model.page.background || 'ffffff' }, numbering: { config: numbering },
+        var footnotes=Object.create(null);notes.forEach(function(note){footnotes[note.number]={children:write(note.blocks,0)};});
+        return new D.Document({ title: p.title || '', creator: p.author || '', subject: p.subject || '', keywords: p.keywords || '', description: '', background: { color: model.page.background || 'ffffff' }, numbering: { config: numbering }, footnotes:footnotes,features:{updateFields:notes.size>0},
             sections: [{ headers: { default: running('header'), first: running('header', !model.page.furniture.first) }, footers: { default: running('footer'), first: running('footer') }, properties: { titlePage: !model.page.furniture.first, page: { size: { width: Math.round(model.page.width * 20), height: Math.round(model.page.height * 20) }, margin: { header: Math.max(0, m[1] / 2 - 6) * 20, footer: Math.max(0, m[3] / 2 - 6) * 20, left: m[0] * 20, top: m[1] * 20, right: m[2] * 20, bottom: m[3] * 20 } } }, children: children.length ? children : [new D.Paragraph({})] }] });
     }
     function pdfDefinition(model) {
@@ -243,10 +255,15 @@
             await K.loadScript(K.here + 'vendor/docx-9.15.2/index.js' + K.stamp);
             blob = await window.docx.Packer.toBlob(docxDocument(model, window.docx));
         } else {
+            if((model.footnotes||[]).length){
+                await K.loadScript(K.here+'pdf-notes.js'+K.stamp);
+                blob=await window.yavcFootnotePDF.write(model,K);
+            }else{
             checkGlyphs(model.blocks.concat([].concat(model.furniture.header, model.furniture.footer)), await pdfFont(K));
             await K.loadScript(K.here + 'vendor/pdfmake-0.2.23/pdfmake.min.js' + K.stamp);
             await K.loadScript(K.here + 'vendor/pdfmake-0.2.23/vfs_fonts.js' + K.stamp);
             blob = await new Promise(function (resolve, reject) { var timer = setTimeout(function () { reject(new Error('PDF generation did not finish. Try a smaller document.')); }, 30000); try { window.pdfMake.createPdf(pdfDefinition(model)).getBlob(function (value) { clearTimeout(timer); resolve(value); }); } catch (err) { clearTimeout(timer); reject(err); } });
+            }
         }
         if (options.current && !options.current()) { throw new Error('The document changed during export. Export it again.'); }
         return { blob: blob, warnings: format === 'pdf' ? model.warnings : [], blocks: model.blocks.length };

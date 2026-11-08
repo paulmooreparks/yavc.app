@@ -58,29 +58,48 @@
     }
     // Input units exclude existing widgets. A unit is a line or an atomic block.
     function plan(blocks, page) {
-        var d = dimensions(page), gaps = [], sheet = 0, added = 0, oversized = false, ends = [];
+        var d = dimensions(page), gaps = [], sheet = 0, added = 0, oversized = false, ends = [], references = [], noteProblem = '';
+        var hasNotes=blocks.footnotes&&blocks.footnotes.length||blocks.some(function(block){return block.references&&block.references.length;});
+        var notes = hasNotes && window.yavcPageFootnotes ? window.yavcPageFootnotes.create(blocks,d) : null;
         // Resolve keep chains once, so a long run of headings stays linear.
-        for(var i=blocks.length-1;i>=0;i--)ends[i]=blocks[i].keepNext&&i+1<blocks.length&&!blocks[i+1].breakBefore&&!blocks[i+1].control?ends[i+1]:i;
+        for(var i=blocks.length-1;i>=0;i--){
+            ends[i]=blocks[i].keepNext&&i+1<blocks.length&&!blocks[i+1].breakBefore&&!blocks[i+1].control?ends[i+1]:i;
+            if(notes){var following=ends[i]>i?references[i+1]:new Set(),own=blocks[i].references||[];references[i]=own.every(function(label){return following.has(label);})?following:new Set(Array.from(following).concat(own));}
+        }
         blocks.forEach(function (block, index) {
             var top = block.top + added, start = sheet * (d.height + GAP), used = top - start;
             var last=blocks[ends[index]],group=last.top+last.height-block.top,height=group<=d.content+.5?Math.max(block.height,group):block.height;
-            if (index && (block.breakBefore || (used > .5 && used + height > d.content + .5))) {
+            var noteProposal=notes?notes.proposal(height>block.height?references[index]:new Set(block.references||[])):null;
+            if (index && (block.breakBefore || (used > .5 && used + height + (noteProposal?noteProposal.height:0) > d.content + .5))) {
                 var space = d.height + GAP - used;
                 gaps.push({ index: index, pos: block.pos, height: Math.max(0, space) });
                 added += Math.max(0, space); sheet++;
+                if(notes){notes.next();noteProposal=notes.proposal(height>block.height?references[index]:new Set(block.references||[]));}
+            }
+            if(notes){
+                if(height>block.height&&height+noteProposal.height>d.content+.5){height=block.height;noteProposal=notes.proposal(new Set(block.references||[]));}
+                if(block.height+noteProposal.height>d.content+.5){oversized=true;noteProblem='A footnote leaves too little space for its reference on the page. Shorten the note or enlarge the page.';}
+                notes.commit(noteProposal);
             }
             if (block.height > d.content + .5) { oversized = true; }
             if (sheet >= LIMIT) { throw new Error('Document view is limited to 1,000 pages.'); }
         });
-        return { gaps: gaps, count: sheet + 1, oversized: oversized };
+        var result={ gaps: gaps, count: sheet + 1, oversized: oversized };
+        if(notes){result.footnotes=notes.placements();result.problem=notes.problem()||noteProblem;}
+        if(blocks.noteProblem)result.problem=blocks.noteProblem;
+        return result;
     }
     function blocksOf(dom, positions, position) {
         var host = dom.closest('.doc-paginated'), scale = host ? Number(host.style.zoom) || 1 : 1;
         var top = dom.getBoundingClientRect().top, blocks = [], sourceIndex = 0;
         var gaps = Array.from(dom.querySelectorAll('.doc-page-gap')).map(function (node) { var r = node.getBoundingClientRect(); return { bottom: r.bottom, height: r.height / scale }; });
-        function clean(y) { return (y - top) / scale - gaps.reduce(function (sum, gap) { return sum + (gap.bottom <= y + .5 ? gap.height : 0); }, 0); }
+        var noteNodes=Array.from(dom.children).filter(function(node){return node.matches('aside.doc-footnote[data-footnote]')&&Number(node.getAttribute('data-footnote-number'))>0;}),noteOffsets=noteNodes.filter(function(node){return getComputedStyle(node).position!=='absolute';}).map(function(node){var rect=node.getBoundingClientRect();return {bottom:rect.bottom,height:rect.height/scale};}),offsets=gaps.concat(noteOffsets);
+        if(Array.from(dom.querySelectorAll('aside.doc-footnote[data-footnote]')).some(function(node){return Number(node.getAttribute('data-footnote-number'))>0&&node.parentNode!==dom;}))blocks.noteProblem='Document page footnotes require top-level definitions. Move the definition outside its quotation or list, or edit it in Visual or Text view.';
+        function clean(y) { return (y - top) / scale - offsets.reduce(function (sum, gap) { return sum + (gap.bottom <= y + .5 ? gap.height : 0); }, 0); }
+        blocks.footnotes=noteNodes.map(function(node){return {label:node.getAttribute('data-footnote'),number:Number(node.getAttribute('data-footnote-number')),node:node,height:node.getBoundingClientRect().height/scale,pos:position?position(node.parentNode,Array.prototype.indexOf.call(node.parentNode.childNodes,node)):0,to:position?position(node.parentNode,Array.prototype.indexOf.call(node.parentNode.childNodes,node)+1):0,references:window.yavcPageFootnotes.references(node)};});
         function emit(node, suppliedPosition) {
             if (node.classList.contains('doc-page-gap')) return;
+            if(noteNodes.indexOf(node)>=0)return;
             var rect = node.getBoundingClientRect(), css = getComputedStyle(node), content=node;
             while(content.matches('.doc-block,.pm-source,.dinah-src,.dinah-block')&&content.childElementCount===1)content=content.firstElementChild;
             var contentCSS=getComputedStyle(content),previous=blocks[blocks.length-1];
@@ -103,14 +122,17 @@
             if (gapNode !== node && position) suppliedPosition = position(gapNode.parentNode, Array.prototype.indexOf.call(gapNode.parentNode.childNodes, gapNode));
             var block = { node: gapNode, pos: suppliedPosition, top: clean(rect.top), row: node.tagName === 'TR', columns: node.cells ? node.cells.length : 0,
                 height: clean(rect.bottom) - clean(rect.top) + Math.max(0, parseFloat(css.marginBottom) || 0),
+                references:node.matches('aside.doc-footnote')?[]:window.yavcPageFootnotes?window.yavcPageFootnotes.references(node):[],
                 keepNext:/^(avoid|avoid-page)$/.test(css.breakAfter)||/^(avoid|avoid-page)$/.test(contentCSS.breakAfter)||node.tagName==='TR'&&!!node.querySelector('th'),
                 breakAfter:/^(page|always)$/.test(css.breakAfter)||/^(page|always)$/.test(contentCSS.breakAfter),
                 control:node.matches('.sc-page-break')||!!node.querySelector('.sc-page-break'),
                 breakBefore: /^(page|always)$/.test(css.breakBefore)||/^(page|always)$/.test(contentCSS.breakBefore)||!!(previous&&(previous.control||previous.breakAfter)) };
-            var lines = window.yavcPageLines && window.yavcPageLines.measure(content, top, scale, gaps, position);
+            var lines = window.yavcPageLines && window.yavcPageLines.measure(content, top, scale, offsets, position);
             if (lines) {
+                var lineReferences=lines.map(function(){return [];});
+                content.querySelectorAll('.doc-footnote-ref[data-footnote-ref]').forEach(function(ref){var rect=ref.getBoundingClientRect(),middle=clean((rect.top+rect.bottom)/2),index=0;while(index+1<lines.length&&lines[index+1].top<=middle)index++;lineReferences[index].push(ref.getAttribute('data-footnote-ref'));});
                 lines.forEach(function (line, i) {
-                    blocks.push(Object.assign({}, block, line, { anchor: i ? line.anchor : null, pos: i ? line.pos : block.pos,
+                    blocks.push(Object.assign({}, block, line, { references:lineReferences[i],anchor: i ? line.anchor : null, pos: i ? line.pos : block.pos,
                         breakBefore: i === 0 && block.breakBefore, breakAfter: i === lines.length - 1 && block.breakAfter,
                         keepNext: i < line.orphans - 1 || i >= lines.length - line.widows && i < lines.length - 1 || i === lines.length - 1 && block.keepNext }));
                 });
@@ -135,15 +157,16 @@
                 try {
                     // Preview source wrappers do not participate in physical layout.
                     Array.from(o.flow.querySelectorAll('.dinah-src[data-start]')).reverse().forEach(function (node) { node.replaceWith.apply(node, Array.from(node.childNodes)); });
-                    var blocks = blocksOf(o.flow), layout = plan(blocks, page), next = JSON.stringify([page, layout.gaps, layout.count, layout.oversized]);
+                    var blocks = blocksOf(o.flow), layout = plan(blocks, page), next = JSON.stringify([page, layout.gaps, layout.count, layout.oversized,layout.footnotes,layout.problem]);
                     var d = surface(o.host, page); o.host.style.minHeight = (layout.count * (d.height + GAP) - GAP) + 'px'; o.host.setAttribute('data-page-count', layout.count);
                     o.changed(layout);
                     if (next !== signature) {
                         o.flow.querySelectorAll('.doc-page-gap').forEach(function (node) { node.remove(); }); o.flow.normalize();
                         blocks = blocksOf(o.flow); layout = plan(blocks, page);
                         if (window.yavcDocumentSettings) { window.yavcDocumentSettings.decorate(o.host, page, layout.count); }
-                        signature = JSON.stringify([page, layout.gaps, layout.count, layout.oversized]);
+                        signature = JSON.stringify([page, layout.gaps, layout.count, layout.oversized,layout.footnotes,layout.problem]);
                         layout.gaps.slice().reverse().forEach(function (gap) { var block = blocks[gap.index]; window.yavcPageLines.insert(o.flow, block, spacer(gap.height, !!block.anchor, block)); });
+                        (layout.footnotes||[]).forEach(function(note){var node=blocks.footnotes.find(function(item){return item.label===note.label;}).node;node.classList.add('doc-footnote-paged');node.style.top=note.top+'px';node.style.width='100%';});
                     }
                 } catch (err) { o.problem(err.message); }
             });
@@ -167,7 +190,7 @@
                 try {
                     var d = surface(o.page, page), positions = []; v.state.doc.forEach(function (n, pos) { positions.push(pos); });
                     var blocks = blocksOf(v.dom, positions, function (node, offset) { return v.posAtDOM(node, offset); }), layout = plan(blocks, page);
-                    var next = JSON.stringify([page, layout.gaps, layout.count, layout.oversized]);
+                    var next = JSON.stringify([page, layout.gaps, layout.count, layout.oversized,layout.footnotes,layout.problem]);
                     o.page.style.minHeight = (layout.count * (d.height + GAP) - GAP) + 'px';
                     o.page.setAttribute('data-page-count', layout.count);
                     if (o.paginated) { o.paginated(layout); }
@@ -175,6 +198,7 @@
                         signature = next;
                         if (window.yavcDocumentSettings) { window.yavcDocumentSettings.decorate(o.page, page, layout.count); }
                         var widgets = layout.gaps.map(function (gap) { return PM.Decoration.widget(gap.pos, function () { return spacer(gap.height, !!blocks[gap.index].anchor, blocks[gap.index]); }, { side: -1, key: gap.pos + ':' + gap.height, ignoreSelection: true }); });
+                        (layout.footnotes||[]).forEach(function(note){widgets.push(PM.Decoration.node(note.pos,note.to,{class:'doc-footnote-paged',style:'top:'+note.top+'px;width:100%;'}));});
                         v.dispatch(v.state.tr.setMeta(key, PM.DecorationSet.create(v.state.doc, widgets)).setMeta('addToHistory', false));
                     }
                 } catch (err) { if (o.paginationProblem) { o.paginationProblem(err.message); } }

@@ -156,6 +156,15 @@ var schemaCache = null;
           attrs: { src: { default: '' }, html: { default: '' } },
           parseDOM: [{ tag: 'span.pm-sc[data-src]', getAttrs: function (d) { return { src: d.getAttribute('data-src'), html: window.yavcHTML.clean(d.getAttribute('data-html') || '') }; } }],
           toDOM: function (n) { return ['span', { class: 'pm-sc', 'data-src': n.attrs.src, 'data-html': n.attrs.html }]; } },
+        footnote: { group: 'block', content: 'block+', defining: true,
+          attrs: withPlace({ label: { default: '' }, number: { default: -1 }, tail: { default: '' } }),
+          parseDOM: [{ tag: 'aside.doc-footnote[data-footnote]', contentElement: '.doc-footnote-body', getAttrs: function (d) { return { label: d.getAttribute('data-footnote'), number: Number(d.getAttribute('data-footnote-number')) || -1 }; } }],
+          toDOM: function (n) { return ['aside', { class: 'doc-footnote', 'data-footnote': n.attrs.label, 'data-footnote-number': n.attrs.number },
+            ['span', { class: 'doc-footnote-label', contenteditable: 'false' }, n.attrs.number > 0 ? String(n.attrs.number) : n.attrs.label], ['div', { class: 'doc-footnote-body' }, 0]]; } },
+        footnote_ref: { group: 'inline', inline: true, atom: true, selectable: true,
+          attrs: { label: { default: '' }, number: { default: -1 } },
+          parseDOM: [{ tag: 'sup.doc-footnote-ref[data-footnote-ref]', getAttrs: function (d) { return { label: d.getAttribute('data-footnote-ref'), number: Number(d.getAttribute('data-footnote-number')) || -1 }; } }],
+          toDOM: function (n) { var label = n.attrs.number > 0 ? String(n.attrs.number) : '?'; return ['sup', { class: 'doc-footnote-ref', 'data-footnote-ref': n.attrs.label, 'data-footnote-number': n.attrs.number, contenteditable: 'false' }, ['a', { 'aria-label': 'Footnote ' + label }, label]]; } },
         text: { group: 'inline' },
         // A line break, as HTML pasted from another program can hold one.
         hard_break: { group: 'inline', inline: true, selectable: false, parseDOM: [{ tag: 'br' }], toDOM: function () { return ['br']; } },
@@ -225,6 +234,7 @@ var schemaCache = null;
      } */
   function attach(o) {
     var PM = null, view = null, on = false, shown = null, loading = 0;
+    var footnoteNamespace='yavc-notes-'+crypto.randomUUID();
     var dirty = false, syncTimer = 0, syncing = null, reloadTimer = 0, sourceStale = false, refreshFocus = null, frozen = false;
     function updating(value) {
       if (value && !sourceStale && view && view.hasFocus()) refreshFocus = view;
@@ -280,7 +290,7 @@ var schemaCache = null;
           o.page.replaceChildren();
           view = new PM.EditorView(o.page, {
             state: state,
-            nodeViews: { source_block: sourceView, container: boxView, columns: boxView, shortcode: inlineView },
+            nodeViews: { source_block: sourceView, container: boxView, columns: boxView, shortcode: inlineView,footnote:footnoteView,footnote_ref:footnoteView },
             handlePaste: handlePaste,
             // HTML pasted from another program is made safe before the
             // editor reads it (safe-html.js).
@@ -717,6 +727,36 @@ var schemaCache = null;
       if (view && suggestKey) view.dispatch(view.state.tr.setMeta(suggestKey, true));
     }
 
+    function footnoteView(node) {
+      var rendered=PM.DOMSerializer.renderSpec(document,node.type.spec.toDOM(node)),dom=rendered.dom,isReference=node.type.name==='footnote_ref';
+      function update(next){
+        if(next.type!==node.type)return false;
+        node=next;
+        if(isReference){var label=next.attrs.number>0?String(next.attrs.number):'?';dom.setAttribute('data-footnote-ref',next.attrs.label);dom.setAttribute('data-footnote-number',next.attrs.number);dom.querySelector('a').textContent=label;dom.querySelector('a').setAttribute('aria-label','Footnote '+label);}
+        else {dom.setAttribute('data-footnote',next.attrs.label);dom.setAttribute('data-footnote-number',next.attrs.number);dom.querySelector('.doc-footnote-label').textContent=next.attrs.number>0?String(next.attrs.number):next.attrs.label;}
+        window.yavcMdEditor.scopeFootnotes(dom,footnoteNamespace);return true;
+      }
+      update(node);
+      return {dom:dom,contentDOM:rendered.contentDOM,update:update,ignoreMutation:function(mutation){return mutation.type!=='selection'&&(isReference||mutation.type==='attributes'&&mutation.target===dom||dom.querySelector('.doc-footnote-label')&&dom.querySelector('.doc-footnote-label').contains(mutation.target));}};
+    }
+    function footnoteNumbers() {
+      return new PM.Plugin({appendTransaction:function(transactions,old,state){
+        if(!transactions.some(function(tr){return tr.docChanged;}))return null;
+        var definitions=new Map(),numbers=new Map();
+        state.doc.descendants(function(node){if(node.type.name==='footnote'&&!definitions.has(node.attrs.label))definitions.set(node.attrs.label,node);});
+        function collect(node){if(node.type.name==='footnote')return false;if(node.type.name==='footnote_ref'&&definitions.has(node.attrs.label)&&!numbers.has(node.attrs.label))numbers.set(node.attrs.label,numbers.size+1);}
+        state.doc.descendants(collect);
+        for(var label of numbers.keys())definitions.get(label).descendants(collect);
+        var seen=new Set(),tr=state.tr;
+        state.doc.descendants(function(node,pos){
+          if(node.type.name!=='footnote'&&node.type.name!=='footnote_ref')return;
+          var number=numbers.get(node.attrs.label)||-1;
+          if(node.type.name==='footnote'){if(seen.has(node.attrs.label))number=-1;seen.add(node.attrs.label);}
+          if(node.attrs.number!==number)tr.setNodeMarkup(pos,null,Object.assign({},node.attrs,{number:number}));
+        });
+        return tr.steps.length?tr.setMeta('addToHistory',false):null;
+      }});
+    }
     function plugins(schema) {
       var n = schema.nodes;
       // Consult current preferences without rebuilding the editor state or
@@ -765,6 +805,7 @@ var schemaCache = null;
       return [
         listShortcuts(schema),
         taskBoxes(schema),
+        footnoteNumbers(),
         window.yavcDocumentPages.plugin(PM, o),
         suggestionPlugin(),
         findPlugin(),
@@ -1117,6 +1158,7 @@ var schemaCache = null;
         var inner = document.createElement('div');
         dom.replaceChildren(inner);
         o.draw(inner, nd.attrs.html || '<pre>' + (nd.attrs.src || '').replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</pre>', nd.attrs.diagrams || []);
+        window.yavcMdEditor.scopeFootnotes(inner,footnoteNamespace);
         // A valid stylesheet contributes no drawn block or selectable outline.
         // Keep the source node so unchanged Markdown still serializes verbatim.
         if (hiddenStyles(inner)) { dom.hidden = true; }
@@ -1567,6 +1609,14 @@ var schemaCache = null;
     // A link on the page is followed with Ctrl+click; a plain click places the caret.
     function click(e) {
       if (!on) return;
+      var reference=e.target.closest&&e.target.closest('.doc-footnote-ref[data-footnote-ref]');
+      if(reference&&o.page.contains(reference)){
+        e.preventDefault();e.stopPropagation();var label=reference.getAttribute('data-footnote-ref'),found=null;
+        view.state.doc.descendants(function(node,pos){if(found==null&&node.type.name==='footnote'&&node.attrs.label===label)found=pos;});
+        if(found!=null){view.dispatch(view.state.tr.setSelection(PM.TextSelection.near(view.state.doc.resolve(found+1))).scrollIntoView());view.focus();}
+        else {var definition=Array.from(o.page.querySelectorAll('.doc-footnote')).find(function(note){return note.getAttribute('data-footnote')===label;});if(definition)definition.scrollIntoView({block:'nearest'});}
+        return;
+      }
       var link = e.target.closest && e.target.closest('a[href]');
       if (link && !e.ctrlKey) { e.preventDefault(); e.stopPropagation(); }
     }
@@ -1606,6 +1656,27 @@ var schemaCache = null;
           remove: function () { if (current()) view.dispatch(view.state.tr.deleteSelection().scrollIntoView().setMeta('uiEvent', 'cut')); } };
       },
       sync: sync,
+      prepareEdit: async function () {
+        await sync();
+        if(on&&sourceStale){clearTimeout(reloadTimer);await load();}
+        return !!(view&&on&&!sourceStale&&!frozen&&view.editable);
+      },
+      footnoteSelection: function () {
+        if (!view || !on || sourceStale || frozen || !view.editable || !view.state.selection.$to.parent.isTextblock) return null;
+        var target=view,doc=view.state.doc,selection=view.state.selection;
+        function current(){return on&&view===target&&view.editable&&!sourceStale&&!frozen&&view.state.doc===doc&&view.state.selection.eq(selection);}
+        return {current:current,apply:function(text){
+          if(!current()||typeof text!=='string'||!text.trim()||text.length>16384)return false;
+          var schema=view.state.schema,used=new Set(),number=0;
+          doc.descendants(function(node){if(node.type.name==='footnote'||node.type.name==='footnote_ref'){used.add(node.attrs.label);number=Math.max(number,node.attrs.number||0);}});
+          if(used.size>=256)return false;
+          var index=1;while(used.has('note-'+index))index++;
+          var label='note-'+index,paragraphs=text.split(/\n\s*\n/).map(function(part){var content=[];part.split('\n').forEach(function(line,i){if(i)content.push(schema.nodes.soft_break.create());if(line)content.push(schema.text(line));});return schema.nodes.paragraph.create(null,content);});
+          var note=schema.nodes.footnote.create({label:label,number:number+1},paragraphs),ref=schema.nodes.footnote_ref.create({label:label,number:number+1});
+          var tr=view.state.tr.insert(selection.to,ref);tr.insert(tr.doc.content.size,note);tr.setSelection(PM.TextSelection.near(tr.doc.resolve(selection.to+1)));
+          view.dispatch(tr.scrollIntoView());view.focus();return true;
+        }};
+      },
       textChanged: textChanged,
       reload: function () { return on ? load() : Promise.resolve(); },
       // The draft's suggestions, to show on the page with Accept and Reject.

@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 const context = vm.createContext({ window: {} });
 vm.runInContext(readFileSync(new URL('../paper-sizes.js', import.meta.url), 'utf8'), context);
+vm.runInContext(readFileSync(new URL('../page-footnotes.js', import.meta.url), 'utf8'), context);
 vm.runInContext(readFileSync(new URL('../pages.js', import.meta.url), 'utf8'), context);
 const P = context.window.yavcDocumentPages;
 vm.runInContext(readFileSync(new URL('../document-settings.js', import.meta.url), 'utf8'), context);
@@ -68,4 +69,22 @@ test('line keep groups prevent single-line paragraph fragments and retain forced
     for(let i=1;i<boundaries.length;i++)assert.ok(boundaries[i]-boundaries[i-1]>=2);
     assert.equal(layout.oversized,false);
     assert.equal(P.plan(lines.map((line,i)=>({...line,breakBefore:i===1})),page).gaps[0].index,1);
+});
+
+test('page footnotes reserve space at the first reference and keep repetitions as cross-references',()=>{
+    const page=P.settings({page:'300pt x 400pt',margins:'20pt'}),d=P.dimensions(page);
+    const blocks=[{top:0,height:440},{top:440,height:20,references:['proof']},{top:460,height:20,references:['proof']}];
+    blocks.footnotes=[{label:'proof',number:1,height:60,pos:100,to:110}]; // check-ignore(title-case-labels): This is a Markdown identifier, not a UI label.
+    const layout=P.plan(blocks,page);
+    assert.equal(layout.gaps[0].index,1);
+    assert.equal(layout.footnotes.length,1);
+    assert.equal(layout.footnotes[0].page,2);
+    assert.equal(layout.footnotes[0].top+layout.footnotes[0].height,d.height+24+d.content);
+    assert.equal(layout.oversized,false);
+    assert.equal(layout.problem,'');
+    const missing=P.plan([{top:0,height:20,references:['missing']}],page);
+    assert.match(missing.problem,/no definition/);
+    const excessive=[{top:0,height:20,references:['big']}];excessive.footnotes=[{label:'big',number:1,height:d.content}]; // check-ignore(title-case-labels): This is a Markdown identifier, not a UI label.
+    assert.equal(P.plan(excessive,page).oversized,true);
+    assert.match(P.plan(excessive,page).problem,/Shorten the note/);
 });

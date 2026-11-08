@@ -4,30 +4,32 @@
     'use strict';
     var LIMIT = 20000;
     function lines(element, origin, scale, gaps, position) {
-        if (!element.matches('p,li') || element.closest('.pm-source') || element.querySelector('img,svg,iframe,[contenteditable="false"]:not(.doc-page-gap)')) return null;
+        if (!element.matches('p,li') || element.closest('.pm-source') || element.querySelector('img,svg,iframe,[contenteditable="false"]:not(.doc-page-gap):not(.doc-footnote-ref)')) return null;
         var css = getComputedStyle(element);
         if (/^(avoid|avoid-page)$/.test(css.breakInside) || /^(pre|nowrap)$/.test(css.whiteSpace)) return null;
         function clean(y) { return (y - origin) / scale - gaps.reduce(function (sum, gap) { return sum + (gap.bottom <= y + .5 ? gap.height : 0); }, 0); }
-        var walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT), text, rows = [], range = document.createRange();
+        var walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT), text, rows = [], range = document.createRange();
         while ((text = walker.nextNode())) {
-            if (!text.length || text.parentElement.closest('.doc-page-gap')) continue;
-            range.selectNodeContents(text);
+            var atom = text.nodeType === Node.ELEMENT_NODE && text.matches('.doc-footnote-ref');
+            if (!atom && (text.nodeType !== Node.TEXT_NODE || !text.length || text.parentElement.closest('.doc-page-gap,.doc-footnote-ref'))) continue;
+            if (atom) range.selectNode(text); else range.selectNodeContents(text);
             var rects = Array.from(range.getClientRects()).filter(function (r) { return r.width > 0 && r.height > 0; });
             for (var rect of rects) {
                 var top = clean(rect.top), bottom = clean(rect.bottom), previous = rows[rows.length - 1];
                 if (previous && top < previous.bottom - .5) { previous.bottom = Math.max(previous.bottom, bottom); continue; }
                 // Find the first character on this measured line. Character
                 // ranges use UTF-16 DOM offsets, matching ProseMirror positions.
-                var low = 0, high = text.length;
+                var low = 0, high = atom ? 0 : text.length;
                 while (low < high) {
                     var mid = Math.floor((low + high) / 2);
                     range.setStart(text, mid); range.setEnd(text, mid + 1);
                     if (range.getBoundingClientRect().top < rect.top - .5) low = mid + 1; else high = mid;
                 }
-                if (low === text.length) continue;
+                if (!atom && low === text.length) continue;
                 // A range must never start between a Unicode surrogate pair.
-                if (low && /[\uDC00-\uDFFF]/.test(text.data[low])) low--;
-                rows.push({ anchor: text, offset: low, top: top, bottom: bottom, pos: position ? position(text, low) : 0 });
+                if (!atom && low && /[\uDC00-\uDFFF]/.test(text.data[low])) low--;
+                var anchor = atom ? text.parentNode : text, at = atom ? Array.prototype.indexOf.call(anchor.childNodes, text) : low;
+                rows.push({ anchor: anchor, offset: at, top: top, bottom: bottom, pos: position ? position(anchor, at) : 0 });
                 if (rows.length > LIMIT) return null;
             }
         }
@@ -48,6 +50,7 @@
     }
     function fragment(flow, blocks, from, to) {
         var range = document.createRange(), first = blocks[from], last = blocks[to];
+        if(!first)return document.createDocumentFragment();
         if (first.anchor) range.setStart(first.anchor, first.offset); else range.setStartBefore(first.node);
         if (!last) range.setEnd(flow, flow.childNodes.length);
         else if (last.anchor) range.setEnd(last.anchor, last.offset); else range.setEndBefore(last.node);
@@ -56,6 +59,7 @@
         while (ancestor && ancestor !== flow) {
             var shell = ancestor.cloneNode(false); shell.removeAttribute('id'); shell.append(output); output = shell; ancestor = ancestor.parentElement;
         }
+        output.querySelectorAll('aside.doc-footnote[data-footnote-number]').forEach(function(note){if(Number(note.getAttribute('data-footnote-number'))>0)note.remove();});
         // A continued ordered list retains its displayed item number.
         var start = range.startContainer.nodeType === Node.TEXT_NODE ? range.startContainer.parentElement : range.startContainer.childNodes[range.startOffset] || range.startContainer;
         var lists = [], continuedItems = [], branch = start;

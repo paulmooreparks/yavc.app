@@ -1134,7 +1134,7 @@
         function pagedView(mode) { return mode === 'document'; }
         function pageLayout(layout) {
             el.pages.textContent = layout.count + (layout.count === 1 ? ' page' : ' pages');
-            pageNotice(layout.oversized ? 'An indivisible block is taller than the page. Shorten it or enlarge the page before printing.' : '');
+            pageNotice(layout.problem || (layout.oversized ? 'An indivisible block is taller than the page. Shorten it or enlarge the page before printing.' : ''));
         }
         function pageNotice(message) {
             var notice = root.querySelector('[data-role="page-problems"]');
@@ -1200,6 +1200,7 @@
                         flow.append.apply(flow, Array.from(surface.childNodes)); surface.append(flow);
                         await document.fonts.ready;
                         var blocks = P.blocks(flow), layout = P.plan(blocks, page);
+                        if(layout.problem)throw new Error(layout.problem);
                         if (layout.oversized) { throw new Error('A block is taller than the page. Shorten it or enlarge the page before printing.'); }
                         var frame = document.createElement('iframe'); frame.className = 'ed-print-frame'; frame.title = 'Document Print'; frame.inert = true; frame.tabIndex = -1; frame.setAttribute('aria-hidden', 'true'); document.body.append(frame); printFrame = frame;
                         frame.contentWindow.addEventListener('afterprint', function () { frame.remove(); if (printFrame === frame) { printFrame = null; } }, { once: true });
@@ -1210,6 +1211,7 @@
                         for (var i = 0; i < starts.length - 1; i++) {
                             var sheet = surface.cloneNode(false); sheet.classList.add('doc-print-sheet'); var body = doc.createElement('div'); body.className = 'doc-page-flow'; sheet.append(body);
                             body.append(window.yavcPageLines.fragment(flow, blocks, starts[i], starts[i + 1]));
+                            (layout.footnotes||[]).filter(function(note){return note.page===i+1;}).forEach(function(note){var original=blocks.footnotes.find(function(item){return item.label===note.label;}).node,copy=original.cloneNode(true);copy.classList.add('doc-print-footnote');copy.style.position='absolute';copy.style.marginTop='0';copy.style.top=(d.top+note.top-i*(d.height+24))+'px';copy.style.left=d.left+'px';copy.style.width=(d.width-d.left-d.right)+'px';sheet.append(copy);});
                             var layer = doc.createElement('div'); layer.className = 'doc-furniture';
                             var header = window.yavcDocumentSettings.row(page, 'header', i + 1, starts.length - 1, doc), footer = window.yavcDocumentSettings.row(page, 'footer', i + 1, starts.length - 1, doc);
                             header.style.top = (page.margins[1] / 1.5 - 8) + 'px'; footer.style.top = ((page.height - page.margins[3] / 2) / .75 - 8) + 'px'; layer.append(header, footer); sheet.append(layer);
@@ -1267,6 +1269,26 @@
             try { await M.manage({ engine: m, text: text, host: picturesHost(), current: unchanged, signal: styleLifetime.signal,
                 save: function (next) { takeVisualText(next); textChangedForPage(); refreshStyles(); } }); }
             catch (err) { say(err.message, true); }
+        }
+        async function insertFootnote() {
+            var t=current();if(!t||t.readOnly||t.lang!=='markdown')return;
+            var m=await mdEngine();
+            if(destroyed||current()!==t||t.readOnly)return;
+            if(pageActive()&&!await visual.api.prepareEdit())return;
+            var rich=pageActive()?visual.api.footnoteSelection():null,text=view.state.doc.toString(),selection=view.state.selection;
+            function unchanged(){return !destroyed&&current()===t&&!t.readOnly&&view.state.doc.toString()===text&&(rich?rich.current():view.state.selection.eq(selection));}
+            if(!unchanged())return;
+            if(pageActive()&&!rich){say('Place the caret in a paragraph before inserting a footnote.',true);return;}
+            var tree=m.doc(text),used=new Set();function collect(node){if(node.attrs&&node.attrs.label)used.add(node.attrs.label);(node.content||[]).forEach(collect);}collect(tree);
+            if(used.size>=256){say('A document supports at most 256 footnotes.',true);return;}
+            var value=await window.yavcDialog.askText('Insert Footnote','Footnote Text','',{multiline:true,okLabel:'Insert',signal:styleLifetime.signal,help:'The reference is inserted after the selection. You can format the note on the page.',validate:function(value){if(!unchanged())return 'The document or selection changed. Cancel and try again.';return !value.trim()?'Enter the footnote text.':value.length>16384?'Footnote text is limited to 16,384 characters.':null;}});
+            if(value==null||!unchanged())return;
+            if(rich){rich.apply(value);return;}
+            var index=1;while(used.has('note-'+index))index++;var label='note-'+index;
+            var content=value.split(/\n\s*\n/).map(function(part){var children=[];part.split('\n').forEach(function(line,i){if(i)children.push({type:'soft_break'});if(line)children.push({type:'text',text:line});});return {type:'paragraph',content:children};});
+            var definition=m.markdown({type:'doc',attrs:{tail:''},content:[{type:'footnote',attrs:{label:label,tail:''},content:content}]}),at=selection.main.to;
+            var next=text.slice(0,at)+'[^'+label+']'+text.slice(at);next+=(next.endsWith('\n\n')?'':next.endsWith('\n')?'\n':'\n\n')+definition+'\n';
+            takeVisualText(next,true);textChangedForPage();
         }
         async function pageParts() {
             await mdEngine();
@@ -2340,6 +2362,7 @@
             table.push(cmd('print-document', 'Print…', 'yavc-print', printDocument, { hidden: unformatted, disabled: function () { return !ready || !tab || tab.lang !== 'markdown'; } }));
             table.push(cmd('stylesheet', 'Document Stylesheet…', 'code', function () { return editStyles(false); }, { shortcut: 'Mod+Shift+F', hidden: unformatted, disabled: noEdit }));
             table.push(cmd('custom-shortcodes', 'Custom Shortcodes…', 'code', editDefinitions, { hidden: unformatted, disabled: noEdit }));
+            table.push(cmd('footnote','Footnote…','comments',insertFootnote,{hidden:unformatted,disabled:noEdit}));
             table.push(cmd('shared-stylesheet', 'Edit Shared Stylesheet…', 'file', function () { return editStyles(true); }, { hidden: unformatted,
                 disabled: function () { return noEdit() || !/^~\/.+\.css$/i.test(currentSharedStyle) || !(window.pudlHost && window.pudlHost.fs && window.pudlHost.fs.writeText); },
                 reason: 'Choose a home-folder CSS file in Document Stylesheet first. This host also needs a writable file service.' }));
@@ -2389,7 +2412,7 @@
                 { label: isDocs ? 'Docs' : 'Editor', glyph: isDocs ? 'document' : 'code', items: H.identity(root, ['key-bindings']) },
                 { id: 'file', label: 'File', glyph: 'file', items: ['new', 'new-template', 'new-markdown', 'open', 'open-other', 'save', 'save-as', '-', 'export-docx', 'export-pdf', 'print-document', '-', 'properties', 'present', '-', 'close-document'] },
                 { id: 'edit', label: 'Edit', glyph: 'pencil', items: ['undo', 'redo', '-', 'cut', 'copy', 'paste', '-', 'select-all', '-', 'find', 'go-to-line', 'section-up', 'section-down', '-', 'json-format', 'language-restart'] },
-                { id: 'insert', label: 'Insert', glyph: 'plus', items: ['link', 'insert', 'table', 'box', '-', 'insert-timestamp', 'insert-date', 'stamp-modified'] }
+                { id: 'insert', label: 'Insert', glyph: 'plus', items: ['link', 'insert', 'table', 'box', 'footnote', '-', 'insert-timestamp', 'insert-date', 'stamp-modified'] }
             ];
             /* Format, where there is formatting to do. */
             if (formatOffered) { titles.push({ id: 'format', label: 'Format', glyph: 'paragraph', items: ['style', '-', 'bold', 'italic', 'underline', 'strike', 'code', '-', 'highlight', 'superscript', 'subscript', '-', 'color', 'class', '-', 'bullets', 'numbers', 'quote', 'table', '-', 'document-layout','page-setup', 'document-theme', 'typography', 'header-footer', '-', 'stylesheet', 'shared-stylesheet', 'custom-shortcodes'] }); }
@@ -2499,7 +2522,7 @@
         function docText(i) { return i === active && view ? view.state.doc.toString() : tabs[i].state.doc.toString(); }
         function docView(i, withText) {
             var t = tabs[i];
-            var v = { index: i + 1, name: t.name, path: t.path || null, lang: t.lang, modified: !!t.modified, readOnly: !!t.readOnly };
+            var v = { index: i + 1, name: t.name, path: t.path || null, lang: t.lang, modified: dirtyTab(t), readOnly: !!t.readOnly };
             if (withText) { v.text = docText(i); }
             return v;
         }
@@ -2576,7 +2599,7 @@
             },
             'define@1': async function () { docNo(); if (pageActive()) { await visual.api.sync(); } return { output: (await documentEngine()).macros() }; },
             'documents@1': async function () { return { output: { active: active + 1, documents: tabs.map(function (t, i) { return docView(i, false); }) } }; },
-            'document@1': async function (input) { var i = docNo(input.index); return { output: docView(i, true) }; },
+            'document@1': async function (input) { var i = docNo(input.index),t=tabs[i]; if(i===active&&pageActive())await visual.api.sync(); if(tabs[i]!==t)throw new Error('The document closed while its text was being read.'); return { output: docView(i, true) }; },
             'open-file@1': async function (input) { if(!tabs.some(function (t) {return t.path===input.path;})){var routed=await routeDocument('open-file',input);if(routed)return routed.result;} await openPath(String(input.path), true); if(input.view && supportsView(current(),input.view))await setView(input.view); return { output: docView(active, false) }; },
             'new@1': async function (input) {
                 /* A new document never takes the name of a file that exists,

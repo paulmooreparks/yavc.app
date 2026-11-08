@@ -698,3 +698,9 @@ These problems belong to PUDL or to applets that are maintained elsewhere, so th
 - yavc.app moved from PUDL 0.96.7 to 0.97.7 on 2026-11-03. The one change it needed was a `title` on each place in the file browser's path bar, which 0.97.7 keeps to one line and shortens. PUDL 0.97.8 then fixed the gap 0.97.7 left after a short place such as "/" or "~" (reported as paulmooreparks/pudl#30), so nothing here overrides it.
 - The sight-reader applet uses glyphs and a colour outside PUDL's set, the sudoku applet uses a hard-coded colour, and the dice applet has no minimum width.
 - The barcode scanner applet uses `confirm()` and the host kit uses `alert()`. Both should use PUDL dialogs.
+# Footnotes and page-note export, 2026-11-09
+
+Footnotes retain source definitions, rich body editing, one-step insertion Undo and stable numbering. Two-window checks found and fixed shared DOM IDs, and source-only nested definitions now produce accurate page-layout guidance. A pending rich edit is flushed before a document action reads its source.
+
+Chromium, Firefox and WebKit pass the footnote editing, scoped-surface navigation, page-note placement and Word export fixtures. Native Word package checks confirm editable footnotes, repeated-reference fields and exclusion pruning. The PDF fixtures generate selectable linked notes, including long-note continuation. PyMuPDF 1.26.7 verifies every continuation token appears once, notes remain below body text and inside margins, and excluded definitions disappear. Source review caught lost code indentation, ignored justification and overly broad trusted-note style exemptions; focused regressions cover all three fixes. The generated PDF was rendered and inspected. The interactive planner still refuses nested definitions and oversized notes, and those cases remain active work.
+
