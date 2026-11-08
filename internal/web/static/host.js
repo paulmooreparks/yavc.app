@@ -119,6 +119,10 @@
         contentBytes: {version:1,read:function (request,context) {return fs().then(function (F) {return F.contentBytes.read(request,context);});}},
         snapshot: window.pcSnapshot,
         documentWindows: window.yavcDocumentWindows,
+        presentation: {version:1,presenterURL:function(request){
+            if(request.application!=='slides')throw new Error('This application has no presenter page.');
+            var url=new URL('/applet/slides',location.origin);url.searchParams.set('file',request.resource);url.searchParams.set('presenter','1');url.searchParams.set('presenter-channel',request.channel);return url.href;
+        }},
         contentWorkspace: { version: 1,
             browser: function () { return withDialog().then(function (x) { return {F:x[0],FB:x[1]}; }); },
             split: {of:function (handle,change) {return window.pcSplit.of(handle,change);}},

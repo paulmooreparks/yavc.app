@@ -241,6 +241,7 @@ func New(s *Server) (*Server, error) {
 	m.HandleFunc("GET /applets/registry.js", s.registry)
 	m.HandleFunc("GET /applets/{name}/{file...}", s.appletFile)
 	m.HandleFunc("GET /win/{key}", s.window)
+	m.HandleFunc("GET /applet/{applet}", s.root)
 	m.HandleFunc("GET /api/site/tree", s.siteTree)
 	m.HandleFunc("GET /api/site/text/{slug}", s.siteText)
 	m.HandleFunc("GET /api/site/texts", s.siteTexts)
@@ -614,6 +615,17 @@ func (s *Server) root(w http.ResponseWriter, r *http.Request) { s.rootWith(w, r,
 
 func (s *Server) rootWith(w http.ResponseWriter, r *http.Request, dialog string) {
 	kind, name := s.hostKind(r)
+	if requested := r.PathValue("applet"); requested != "" {
+		if kind != "desktop" {
+			s.notFound(w, r)
+			return
+		}
+		if _, ok := s.appletByName(requested); !ok {
+			s.notFound(w, r)
+			return
+		}
+		kind, name = "applet", requested
+	}
 	switch kind {
 	case "applet":
 		a, _ := s.appletByName(name)

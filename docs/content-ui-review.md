@@ -33,10 +33,10 @@ Existing Editor UI and command-toolbar fixtures cover shared dialogs, customizat
 | Area | Remaining work |
 | --- | --- |
 | Completed | Editor and Slides now share clipboard commands; Slides source search has explicit current-slide and whole-deck scopes. See [the editing command follow-up](editing-commands.md). |
-| History | History availability now follows actual state. Slides exposes text-editing history; slide insertion, deletion, reordering, deck properties and cross-slide history need a separately specified deck-wide undo model. Delete confirmation remains in place. |
+| History | Completed on 2026-11-09. Slides has one bounded deck timeline across source/rich edits, slide operations, metadata and whole-deck replacement. Save acknowledgements establish the clean source baseline. Delete confirmation remains in place. |
 | Dialog lifecycle | Metadata forms now cancel on owner navigation/disposal and reject changed source. Existing style/shortcode forms retain source/disposal guards. The editing command fixture and stylesheet regressions cover these paths; manual assistive-technology testing remains separate. |
 | Diagrams | Continue the Inspector, Outline/navigation and keyboard selection review across Canvas, D2 and Mermaid, including source-based formats' differing edit capabilities. Existing Canvas editing tests remain applicable. |
-| Presentation | Presenter-window and full-screen behavior need their own cross-browser review. This batch does not claim those modes were tested. |
+| Presentation | Reviewed on 2026-11-09. Three-engine tests cover real popup/fullscreen behavior, live notes, Save As, reveal navigation, blocked/denied API branches and disposal during stylesheet preparation. Manual assistive-technology and receiving-host webview checks remain separate. |
 | Accessibility | Headless focus, label and rendering checks do not replace manual assistive-technology testing. |
 
 The next cleanup should address behavior and command completeness together, rather than release isolated spacing adjustments.

@@ -1,5 +1,13 @@
 # Stem-to-stern review, November 2026
 
+## Slides deck history and presentation, 2026-11-09
+
+Slides now owns one bounded Undo timeline for source/rich edits, slide operations, properties and whole-deck replacement. Slide-setting updates previously assigned the source before asking the change handler to compare it, suppressing dirty state. They now enter the same timeline and compare against the source acknowledged by Save. Navigation separates typing groups, and Save As does not replace history with a different resource identity.
+
+The presenter shortcut previously went through the desktop applet redirect, losing its presenter parameters. A documented optional host capability now supplies a same-origin standalone route. Per-deck channels exchange bounded live source and notes, preserve connections through Save As and validate incoming positions. Presenter instances expose no writable actions or recovery writer. Fullscreen requests happen before asynchronous preparation, with an in-window fallback and explicit Full Screen/Leave Show controls. Automatic presenter opening uses its own gesture.
+
+Source review found disposal after stylesheet preparation, Page Up/Down interception inside dialogs, and a stale Delete target. The fixes check ownership after asynchronous preparation, scope navigation to deck surfaces and retain slide ownership through the final rich-source disable. The slideshow resize handler belongs to the applet's abort lifetime. Three-engine fixtures cover these regressions, source/rich history, structural operations, clean baselines, shared clipboard/search, real presenter popups and native fullscreen. Synthetic null-popup and denied-fullscreen branches supplement the real API tests. The first disposal assertion incorrectly expected synchronous fullscreen exit; the corrected fixture waits for completion. Independent-host packaging and installed-image checks are recorded with the local installation receipt.
+
 ## Document windows and view restoration, 2026-11-08
 
 The host now selects single-document windows or tabbed editing. All four apps route another document through the optional host capability, and yavc.app defaults to separate windows. Recovery migrates existing tabs only after the new windows acknowledge their snapshots. Capacity and failed acknowledgement retain the source tabs. Source review found that the old window could still be edited or closed while migration waited for another window; migration now pauses that window and cancels close until transfer finishes. Keyboard New now uses the same route as menu New.

@@ -1,0 +1,30 @@
+// Copyright 2026 Paul Parks. SPDX-License-Identifier: Apache-2.0
+const assert=require('node:assert/strict'),pw=require('playwright');
+const port=process.env.YAVC_CHROME_TEST_PORT||'8458';
+const action=(p,name,input={})=>p.evaluate(({name,input})=>pudlActions.run('yavc.slides/'+name+'@1',input,{grant:'all'}),{name,input});
+const command=(p,name)=>p.evaluate(name=>pudlCommands.run(name,null,document.querySelector('[data-applet="slides"]')),name);
+const text=p=>action(p,'text').then(result=>result.text);
+(async()=>{for(const engine of process.argv.slice(2).length?process.argv.slice(2):['chromium','firefox','webkit']){
+ const browser=await pw[engine].launch({headless:true}),p=await browser.newPage({viewport:{width:1500,height:1000}});p.setDefaultTimeout(25000);let phase='boot';const errors=[];p.on('pageerror',error=>errors.push(error.message));
+ try{
+  await p.goto(`http://localhost:${port}/?open=slides`);await p.locator('[data-applet="slides"][data-applet-state="running"]').waitFor();
+  await action(p,'load',{path:'~/History.slides.md',text:'---\ntitle: Original title\nunknown: preserved\n---\n\n# First\n\nOriginal words.\n\n---\n\n# Second\n\nSecond words.\n'});await action(p,'save');const saved=await text(p);
+  phase='deck properties';await action(p,'set-deck',{title:'Changed title',theme:'midnight'});const properties=await text(p);assert.notEqual(properties,saved);await command(p,'undo');assert.equal(await text(p),saved);assert.equal((await action(p,'deck')).modified,false);await command(p,'redo');assert.equal(await text(p),properties);
+  phase='save baseline';await action(p,'save');await command(p,'undo');assert.equal((await action(p,'deck')).modified,true);await command(p,'redo');assert.equal((await action(p,'deck')).modified,false);
+  phase='slide properties';await action(p,'set-slide',{index:1,layout:'title',background:'#abcdef'});const styled=await text(p);assert.notEqual(styled,properties);assert.equal((await action(p,'deck')).modified,true);await command(p,'undo');assert.equal(await text(p),properties);await command(p,'redo');assert.equal(await text(p),styled);
+  phase='structural operations';for(const [name,input] of [['add',{after:1,text:'# Inserted\n'}],['duplicate',{index:2}],['move',{index:2,to:1}],['delete',{index:1}]]){
+   const before=await text(p);await action(p,name,input);const after=await text(p);assert.notEqual(after,before,name);await command(p,'undo');assert.equal(await text(p),before,name+' undo');await command(p,'redo');assert.equal(await text(p),after,name+' redo');
+  }
+  phase='pending rich draft and keyboard';await action(p,'go',{index:1});await action(p,'view',{mode:'visual'});await p.locator('.ProseMirror').click();await p.keyboard.press('ControlOrMeta+End');await p.keyboard.type(' Pending rich words');const beforePending=await text(p);
+  await action(p,'add',{after:1,text:'# After rich draft\n'});const richAdded=await text(p);assert.ok(richAdded.includes('Pending rich words'));await command(p,'undo');assert.ok((await text(p)).includes('Pending rich words'));assert.ok(!(await text(p)).includes('After rich draft'));
+  await p.locator('.ProseMirror').focus();await p.keyboard.press('ControlOrMeta+z');await p.waitForFunction(()=>!document.querySelector('.ProseMirror')?.textContent.includes('Pending rich words'));assert.ok(!(await text(p)).includes('Pending rich words'));
+  await command(p,'redo');assert.ok((await text(p)).includes('Pending rich words'));await command(p,'redo');assert.equal(await text(p),richAdded);
+  phase='source typing';await action(p,'view',{mode:'text'});await p.locator('.cm-content').click();await p.keyboard.press('ControlOrMeta+End');await p.keyboard.type('\nSource addition');await command(p,'undo');assert.ok(!(await text(p)).includes('Source addition'));await command(p,'redo');assert.ok((await text(p)).includes('Source addition'));
+  phase='owned dialogs';const beforeDialog=await text(p);await command(p,'deck-title');const props=p.locator('dialog[open]');await props.waitFor();const slideBefore=(await action(p,'deck')).slide;await props.getByLabel('Title',{exact:true}).press('PageDown');assert.equal((await action(p,'deck')).slide,slideBefore);assert.equal(await props.isVisible(),true);await props.getByRole('button',{name:'Cancel',exact:true}).click();
+  await p.evaluate(()=>{window.pendingDelete=pudlCommands.run('slide-delete',null,document.querySelector('[data-applet="slides"]'));});await p.locator('dialog[open]').waitFor();await action(p,'go',{index:1});await p.locator('dialog[open]').waitFor({state:'hidden'});await p.evaluate(()=>pendingDelete);assert.equal(await text(p),beforeDialog);
+  phase='navigation during final structural preparation';await action(p,'view',{mode:'visual'});await action(p,'go',{index:2});
+  await p.evaluate(()=>{const page=yavcMdEditor._page,enable=page.enable.bind(page);window.structuralFixture={hold:true,waiting:false};page.enable=async function(on){if(!on&&structuralFixture.hold){structuralFixture.hold=false;structuralFixture.waiting=true;await new Promise(resolve=>structuralFixture.release=resolve);}return enable(on);};window.pendingDelete=pudlCommands.run('slide-delete',null,document.querySelector('[data-applet="slides"]'));});await p.locator('dialog[open]').getByRole('button',{name:'Delete',exact:true}).click();await p.waitForFunction(()=>structuralFixture.waiting);await action(p,'go',{index:1});await p.evaluate(async()=>{structuralFixture.release();await pendingDelete;});assert.equal(await text(p),beforeDialog);
+  phase='divergence';await command(p,'undo');await action(p,'set-slide',{layout:'blank'});assert.equal(await p.locator('.yavc-command-toolbar [data-command="redo"]').first().isDisabled(),true);
+  assert.deepEqual(errors,[]);console.log(engine+': ordered deck/source/rich/metadata history, structural Undo/Redo, saved baseline, keyboard and divergence passed');
+ }catch(error){console.error(engine,phase,error);throw error;}finally{await browser.close();}
+}})().catch(error=>{console.error(error);process.exitCode=1;});

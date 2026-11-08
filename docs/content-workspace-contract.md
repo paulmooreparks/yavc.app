@@ -31,6 +31,12 @@ The resource, creation and recovery contracts remain in `content-resource-contra
 
 PUDL's host kit supplies the identity/menu helpers. The host supplies resource/snapshot services and may supply `config`, `fs`, `commandToolbar` and `fileResolution`. Missing optional file selection, toolbars or browsing does not install yavc.app's filesystem. A host without revision-safe resources cannot write through the old server-mount path. Its legacy source can be inspected or downloaded, and old drafts remain retained.
 
+## Presenter capability
+
+Slides optionally uses `pudlHost.presentation` version 1. Its synchronous `presenterURL({application, resource, channel})` returns a same-origin URL that starts the same Slides package in presenter mode. The resource identifies an already saved deck; the opaque channel identifies this open editing session and survives Save As. A resource host without this capability disables Presenter Window. A legacy standalone host can use its own current page. The yavc.app implementation returns `/applet/slides` on the desktop origin, preserving file and presenter parameters without the ordinary applet shortcut redirect.
+
+The presenter exposes no writable actions or recovery writer. It renders bounded source snapshots received over its same-origin BroadcastChannel, with the editing window retaining resource authority. The 2,097,152-code-unit live-source limit reports an unavailable live snapshot and retains the loaded saved deck. This capability does not bypass popup policy or provide fullscreen permission. Slides invokes those browser APIs from their own user gestures and retains an in-window show when fullscreen is unavailable.
+
 ## Preference and recovery migration
 
 The host's `config.stored(name)` returns persisted keys without implicit defaults. Docs adopts applicable legacy Editor settings once; it never mistakes Editor's new default Text preference for an old user choice. Existing Docs settings always win. Applicable toolbar preferences are copied into Docs once, while unavailable command IDs remain retained in preferences and are omitted from the rendered toolbar. Editor's original settings and toolbar record are retained.

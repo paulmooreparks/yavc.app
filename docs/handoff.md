@@ -1,4 +1,8 @@
-# Current work, 2026-11-08
+# Current work, 2026-11-09
+
+Paul authorized continuous implementation and automatic local installation of verified batches. `content-completion-plan.md` is the current backlog. PR #57 is merged at `cbf6d6c54d625962d547f9203d0814233ff871e8`; the worktree `%TEMP%/yavc-document-theme-parity` now holds branch `codex/content-completion`. Root-checkout edits remain unrelated and preserved.
+
+The first batch adds Slides 0.35.0 deck-wide history, correct slide-setting dirty state, a host-owned same-origin presenter page, bounded live notes/source exchange and gesture-safe fullscreen fallback. Slides design decisions 20 through 22 and `review.md` describe the contract and verification. `%TEMP%/yavc-slides-completion-backup-path.txt` identifies the local installation receipt once installed. The next batch continues Diagrams Outline/navigation, embedding and conversion. The old entries below describe historical candidates and do not determine the installed image.
 
 The current batch implements document-window policy for Editor 46.1.0, Docs 1.1.0, Slides 0.34.0 and Diagrams 0.28.0. The engine defaults to `-document-grouping single`; `tabbed` remains a host deployment option. `document-window-contract.md` describes the optional portable host service, recovery acknowledgement and the nine-window limit. Existing tabs migrate with source interaction paused, retaining any document whose transfer fails. Rich drafts synchronize before source ownership changes, and all supported per-document views survive recovery. The three-engine fixture covers immediate rich New, per-tab Document/Visual/Preview restoration, migration/reload, source-close protection and keyboard New. The portable Diagrams fixture now supplies its versioned PUDL base and expects the previously adopted transient conflict toast.
 

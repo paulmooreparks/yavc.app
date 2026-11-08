@@ -205,9 +205,51 @@
         var resourceSession = null, resources = null, recovery = null;
         function resourceAsset(file) { return window.yavcUtil.versioned(new URL('../content-kit/' + file, SELF_SRC).href); }
         function tab() { return tabs[active] || null; }
+        var applyingHistory = false, historyQueue = Promise.resolve(), historyBatch = 0;
+        function historyState() { return {text: serializeDeck(deck), slide: at}; }
+        function deckHistory() {
+            var t = tab(); if (!t || !window.yavcDeckHistory) return null;
+            if (!t.history) {
+                t.history = window.yavcDeckHistory.create(historyState());
+                t.savedText = t.resource ? t.resource.text : (t.modified || t.fresh ? null : serializeDeck(deck));
+            }
+            return t.history;
+        }
+        function recordHistory(kind, slide) {
+            if (applyingHistory || historyBatch) return;
+            var next=historyState();if(slide!=null)next.slide=slide;
+            var h = deckHistory(); if (h) h.record(next, kind || 'command');
+        }
+        function canDeckHistory(direction) { var h=deckHistory(); return !presenting && !readOnly() && !!h && (direction==='undo' && pageActive() && page.pending() || h.can(direction)); }
+        function changeHistory(direction) {
+            var owner = tab();
+            var operation = historyQueue.catch(function () {}).then(async function () {
+                if (destroyed || tab() !== owner) return false;
+                requireEditable(); if (pageActive()) await page.sync();
+                if (destroyed || tab() !== owner || readOnly()) return false;
+                var h = deckHistory(); if (!h || !h.can(direction)) return false;
+                if (pageActive()) await page.enable(false);
+                if (destroyed || tab() !== owner) return false;
+                var target = h.take(direction), inert = root.inert;
+                applyingHistory = true; root.inert = true;
+                try {
+                    abortOwnedDialogs(false); if(slideSearch)slideSearch.reset();
+                    deck = parseDeck(target.text); owner.deck = deck;
+                    at = Math.max(0, Math.min(deck.slides.length - 1, target.slide));
+                    modified = !!owner.saveFailed || owner.savedText == null || target.text !== owner.savedText;
+                    owner.modified = modified; cmStates = new WeakMap(); cmSlide = null;
+                    drawFilm(); await goTo(at); stash(); keep(); commandsChanged();
+                    return true;
+                } finally {
+                    applyingHistory = false; root.inert = inert;
+                    if(!inert && !destroyed && tab()===owner){if(cm && (mode==='text' || mode==='split' && historyPane==='text'))cm.focus();else if(pageActive())page.focus();else root.focus();}
+                }
+            });
+            historyQueue = operation; return operation;
+        }
         function dirtyTab(t) { return !!(t && (t.modified || (t === tab() && pageActive() && page.pending()))); }
-        function readOnly() { var t = tab(); return !!(resources && t && t.resource && !resources.canWrite(t.resource)); }
-        function requireEditable() { if (readOnly()) throw new Error('This deck is read-only. Use Save As to create an editable copy.'); }
+        function readOnly() { var t = tab(); return !!presenterRole || !!(resources && t && t.resource && !resources.canWrite(t.resource)); }
+        function requireEditable() { if(presenting)throw new Error('Leave the show before editing this deck.');if(applyingHistory)throw new Error('Undo or Redo is still completing.');if (readOnly()) throw new Error('This deck is read-only. Use Save As to create an editable copy.'); }
         function canSave() { var t = tab(); return !readOnly() && !(resources && t && t.path && !t.resource); }
         function refreshAccess() {
             root.setAttribute('data-read-only', String(readOnly()));
@@ -225,6 +267,8 @@
             var own = new URLSearchParams(location.search);
             if (own.get('file') || own.get('presenter') || own.get('present')) { start = own; }
         }
+        var presenterToken = start.get('presenter-channel') || crypto.randomUUID();
+        function presenterIdentity(){var t=tab();if(start.get('presenter') || !t)return presenterToken;if(!t.presenterToken)t.presenterToken=crypto.randomUUID();return t.presenterToken;}
         root.classList.add('deck', 'deck-' + (opts.fit === 'fill' ? 'fill' : 'flow'));
         root.tabIndex = -1;
         root.innerHTML =
@@ -384,12 +428,14 @@
         function pageActive() { return !!(page && page.active()); }
         /* A change to the slide's text, from the page, the text pane or a
            command: the deck is told, the other views follow. */
-        function takeText(text, from) {
+        function takeText(text, from, historyKind) {
             requireEditable();
             var s = current();
             if (s.text === text) { return; }
+            deckHistory();
             s.text = text;
             modified = true;
+            recordHistory(historyKind || (from === 'text' || from === 'page' ? from + ':' + at : 'command'));
             installStyle();
             if (from !== 'text' && cm) { setCM(text); }
             if (from !== 'page' && pageActive()) { page.textChanged(); }
@@ -449,7 +495,7 @@
                     accessComp.of([CM.EditorState.readOnly.of(readOnly()), CM.EditorView.editable.of(!readOnly())]),
                     CM.EditorState.transactionFilter.of(function (tr) { return tr.docChanged && readOnly() ? [] : tr; }),
                     CM.EditorView.lineWrapping, CM.EditorView.contentAttributes.of({ 'aria-label': 'The Slide\'s Markdown' }),
-                    CM.EditorView.updateListener.of(function (u) { if (u.docChanged && !fromPage) { takeText(u.state.doc.toString(), 'text'); } if (u.docChanged || u.selectionSet) commandsChanged(); })];
+                    CM.EditorView.updateListener.of(function (u) { if (u.docChanged && !fromPage) { var typing=u.transactions.every(function(tr){return tr.isUserEvent('input.type') || tr.isUserEvent('delete.backward') || tr.isUserEvent('delete.forward');});takeText(u.state.doc.toString(), 'text',typing?'text:'+at:'command'); } if (u.docChanged || u.selectionSet) commandsChanged(); })];
                 if (CM.markdown) { try { ext.push(CM.markdown()); } catch (err) { } }
                 ext.push(window.yavcMacroTools.completions(CM, currentMacroEngine));
                 if (CM.EditorView.theme) { ext.push(CM.EditorView.theme({ '&': { height: '100%', fontSize: 'var(--text-sm)' }, '.cm-scroller': { fontFamily: 'var(--mono)' }, '.cm-content': { caretColor: 'var(--text)' } })); }
@@ -591,6 +637,7 @@
             if (b) { goTo(+b.getAttribute('data-slide')); }
         });
         async function goTo(i, fromSearch) {
+            var h = deckHistory(); if(h && i!==at)h.boundary();
             if (Math.max(0, Math.min(deck.slides.length - 1, i)) !== at) abortOwnedDialogs(true);
             i = Math.max(0, Math.min(deck.slides.length - 1, i));
             if (pageActive()) { await page.enable(false); }
@@ -609,50 +656,84 @@
             var b = el.film.querySelector('[data-slide="' + at + '"]');
             if (b && b.scrollIntoView) { b.scrollIntoView({ block: 'nearest' }); }
             await installStyle();
+            recordHistory('navigation');
+            if(channel && !presenterRole && !presenting)channel.postMessage({type:'at',slide:at,step:0});
         }
 
         /* === Slides: new, duplicate, delete, move ======================= */
 
-        function addSlide(layout) {
+        async function prepareStructure(owner) {
+            owner = owner || {deck:deck,slide:current()};
+            if (!(await settleForDialog(true))) return false;
+            deckHistory();
+            if (pageActive()) await page.enable(false);
+            return !destroyed && !readOnly() && deck === owner.deck && current() === owner.slide;
+        }
+        async function addSlide(layout) {
             requireEditable();
+            if (!(await prepareStructure())) return;
             var text = NEW_SLIDE[layout] || NEW_SLIDE.content;
             deck.slides.splice(at + 1, 0, { text: text });
             modified = true;
             drawFilm();
-            goTo(at + 1);
+            recordHistory('add',at+1); await goTo(at + 1);
         }
-        function duplicateSlide() { requireEditable(); deck.slides.splice(at + 1, 0, { text: current().text }); modified = true; drawFilm(); goTo(at + 1); }
+        async function duplicateSlide() { requireEditable(); if (!(await prepareStructure()))return;deck.slides.splice(at + 1, 0, { text: current().text }); modified = true; drawFilm();recordHistory('duplicate',at+1);await goTo(at + 1); }
         /* asked: false for an agent's delete@1, which changes only the deck
            in the window, unsaved, and must not wait on a dialog. */
         async function deleteSlide(asked) {
             requireEditable();
+            var owner={deck:deck,slide:current()};
+            if (!(await settleForDialog(true))) return; deckHistory();
             if (deck.slides.length <= 1) { say('A deck keeps at least one slide.'); return; }
-            /* There is no undo for a slide, so the person's delete asks (Principles, section 3). */
-            if (asked !== false && !(await window.yavcDialog.confirm('Delete slide ' + (at + 1) + '?', '"' + titleOf(current(), at) + '" and its notes go from the deck.', { okLabel: 'Delete', danger: true }))) { return; }
+            /* The confirmation retains the existing destructive-command policy. */
+            if (asked !== false) {
+                var guard=dialogGuard(true);
+                try {if(!(await window.yavcDialog.confirm('Delete slide ' + (at + 1) + '?','"'+titleOf(current(),at)+'" and its notes go from the deck.',{okLabel:'Delete',danger:true,signal:guard.signal})) || !guard.current())return;}
+                finally {guard.release();}
+            }
+            if(!(await prepareStructure(owner)))return;
             deck.slides.splice(at, 1);
             modified = true;
             drawFilm();
-            goTo(Math.min(at, deck.slides.length - 1));
+            recordHistory('delete',Math.min(at,deck.slides.length-1));await goTo(Math.min(at, deck.slides.length - 1));
         }
-        function moveSlide(by) {
+        async function moveSlide(by) {
             requireEditable();
+            if (!(await prepareStructure()))return;
             var to = at + by;
             if (to < 0 || to >= deck.slides.length) { return; }
             var s = deck.slides.splice(at, 1)[0];
             deck.slides.splice(to, 0, s);
             modified = true;
             drawFilm();
-            goTo(to);
+            recordHistory('move',to);await goTo(to);
         }
         function setSlideSetting(key, value) {
             requireEditable();
             var s = current();
+            deckHistory();var original = s.text;
             setSetting(s, key, value);
-            takeText(s.text, 'command');
+            var next=s.text;s.text=original;takeText(next, 'command');
             if (pageActive()) { applySlideSettings(el.slide, s); }
+        }
+        async function updateSlideSettings(values) {
+            requireEditable(); if(!(await settleForDialog(true)))return false;
+            deckHistory();historyBatch++;
+            try { Object.keys(values).forEach(function(key){setSlideSetting(key,values[key]);}); }
+            finally {historyBatch--;recordHistory('slide-properties');commandsChanged();}
+            return true;
+        }
+        async function updateDeckSettings(values) {
+            requireEditable();if(!(await settleForDialog(false)))return false;
+            deckHistory();historyBatch++;
+            try {Object.keys(values).forEach(function(key){setFront(key,values[key]);});}
+            finally {historyBatch--;recordHistory('deck-properties');commandsChanged();}
+            return true;
         }
         function setFront(key, value) {
             requireEditable();
+            deckHistory();
             if (deck.frontProblem) { say('The front matter cannot be changed here: ' + deck.frontProblem, true); return; }
             if (value == null || value === '') { delete deck.front[key]; } else { deck.front[key] = value; }
             /* Written at once, so a change the engine refuses is known now. */
@@ -660,6 +741,7 @@
             frontChanged();
         }
         function frontChanged() {
+            recordHistory('properties');
             installStyle();
             modified = true;
             deck.slides.forEach(function (s, i) { drawThumb(i); });
@@ -718,7 +800,7 @@
                         var message=!guard.current()?'The deck or slide changed. Close and reopen this form.':input.value.trim().split(/\s+/).some(function (name) {return name && !/^[A-Za-z0-9_-]+$/.test(name);})?'Class names can contain letters, numbers, hyphens and underscores.':null;
                         if(message){error.textContent=message;error.hidden=false;input.setAttribute('aria-invalid','true');input.focus();return true;}
                     }});
-                if(result.value==='apply' && guard.current()){var value=result.body.querySelector('[data-class-value]').value;if(value!==initial)setSlideSetting('class',Array.from(new Set(value.trim().split(/\s+/).filter(Boolean))).join(' '));}
+                if(result.value==='apply' && guard.current()){var value=result.body.querySelector('[data-class-value]').value;if(value!==initial)await updateSlideSettings({class:Array.from(new Set(value.trim().split(/\s+/).filter(Boolean))).join(' ')});}
             } finally {guard.release();}
         }
         async function deckColours() {
@@ -730,7 +812,7 @@
                 { key: 'muted', label: 'Secondary Text', value: f.muted, fallback: '#5c6470', help: 'A title slide\'s subtitle, captions and the speaker notes.' },
                 { key: 'accent', label: 'Accent', value: f.accent, fallback: '#1f5fbf', help: 'The rule under a heading, links, and words colored "accent".' },
                 { key: 'background', label: 'Background', value: f.background, fallback: '#ffffff', help: 'Every slide, unless the slide sets its own.' }
-            ], guard).then(function (v) { if (!v || !guard.current()) return; Object.keys(v).forEach(function (k) { setFront(k, v[k]); }); }).finally(guard.release);
+            ], guard).then(function (v) { if (!v || !guard.current()) return; return updateDeckSettings(v); }).finally(guard.release);
         }
         async function slideColours() {
             if (!await settleForDialog(true)) return;
@@ -740,7 +822,7 @@
                 { key: 'heading', label: 'Headings', value: st.heading, fallback: '#1a1a1a', placeholder: 'The deck\'s own', help: 'This slide\'s headings.' },
                 { key: 'accent', label: 'Accent', value: st.accent, fallback: '#1f5fbf', placeholder: 'The deck\'s own', help: 'The rule under the heading, links, and words colored "accent".' },
                 { key: 'background', label: 'Background', value: st.background, fallback: '#ffffff', placeholder: 'The deck\'s own', help: 'This slide alone.' }
-            ], guard).then(function (v) { if (!v || !guard.current()) return; Object.keys(v).forEach(function (k) { setSlideSetting(k, v[k]); }); }).finally(guard.release);
+            ], guard).then(function (v) { if (!v || !guard.current()) return; return updateSlideSettings(v); }).finally(guard.release);
         }
         /* Cancel is not a submit button, so Enter in the field is OK. */
 
@@ -865,6 +947,7 @@
             active = i;
             var t = tabs[i];
             deck = t.deck; path = t.path; modified = t.modified; at = 0;
+            deckHistory();
             refreshAccess();
             installStyle();
             if (channel) { channel.close(); channel = null; }
@@ -881,7 +964,7 @@
            deck nobody has touched, which it replaces. */
         async function openInTab(text, newPath, slide) {
             stash();
-            if (active >= 0 && tabs[active] && untouched(tabs[active])) { load(text, newPath, slide); return; }
+            if (active >= 0 && tabs[active] && untouched(tabs[active])) { await load(text, newPath, slide); return; }
             tabs.push({ deck: parseDeck(text), path: newPath || null, modified: false, at: Math.max(0, (slide || 1) - 1) });
             await activateTab(tabs.length - 1);
         }
@@ -903,20 +986,24 @@
             keep();
         }
 
-        function load(text, newPath, slide) {
+        async function load(text, newPath, slide) {
+            if(pageActive())await page.enable(false);
             abortOwnedDialogs(false); if (slideSearch) slideSearch.reset();
             deck = parseDeck(text);
             path = newPath || null;
             modified = false;
             at = 0;
+            if (active < 0) { tabs.push({ deck: deck, path: path, modified: false, at: at }); active = tabs.length - 1; }
+            else { tab().deck=deck;tab().path=path;tab().modified=false;tab().history=null; }
+            deckHistory();
             installStyle();
             drawFilm();
-            goTo(Math.max(0, Math.min(deck.slides.length - 1, (slide || 1) - 1)));
+            await goTo(Math.max(0, Math.min(deck.slides.length - 1, (slide || 1) - 1)));
             if (cm) { setCM(current().text); }
             fit();
-            if (active < 0) { tabs.push({ deck: deck, path: path, modified: false, at: at }); active = tabs.length - 1; }
             stash();
             tabRow();
+            deckHistory();
         }
         async function openPath(p, slide) {
             if (!tabs.some(function (t) { return t.path === p; })) { var routed = await routeDocument('open-file', {path: p, slide: slide}); if (routed) return true; }
@@ -960,6 +1047,7 @@
             announce();
         }
         async function save() {
+            if(presenterRole)return false;
             if (resources) {
                 if (!path) return saveAs();
                 try { return await saveResource(tab(), path); } catch (err) { say(err.message, true); return false; }
@@ -968,10 +1056,12 @@
             var err = await H.fs.writeText(path, fullText());
             if (err) { say('Could not save: ' + err, true); return; }
             modified = false;
+            if(tab())tab().savedText=fullText();
             say('Saved ' + path + '.');
             commandsChanged();
         }
         async function saveAs() {
+            if(presenterRole)return false;
             if (resources) {
                 try { return await saveResource(tab(), null); } catch (err) { say(err.message, true); return false; }
             }
@@ -980,7 +1070,7 @@
             var blob = new Blob([fullText()], { type: 'text/markdown' });
             var res = await H.fs.save({ title: 'Save the Deck As', name: name + '.slides.md', host: root, start: '~/Documents', blob: blob }).catch(function (e) { say(e.message, true); return null; });
             if (!res) { return; }
-            if (res.path) { path = res.path; modified = false; say('Saved ' + path + '.'); announce(); }
+            if (res.path) { path = res.path; modified = false; if(tab())tab().savedText=fullText();say('Saved ' + path + '.'); announce(); }
             /* "Download instead": the dialog leaves the download to the
                applet (pudl-applet-packages README, fs.save). */
             else if (res.download) { window.yavcUtil.download(res.download, blob); say('Downloaded ' + res.download + '.'); }
@@ -1010,6 +1100,7 @@
                 }
                 t.resource = accepted; t.baseline = null; t.conflict = null; t.path = accepted.resource; t.name = accepted.name || t.name;
                 t.modified = !!syncError || serializeDeck(t.deck) !== submitted; t.fresh = false;
+                t.savedText = submitted; t.saveFailed = !!syncError;
                 if (tab() === t) {
                     path = t.path; modified = t.modified; refreshAccess();
                     if (!syncError && readOnly() && page) { await page.enable(false); drawSlide(); }
@@ -1021,7 +1112,7 @@
         }
         async function newDeck() {
             var routed = await routeDocument('new-deck', {}); if (routed) return;
-            if (tab() && untouched(tab())) { load(NEW_DECK, null); commandsChanged(); return; }
+            if (tab() && untouched(tab())) { await load(NEW_DECK, null); commandsChanged(); return; }
             stash();
             tabs.push({ deck: parseDeck(NEW_DECK), path: null, modified: false, at: 0 });
             await activateTab(tabs.length - 1);
@@ -1038,7 +1129,9 @@
 
         function channelFor() {
             if (!('BroadcastChannel' in window)) { return null; }
-            return new BroadcastChannel('yavc-slides:' + (path || 'unsaved'));
+            var name='yavc-slides:'+presenterIdentity();
+            if(channel && channel.name===name)return channel;
+            if(channel)channel.close();return new BroadcastChannel(name);
         }
         function buildShow(stage) {
             stage.innerHTML = '';
@@ -1064,16 +1157,27 @@
             var wh = sizeOf(), w = stage.clientWidth, h = stage.clientHeight, k = Math.min(w / wh[0], h / wh[1]) || 1;
             stage.querySelectorAll('.deck-canvas').forEach(function (c) { c.style.width = wh[0] + 'px'; c.style.height = wh[1] + 'px'; c.style.transform = 'translate(-50%, -50%) scale(' + k + ')'; });
         }
-        var showStage = null, showResize = null;
+        var showStage = null, showResize = null, startingShow = false, showFullscreenOwned = false;
+        function presenterHost(){return !!(H.presentation && H.presentation.version===1) || !resources && opts.host!=='window';}
+        function fullscreenShow() {
+            if(!root.requestFullscreen || !document.fullscreenEnabled)return Promise.resolve(false);
+            return root.requestFullscreen().then(function(){return true;},function(){return false;});
+        }
         async function present(fromSlide) {
-            if (presenting) { return; }
-            await loadScript(HERE + 'present.js' + STAMP);
+            if (presenting || startingShow || destroyed || presenterRole) { return; }
+            if(!window.yavcPresent)return false;
+            startingShow=true;var owner=tab(),fullscreen=null;
+            if(settings.presenterOnPresent && path)presenterWindow();else fullscreen=fullscreenShow();
+            try {
             if (pageActive()) { await page.enable(false); }
+            if(fullscreen)await fullscreen;
+            if(destroyed || tab()!==owner){if(document.fullscreenElement===root && document.exitFullscreen)document.exitFullscreen().catch(function(){});return false;}
             showStage = document.createElement('div');
             showStage.className = 'deck-show';
             buildShow(showStage);
             root.appendChild(showStage);
             await installStyle();
+            if(destroyed || tab()!==owner){if(showStage){showStage.remove();showStage=null;}root.classList.remove('deck-showing');if(document.fullscreenElement===root && document.exitFullscreen)document.exitFullscreen().catch(function(){});return false;}
             root.classList.add('deck-showing');
             channel = channel || channelFor();
             presenting = window.yavcPresent.attach(showStage, {
@@ -1081,13 +1185,20 @@
                 onChange: function (i, step) { if (channel) { channel.postMessage({ type: 'at', slide: i, step: step }); } },
                 onLeave: leave
             });
+            var controls=document.createElement('div');controls.className='deck-show-controls';controls.setAttribute('role','group');controls.setAttribute('aria-label','Slideshow');
+            var full=document.createElement('button');full.type='button';full.className='btn btn-sm';full.textContent='Full Screen';full.hidden=document.fullscreenElement===root || !root.requestFullscreen || !document.fullscreenEnabled;full.addEventListener('click',function(){fullscreenShow().then(function(ok){full.hidden=ok;if(!ok)say('The browser did not enter full screen. The show can continue in this window.',true);});});controls.append(full);
+            var end=document.createElement('button');end.type='button';end.className='btn btn-sm';end.textContent='Leave Show';end.addEventListener('click',leave);controls.append(end);showStage.append(controls);
             showResize = function () { fitShow(showStage); };
-            window.addEventListener('resize', showResize);
+            window.addEventListener('resize', showResize, {signal:styleLifetime.signal});
             fitShow(showStage);
-            if (root.requestFullscreen && !document.fullscreenElement) { root.requestFullscreen().catch(function () { }); }
             showStage.focus();
-            if (settings.presenterOnPresent && path) { presenterWindow(); }
             commandsChanged();
+            } catch(error) {
+                if(document.fullscreenElement===root && document.exitFullscreen)document.exitFullscreen().catch(function(){});
+                if(!presenting && showStage){showStage.remove();showStage=null;root.classList.remove('deck-showing');}
+                if(!destroyed)say('The slideshow could not start: '+error.message,true);
+                return false;
+            } finally {startingShow=false;}
         }
         async function leave() {
             if (!presenting) { return; }
@@ -1100,12 +1211,13 @@
             showStage.remove();
             showStage = null;
             root.classList.remove('deck-showing');
-            if (document.fullscreenElement && document.exitFullscreen) { document.exitFullscreen().catch(function () { }); }
+            showFullscreenOwned=false;
+            if (document.fullscreenElement===root && document.exitFullscreen) { document.exitFullscreen().catch(function () { }); }
             drawFilm();
             await goTo(at);
             commandsChanged();
         }
-        function onFullscreenChange() { if (!document.fullscreenElement && presenting && !presenterRole) { leave(); } }
+        function onFullscreenChange() {if(document.fullscreenElement===root){showFullscreenOwned=true;return;}if(!document.fullscreenElement && showFullscreenOwned){showFullscreenOwned=false;if(presenting && !presenterRole)leave();}}
         document.addEventListener('fullscreenchange', onFullscreenChange);
         function presenterWindow() {
             if (!path) { say('Save the deck first, so the presenter window can open it.'); return; }
@@ -1114,11 +1226,16 @@
                which never crosses origins, and the deck's file is kept
                per origin (DESIGN.md, decision 11): on the desktop that is
                the applet's standalone page at /slides on the same host. */
-            var url = new URL(opts.host === 'window' ? '/slides' : location.pathname, location.origin);
-            url.search = '?file=' + encodeURIComponent(path).replace(/%2F/g, '/').replace(/%7E/g, '~') + '&presenter=1';
-            window.open(url.href, 'yavc-presenter-' + path, 'popup,width=960,height=600'); // check-ignore(window-open-noopener): the site's own page on this origin; the name lets a second press reuse the window
+            var token=presenterIdentity(),url;
+            if(H.presentation && H.presentation.version===1)url=new URL(H.presentation.presenterURL({application:'slides',resource:path,channel:token}),location.href);
+            else if(!resources && opts.host!=='window'){url=new URL(location.pathname,location.origin);url.search='?file='+encodeURIComponent(path)+'&presenter=1&presenter-channel='+encodeURIComponent(token);}
+            else{say('This host does not provide a presenter page.',true);return false;}
+            if(url.origin!==location.origin){say('The presenter page must use this application\'s origin.',true);return false;}
+            var popup=null;try{popup=window.open(url.href, 'yavc-presenter-' + token, 'popup,width=960,height=600');}catch(error){} // check-ignore(window-open-noopener): the site's own page on this origin; the name lets a second press reuse the window
+            if(!popup)say('The browser blocked the presenter window. Allow popups for this site, then choose Presenter Window again.',true);
+            return !!popup;
 
-            channel = channel || channelFor();
+            channel = channelFor();
             if (channel) { channel.postMessage({ type: 'at', slide: presenting ? presenting.position().slide : at, step: presenting ? presenting.position().step : 0 }); }
         }
         /* The presenter view: the current slide, the next, the notes, a
@@ -1127,13 +1244,15 @@
         var clockTimer = 0;
         function becomePresenter() {
             presenterRole = { slide: 0, step: 0, started: Date.now() };
+            document.title='Presenter \u00b7 '+tabTitle(tab())+' \u00b7 Slides';
+            if(detachLive){detachLive();detachLive=null;}if(snap){snap.leave();snap=null;}
             root.classList.add('deck-presenter-mode');
             el.main.hidden = true;
             root.querySelector('.deck-toolbar-slot').hidden = true;
             root.querySelector('[data-role="status"]').hidden = true;
             el.presenter.hidden = false;
             el.presenter.innerHTML = '<div class="deck-pv-top"><div class="deck-pv-now"><div class="deck-stage" data-role="pv-now"></div></div><div class="deck-pv-side"><div class="deck-pv-clock" data-role="pv-clock"></div><div class="deck-pv-next"><p class="deck-pv-label">Next</p><div class="deck-stage" data-role="pv-next"></div></div></div></div><div class="deck-pv-notes" data-role="pv-notes"></div><p class="deck-pv-help">Arrows, Space, Page Up and Down move the show from here as well. <span data-role="pv-count"></span></p>';
-            channel = channel || channelFor();
+            channel = channelFor();
             function drawPV() {
                 var i = presenterRole.slide, now = q('[data-role="pv-now"]'), nxt = q('[data-role="pv-next"]');
                 function one(stage, s) {
@@ -1165,33 +1284,41 @@
             if (channel) {
                 channel.onmessage = function (e) {
                     var m = e.data || {};
-                    if (m.type === 'at') { presenterRole.slide = m.slide; presenterRole.step = m.step; drawPV(); }
+                    if(m.type==='state' && typeof m.text==='string' && m.text.length<=2097152){deck=parseDeck(m.text);presenterRole.slide=Math.max(0,Math.min(deck.slides.length-1,Number.isInteger(m.slide)?m.slide:0));presenterRole.step=Number.isInteger(m.step)?Math.max(0,m.step):0;drawPV();}
+                    else if(m.type==='unavailable')say('The live deck is too large for presenter synchronization. The saved deck remains visible.',true);
+                    else if (m.type === 'at' && Number.isInteger(m.slide) && m.slide>=0 && m.slide<deck.slides.length && Number.isInteger(m.step) && m.step>=0) { presenterRole.slide = m.slide; presenterRole.step = m.step; drawPV(); }
                 };
+                channel.postMessage({type:'ready'});
             }
             root.addEventListener('keydown', function (e) {
-            if ((e.key === 'PageUp' || e.key === 'PageDown') && !e.ctrlKey && !e.metaKey && !e.altKey && !presenting) {
-                e.preventDefault();
-                goTo(at + (e.key === 'PageUp' ? -1 : 1));
-                return;
-            }
                 var next = ['ArrowRight', 'ArrowDown', ' ', 'PageDown'].indexOf(e.key) >= 0, prev = ['ArrowLeft', 'ArrowUp', 'PageUp'].indexOf(e.key) >= 0;
                 if (!next && !prev) { return; }
                 e.preventDefault();
+                if(channel){channel.postMessage({type:'advance',direction:next?'next':'previous'});return;}
                 presenterRole.slide = Math.max(0, Math.min(deck.slides.length - 1, presenterRole.slide + (next ? 1 : -1)));
                 presenterRole.step = 0;
                 if (channel) { channel.postMessage({ type: 'goto', slide: presenterRole.slide, step: 0 }); }
                 drawPV();
             });
             drawPV();
-            window.addEventListener('resize', drawPV);
+            window.addEventListener('resize', drawPV, {signal:styleLifetime.signal});
+            commandsChanged();
         }
         function listenForPresenter() {
-            channel = channel || channelFor();
+            channel = channelFor();
             if (!channel) { return; }
             channel.onmessage = function (e) {
                 var m = e.data || {};
-                if (m.type === 'goto' && presenting) { presenting.goTo(m.slide, m.step); }
-                else if (m.type === 'goto' && !presenting) { goTo(m.slide); }
+                if(m.type==='ready'){
+                    var reply=channel;Promise.resolve(pageActive()?page.sync():null).then(function(){if(!destroyed && channel===reply){var text=fullText();reply.postMessage(text.length>2097152?{type:'unavailable'}:{type:'state',text:text,slide:presenting?presenting.position().slide:at,step:presenting?presenting.position().step:0});}}).catch(function(error){if(!destroyed)say(error.message,true);});return;
+                }
+                if(m.type==='advance' && (m.direction==='next' || m.direction==='previous')){
+                    if(presenting){if(m.direction==='next')presenting.next();else presenting.prev();}
+                    else goTo(at+(m.direction==='next'?1:-1));return;
+                }
+                if(m.type!=='goto' || !Number.isInteger(m.slide) || m.slide<0 || m.slide>=deck.slides.length || !Number.isInteger(m.step) || m.step<0)return;
+                if (presenting) { presenting.goTo(m.slide, m.step); }
+                else { goTo(m.slide); }
             };
         }
 
@@ -1276,6 +1403,7 @@
             await openInTab(got.text, null);
             modified = true;
             stash();
+            if(tab())tab().savedText=null;
             commandsChanged();
             announce();
             say('Imported ' + (name || 'the file') + ': ' + got.slides + ' slide' + (got.slides === 1 ? '' : 's') + (got.pictures ? ', with ' + got.pictures + ' picture' + (got.pictures === 1 ? '' : 's') + ' noted but not kept' : '') + '. Save it to keep it.');
@@ -1346,7 +1474,7 @@
         function editCtx() {
             return {
                 identity: current, signal: styleLifetime.signal, readOnly: readOnly,
-                prepareFormats: async function () { await deckEngine(); await installStyle(); },
+                prepareFormats: async function () { if(pageActive())await page.sync();var h=deckHistory();if(h)h.boundary();await deckEngine(); await installStyle(); },
                 styleScope: function () { return el.body.getAttribute('data-md-style') || ''; },
                 page: function () { return page; }, text: function () { return cm; },
                 onPage: function () { return pageActive() && (mode === 'visual' || (mode === 'split' && historyPane !== 'text')); },
@@ -1367,6 +1495,8 @@
                     textPane: async function () { var owner = deck; if (pageActive()) await page.sync(); if (destroyed || deck !== owner) return; if (mode === 'visual') await setMode('split'); await makeCM(); },
                     replace: function (edits) {
                         requireEditable();
+                        deckHistory();historyBatch++;
+                        try {
                         edits.forEach(function (changes, slide) {
                             if (slide === current()) cm.dispatch({ changes: changes, userEvent: 'input.replace', annotations: cmLibs.isolateHistory.of('full') });
                             else {
@@ -1376,7 +1506,9 @@
                                 cmStates.set(slide, state); slide.text = state.doc.toString(); drawThumb(deck.slides.indexOf(slide));
                             }
                         });
+                        } finally {historyBatch--;}
                         modified = true; installStyle(); keep(); commandsChanged();
+                        recordHistory('replace');
                     }
                 });
                 await slideSearch.open();
@@ -1395,6 +1527,7 @@
             return editingCommands;
         }
         function commandTable() {
+            if(presenterRole)return [];
             var ready = !!md, s = current(), st = settingsOf(s);
             var table = [
                 cmd('new-deck', 'New Deck', 'file', newDeck),
@@ -1402,24 +1535,24 @@
                 cmd('save', 'Save', 'yavc-save', save, { shortcut: 'Mod+S', disabled: function () { return !ready; } }),
                 cmd('save-as', 'Save As…', 'yavc-save-as', saveAs, { disabled: function () { return !!(resources && !resources.canSaveAs()); } }),
                 cmd('find', 'Find and Replace…', 'search', openFind, { shortcut: window.yavcUtil.shortcut('Mod-f'), bind: false, disabled: function () { return !ready; } }),
-                cmd('undo', 'Undo', 'yavc-undo', function () { return editing().history('undo'); }, { shortcut: window.yavcUtil.shortcut('Mod-z'), bind: false, disabled: function () { return !editing() || !editing().canHistory('undo'); } }),
-                cmd('redo', 'Redo', 'yavc-redo', function () { return editing().history('redo'); }, { shortcut: window.yavcUtil.shortcut('Mod-y'), bind: false, disabled: function () { return !editing() || !editing().canHistory('redo'); } }),
+                cmd('undo', 'Undo', 'yavc-undo', function () { return changeHistory('undo'); }, { shortcut: window.yavcUtil.shortcut('Mod-z'), bind: false, disabled: function () { return !canDeckHistory('undo'); } }),
+                cmd('redo', 'Redo', 'yavc-redo', function () { return changeHistory('redo'); }, { shortcut: window.yavcUtil.shortcut('Mod-y'), bind: false, disabled: function () { return !canDeckHistory('redo'); } }),
                 cmd('edit-whole', 'Edit the Whole Deck in the Editor', 'pencil', editWhole, { disabled: function () { return !path; } }),
                 cmd('export-html', 'Download as a Page', 'download', exportHTML),
                 cmd('export-pptx', 'Download as PowerPoint', 'download', exportPPTX, { disabled: function () { return !ready; } }),
                 cmd('export-pdf', 'Download as PDF', 'download', exportPDF, { disabled: function () { return !ready; } }),
                 cmd('import-pptx', 'Import from PowerPoint…', 'upload', importPPTX, { disabled: function () { return !ready; } }),
                 cmd('print', 'Print…', 'yavc-print', printDeck),
-                cmd('slide-new', 'New Slide', 'plus', null, { items: LAYOUTS.map(function (l) { return { id: 'slide-new-' + l[0], label: l[1], run: function () { addSlide(l[0]); } }; }) }),
+                cmd('slide-new', 'New Slide', 'plus', null, { items: LAYOUTS.map(function (l) { return { id: 'slide-new-' + l[0], label: l[1], run: function () { return addSlide(l[0]); } }; }) }),
                 cmd('slide-duplicate', 'Duplicate Slide', 'copy', duplicateSlide),
                 cmd('slide-delete', 'Delete Slide', null, deleteSlide, { danger: true, disabled: function () { return deck.slides.length <= 1; } }),
                 cmd('slide-prev', 'Previous Slide', 'back', function () { goTo(at - 1); }, { shortcut: 'PageUp', disabled: function () { return at === 0; } }),
                 cmd('slide-next', 'Next Slide', 'forward', function () { goTo(at + 1); }, { shortcut: 'PageDown', disabled: function () { return at >= deck.slides.length - 1; } }),
-                cmd('slide-up', 'Move Slide Up', 'arrow-up', function () { moveSlide(-1); }, { disabled: function () { return at === 0; } }),
-                cmd('slide-down', 'Move Slide Down', 'arrow-down', function () { moveSlide(1); }, { disabled: function () { return at >= deck.slides.length - 1; } }),
+                cmd('slide-up', 'Move Slide Up', 'arrow-up', function () { return moveSlide(-1); }, { disabled: function () { return at === 0; } }),
+                cmd('slide-down', 'Move Slide Down', 'arrow-down', function () { return moveSlide(1); }, { disabled: function () { return at >= deck.slides.length - 1; } }),
                 { id: 'layout', label: 'Layout', glyph: 'board', current: function () { var f = LAYOUTS.find(function (x) { return x[0] === (st.layout || 'content'); }); return f ? f[1] : null; },
-                    items: LAYOUTS.map(function (l) { return { id: 'layout-' + l[0], label: l[1], choice: 'deck-layout', value: l[0], checked: function () { return (settingsOf(current()).layout || 'content') === l[0]; }, run: function () { setSlideSetting('layout', l[0]); } }; }) },
-                cmd('reveal', 'Reveal Points One by One', 'list', function () { setSlideSetting('reveal', settingsOf(current()).reveal === 'steps' ? null : 'steps'); }, { checked: function () { return settingsOf(current()).reveal === 'steps'; } }),
+                    items: LAYOUTS.map(function (l) { return { id: 'layout-' + l[0], label: l[1], choice: 'deck-layout', value: l[0], checked: function () { return (settingsOf(current()).layout || 'content') === l[0]; }, run: function () { return updateSlideSettings({layout:l[0]}); } }; }) },
+                cmd('reveal', 'Reveal Points One by One', 'list', function () { return updateSlideSettings({reveal:settingsOf(current()).reveal === 'steps' ? null : 'steps'}); }, { checked: function () { return settingsOf(current()).reveal === 'steps'; } }),
                 cmd('slide-colours', 'Slide Colors…', 'colour', slideColours),
                 cmd('deck-colours', 'Deck Colors…', 'colour', deckColours),
                 cmd('deck-stylesheet', 'Stylesheet File…', 'file', function () {
@@ -1432,8 +1565,8 @@
                     reason: 'Choose a home-folder CSS file in Stylesheet File first. This host also needs a writable file service.' }),
                 cmd('slide-class', 'Slide Style…', 'tag', slideClasses),
                 cmd('styles-help', 'Styling a Deck', 'info', function () { window.open(publicOrigin() + '/slides-styles', '_blank', 'noopener'); }),
-                cmd('background-image', 'Background Picture…', 'image', function () { askText('Background Picture', 'Picture File or URL', function () { return settingsOf(current()).image || ''; }, true,{browse:true,accept:'.png,.jpg,.jpeg,.gif,.webp,.svg',help:'Leave empty to remove the background picture.'}).then(function (v) { if (v != null) { setSlideSetting('image', v.trim()); } }); }),
-                { id: 'slide-transition', label: 'Transition', items: TRANSITIONS.map(function (t) { return { id: 'slide-transition-' + t[0], label: t[1], choice: 'deck-slide-transition', value: t[0], checked: function () { return (settingsOf(current()).transition || deck.front.transition || 'fade') === t[0]; }, run: function () { setSlideSetting('transition', t[0] === (deck.front.transition || 'fade') ? null : t[0]); } }; }) },
+                cmd('background-image', 'Background Picture…', 'image', function () { askText('Background Picture', 'Picture File or URL', function () { return settingsOf(current()).image || ''; }, true,{browse:true,accept:'.png,.jpg,.jpeg,.gif,.webp,.svg',help:'Leave empty to remove the background picture.'}).then(function (v) { if (v != null) { return updateSlideSettings({image:v.trim()}); } }); }),
+                { id: 'slide-transition', label: 'Transition', items: TRANSITIONS.map(function (t) { return { id: 'slide-transition-' + t[0], label: t[1], choice: 'deck-slide-transition', value: t[0], checked: function () { return (settingsOf(current()).transition || deck.front.transition || 'fade') === t[0]; }, run: function () { return updateSlideSettings({transition:t[0] === (deck.front.transition || 'fade') ? null : t[0]}); } }; }) },
                 cmd('deck-title', 'Properties…', 'tag', async function () {
                     if (!ENGINE || !await settleForDialog(false)) { return; }
                     var guard = dialogGuard(false);
@@ -1451,13 +1584,13 @@
                     }).finally(guard.release);
                 }),
                 { id: 'theme', label: 'Theme', glyph: 'theme', current: function () { var f = THEMES.find(function (x) { return x[0] === deck.front.theme; }); return f ? f[1] : null; },
-                    items: THEMES.map(function (t) { return { id: 'theme-' + t[0], label: t[1], choice: 'deck-theme', value: t[0], checked: function () { return (deck.front.theme || 'plain') === t[0]; }, run: function () { setFront('theme', t[0]); } }; }) },
-                { id: 'size', label: 'Slide Size', items: SIZES.map(function (t) { return { id: 'size-' + t[0].replace(':', '-'), label: t[1], choice: 'deck-size', value: t[0], checked: function () { return (deck.front.size || '16:9') === t[0]; }, run: function () { setFront('size', t[0]); } }; }) },
-                { id: 'deck-transition', label: 'Transition for Every Slide', items: TRANSITIONS.map(function (t) { return { id: 'deck-transition-' + t[0], label: t[1], choice: 'deck-transition', value: t[0], checked: function () { return (deck.front.transition || 'fade') === t[0]; }, run: function () { setFront('transition', t[0]); } }; }) },
-                cmd('present', 'Present from the Start', 'play', function () { present(0); }, { shortcut: 'Mod+Enter', disabled: function () { return !ready || !!presenting; } }),
-                cmd('present-here', 'Present from This Slide', 'forward', function () { present(at); }, { shortcut: 'Mod+Shift+Enter', disabled: function () { return !ready || !!presenting; } }),
+                    items: THEMES.map(function (t) { return { id: 'theme-' + t[0], label: t[1], choice: 'deck-theme', value: t[0], checked: function () { return (deck.front.theme || 'plain') === t[0]; }, run: function () { return updateDeckSettings({theme:t[0]}); } }; }) },
+                { id: 'size', label: 'Slide Size', items: SIZES.map(function (t) { return { id: 'size-' + t[0].replace(':', '-'), label: t[1], choice: 'deck-size', value: t[0], checked: function () { return (deck.front.size || '16:9') === t[0]; }, run: function () { return updateDeckSettings({size:t[0]}); } }; }) },
+                { id: 'deck-transition', label: 'Transition for Every Slide', items: TRANSITIONS.map(function (t) { return { id: 'deck-transition-' + t[0], label: t[1], choice: 'deck-transition', value: t[0], checked: function () { return (deck.front.transition || 'fade') === t[0]; }, run: function () { return updateDeckSettings({transition:t[0]}); } }; }) },
+                cmd('present', 'Present from the Start', 'play', function () { return present(0); }, { shortcut: 'Mod+Enter', disabled: function () { return !ready || !!presenting || startingShow; } }),
+                cmd('present-here', 'Present from This Slide', 'forward', function () { return present(at); }, { shortcut: 'Mod+Shift+Enter', disabled: function () { return !ready || !!presenting || startingShow; } }),
                 cmd('leave', 'Leave the Show', 'stop', leave, { hidden: function () { return !presenting; } }),
-                cmd('presenter', 'Presenter Window', 'new-window', presenterWindow, { disabled: function () { return !path; }, reason: 'Save this deck in this browser before opening the presenter window.' }),
+                cmd('presenter', 'Presenter Window', 'new-window', presenterWindow, { disabled: function () { return !path || !presenterHost(); }, reason: !presenterHost()?'This host does not provide presenter windows.':'Save this deck in this browser before opening the presenter window.' }),
                 cmd('presenter-auto', 'Always Show Presenter Window', null, function () { settings.presenterOnPresent = !settings.presenterOnPresent; keepSetting('presenterOnPresent', settings.presenterOnPresent); commandsChanged(); }, { checked: function () { return !!settings.presenterOnPresent; } }),
                 cmd('toggle-film', 'Show the Filmstrip', 'panel', function () { settings.filmstrip = !settings.filmstrip; el.film.hidden = !settings.filmstrip; keepSetting('filmstrip', settings.filmstrip); fit(); commandsChanged(); }, { checked: function () { return settings.filmstrip; } }),
                 { id: 'dock', label: 'Canvas', glyph: 'dock', current: function () { var d = DOCKS.find(function (x) { return x[0] === settings.dock; }); return d ? d[1] : null; },
@@ -1479,9 +1612,9 @@
                     result.reason = 'This deck is read-only or its recovered revision no longer matches. Use Save As.';
                 } else if (row.id && !navigation.test(row.id)) {
                     var disabled = row.disabled, run = row.run;
-                    result.disabled = function () { return readOnly() || (typeof disabled === 'function' ? disabled() : !!disabled); };
-                    result.reason = readOnly() ? 'This deck is read-only.' : row.reason;
-                    if (run) result.run = function () { requireEditable(); return run.apply(this, arguments); };
+                    result.disabled = function () { return !!presenting || readOnly() || (typeof disabled === 'function' ? disabled() : !!disabled); };
+                    result.reason = presenting ? 'Leave the show before editing this deck.' : readOnly() ? 'This deck is read-only.' : row.reason;
+                    if (run) result.run = function () { requireEditable();if(row.id==='undo' || row.id==='redo')return run.apply(this,arguments);var h=deckHistory();if(h)h.boundary();try{return Promise.resolve(run.apply(this,arguments)).finally(function(){if(h)h.boundary();});}catch(error){if(h)h.boundary();throw error;} };
                 }
                 return result;
             }
@@ -1532,11 +1665,22 @@
             }
         });
         root.addEventListener('keydown', function (e) {
+            if((e.key==='PageUp' || e.key==='PageDown') && !e.defaultPrevented && !e.isComposing && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && !presenting && !presenterRole && !e.target.closest('input,textarea,select,dialog') && e.target.closest('[data-applet]')===root && (e.target===root || e.target.closest('.deck-main'))){e.preventDefault();goTo(at+(e.key==='PageUp'?-1:1));return;}
             /* Ctrl+Enter presents, since F5 is the browser's reload; F5 still
                works while the deck itself has the focus. */
             if (e.key === 'F5' || ((e.ctrlKey || e.metaKey) && e.key === 'Enter')) { e.preventDefault(); present(e.shiftKey ? at : 0); }
             if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); save(); }
         });
+        root.addEventListener('keydown',function(e){
+            if(presenting || e.defaultPrevented || e.isComposing || e.altKey || !(e.ctrlKey || e.metaKey) || e.target.closest('input,textarea,select'))return;
+            var key=e.key.toLowerCase(),direction=key==='z'?(e.shiftKey?'redo':'undo'):key==='y'?'redo':null;
+            if(!direction)return;e.preventDefault();e.stopPropagation();changeHistory(direction).catch(function(err){say(err.message,true);});
+        },true);
+        root.addEventListener('beforeinput',function(e){
+            var direction=e.inputType==='historyUndo'?'undo':e.inputType==='historyRedo'?'redo':null;
+            if(!direction || !e.cancelable || presenting || e.target.closest('input,textarea,select'))return;
+            e.preventDefault();e.stopPropagation();changeHistory(direction).catch(function(error){say(error.message,true);});
+        },true);
         if (el.split && window.pudlSplit) { /* PUDL's splitter runs by markup. */ }
         var ro = 'ResizeObserver' in window ? new ResizeObserver(function () { fit(); fitThumbs(); }) : null;
         if (ro) { ro.observe(el.stage); ro.observe(el.film); }
@@ -1544,6 +1688,8 @@
         /* === Start ===================================================== */
 
         var booted = (async function () {
+            await loadScript(HERE + 'history.js' + STAMP);
+            await loadScript(HERE + 'present.js' + STAMP);
             md = await engine();
             await kit();
             if (destroyed) { return; }
@@ -1587,7 +1733,7 @@
             }
             var startExisted=tabs.some(function (t) {return t.path===file;});
             if (file) { await openPath(file, parseInt(start.get('slide') || '1', 10)).catch(function (err) { say(err.message, true); return false; }); }
-            if (!tabs.length) { load(NEW_DECK, null); }
+            if (!tabs.length) { await load(NEW_DECK, null); }
             restoring = false;
             listenForPresenter();
             var stored=H.config && H.config.stored ? await H.config.stored('slides') : {};
@@ -1654,6 +1800,7 @@
                 if (resources) { tab().resource = null; tab().fresh = !!input.path; }
                 modified = true;
                 stash();
+                if(tab())tab().savedText=null;
                 commandsChanged();
                 announce();
                 return { output: { index: active + 1, path: path, slide: at + 1, count: deck.slides.length } };
@@ -1689,6 +1836,7 @@
             },
             'save@1': async function (input) {
                 await booted;
+                if(presenterRole)throw new Error('The presenter is read-only. Save from the editing window.');
                 if (resources) {
                     var destination = input.path ? String(input.path) : path;
                     if (!destination) throw new Error('Choose a destination for the deck.');
@@ -1701,6 +1849,7 @@
                 var err = await H.fs.writeText(path, fullText());
                 if (err) { throw new Error('could not save: ' + err); }
                 modified = false;
+                if(tab())tab().savedText=fullText();
                 say('Saved ' + path + '.');
                 announce();
                 commandsChanged();
@@ -1721,16 +1870,18 @@
             },
             'add@1': async function (input) {
                 await booted;
+                if(!(await prepareStructure()))throw new Error('The deck changed. Try again.');
                 var after = input.after == null ? at + 1 : Math.floor(Number(input.after));
                 if (!(after >= 0 && after <= deck.slides.length)) { throw new Error('after must be from 0 to ' + deck.slides.length); }
                 var text = input.text != null ? String(input.text) : (NEW_SLIDE[input.layout] || NEW_SLIDE.content);
                 deck.slides.splice(after, 0, { text: text });
                 modified = true;
                 drawFilm();
+            recordHistory('add',after);
                 await goTo(after);
                 return { output: placed() };
             },
-            'duplicate@1': async function (input) { await booted; await atSlide(input.index); duplicateSlide(); await booted; return { output: placed() }; },
+            'duplicate@1': async function (input) { await booted; await atSlide(input.index); await duplicateSlide(); return { output: placed() }; },
             'delete@1': async function (input) {
                 await booted;
                 if (deck.slides.length <= 1) { throw new Error('a deck keeps at least one slide'); }
@@ -1740,24 +1891,26 @@
             },
             'move@1': async function (input) {
                 await booted;
+                if(!(await prepareStructure()))throw new Error('The deck changed. Try again.');
                 var i = slideNo(input.index), to = slideNo(input.to);
                 var s = deck.slides.splice(i, 1)[0];
                 deck.slides.splice(to, 0, s);
                 modified = true;
                 drawFilm();
+                recordHistory('move',to);
                 await goTo(to);
                 return { output: placed() };
             },
             'set-slide@1': async function (input) {
                 await booted;
                 var i = await atSlide(input.index);
-                ['layout', 'background', 'image', 'reveal', 'transition', 'class', 'color', 'heading', 'accent'].forEach(function (k) {
-                    if (input[k] != null) { setSlideSetting(k, String(input[k])); }
-                });
+                var values={};['layout', 'background', 'image', 'reveal', 'transition', 'class', 'color', 'heading', 'accent'].forEach(function (k) {if(input[k]!=null)values[k]=String(input[k]);});
+                await updateSlideSettings(values);
                 return { output: { index: i + 1, settings: settingsOf(current()) } };
             },
             'set-deck@1': async function (input) {
                 await booted;
+                deckHistory();
                 if (deck.frontProblem) { throw new Error('the front matter cannot be changed here: ' + deck.frontProblem); }
                 var set = {}, order = [];
                 ['title', 'author', 'subject', 'keywords', 'lang', 'date', 'theme', 'size', 'transition', 'ink', 'heading', 'muted', 'accent', 'background', 'stylesheet'].forEach(function (k) {
@@ -1790,7 +1943,7 @@
                 await booted;
                 if (presenting) { throw new Error('the deck is being presented already'); }
                 await present(input.from == null ? 0 : slideNo(input.from));
-                return { output: { presenting: true, slide: (presenting ? presenting.position().slide : at) + 1 } };
+                return { output: { presenting: !!presenting, slide: (presenting ? presenting.position().slide : at) + 1 } };
             },
             'leave@1': async function () { await booted; await leave(); return { output: { presenting: false, slide: at + 1 } }; },
             'export@1': async function () {
@@ -1859,6 +2012,9 @@
                 styledSections.clear();
                 if (sheetWatch) { sheetWatch(); }
                 if (presenting) { presenting.destroy(); }
+                if (showStage) { showStage.remove(); showStage = null; }
+                root.classList.remove('deck-showing');
+                if (document.fullscreenElement === root && document.exitFullscreen) { document.exitFullscreen().catch(function () {}); }
                 if (page) { try { page.enable(false); } catch (err) { } }
                 if (cm) { cm.destroy(); }
                 if (ro) { ro.disconnect(); }
