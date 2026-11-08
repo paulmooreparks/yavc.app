@@ -35,6 +35,7 @@ async function colors(p) {
                 }
                 for(const mode of app==='docs'?['document','visual','split','preview']:['split','preview']) {
                     await action(p,app,'view',{mode}); await p.locator('[data-ed-page] th').first().waitFor();
+                    assert.equal(await p.locator('[data-role="message"]').textContent(),'');
                     await p.locator('[data-ed-page] .ed-diagram svg').waitFor({state:'attached'});
                     assert.equal(await p.locator('[data-ed-page] .ed-diagram svg rect').first().evaluate(n=>getComputedStyle(n).fill),'rgb(236, 236, 255)');
                     let light;

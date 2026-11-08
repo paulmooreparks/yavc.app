@@ -8,6 +8,10 @@ Page Setup and Header and Footer belong to Docs Document view. Format offers Swi
 
 All drawn Docs views and Editor Markdown previews use the shared paper palette before authored styles. Host appearance changes the surrounding workspace and page gutters, while document ink, links, borders, table/code shading and semantic shortcode colors remain unchanged. Mermaid diagrams on these surfaces use their light rendering theme. Slides retains its own deck palette and rendering policy. Hidden stylesheet node views retain their original Markdown but contribute no visible selection box.
 
+Inline export exclusions use the `no_export` rich mark; block exclusions remain editable containers. Serialization retains whitespace within the exclusion boundary before export pruning. The engine and rich schema must come from the same release set. Rich insertion captures the source view, document, selection and load generation before parsing. A stale result is refused, and live insertion acknowledges only after its rich source has synchronized.
+
+Key Bindings is an application-owned preferences dialog. It uses host `config.set` to save a validated override map rather than routing a JSON preference file through Docs or bypassing revision-safe resource writes. Rich shortcut lookup consults current bindings without replacing editor state or Undo history. Field errors stay in the dialog with accessible associations. Ordinary command failures use the shared toast helper; ongoing source/recovery problems remain inline.
+
 ## Host capabilities
 
 The resource, creation and recovery contracts remain in `content-resource-contract.md`, `content-creation-contract.md` and `content-recovery-contract.md`. They retain storage authority in the host. Opaque resource IDs are not treated as filenames; native-format checks use the returned display name. The optional Save As name check runs before a destination is committed.

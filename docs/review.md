@@ -1,5 +1,17 @@
 # Stem-to-stern review, November 2026
 
+## Inline export exclusions and operation feedback, 2026-11-08
+
+Docs Key Bindings previously tried to open its JSON preference file as a Markdown document. Settings resources also intentionally lack document-write authority. A shared application-owned dialog now edits shortcut overrides through the host configuration service, with command selections, defaults, disabled bindings, validation and Apply/Cancel. It keeps document tabs unchanged, detects concurrent preference changes and retains failed saves in the dialog. Rich shortcut lookup reads current preferences without rebuilding the editor state. The focused fixture exercises immediate remapping, cancellation, reset, narrow layout, stale settings and save failures in Docs and Editor.
+
+Standing status-bar instructions are removed from the shared document surface and Diagrams drawing tools. Shared block-source editing no longer adds its instruction to the status bar. Document metrics, operation results and actual progress remain available. Language-service callbacks now distinguish ongoing worker/suspension warnings from refused formatting commands, preserving contextual warnings while using transient feedback for an individual failure.
+
+Rich insertion captures its originating view, document, selection and load generation before parsing. A held-parser regression changes tabs before releasing the result and verifies that the replacement document receives no text. The live insertion action awaits rich synchronization before returning its result. The shared preferences dialog also uses PUDL select wrappers and links field errors to their notices. Independent source review found no remaining concrete blockers after these corrections.
+
+The export playground's inline `no-export` span previously forced its entire paragraph into source-block editing. It now maps to an editable rich mark, with the same excluded-text identification in pasted HTML. Its serializer keeps leading and trailing whitespace inside the exclusion, while maintaining Markdown emphasis rules. Go tests cover whitespace-only exclusions, nested formatting, links, malformed tags and export pruning after serialization. The browser fixture replaces the entire excluded note, edits surrounding text and changes an excluded block heading; each change retains the wrappers and exports no private text or added spacing.
+
+One-time refusals and operation failures in Docs/Editor, Slides, Diagrams, Files and the shell now use a shared PUDL toast helper. A blocked toast component falls back to an escaped shared dialog. Persistent content/recovery diagnostics and field validation remain inline. The source inventory and classification are in `operation-feedback-audit.md`. The feedback fixture verifies failed-open tab/content/geometry preservation, expiry, picker failures, taskbar header geometry and the fallback dialog. Theme, exclusion and feedback fixtures pass Chromium, Firefox and WebKit on disposable port 8447.
+
 ## White document palette and hidden stylesheet selection, 2026-11-08
 
 Runtime inspection of the installed export playground showed white paper and dark ink in both themes, but table shading changed from `rgb(228, 231, 235)` to `rgb(35, 39, 45)` and borders changed from `rgb(207, 212, 218)` to `rgb(53, 59, 67)`. A selected zero-height source node around the hidden stylesheet produced the thin rectangle above the title.

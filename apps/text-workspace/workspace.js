@@ -202,10 +202,14 @@
             if (opts.changed) { opts.changed(stateString()); }
         }
 
-        /* A passing message goes in the status line; an error is a notice
-           above the document, which stays until dismissed or the next one. */
+        /* Command failures use toasts; ongoing document warnings remain
+           beside the document. Routine confirmations use the status line. */
         function say(msg, isError) {
-            if (isError && msg) { window.yavcUtil.notice(el.tabs, msg, true); el.message.textContent = ''; return; }
+            if (isError && msg) {
+                if (isError === true || isError === 'danger') { window.yavcUtil.toast(msg, 'danger'); }
+                else { window.yavcUtil.notice(el.tabs, msg, isError); }
+                el.message.textContent = ''; return;
+            }
             el.message.textContent = msg || '';
         }
 
@@ -471,7 +475,7 @@
             var want = resolvedView(t, t.view || markdownDefault());
             if (want !== 'text' && t.lang === 'markdown' && want !== viewMode) { setView(want); }
             markExplorer();
-            say(t.external ? 'This file was changed somewhere else since you opened it.' : '', !!t.external);
+            say(t.external ? 'This file was changed somewhere else since you opened it.' : '', t.external ? 'warn' : false);
             if (switching && t.view && t.view !== 'text' && canEditVisually()) { setView(t.view); }
         }
 
@@ -978,7 +982,7 @@
             schedulePaneLayout();
             if (view && keyComp) {
                 view.dispatch({ effects: keyComp.reconfigure(keyBindings()) });
-                if (keyProblems) { say(keyProblems, true); }
+                if (keyProblems) { say(keyProblems, 'warn'); }
             }
         }
 
@@ -1260,11 +1264,12 @@
             });
             FORMATS.forEach(function (f) { if (f[3]) { keys.push({ key: f[3], run: function () { applyFormat(f[0]); return true; } }); } });
             STYLES.forEach(function (st) { keys.push({ key: st[2], run: function () { applyFormat(st[0]); return true; } }); });
-            keys.push({ key: 'Mod-s', run: function () { save(); return true; } });
             keys.push({ key: 'Mod-f', run: function () { openFind(); return true; } });
-            keys.push({ key: 'Mod-Alt-o', run: function () { toggleOutline(); return true; } });
-            keys.push({ key: 'Alt-Shift-ArrowUp', run: function () { moveOutline('up'); return true; } });
-            keys.push({ key: 'Alt-Shift-ArrowDown', run: function () { moveOutline('down'); return true; } });
+            var bindings=effectiveKeys();
+            Object.keys(bindings).forEach(function (key) {
+                var name=bindings[key];if(!validKey(key) || name!==null&&!COMMANDS[name])return;
+                keys.push({key:key,run:function(){if(name!==null){try{Promise.resolve(COMMANDS[name]()).catch(function(err){say(err.message,true);});}catch(err){say(err.message,true);}}return true;}});
+            });
             return keys;
         }
         function textChangedForPage() {
@@ -1317,16 +1322,14 @@
                     await visual.api.enable(true);
                     if (gen !== visual.gen) { return; }
                     if (!el.findPlace.hidden && lastFind) { pageFind.set(lastFind); visualFind.refresh(); }
-                    say(mode === 'split'
-                        ? 'Edit the text or the page; each follows the other. Click a block drawn from its Markdown to change it.'
-                        : 'Edit the page as it will look. Click a block drawn from its Markdown to change it.');
+                    say('');
                     visual.api.repaginate();
                     if ((mode === 'visual' || mode === 'document') && inFront()) { visual.api.focus(); }
                 }
             } catch (err) {
                 if (gen !== visual.gen || destroyed) { return; }
                 await setView(mode === 'document' ? 'visual' : 'text');
-                say('The page could not be made. Using ' + viewMode + ' view: ' + (err && err.message || err), true);
+                say('The page could not be made. Using ' + viewMode + ' view: ' + (err && err.message || err), 'warn');
                 return;
             }
             keep();
@@ -2094,6 +2097,7 @@
         function insertText(text) {
             var t = current();
             if (!t || t.readOnly) { say('This file is read-only, so nothing can be added to it.', true); return; }
+            if (formatsThePage()) { return visual.api.insertMarkdown(text); }
             view.dispatch(view.state.replaceSelection(text), { scrollIntoView: true, userEvent: 'input' });
             view.focus();
         }
@@ -2102,9 +2106,10 @@
            of a Markdown page's front matter, in local time with its offset,
            or an HTML page's last-modified meta tag, in UTC as those are
            kept. Either is added if the page has none. */
-        function stampModified() {
+        async function stampModified() {
             var t = current();
             if (!t || t.readOnly) { say('This file is read-only, so its date can\'t be changed.', true); return; }
+            if(formatsThePage()&&pageActive()){await visual.api.sync();if(destroyed||current()!==t)return;}
             var doc = view.state.doc.toString(), eol = /\r\n/.test(doc) ? '\r\n' : '\n', change, stamp;
             if (t.lang === 'markdown') {
                 var fm = /^---[ \t]*\r?\n([\s\S]*?\r?\n)?---[ \t]*(?:\r?\n|$)/.exec(doc);
@@ -2140,19 +2145,16 @@
             say('Last modified ' + stamp + '.');
         }
 
-        /* Opens the settings file at its key bindings, writing the Editor's
-           own bindings into it first if it has none, so there is something
-           to change. */
+        /* Preferences belong to their application and use the host config
+           service, without opening a settings file as a document. */
         async function editKeys() {
-            if (!settings.keys) {
-                var err = await loadConfig().then(function (c) { return c.set(app, { keys: Object.assign({}, DEFAULT_KEYS) }); })
-                    .catch(function (e) { return e.message; });
-                if (err) { say('The key bindings could not be written: ' + err, true); return; }
-            }
-            if (await openPath('~/.config/'+app+'.json')) {
-                say('Under "keys", each key runs the command after it, and a key set to null does nothing. Saved changes apply at once. The commands are ' +
-                    Object.keys(COMMANDS).join(', ') + '.');
-            }
+            await loadScript(window.yavcUtil.versioned(beside('key-bindings.js')));
+            if(destroyed)return;
+            var baseline=JSON.stringify(settings.keys || {}), titles=new Map(commandTable().map(function (c) {return [c.id,c.label];}));
+            return window.yavcKeyBindings.open({title:isDocs?'Docs':'Editor',defaults:DEFAULT_KEYS,keys:settings.keys,keyLabel:keyLabel,validKey:validKey,signal:styleLifetime.signal,
+                commands:Object.keys(COMMANDS).sort().map(function (id) {return {id:id,label:typeof titles.get(id)==='string'?titles.get(id):id};}),
+                current:function(){return !destroyed&&JSON.stringify(settings.keys || {})===baseline;},
+                save:function(keys){return loadConfig().then(function (c) {return c.set(app,{keys:keys});});}});
         }
 
         /* === The command table and the toolbar (PUDL 0.68.0) ===============
@@ -2340,8 +2342,8 @@
             try {
                 var languageServices = await window.yavcMdEditor.languageServices();
                 if (destroyed) { return; }
-                lsp = languageServices.create(CM, function (message) { say(message, true); });
-            } catch (err) { if (!destroyed) { say('Language assistance could not load. Text editing remains available.', true); } }
+                lsp = languageServices.create(CM, function (message, detail) { say(message, detail && detail.persistent ? 'warn' : true); });
+            } catch (err) { if (!destroyed) { say('Language assistance could not load. Text editing remains available.', 'warn'); } }
             if (destroyed) { return; }
             FB = res[2];
             /* Settings that can't be read leave the defaults in place. */
@@ -2502,7 +2504,13 @@
                 return { output: docView(active, false) };
             },
             'set-text@1': async function (input) { var i = docNo(input.index); setDocText(i, input.text); return { output: docView(i, false) }; },
-            'insert@1': async function (input) { docNo(); if (current().readOnly) { throw new Error('the document is read-only'); } insertText(String(input.text)); return { output: docView(active, false) }; },
+            'insert@1': async function (input) {
+                docNo();var tab=current();if(tab.readOnly)throw new Error('the document is read-only');
+                if(await insertText(String(input.text))===false || current()!==tab)throw new Error('The document or selection changed before insertion.');
+                if(pageActive())await visual.api.sync();
+                if(current()!==tab)throw new Error('The document changed before insertion was acknowledged.');
+                return {output:docView(active,false)};
+            },
             'replace@1': async function (input) {
                 var i = docNo(input.index), text = docText(i), n = 0;
                 var flags = (input.all !== false ? 'g' : '') + (input.ignoreCase ? 'i' : '');

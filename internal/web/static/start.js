@@ -59,7 +59,7 @@
             var state = pudlLauncher.state(root), value = { pinned: state.pinned, collapsed: state.presentation === 'collapsed', width: state.width, height: state.height };
             saving = saving.then(function () { return pudlHost.config.set('site-launcher', value); }).then(function (problem) {
                 if (problem) throw new Error(problem);
-            }).catch(function () { window.yavcUtil.notice(document.querySelector('.site-header'), 'Launcher preferences could not be saved.', true); });
+            }).catch(function () { window.yavcUtil.toast( 'Launcher preferences could not be saved.', true); });
         }
         function restore(preferences) {
             var u = new URL(location.href), mode = u.searchParams.get('start-mode'); restoring = true;
@@ -93,7 +93,7 @@
         restore(null);
         if (window.pudlHost && pudlHost.config) {
             pudlHost.config.load('site-launcher', {}).then(function (prefs) { settingsReady = true; if (!touched) restore(prefs); else persist(); }).catch(function () {
-                window.yavcUtil.notice(document.querySelector('.site-header'), 'Launcher preferences could not be loaded.', true);
+                window.yavcUtil.toast( 'Launcher preferences could not be loaded.', true);
             });
         }
     }

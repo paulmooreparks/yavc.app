@@ -201,10 +201,10 @@
                 positionInlineText();
             }
         }); inspectorSize.observe(el.body); inspectorSize.observe(el.inspector);
-        /* A confirmation goes in the status line, as in Slides; a fault the
-           person must deal with is the site's notice beside what failed,
-           which stays until it is dismissed or put right (decision 15). */
+        /* Failed commands use toasts. Parse and recovery warnings remain
+           beside their content; confirmations use the status line. */
         function say(msg, kind) {
+            if (kind === true || kind === 'danger') { el.message.textContent = ''; window.yavcUtil.toast(msg, 'danger'); return; }
             if (kind) { el.message.textContent = ''; window.yavcUtil.notice(el.tabsEl, msg, kind); return; }
             el.message.textContent = msg || '';
         }
@@ -1380,9 +1380,8 @@
             root.classList.remove('dg-cv-panning');
             tool = kind && kind !== 'select' ? kind : null;
             root.classList.toggle('dg-placing', !!tool);
+            say('');
             if (tool) {
-                var name = (PALETTE.find(function (x) { return x[0] === tool; }) || [tool, tool])[1].toLowerCase();
-                say(isCanvas() ? 'Click the drawing to place a ' + name + ', or press N. Escape goes back to Select.' : 'Click the drawing to place a ' + name + ': on a shape to put it inside, or on empty space; or press N. Escape goes back to Select.');
                 el.stage.focus({ preventScroll: true });
             }
             commandsChanged();
@@ -1517,7 +1516,7 @@
             connecting = key;
             root.classList.add('dg-connecting');
             el.stage.focus({ preventScroll: true });
-            say('Connecting from ' + describe(current(), key) + '. Choose the shape to connect to; Escape stops.');
+            say('Connecting from ' + describe(current(), key) + '.');
             commandsChanged();
         }
         function stopConnect(msg) {
@@ -1528,7 +1527,7 @@
         }
         function pickEnd(key) {
             if (!connecting) { return false; }
-            if (isConnection(key)) { say('Choose a shape, not a connection; Escape stops.'); return true; }
+            if (isConnection(key)) { say('A connection needs a target shape.',true); return true; }
             var from = connecting;
             stopConnect(null);
             applyEdit({ op: 'create', key: from + ' -> ' + key }).then(function (out) {
@@ -2081,7 +2080,7 @@
             try {
                 var languageServices = await got[0].languageServices();
                 if (destroyed) { return; }
-                lsp = languageServices.create(CM, function (message) { say(message, 'warn'); });
+                lsp = languageServices.create(CM, function (message, detail) { say(message, detail && detail.persistent ? 'warn' : true); });
             } catch (err) { if (!destroyed) { say('Language assistance could not load. Text editing remains available.', 'warn'); } }
             if (destroyed) { return; }
             if (H.config && H.config.load) { try { Object.assign(settings, (await H.config.load('diagrams', SETTINGS)) || {}); } catch (err) { } }

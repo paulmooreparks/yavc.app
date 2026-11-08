@@ -22,6 +22,7 @@ The executable evidence includes the site, content, authored, block, formatting,
 | File browser | Choose Folder | Directory selection with direct path entry | Files sweep, all three engines |
 | File fields | Import a dependency | Explicit create-only import; cancellation before commit | Dependency suite all three; authority cancellation tested in home-store suite |
 | Toolbar | Customize Editor/Docs | Available and selected lists, transfer controls and ordering | Content sweep all three; toolbar suite Chromium; focused visual/keyboard suite Firefox and WebKit |
+| Docs/Editor | Key Bindings | Searchable shortcut rows with native command selects, overrides/defaults, Add, Apply/Cancel and host-owned settings | Focused three-engine suite; immediate rich/text remapping, narrow layout, stale settings and retained failed saves |
 | Toolbar | Customize Slides | Same command model, Slides choices | Content sweep all three; toolbar suite Chromium; focused visual/keyboard suite Firefox and WebKit |
 | Toolbar | Customize Diagrams | Same command model, diagram choices | Content sweep all three; toolbar suite Chromium; focused visual/keyboard suite Firefox and WebKit |
 | Site | About yavc.app | Addressable informational dialog and Close | Site sweep, all three engines |

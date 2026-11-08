@@ -24,7 +24,7 @@
             if (!ready) return;
             var value = Object.assign({ version: 1 }, preferences(e.detail));
             saving = saving.then(function () { return pudlHost.config.set('desktop-taskbar', value); }).then(function (problem) { if (problem) throw new Error(problem); }).catch(function () {
-                window.yavcUtil.notice(document.querySelector('.site-header'), 'Taskbar pins could not be saved.', true);
+                window.yavcUtil.toast( 'Taskbar pins could not be saved.', true);
             });
         });
         layer.addEventListener('pudl:taskbar-activate', function (e) {
@@ -37,12 +37,12 @@
                 if (!result.window || !result.window.isConnected || result.window.querySelector('[data-applet-state="error"]')) throw new Error('The application could not start.');
             })());
         });
-        layer.addEventListener('pudl:taskbar-activation-end', function (e) { if (e.detail.status === 'failed') window.yavcUtil.notice(document.querySelector('.site-header'), 'The pinned application could not open. Try again.', true); });
+        layer.addEventListener('pudl:taskbar-activation-end', function (e) { if (e.detail.status === 'failed') window.yavcUtil.toast( 'The pinned application could not open. Try again.', true); });
         pudlHost.config.load('desktop-taskbar', { version: 1, pins: [], order: [], references: [] }).then(function (value) {
-            if (value.version !== 1) { window.yavcUtil.notice(document.querySelector('.site-header'), 'Taskbar preferences use an unsupported version.', true); return; }
+            if (value.version !== 1) { window.yavcUtil.notice(document.querySelector('.site-header'), 'Taskbar preferences use an unsupported version.', 'warn'); return; }
             configure(value); ready = true;
             pudlHost.config.onChange('desktop-taskbar', function (next) { if (next.version === 1) configure(next); });
-        }).catch(function () { window.yavcUtil.notice(document.querySelector('.site-header'), 'Taskbar preferences could not be loaded.', true); });
+        }).catch(function () { window.yavcUtil.toast( 'Taskbar preferences could not be loaded.', true); });
     }
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start();
 })();

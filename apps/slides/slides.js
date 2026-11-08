@@ -246,10 +246,10 @@
             var change = {}; change[key] = value;
             H.config.set('slides', change).catch(function () { });
         }
-        /* A confirmation goes in the status strip; an error, which the
-           person must act on, is a notice that stays until dismissed, and
-           so is help, as an info notice. */
+        /* Command failures use toasts. Persistent diagnostics and help
+           retain inline notices; confirmations use the status strip. */
         function say(msg, kind) {
+            if (kind === true || kind === 'danger') { window.yavcUtil.toast(msg, 'danger'); return; }
             if (kind) { window.yavcUtil.notice(el.tabsEl, msg, kind); fit(); return; }
             el.message.textContent = msg || '';
         }
@@ -936,7 +936,7 @@
                 if(requested && ['visual','text','split'].includes(requested))await setMode(requested,!!input.view);return true;
             }
             if (!H.fs || !H.fs.open) { return; }
-            var res = await H.fs.open({ title: 'Open a Deck', host: root, start: '~', accept: ['.md'] });
+            var res = await H.fs.open({ title: 'Open a Deck', host: root, start: '~', accept: ['.md'] }).catch(function (err) { say('The file could not be opened: ' + err.message, true); return null; });
             if (!res) { return; }
             if (res.path) { await openPath(res.path); return; }
             await openInTab(res.text, null);
@@ -1276,7 +1276,7 @@
         }
         async function printDeck() {
             var unchanged;
-            try { unchanged = await captureExport(); } catch (err) { say('The deck could not be printed: ' + err.message, 'problem'); return; }
+            try { unchanged = await captureExport(); } catch (err) { say('The deck could not be printed: ' + err.message, true); return; }
             var box = document.createElement('div');
             box.className = 'deck-print';
             buildShow(box);
@@ -1284,7 +1284,7 @@
             document.body.classList.add('deck-printing');
             function done() { box.remove(); document.body.classList.remove('deck-printing'); window.removeEventListener('afterprint', done); }
             window.addEventListener('afterprint', done);
-            setTimeout(function () { try { unchanged(); window.print(); } catch (err) { say('The deck could not be printed: ' + err.message, 'problem'); } finally { setTimeout(done, 1000); } }, 300);
+            setTimeout(function () { try { unchanged(); window.print(); } catch (err) { say('The deck could not be printed: ' + err.message, true); } finally { setTimeout(done, 1000); } }, 300);
         }
 
         /* === Snapshots and continuity =================================== */
@@ -1576,7 +1576,7 @@
             if(destroyed)return;
             var initial=start.get('view') || (startExisted && kept && kept.mode) || (['visual','text','split'].includes(stored.view) ? stored.view : start.get('initial-view')) || settings.view;
             await setMode(initial,false);
-            if (tabs.some(function (t) { return !!t.conflict; })) say('Some recovered drafts no longer match their original revision. Use Save As to preserve a copy.', true);
+            if (tabs.some(function (t) { return !!t.conflict; })) say('Some recovered drafts no longer match their original revision. Use Save As to preserve a copy.', 'warn');
             if (start.get('present')) { present(parseInt(start.get('slide') || '1', 10) - 1); }
             announce();
         })().catch(function (err) { startupFailed=true;if (!destroyed) { root.innerHTML = '<div class="notice danger" role="alert"><div class="notice-content"><p class="notice-title">Slides could not start</p><p class="notice-body">' + esc(err.message) + '</p></div></div>'; } });

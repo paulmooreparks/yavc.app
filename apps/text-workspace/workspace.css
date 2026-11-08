@@ -143,6 +143,23 @@
   --warn: var(--doc-warning); --danger: var(--doc-danger); --positive: var(--doc-positive);
 }
 .pc-editor .ed-scroll { --sheet-gutter: var(--surface-alt); }
+.ed-key-bindings.dialog { width: min(46rem, calc(100vw - 2rem)); }
+.ed-key-bindings .dialog-body { max-height: 75svh; overflow: auto; }
+.ed-bindings-list { max-height: 20rem; overflow: auto; margin-block-end: var(--space-4); }
+.ed-bindings-list table { width: 100%; table-layout: fixed; }
+.ed-bindings-list th { width: 35%; }
+.ed-bindings-list label { white-space: nowrap; }
+.ed-bindings-list select { width: 100%; min-width: 0; }
+.ed-binding-add { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,2fr) auto; align-items: end; gap: var(--space-3); }
+.ed-binding-add .form-group { margin: 0; min-width: 0; }
+.ed-key-bindings [hidden] { display: none; }
+@media (max-width: 520px) {
+  .ed-binding-add { grid-template-columns: minmax(0,1fr); }
+  .ed-bindings-list :is(table, tbody, tr, th, td) { display: block; width: auto; }
+  .ed-bindings-list thead { display: none; }
+  .ed-bindings-list th { border-bottom: 0; }
+  .ed-bindings-list td { padding-top: 0; }
+}
 .pc-editor.ed-reading .ed-scroll { cursor: default; }
 .pc-editor .editor-dialog { width: min(36rem, 92vw); }
 .pc-editor.ed-document .ed-scroll { padding: var(--space-4); background: var(--surface-alt); }

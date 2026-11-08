@@ -120,7 +120,7 @@
                 status.textContent = 'Saved site state was reset. The page will reload.';
                 setTimeout(function () { location.reload(); }, 800);
             }).catch(function () {
-                window.yavcUtil.notice(status, 'Your data could not be forgotten just now. Try again in a moment.', true);
+                window.yavcUtil.toast('Your data could not be forgotten just now. Try again in a moment.', true);
             });
         });
         /* === Agents ====================================================== */
@@ -176,7 +176,7 @@
         function revoke(id) {
             window.fetch('/agent/tokens/' + encodeURIComponent(id), { method: 'DELETE', credentials: 'same-origin' })
                 .then(function (r) { if (!r.ok) { throw new Error('HTTP ' + r.status); } tokenStatus.textContent = 'Revoked.'; tokenShown.hidden = true; return loadTokens(); })
-                .catch(function () { window.yavcUtil.notice(tokenStatus, 'The token could not be revoked just now. Try again in a moment.', true); });
+                .catch(function () { window.yavcUtil.toast('The token could not be revoked just now. Try again in a moment.', true); });
         }
 
         function onTheme() { mark(); }

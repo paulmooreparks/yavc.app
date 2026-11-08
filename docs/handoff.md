@@ -1,5 +1,13 @@
 # Current work, 2026-11-08
 
+PR #57 (`codex/document-theme-parity`, worktree `%TEMP%/yavc-document-theme-parity`) is the combined document/UI repair candidate. Docs 1.0.2 and Editor 46.0.2 share stable paper colors, direct inline exclusion editing, application-owned shortcut preferences and transient operation errors. Slides 0.33.2, Diagrams 0.27.1, Files 32.9.1 and Settings 0.4.1 receive the related shared rendering/feedback changes. Static status-bar guidance is removed. The source review and focused browser evidence are in `review.md` and `operation-feedback-audit.md`; test data uses disposable port 8447.
+
+Paul authorized automatic local installation of verified batches. The release baseline is v0.2.48. Branch candidates are identified by their PR and commit, and `%TEMP%/yavc-pr57-backup-path.txt` identifies the candidate installation receipt once installation completes. Check the receipt and running image before reporting the current local state. Merge and production deployment remain separate from this local candidate process. Root local changes remain preserved.
+
+The requested fractional wheel increments require a separate spin-increment capability in the bundled PUDL number control. `pudl-number-step-report.md` records the agreed unit increments and the precision constraint. No vendor patch or rounding workaround is applied.
+
+## Earlier receipts
+
 PR #56 is merged as `3154f202bed25b47bac0d3dcaf49e89e195ac3ee` and installed locally as v0.2.48 on port 8401. Docs 1.0.0 and Editor 46.0.0 are separate applets. The clean release checkout is `%TEMP%/yavc-release-0.2.48`; `%TEMP%/yavc-v0.2.48-backup-path.txt` identifies the installation receipt, data backup, rollback container and retained build/browser/CI evidence. Main and tag checks and image publication passed. The existing volume and restart policy remain intact.
 
 The active candidate is `%TEMP%/yavc-document-theme-parity`, branch `codex/document-theme-parity`, tested on disposable port 8446. Docs 1.0.1 and Editor 46.0.1 share complete paper colors across all drawn views, with stable table/code shading and semantic shortcode colors. Slides 0.33.1 retains its deck policy while receiving the shared hidden-stylesheet node correction. The valid hidden stylesheet no longer draws a selected rectangle; initial typing skips retained metadata. Decision 76 and the review record describe the contracts and evidence. The three-engine parity, export and Slides fixtures pass. This candidate is not merged or installed. Older entries below are historical.

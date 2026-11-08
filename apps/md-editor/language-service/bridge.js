@@ -6,6 +6,8 @@
     if (window.yavcLanguageServices) { return; }
     var self = document.currentScript.src;
     var workerURL = self.replace(/bridge\.js(?=\?|$)/, 'worker.js');
+    // onError receives {persistent:true} for ongoing availability problems,
+    // and {persistent:false} for a refused individual operation.
     function create(CM, onError) {
         var worker = null, client = null, disposed = false, generation = 0, failed = false, reports = new Map(), views = new Map(), endRequests = null;
         var prefix = 'yavc-lsp://' + crypto.randomUUID() + '/';
@@ -25,7 +27,7 @@
                     if (!disposed && views.get(view) === mounted && mounted.scope.get(view.state) !== undefined) { view.dispatch({ effects: mounted.scope.reconfigure([CM.linter(CM.jsonParseLinter()), CM.lintGutter()]) }); }
                 });
             });
-            if (onError) { onError('Language assistance is unavailable. Your text is kept; use Restart Language Assistance to retry.'); }
+            if (onError) { onError('Language assistance is unavailable. Your text is kept; use Restart Language Assistance to retry.', {persistent:true}); }
         }
         function ensure() {
             if (disposed || failed) { return null; }
@@ -114,7 +116,7 @@
                         if (oversized === mounted.suspended) { return; }
                         mounted.suspended = oversized;
                         view.dispatch({ effects: scope.reconfigure(oversized ? [] : services()) });
-                        if (oversized && onError) { onError('Language assistance is paused for this large document. It resumes automatically when the document is smaller.'); }
+                        if (oversized && onError) { onError('Language assistance is paused for this large document. It resumes automatically when the document is smaller.', {persistent:true}); }
                     });
                 }
                 checkSize();
@@ -146,7 +148,7 @@
                     if (length > 2097152) { throw new Error('Formatted text exceeds the language-service size limit.'); }
                     view.dispatch({ changes: changes, userEvent: 'format' });
                 });
-            }).catch(function () { if (!disposed && client === active && CM.LSPPlugin.get(view) === plugin && onError) { onError('The document could not be formatted. Your text is unchanged.'); } });
+            }).catch(function () { if (!disposed && client === active && CM.LSPPlugin.get(view) === plugin && onError) { onError('The document could not be formatted. Your text is unchanged.', {persistent:false}); } });
             return true;
         }
         return {

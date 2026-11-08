@@ -123,6 +123,8 @@ Check from anywhere that the site answers and that the new server served it, for
 
 ## Trying a branch before it is merged
 
+Paul authorized automatic local installation of verified batches on 2026-11-08. Build from the reviewed candidate, preserve the existing data volume, take an offline data backup, retain the previous container for rollback, and verify the installed behavior on port 8401. A branch candidate can be installed before merge and must be identified by its PR and commit rather than an unissued release number. This authorization applies to the local installation; production deployment remains a separate operation.
+
 A branch can be tried on the workstation in the same image the server runs, built from the branch and started on the workstation's own address. This also tests the image build, which CI does not do, since only a release tag builds the image. From the repository folder, with Docker Desktop running, fetch the branch and check it out without making a local branch of it:
 
 ```bash
