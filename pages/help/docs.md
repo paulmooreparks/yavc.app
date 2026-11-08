@@ -79,6 +79,8 @@ Docs, Key Bindings opens `~/.config/docs.json`, where each key is bound to a com
 
 ## Document styles
 
+The page uses the same paper colors in light and dark application appearance, including tables, rules, code blocks and shortcode colors. Editor's Markdown previews use the same defaults. A document stylesheet can override `--doc-page`, `--doc-ink`, `--doc-muted`, `--doc-accent`, `--doc-rule`, `--doc-code`, `--doc-warning`, `--doc-danger` and `--doc-positive`. Changing application appearance does not change those authored colors.
+
 Format, Document Stylesheet opens the CSS editor for this document. Ctrl+Shift+F opens it too. Choose an existing style block or New Style Block, edit its CSS, then Apply Styles or press Ctrl+S. The change enters the document's Undo history. Cancel leaves the source unchanged. A warning explains CSS that the preview cannot apply; the source keeps what you wrote.
 
 For example, a style block can define a class:

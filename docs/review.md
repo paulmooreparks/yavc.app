@@ -1,5 +1,15 @@
 # Stem-to-stern review, November 2026
 
+## White document palette and hidden stylesheet selection, 2026-11-08
+
+Runtime inspection of the installed export playground showed white paper and dark ink in both themes, but table shading changed from `rgb(228, 231, 235)` to `rgb(35, 39, 45)` and borders changed from `rgb(207, 212, 218)` to `rgb(53, 59, 67)`. A selected zero-height source node around the hidden stylesheet produced the thin rectangle above the title.
+
+All Docs drawn views and Editor Markdown previews now use the complete shared paper palette before authored styles. Rules, table/code shading and semantic shortcode colors follow document tokens. Workspace chrome and page gutters retain the host theme. Mermaid uses its light renderer on these surfaces. Hidden stylesheet node views remain in the source model without drawing or occupying space. The initial caret skips hidden metadata, and a metadata-only model provides an empty paragraph for visible typing without changing the original source until an edit occurs.
+
+`scripts/test-document-theme.cjs` passes Chromium, Firefox and WebKit. It compares paper, headings, tables, quotes, code, contents, expanders, notices, keys, status labels, highlights and authored accents across light/dark appearance and Docs Document/Visual/Split/Preview versus Editor Split/Preview. It also checks cold dark-mode Mermaid rendering, custom paper/shading/rule overrides, zero-size hidden styles, original source retention, initial heading typing and metadata-only typing. Screenshots are retained under `%TEMP%/yavc-document-theme-evidence`. Firefox could not create a page inside the restricted sandbox; the headless run outside it passed.
+
+The export-paper, DOCX/PDF and shared glyph/slide-style fixtures pass all three engines. The pagination/source-preservation fixture passes Chromium. Source review found no concrete blockers, including in the caret correction. This candidate does not close the older read-only navigation timeout or unrelated Firefox Diagrams screenshot crash.
+
 ## Separate Docs and Editor with shared extraction, 2026-11-08
 
 Docs now owns Markdown visual editing, physical pages, formatting and document exports. Editor opens general text/code as source and offers safe read-only Markdown previews. Their packages share one extracted workspace implementation, with separate actions, settings, snapshots and toolbars. Existing Editor drafts stay there as source. Docs adopts only missing persisted preferences once; explicit destination choices and null values win. The atomic server adoption endpoint covers concurrent attempts and rejects oversized migrations without changing settings.

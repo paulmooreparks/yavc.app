@@ -1351,7 +1351,7 @@
                 if (documentStyles && styledTypography !== typeCSS) { documentStyles.destroy(); documentStyles = null; }
                 styledTypography = typeCSS;
                 if (!documentStyles) { documentStyles = D.attach({ surfaces: function () { return [el.page]; }, boundaries: function () { return [el.scroll]; },
-                    base: (pagedView(viewMode) ? P.paper : '') + ';' + typeCSS,
+                    base: P.paper + ';' + typeCSS,
                     read: function (path) { return window.pudlHost.fs.readText(path); }, onProblems: function (problems) {
                         var notice = root.querySelector('[data-role="style-problems"]'); notice.hidden = !problems.length; notice.querySelector('.notice-body').textContent = problems.join(' ');
                     } }); }

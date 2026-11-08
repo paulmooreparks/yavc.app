@@ -133,6 +133,16 @@
 .pc-editor .ed-scroll:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
 /* The page sits in from its frame, as a page does; the margin scales with the pane. */
 .pc-editor .ed-scroll > .doc-page { padding: clamp(16px, 4vw, 48px) clamp(20px, 6vw, 72px); box-sizing: border-box; max-width: 100%; }
+/* The document palette also supplies semantic shortcode colors. App chrome
+   outside the styled page continues to use the host's appearance. */
+.pc-editor [data-ed-page][data-md-style] {
+  color-scheme: light;
+  --text: var(--doc-ink); --text-muted: var(--doc-muted);
+  --surface: var(--doc-page); --surface-alt: var(--doc-code);
+  --border: var(--doc-rule); --accent: var(--doc-accent);
+  --warn: var(--doc-warning); --danger: var(--doc-danger); --positive: var(--doc-positive);
+}
+.pc-editor .ed-scroll { --sheet-gutter: var(--surface-alt); }
 .pc-editor.ed-reading .ed-scroll { cursor: default; }
 .pc-editor .editor-dialog { width: min(36rem, 92vw); }
 .pc-editor.ed-document .ed-scroll { padding: var(--space-4); background: var(--surface-alt); }

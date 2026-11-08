@@ -266,8 +266,12 @@ var schemaCache = null;
         if (ticket !== loading || !on) return;
         if (o.text() !== text) return load();
         PM = both[0];
-        var schema = schemaOf(PM), doc = schema.nodeFromJSON(both[1]);
-        var state = PM.EditorState.create({ doc: doc, plugins: plugins(schema) });
+        var schema = schemaOf(PM), doc = schema.nodeFromJSON(both[1]), first = 0;
+        while (first < doc.content.size && hiddenSource(doc.nodeAt(first))) { first += doc.nodeAt(first).nodeSize; }
+        // Metadata is retained in the model, but opening a page places the
+        // caret in visible content. A metadata-only page needs a typing slot.
+        if (first && first === doc.content.size) { doc = doc.copy(doc.content.append(PM.Fragment.from(schema.nodes.paragraph.create()))); }
+        var state = PM.EditorState.create({ doc: doc, selection: first ? PM.TextSelection.near(doc.resolve(first)) : undefined, plugins: plugins(schema) });
         if (view) view.updateState(state);
         else {
           o.page.replaceChildren();
@@ -1076,6 +1080,17 @@ var schemaCache = null;
 
     /* A block drawn as the preview draws it; a click edits its source in
        place, and leaving the box draws it again. */
+    function hiddenStyles(root) {
+      return !!root.querySelector('.sc-style[hidden]') && Array.from(root.childNodes).every(function (node) {
+        if (node.nodeType === 3) return !node.textContent.trim();
+        return node.nodeType === 1 && (node.matches('.sc-style[hidden]') || node.matches('.doc-block') && hiddenStyles(node));
+      });
+    }
+    function hiddenSource(node) {
+      if (!node || node.type.name !== 'source_block') return false;
+      if (node.attrs.kind === 'definition') return !(node.attrs.html || '').includes('sc-problem');
+      return hiddenStyles(window.yavcHTML.fragment(node.attrs.html || ''));
+    }
     function sourceView(node, v, getPos) {
       var dom = document.createElement('div');
       dom.className = 'pm-source';
@@ -1088,6 +1103,9 @@ var schemaCache = null;
         var inner = document.createElement('div');
         dom.replaceChildren(inner);
         o.draw(inner, nd.attrs.html || '<pre>' + (nd.attrs.src || '').replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</pre>', nd.attrs.diagrams || []);
+        // A valid stylesheet contributes no drawn block or selectable outline.
+        // Keep the source node so unchanged Markdown still serializes verbatim.
+        if (hiddenStyles(inner)) { dom.hidden = true; }
       }
       function edit() {
         if (box) return;

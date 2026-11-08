@@ -18,15 +18,17 @@
   --doc-accent: var(--accent);
   --doc-rule: var(--border);
   --doc-page: var(--surface);
-  --dinah-warning-surface: color-mix(in srgb, var(--danger) 8%, var(--surface));
-  --dinah-warning-accent: var(--danger);
-  --dinah-tip-surface: color-mix(in srgb, var(--positive) 8%, var(--surface));
-  --dinah-tip-accent: var(--positive);
+  --doc-code: var(--surface-alt);
+  --doc-warning: var(--warn); --doc-danger: var(--danger); --doc-positive: var(--positive);
+  --dinah-warning-surface: color-mix(in srgb, var(--doc-danger) 8%, var(--doc-page));
+  --dinah-warning-accent: var(--doc-danger);
+  --dinah-tip-surface: color-mix(in srgb, var(--doc-positive) 8%, var(--doc-page));
+  --dinah-tip-accent: var(--doc-positive);
   --dinah-ink: var(--doc-ink);
   --dinah-link-on-surface: var(--doc-accent);
   --dinah-page-surface: var(--doc-page);
   --dinah-content-border: var(--doc-rule);
-  --dinah-content-code-surface: var(--surface-alt);
+  --dinah-content-code-surface: var(--doc-code);
   --dinah-muted-ink: var(--doc-muted);
   display: block; box-sizing: border-box; min-height: 100%; min-width: fit-content; margin: 0;
   padding: var(--space-5) var(--space-6) 40vh; font-family: var(--doc-font); font-size: var(--doc-size); line-height: var(--doc-leading);
@@ -141,7 +143,7 @@
   position: relative;
   width: var(--sheet-width) !important; max-width: none !important; min-width: var(--sheet-width);
   padding: var(--sheet-top) var(--sheet-right) var(--sheet-bottom) var(--sheet-left) !important;
-  background-image: repeating-linear-gradient(to bottom, transparent 0, transparent var(--sheet-height), var(--surface-alt) var(--sheet-height), var(--surface-alt) calc(var(--sheet-height) + var(--sheet-gap)));
+  background-image: repeating-linear-gradient(to bottom, transparent 0, transparent var(--sheet-height), var(--sheet-gutter, var(--surface-alt)) var(--sheet-height), var(--sheet-gutter, var(--surface-alt)) calc(var(--sheet-height) + var(--sheet-gap)));
   background-color: var(--doc-page); color-scheme: light;
 }
 .doc-paginated > :is(.ProseMirror, .doc-page-flow) { display: flow-root; padding: 0; margin: 0; min-height: 0; }

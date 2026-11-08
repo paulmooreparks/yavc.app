@@ -6,6 +6,8 @@ Docs accepts ordinary Markdown and `.docs.md`. It declines decks, code and Offic
 
 Page Setup and Header and Footer belong to Docs Document view. Format offers Switch to Document View from other Markdown views. Typography and stylesheet authoring remain Docs operations. Both applets retain Files as an optional outer pane, with tabs and Outline inside the document workspace.
 
+All drawn Docs views and Editor Markdown previews use the shared paper palette before authored styles. Host appearance changes the surrounding workspace and page gutters, while document ink, links, borders, table/code shading and semantic shortcode colors remain unchanged. Mermaid diagrams on these surfaces use their light rendering theme. Slides retains its own deck palette and rendering policy. Hidden stylesheet node views retain their original Markdown but contribute no visible selection box.
+
 ## Host capabilities
 
 The resource, creation and recovery contracts remain in `content-resource-contract.md`, `content-creation-contract.md` and `content-recovery-contract.md`. They retain storage authority in the host. Opaque resource IDs are not treated as filenames; native-format checks use the returned display name. The optional Save As name check runs before a destination is committed.
