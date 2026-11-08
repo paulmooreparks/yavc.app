@@ -138,6 +138,7 @@
 .doc-page .small { font-size: 0.85em; }
 .doc-page .lead { font-size: 1.2em; line-height: 1.4; }
 .doc-page .no-break { break-inside: avoid; }
+.doc-page :is(h1,h2,h3,h4,h5,h6) { break-after: avoid; break-after: avoid-page; }
 /* Document view retains a single editable flow. Page gaps are decorations. */
 .doc-page.doc-paginated {
   position: relative;

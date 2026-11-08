@@ -2,10 +2,14 @@
 (function () {
  'use strict';
  var records=new Map([['memory:source.md',{text:'# Source\n\nRetained source.\n',revision:1,name:'Source.md'}],['memory:document.docs.md',{text:'# Document\n\nEditable words.\n',revision:1,name:'Document.docs.md'}],['memory:deck.slides.md',{text:'# Slide one\n\nFirst.\n\n---\n\n# Slide two\n\nSecond.\n',revision:1,name:'Deck.slides.md'}]]),snapshots=new Map(),preferences=new Map(),writes=[];
- window.fixture={records:records,writes:writes,snapshots:snapshots};
- window.pudlHost=pudlHostKit.host({pages:'/',pudl:new URL('../pudl/',location.href).href,contentWorkspace:{version:1},
+ var dependency='~/portable/plan.canvas',listeners=new Set();
+ function drawing(label){return JSON.stringify({nodes:[{id:'a',type:'text',x:0,y:0,width:200,height:80,text:label}],edges:[]});}
+ records.set(dependency,{text:drawing('Independent host diagram'),revision:1,name:'plan.canvas'});
+ records.get('memory:document.docs.md').text='# Document\n\n{{diagram:plan.canvas alt="Portable reference"}}\n\nEditable words.\n';
+ window.fixture={records:records,writes:writes,snapshots:snapshots,updateDiagram:function(label){records.get(dependency).text=drawing(label);listeners.forEach(function(fn){fn();});}};
+ window.pudlHost=pudlHostKit.host({pages:'/',pudl:new URL('../pudl/',location.href).href,contentWorkspace:{version:1,directory:function(resource){return resource==='memory:document.docs.md'?'~/portable':null;},shortcodes:async function(){return {shortcodes:[{name:'empty-title',kind:'inline',title:' ',description:'Refused'},{name:'too-long',kind:'block',title:'Overlong Example',description:'Refused',example:'x'.repeat(4097)},null,{name:'<unsafe>',kind:'inline',title:'Unsafe',description:'Refused'},{name:'figure',kind:'inline',title:'Override',description:'A host cannot replace a built-in',params:[]},{name:'host-example',kind:'block',title:'Host Example',description:'Additional host metadata',params:[]}]};}},
   config:{load:async function (app,defaults) {return Object.assign({},defaults,preferences.get(app));},set:async function (app,value) {preferences.set(app,Object.assign({},preferences.get(app),value));},onChange:function () {return function () {}; }},
-  fs:{readText:async function (resource) {return records.has(resource)?records.get(resource).text:null;}},
+  fs:{readText:async function (resource) {return records.has(resource)?records.get(resource).text:null;},onChange:function(fn){listeners.add(fn);return function(){listeners.delete(fn);};}},
   snapshot:{version:2,remembersClosed:true,join:function (root,take,options) {var key=root.id,kept=snapshots.get(key)||null;if(options.validate)options.validate(kept);return {kept:kept,focused:false,changed:function () {},flush:function () {snapshots.set(key,take());return true;},leave:function () {}};}},
   contentResources:{version:1,read:async function (request) {var record=records.get(request.resource);if(!record)throw new Error('Missing resource');return {resource:request.resource,revision:String(record.revision),text:record.text,name:record.name,writable:true};},
    write:async function (request) {var record=records.get(request.resource);if(!record || request.expectedRevision!==String(record.revision))throw new Error('Resource conflict');writes.push(request);record.text=request.text;record.revision++;return {resource:request.resource,revision:String(record.revision),name:record.name,writable:true};}}

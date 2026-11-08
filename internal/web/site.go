@@ -17,7 +17,15 @@ import (
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/extension"
 	"github.com/yuin/goldmark/renderer/html"
+
+	"yavc.app/internal/shortcodes"
 )
+
+// shortcodeList exposes the same public catalog bundled in the browser engine.
+func (s *Server) shortcodeList(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "public, max-age=60")
+	writeJSON(w, http.StatusOK, map[string]any{"shortcodes": shortcodes.Definitions()})
+}
 
 // The site's pages and its tree, for the file system the Terminal, Files
 // and the Editor share (static/sitefs.js, from parkscomputing.com). A

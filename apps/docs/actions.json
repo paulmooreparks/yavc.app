@@ -6,6 +6,26 @@
   "description": "Markdown document authoring, source access and page layout.",
   "actions": [
     {
+      "ref": "yavc.docs/theme@1",
+      "title": "Set Document Theme",
+      "description": "Set the current editable document theme as one undoable front-matter edit. Authored typography and styles retain their overrides.",
+      "live": true,
+      "inputSchema": {"type":"object","additionalProperties":false,"required":["value"],"properties":{"value":{"enum":["plain","manuscript","report","letter"]}}},
+      "outputSchema": {"type":"object","required":["theme"],"properties":{"theme":{"type":"string"}}},
+      "capabilities": [],
+      "replay": "once"
+    },
+    {
+      "ref": "yavc.docs/new-template@1",
+      "title": "New Document from Stock Template",
+      "description": "Create an independent unsaved document from a bundled starter under the host's document-window policy. Custom Markdown files can be chosen through File, New from Template.",
+      "live": true,
+      "inputSchema": {"type":"object","additionalProperties":false,"required":["template"],"properties":{"template":{"enum":["blank","report","letter","manuscript","meeting"]}}},
+      "outputSchema": {"type":"object"},
+      "capabilities": [],
+      "replay": "once"
+    },
+    {
       "ref": "yavc.docs/page-setup@1",
       "title": "Set Page Layout",
       "description": "Change the current Markdown document page size, orientation or margins as one undoable source edit. Dimensions and returned margins are in points, in left, top, right, bottom order.",

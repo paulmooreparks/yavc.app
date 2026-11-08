@@ -79,7 +79,7 @@
         async function draw() {
             if (!alive || !ready) { return; }
             var mine = ++revision;
-            try { var values = read(); await controller.update({ identity: id, base: P.paper + ';' + S.typeCSS(values), inline: opts.styles || [], stylesheet: opts.stylesheet || '' });
+            try { var values = read(); await controller.update({ identity: id, base: P.paper + ';' + S.typeCSS(Object.assign({},props,values)), inline: opts.styles || [], stylesheet: opts.stylesheet || '' });
                 if (!alive || mine !== revision) { return; }
                 var preview = api.body.querySelector('[data-type-preview]'), css = getComputedStyle(preview);
                 if (!explicit['heading-font']) { setField('heading-font', getComputedStyle(preview.querySelector('h2')).fontFamily.split(',')[0].trim().replace(/^["']|["']$/g, '')); }
@@ -106,7 +106,7 @@
         }
         async function initialize() {
             var preview = api.body.querySelector('[data-type-preview]'), boundary = api.body.querySelector('.md-type-preview-boundary');
-            controller = D.attach({ surfaces: [preview], boundaries: [boundary], base: P.paper, read: opts.read });
+            controller = D.attach({ surfaces: [preview], boundaries: [boundary], base: P.paper+';'+S.themeCSS(props), read: opts.read });
             await controller.update({ identity: id, inline: opts.styles || [], stylesheet: opts.stylesheet || '' });
             if (!alive) { return; }
             if (!opts.current()) { failure(new Error('The document changed. Close and reopen Typography.')); return; }

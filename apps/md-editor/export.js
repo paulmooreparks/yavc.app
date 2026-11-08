@@ -32,7 +32,7 @@
             bold: +s.fontWeight >= 600 || s.fontWeight === 'bold', italic: s.fontStyle === 'italic',
             underline: decoration.includes('underline') || !!element.closest('u'), strike: decoration.includes('line-through') || !!element.closest('del,s'),
             sup: !!element.closest('sup'), sub: !!element.closest('sub'), mark: !!element.closest('mark'),
-            font: s.fontFamily.split(',')[0].replace(/["']/g, ''), leading: parseFloat(s.lineHeight) / parseFloat(s.fontSize) || 1.5, after: parseFloat(s.marginBottom) * .75 || 0, align: /^(left|right|center|justify)$/.test(s.textAlign) ? s.textAlign : 'left' };
+            font: s.fontFamily.split(',')[0].replace(/["']/g, ''), leading: parseFloat(s.lineHeight) / parseFloat(s.fontSize) || 1.5, after: parseFloat(s.marginBottom) * .75 || 0, keepNext:/^(avoid|avoid-page)$/.test(s.breakAfter), align: /^(left|right|center|justify)$/.test(s.textAlign) ? s.textAlign : 'left' };
     }
     function inline(element) {
         var out = [];
@@ -82,7 +82,7 @@
         if ((rendered.problems || []).length) { throw new Error('Fix the document warnings before exporting.'); }
         // The HTML cleaner uses an inert template, so omitted assets have not loaded.
         fragment.querySelectorAll('[data-export="omit"],.sc-draft-note').forEach(function (node) { node.remove(); });
-        if (fragment.querySelector('.sc-problem,.sc-glyph,.dinah-diagram-placeholder,[data-applet],iframe,video,audio,svg,canvas,math,details,code[data-code-src]')) { throw new Error('This document contains an invalid shortcode, diagram, glyph, embedded app, SVG, interactive element or external code listing that this export cannot represent yet.'); }
+        if (fragment.querySelector('.sc-problem,.sc-glyph,.dinah-diagram-placeholder,[data-diagram-src],[data-applet],iframe,video,audio,svg,canvas,math,details,code[data-code-src]')) { throw new Error('This document contains an invalid shortcode, diagram, glyph, embedded app, SVG, interactive element or external code listing that this export cannot represent yet.'); }
         var pictures = new Map();
         fragment.querySelectorAll('img').forEach(function (img) { pictures.set(img, { source: img.getAttribute('src'), path: img.dataset.attachment }); img.removeAttribute('src'); img.removeAttribute('srcset'); img.removeAttribute('loading'); });
         var boundary = document.createElement('div'), surface = document.createElement('div');
@@ -184,7 +184,7 @@
                     if (b.id) { content = [new D.Bookmark({ id: bookmark(b.id), children: content })]; }
                     return [new D.Paragraph({ children: content, heading: b.level ? D.HeadingLevel['HEADING_' + b.level] : undefined, alignment: style.align,
                         numbering: list && index === 0 ? { reference: list, level: 0 } : undefined,
-                        indent: depth ? { left: depth * 360 } : undefined, spacing: { after: Math.round((style.after || 0) * 20), line: Math.round((style.leading || 1.5) * 240) }, keepNext: !!b.level })];
+                        indent: depth ? { left: depth * 360 } : undefined, spacing: { after: Math.round((style.after || 0) * 20), line: Math.round((style.leading || 1.5) * 240) }, keepNext: !!style.keepNext })];
                 }
                 if (b.kind === 'list') {
                     var reference = 'list-' + (++listCount);
@@ -214,7 +214,7 @@
             link: r.link && r.link[0] !== '#' ? new URL(r.link, location.href).href : undefined, linkToDestination: r.link && r.link[0] === '#' ? r.link.slice(1) : undefined,
             sup: r.sup, sub: r.sub }; }); }
         function write(blocks) { return blocks.map(function (b) {
-            if (b.kind === 'paragraph') { return { text: runs(b.runs), alignment: (b.style || {}).align, lineHeight: (b.style || {}).leading, margin: [0, b.level ? 8 : 0, 0, (b.style || {}).after || 0], id: b.id, preserveLeadingSpaces: !!b.code }; }
+            if (b.kind === 'paragraph') { return { text: runs(b.runs), alignment: (b.style || {}).align, lineHeight: (b.style || {}).leading, margin: [0, b.level ? 8 : 0, 0, (b.style || {}).after || 0], id: b.id, headlineLevel:(b.style||{}).keepNext?b.level||1:undefined, preserveLeadingSpaces: !!b.code }; }
             if (b.kind === 'list') { var list = {}; list[b.ordered ? 'ol' : 'ul'] = b.items.map(function (item) { return { stack: write(item) }; }); list.start = b.start; list.margin = [0, 0, 0, 6]; return list; }
             if (b.kind === 'quote') { return { stack: write(b.blocks), margin: [12, 0, 0, 6] }; }
             if (b.kind === 'table') { return { table: { headerRows: 1, widths: b.rows[0].map(function () { return '*'; }), body: b.rows.map(function (row) { return row.map(function (cell) { return { text: runs(cell.runs), alignment: cell.style.align, margin: [3, 3, 3, 3] }; }); }) }, margin: [0, 3, 0, 8] }; }
@@ -228,6 +228,7 @@
             return { columns: ((model.furniture || {})[kind] || []).map(function (cell) { return { text: runs(cell.runs.map(function (r) { return r.field ? Object.assign({}, r, { text: String(r.field === 'page' ? number : total) }) : r; })), alignment: cell.align }; }), margin: [model.page.margins[0], Math.max(0, model.page.margins[kind === 'header' ? 1 : 3] / 2 - 6), model.page.margins[2], 0] };
         }; }
         return { content: write(model.blocks), pageSize: { width: model.page.width, height: model.page.height }, pageMargins: model.page.margins, header: running('header'), footer: running('footer'),
+            pageBreakBefore:function(current,following,next,previous){return !!current.headlineLevel&&!following.length&&next.length>0&&previous.length>0;},
             background: { canvas: [{ type: 'rect', x: 0, y: 0, w: model.page.width, h: model.page.height, color: '#' + (model.page.background || 'ffffff') }] },
             defaultStyle: { font: 'Roboto', fontSize: 11, color: '#202124' },
             info: { title: model.properties.title || '', author: model.properties.author || '', subject: model.properties.subject || '', keywords: model.properties.keywords || '' } };

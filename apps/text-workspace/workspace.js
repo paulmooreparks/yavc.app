@@ -242,8 +242,8 @@
            A {{shortcode}} is marked as one, its name and its arguments in
            their own colours; {{ offers the shortcodes' names and, inside a
            call, its parameters; and the pointer over one says what it is
-           and takes. All from the server's table (/api/admin/editor/shortcodes),
-           which the Insert menu reads too. */
+           and takes. The bundled engine supplies the built-in catalog;
+           optional host metadata can add names to it. */
         var SHORTCODE = /\{\{\/?[a-z][a-z0-9-]*(?::(?:[^}]|\}(?!\}))*)?\}\}/g;
         var shortcodeHighlight = null, shortcodeHover = null;
         /* Built when first asked for, since CodeMirror loads only when the
@@ -276,10 +276,10 @@
                     return {
                         from: name.from + (closing ? 3 : 2),
                         validFor: /^[a-z0-9-]*$/,
-                        options: list.filter(function (s) { return !closing || s.kind === 'container'; }).map(function (s) {
+                        options: list.filter(function (s) { return !closing || s.kind === 'container' || s.kind === 'span'; }).map(function (s) {
                             /* The braces close themselves as {{ is typed (closeBrackets), so only the name goes in, with a colon where arguments follow. */
                             return { label: s.name, type: 'keyword', detail: s.title, info: s.description + (s.example ? '\n\n' + s.example : ''),
-                                apply: !closing && s.params.length ? s.name + ':' : s.name };
+                                apply: !closing && (s.argumentRequired || s.params.some(function(p){return p.required;})) ? s.name + ':' : s.name };
                         })
                     };
                 });
@@ -489,6 +489,7 @@
             var t = current();
             if (!t) { view.setState(CM.EditorState.create({ doc: '' })); refreshStyles(); renderTabs(); announce(); return; }
             view.setState(t.state);
+            if(t.lang==='markdown')loadShortcodes().then(commandsChanged);
             refreshStyles();
             scheduleOutline();
             /* A tab kept from before the key bindings last changed takes
@@ -714,6 +715,7 @@
             }
             t.resource = accepted; t.baseline = null; t.conflict = null; t.path = accepted.resource;
             t.name = accepted.name || t.name; t.lang = languageFor(t.name); t.savedRaw = text; t.saved = normalizedSource(text);
+            if(current()===t)window.yavcMdEditor.refreshReferences(root,picturesHost());
             t.readOnly = !resources.canWrite(accepted); t.saveFailed = !!syncError; t.fresh = false; t.external = false;
             t.modified = !!syncError || (current() === t ? view.state : t.state).doc.toString() !== t.saved || ticket !== t.saveTicket;
             var effects = [langComp.reconfigure(langExtension(t.lang)), lintComp.reconfigure(lintExtension(t))];
@@ -915,7 +917,7 @@
             if (!view || !el.outline.querySelector('[data-outline-tree]')) { return; }
             var pendingPlace = el.outline.querySelector('[data-outline-tree]');
             if (tab !== outlineOwner || view.state.doc.toString() !== outlineText) { suspendOutline(pendingPlace); }
-            var text = view.state.doc.toString(), m = await mdEngine();
+            var text = view.state.doc.toString(), m = tab && tab.lang === 'markdown' ? await mdEngine() : null;
             if (destroyed || revision !== outlineRevision || current() !== tab || view.state.doc.toString() !== text) { return; }
             var place = el.outline.querySelector('[data-outline-tree]'), focus = document.activeElement && document.activeElement.closest('[data-outline-index]'), oldFocus = focus && el.outline.contains(focus) ? Number(focus.dataset.outlineIndex) : null;
             var expanded = {}; el.outline.querySelectorAll('[data-outline-index][aria-expanded]').forEach(function (link) { expanded[link.dataset.outlineIndex] = link.getAttribute('aria-expanded'); });
@@ -1166,10 +1168,20 @@
             var text = view.state.doc.toString(), K = await loadKit(), P = await K.pages(), m = await mdEngine(), S = window.yavcDocumentSettings;
             function unchanged() { return !destroyed && current() === t && view.state.doc.toString() === text; }
             if (!unchanged()) { return; }
-            try { await S.open(kind, { properties: S.properties(m.front(text)), styles: m.styles(text).map(function (block) { return block.css; }), stylesheet: currentSharedStyle, read: window.pudlHost.fs.readText, engine: m, current: unchanged, signal: styleLifetime.signal, save: function (set, mappings) {
+            try { await S.open(kind, { properties: S.properties(m.front(text)), styles: m.styles(text).map(function (block) { return block.css; }), stylesheet: currentSharedStyle, read: H.fs && H.fs.readText, engine: m, current: unchanged, signal: styleLifetime.signal, save: function (set, mappings) {
                 var order = Object.keys(set).concat(Object.keys(mappings));
-                takeVisualText(m.frontset({ text: text, set: set, mappings: mappings, order: order }).text); textChangedForPage(); refreshStyles();
+                takeVisualText(m.frontset({ text: text, set: set, mappings: mappings, order: order }).text,true); textChangedForPage(); refreshStyles();
             } }); } catch (err) { say(err.message, true); }
+        }
+        async function documentGallery() {
+            var K=await loadKit();await K.pages();await K.loadScript(K.here+'document-gallery.js'+K.stamp);return window.yavcDocumentGallery;
+        }
+        async function newFromTemplate() {
+            if(pageActive())await visual.api.sync();var tab=current(),text=view?view.state.doc.toString():'';
+            function unchanged(){return !destroyed&&current()===tab&&(!view||view.state.doc.toString()===text);}
+            var G=await documentGallery(),m=await mdEngine();if(!unchanged())return;
+            var source=await G.template({engine:m,read:H.fs&&H.fs.readText,host:picturesHost(),signal:styleLifetime.signal,current:unchanged});
+            if(source!==null&&source!==undefined&&unchanged())return liveActions['new@1']({text:source});
         }
         async function printDocument() {
             var t = current(); if (!t || t.lang !== 'markdown') { return; }
@@ -1266,7 +1278,7 @@
                 inserts: function () {
                     var extra = [];
                     if (F && F.mounted && shortcodes) {
-                        shortcodes.filter(function (s) { return s.name !== 'column' && !SHORTCODES.some(function (i) { return i.name === s.name; }); }).forEach(function (s) {
+                        shortcodes.filter(function (s) { return !s.builtin && s.name !== 'column' && !SHORTCODES.some(function (i) { return i.name === s.name; }); }).forEach(function (s) {
                             extra.push({ id: 'insert-' + s.name, label: s.title, words: s.name + ' ' + s.title.toLowerCase(), markdown: s.example });
                         });
                     }
@@ -1499,6 +1511,8 @@
                 site: function () { return Promise.resolve({ F: F, FB: FB }); },
                 root: root, say: say,
                 macroContext: currentMacroEngine,
+                read: function (path) { if(!H.fs || !H.fs.readText)throw new Error('This host cannot read dependencies.');return H.fs.readText(path); },
+                watch: H.fs && H.fs.onChange ? function(fn){return H.fs.onChange(fn);} : null,
                 signal: styleLifetime.signal, identity: current, text: function () { return view ? view.state.doc.toString() : ''; },
                 dir: styleDirectory
             };
@@ -1592,14 +1606,14 @@
         /* The page's edit, as text: the least change that turns the text into
            the new text, so the cursor and the undo history in Split keep
            their sense. */
-        function takeVisualText(text) {
+        function takeVisualText(text, isolate) {
             var old = view.state.doc.toString();
             if (old === text) { return; }
             var a = 0, b = 0;
             while (a < old.length && a < text.length && old[a] === text[a]) { a++; }
             while (b < old.length - a && b < text.length - a && old[old.length - 1 - b] === text[text.length - 1 - b]) { b++; }
             visual.fromVisual = true;
-            try { view.dispatch({ changes: { from: a, to: old.length - b, insert: text.slice(a, text.length - b) }, userEvent: 'input.visual' }); }
+            try { view.dispatch({ changes: { from: a, to: old.length - b, insert: text.slice(a, text.length - b) }, userEvent: 'input.visual',annotations:isolate?CM.isolateHistory.of('full'):[] }); }
             finally { visual.fromVisual = false; }
         }
 
@@ -1637,15 +1651,28 @@
         }
         function applyFormat(name) { window.yavcMdEditor.apply(name, editCtx()); }
 
-        /* The insert menu lists the shortcodes, from the server's table, in
-           alphabetical order of the titles it shows. */
+        /* The engine supplies built-in completion metadata. Optional host
+           additions do not replace the authored insertion forms. */
         var shortcodes = null, shortcodesLoading = null;
+        function shortcodeCatalog(builtin, extra) {
+            var found=new Map(),units=0;
+            [builtin,extra].forEach(function(list,origin){if(!Array.isArray(list))return;list.slice(0,256).forEach(function(s){
+                if(found.size>=256||!s||typeof s.name!=='string'||!/^[a-z][a-z0-9-]{0,63}$/.test(s.name)||found.has(s.name)||!['inline','block','container','span'].includes(s.kind)||typeof s.title!=='string'||!s.title.trim()||s.title.length>256||typeof s.description!=='string'||s.description.length>4096)return;
+                var params=Array.isArray(s.params)?s.params.slice(0,32).filter(function(p){return p&&typeof p.name==='string'&&/^[a-z][a-z0-9-]{0,63}$/.test(p.name)&&typeof p.description==='string'&&p.description.length<=2048;}).map(function(p){return {name:p.name,description:p.description,required:p.required===true};}):[];
+                if(typeof s.example==='string'&&s.example.length>4096)return;
+                var example=typeof s.example==='string'?s.example:'',size=s.name.length+s.title.length+s.description.length+example.length+params.reduce(function(n,p){return n+p.name.length+p.description.length;},0);if(units+size>128*1024)return;units+=size;
+                found.set(s.name,{name:s.name,title:s.title,description:s.description,kind:s.kind,params:params,example:example,argumentRequired:s.argumentRequired===true,builtin:origin===0});
+            });});return Array.from(found.values());
+        }
         function loadShortcodes() {
             if (shortcodes) { return Promise.resolve(shortcodes); }
             if (!shortcodesLoading) {
-                shortcodesLoading = Promise.resolve(hostServices.shortcodes ? hostServices.shortcodes() : {shortcodes:[]})
-                    .then(function (b) { shortcodes = (b.shortcodes || []).map(function (s) { s.params = s.params || []; return s; }); return shortcodes; })
-                    .catch(function () { shortcodes = []; return shortcodes; });
+                shortcodesLoading = mdEngine().then(function(m){
+                    if(destroyed)return [];
+                    var builtin=m.shortcodes().shortcodes;shortcodes=shortcodeCatalog(builtin,[]);
+                    if(hostServices.shortcodes)Promise.resolve().then(function(){if(destroyed)return null;return hostServices.shortcodes({signal:styleLifetime.signal,current:function(){return !destroyed;}});}).then(function(body){if(!destroyed){shortcodes=shortcodeCatalog(builtin,body&&body.shortcodes);commandsChanged();}}).catch(function(){});
+                    return shortcodes;
+                }).catch(function(){shortcodesLoading=null;return [];});
             }
             return shortcodesLoading;
         }
@@ -1658,10 +1685,9 @@
             var custom = customShortcodes();
             if (custom.length) { items.push('-'); custom.forEach(function (s) { items.push({ id: 'insert-custom-' + s.name, label: s.name, run: function () { insertCustom(s.name); } }); }); }
             if (F && F.mounted && shortcodes) {
-                items.push('-');
-                shortcodes.filter(function (s) { return s.name !== 'column'; }).sort(function (a, b) {
+                var extra=shortcodes.filter(function (s) { return !s.builtin && s.name !== 'column'; }).sort(function (a, b) {
                     return a.title.localeCompare(b.title, undefined, { sensitivity: 'base' });
-                }).forEach(function (s) {
+                });if(extra.length)items.push('-');extra.forEach(function (s) {
                     items.push({ id: 'insert-' + s.name, label: s.title, run: function () { insertShortcode(s.name); } });
                 });
             }
@@ -2229,6 +2255,7 @@
                 cmd('section-up', 'Move Section Up', 'arrow-up', function () { return moveOutline('up'); }, { shortcut: key('section-up', 'Alt-Shift-ArrowUp'), disabled: function () { var entry = outlineEntries[outlineTarget]; return !editable || !entry || entry.previous < 0; } }),
                 cmd('section-down', 'Move Section Down', 'arrow-down', function () { return moveOutline('down'); }, { shortcut: key('section-down', 'Alt-Shift-ArrowDown'), disabled: function () { var entry = outlineEntries[outlineTarget]; return !editable || !entry || entry.next < 0; } }),
                 cmd('new', 'New', 'file', function () { return liveActions['new@1']({}); }),
+                cmd('new-template','New from Template…','document',newFromTemplate,{hidden:function(){return !isDocs;},disabled:function(){return !ready;}}),
                 cmd('new-markdown','New Markdown','document',async function () {untitled++;await importedDocument('untitled-'+untitled+'.md','');},{hidden:function () {return !isDocs;}}),
                 cmd('open', 'Open…', 'folder', async function (input) {
                     if(!input || typeof input.resource!=='string')return openDialog();
@@ -2301,6 +2328,7 @@
             table.push(cmd('page-setup', 'Page Setup…', 'file', editPageSetup, { hidden: noPageLayout, disabled: noEdit }));
             table.push(cmd('header-footer', 'Header and Footer…', 'file', function () { return editDocumentOptions('furniture'); }, { hidden: noPageLayout, disabled: noEdit }));
             table.push(cmd('typography', 'Typography…', 'paragraph', function () { return editDocumentOptions('typography'); }, { hidden: unformatted, disabled: noEdit }));
+            table.push(cmd('document-theme','Document Theme…','theme',function(){return editDocumentOptions('theme');},{hidden:unformatted,disabled:noEdit}));
             table.push(cmd('document-zoom', 'Document Zoom', 'search', null, { hidden: function () { return viewMode !== 'document'; }, items: [
                 cmd('document-fit-width', 'Fit Width', null, function () { setDocumentZoom('width'); }),
                 cmd('document-fit-page', 'Fit Page', null, function () { setDocumentZoom('page'); }),
@@ -2357,12 +2385,12 @@
         function menus() {
             var titles = [
                 { label: isDocs ? 'Docs' : 'Editor', glyph: isDocs ? 'document' : 'code', items: H.identity(root, ['key-bindings']) },
-                { id: 'file', label: 'File', glyph: 'file', items: ['new', 'new-markdown', 'open', 'open-other', 'save', 'save-as', '-', 'export-docx', 'export-pdf', 'print-document', '-', 'properties', 'present', '-', 'close-document'] },
+                { id: 'file', label: 'File', glyph: 'file', items: ['new', 'new-template', 'new-markdown', 'open', 'open-other', 'save', 'save-as', '-', 'export-docx', 'export-pdf', 'print-document', '-', 'properties', 'present', '-', 'close-document'] },
                 { id: 'edit', label: 'Edit', glyph: 'pencil', items: ['undo', 'redo', '-', 'cut', 'copy', 'paste', '-', 'select-all', '-', 'find', 'go-to-line', 'section-up', 'section-down', '-', 'json-format', 'language-restart'] },
                 { id: 'insert', label: 'Insert', glyph: 'plus', items: ['link', 'insert', 'table', 'box', '-', 'insert-timestamp', 'insert-date', 'stamp-modified'] }
             ];
             /* Format, where there is formatting to do. */
-            if (formatOffered) { titles.push({ id: 'format', label: 'Format', glyph: 'paragraph', items: ['style', '-', 'bold', 'italic', 'underline', 'strike', 'code', '-', 'highlight', 'superscript', 'subscript', '-', 'color', 'class', '-', 'bullets', 'numbers', 'quote', 'table', '-', 'document-layout','page-setup', 'typography', 'header-footer', '-', 'stylesheet', 'shared-stylesheet', 'custom-shortcodes'] }); }
+            if (formatOffered) { titles.push({ id: 'format', label: 'Format', glyph: 'paragraph', items: ['style', '-', 'bold', 'italic', 'underline', 'strike', 'code', '-', 'highlight', 'superscript', 'subscript', '-', 'color', 'class', '-', 'bullets', 'numbers', 'quote', 'table', '-', 'document-layout','page-setup', 'document-theme', 'typography', 'header-footer', '-', 'stylesheet', 'shared-stylesheet', 'custom-shortcodes'] }); }
             return { titles: titles, into: { view: LAYOUT.concat(commonToolbar ? ['-', 'common-toolbar-show', 'common-toolbar-customize'] : []) } };
         }
 
@@ -2409,7 +2437,7 @@
             if (destroyed) { return; }
             wrapOn = !!settings.wrap;
             /* The shortcodes for the Insert menu, which draws again once they are here. */
-            loadShortcodes().then(commandsChanged);
+            if(isDocs)loadShortcodes().then(commandsChanged);
             loadKit().then(function () { FORMATS = window.yavcMdEditor.FORMATS; STYLES = window.yavcMdEditor.STYLES; INSERTS = window.yavcMdEditor.INSERTS; SHORTCODES = window.yavcMdEditor.SHORTCODES; commandsChanged(); });
             setupExplorer();
             setupExplorerSplit();
@@ -2496,6 +2524,8 @@
             return { output: { changed: true } };
         }
         var liveActions = {
+            'theme@1':async function(input){docNo();var tab=current();if(tab.readOnly||tab.lang!=='markdown')throw new Error('Choose an editable Markdown document.');if(pageActive())await visual.api.sync();var text=view.state.doc.toString(),K=await loadKit();await K.pages();var m=await mdEngine();if(destroyed||tab!==current()||text!==view.state.doc.toString())throw new Error('The document changed. Try again.');window.yavcDocumentSettings.themeCSS({theme:input.value});takeVisualText(m.frontset({text:text,set:{theme:input.value==='plain'?null:input.value},order:['theme']}).text,true);textChangedForPage();refreshStyles();return {output:{theme:input.value}};},
+            'new-template@1':async function(input){var G=await documentGallery();if(destroyed)throw new Error('This workspace is no longer available.');return liveActions['new@1']({text:G.stock(input.template)});},
             'header-footer@1': async function (input) { return updateDocumentOptions(input, true); },
             'typography@1': async function (input) { return updateDocumentOptions(input, false); },
             'document-zoom@1': async function (input) { docNo(); if (viewMode !== 'document') { throw new Error('Choose Document view before setting document zoom.'); } setDocumentZoom(input.value); return { output: { value: documentZoom } }; },
@@ -2596,7 +2626,7 @@
                 return { output: { line: line } };
             }
         };
-        if (!isDocs) ['page-setup@1','typography@1','header-footer@1','export@1','print@1','document-zoom@1','table@1','format@1','define@1'].forEach(function (id) {if(liveActions[id])liveActions[id]=async function () {throw new Error('This document action moved to yavc.docs/'+id+'. Open the saved document in Docs.');};});
+        if (!isDocs) ['theme@1','new-template@1','page-setup@1','typography@1','header-footer@1','export@1','print@1','document-zoom@1','table@1','format@1','define@1'].forEach(function (id) {if(liveActions[id])liveActions[id]=async function () {throw new Error('This document action moved to yavc.docs/'+id+'. Open the saved document in Docs.');};});
         Object.keys(liveActions).forEach(function (id) {var handler=liveActions[id];liveActions[id]=async function (input) {await boot;if(destroyed || startupFailed || !view)throw new Error('This workspace is no longer available.');return handler(input);};});
         if (documentWindows) unbindDocuments = documentWindows.bind(root, {
             application: app, resource: function () {return current() && current().path;},

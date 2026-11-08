@@ -3,11 +3,22 @@
 (function () {
     'use strict';
     var count = 0;
+    var THEMES = Object.freeze([
+        Object.freeze({id:'plain',title:'Plain',description:'The standard document typography.',css:''}),
+        Object.freeze({id:'manuscript',title:'Manuscript',description:'Serif body and headings, 12 point text and double spacing.',css:'--doc-font:Georgia,serif;--doc-font-heading:Georgia,serif;--doc-size:12pt;--doc-leading:2;--doc-paragraph-spacing:0pt;'}),
+        Object.freeze({id:'report',title:'Report',description:'Serif body text with sans-serif headings and generous paragraph spacing.',css:'--doc-font:Georgia,serif;--doc-font-heading:Arial,sans-serif;--doc-size:11pt;--doc-leading:1.45;--doc-paragraph-spacing:8pt;'}),
+        Object.freeze({id:'letter',title:'Letter',description:'Compact serif text with space between paragraphs.',css:'--doc-font:Georgia,serif;--doc-font-heading:Georgia,serif;--doc-size:11pt;--doc-leading:1.3;--doc-paragraph-spacing:8pt;'})
+    ]);
+    function themeCSS(front) {
+        var theme=THEMES.find(function(item){return item.id===(front.theme||'plain');});
+        if(!theme)throw Object.assign(new Error('Choose Plain, Manuscript, Report or Letter as the document theme.'),{field:'theme'});
+        return theme.css;
+    }
     function properties(front) {
         if (front.problem) { throw new Error(front.problem); }
         var out = {};
         (front.entries || []).forEach(function (entry) {
-            if (!/^(page|orientation|margins|font|heading-font|size|spacing|paragraph-spacing|header|footer|header-first|title|author|date)$/.test(entry.key)) { return; }
+            if (!/^(theme|page|orientation|margins|font|heading-font|size|spacing|paragraph-spacing|header|footer|header-first|title|author|date)$/.test(entry.key)) { return; }
             if (entry.kind === 'complex' && !(/^(header|footer)$/.test(entry.key) && entry.mapping)) { throw new Error('Page settings need plain values or header/footer alignment mappings.'); }
             out[entry.key] = entry.mapping || entry.value;
         }); return out;
@@ -34,7 +45,7 @@
         if (t.size != null) { css.push('--doc-size:' + t.size + 'pt'); }
         if (t.spacing != null) { css.push('--doc-leading:' + t.spacing); }
         if (t['paragraph-spacing'] != null) { css.push('--doc-paragraph-spacing:' + t['paragraph-spacing'] + 'pt'); }
-        return css.join(';');
+        return themeCSS(front) + css.join(';');
     }
     function furniture(props, engine) {
         var f = { first: props['header-first'] !== 'none', title: String(props.title || ''), author: String(props.author || ''), date: String(props.date || '') };
@@ -106,6 +117,7 @@
     }
     async function open(kind, opts) {
         if (kind === 'typography') { var K = window.yavcMdEditor; await K.loadScript(K.here + 'typography-ui.js' + K.stamp); return window.yavcTypography.open(opts); }
+        if (kind === 'theme') { var kit=window.yavcMdEditor;await kit.loadScript(kit.here+'document-gallery.js'+kit.stamp);return window.yavcDocumentGallery.theme(opts); }
         if (kind !== 'furniture') { throw new Error('Unknown document settings dialog.'); }
         var esc = window.yavcUtil.esc, api, props = opts.properties;
         var fields = ['header-left', 'header-center', 'header-right', 'footer-left', 'footer-center', 'footer-right'];
@@ -136,5 +148,5 @@
                 } catch (err) { var notice = window.yavcUtil.notice(api.body.querySelector('[data-doc-options-error-ref]'), err.message, true), field = fields.indexOf(err.field) >= 0 ? err.field : fields[0], node = api.body.querySelector('[data-doc-option="' + field + '"]'); notice.id = id + '-error'; node.setAttribute('aria-invalid', 'true'); node.setAttribute('aria-describedby', notice.id); node.focus(); return true; }
             } }); } finally { opts.signal.removeEventListener('abort', abort); }
     }
-    window.yavcDocumentSettings = { properties: properties, typography: typography, typeCSS: typeCSS, furniture: furniture, row: row, decorate: decorate, check: check, checkRows: checkRows, open: open };
+    window.yavcDocumentSettings = { themes:THEMES, themeCSS:themeCSS, properties: properties, typography: typography, typeCSS: typeCSS, furniture: furniture, row: row, decorate: decorate, check: check, checkRows: checkRows, open: open };
 })();

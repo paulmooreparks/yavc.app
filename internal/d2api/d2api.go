@@ -159,7 +159,39 @@ var functions = map[string]func(string) (any, error){
 	"edit":        edit,
 	"format":      format,
 	"outline":     outline,
+	"quote":       quoteValues,
 	"version":     func(string) (any, error) { return map[string]string{"d2": D2Version()}, nil },
+}
+
+// quoteValues delegates literal formatting to D2's exported AST/formatter API.
+// Conversion callers never interpolate a document label into D2 syntax.
+func quoteValues(arg string) (any, error) {
+	if len(arg) > MaxSource*6 {
+		return nil, fmt.Errorf("the label request is too large")
+	}
+	var req struct {
+		Values []string `json:"values"`
+	}
+	if err := json.Unmarshal([]byte(arg), &req); err != nil {
+		return nil, err
+	}
+	if len(req.Values) > MaxObjects*2 {
+		return nil, fmt.Errorf("too many labels")
+	}
+	total := 0
+	for _, value := range req.Values {
+		total += len(value)
+	}
+	if total > MaxSource {
+		return nil, fmt.Errorf("the labels exceed the diagram source limit")
+	}
+	values := make([]string, len(req.Values))
+	for i, value := range req.Values {
+		values[i] = d2format.Format(d2ast.RawString(value, false))
+	}
+	return struct {
+		Values []string `json:"values"`
+	}{values}, nil
 }
 
 // TextRequest is what completions, format and outline take. Line and

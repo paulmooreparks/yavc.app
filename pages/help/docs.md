@@ -6,7 +6,9 @@ Docs and [Editor](/editor) have separate windows, settings and recovery. Editor 
 
 ## Files and tabs
 
-File, Open opens one of your files or a page of the site, and File, New starts an untitled document. View, Show Files shows a pane of your files on the left, where a click opens one. Open documents sit in tabs across the top once there is more than one. A tab with unsaved changes says so, and closing it asks first. Save is Ctrl+S, and Save As asks where to put the file, starting in `~/Documents`. Unsaved changes survive a reload of the page.
+File, Open opens one of your files or a page of the site, and File, New starts an untitled document. View, Show Files shows a pane of your files on the left, where a click opens one. The desktop normally opens each document in its own window. Hosts can choose tabbed editing instead, with tabs above the document area. The window title identifies the active document and its unsaved changes; closing it asks first. Save is Ctrl+S, and Save As asks where to put the file, starting in `~/Documents`. Unsaved changes survive a reload of the page.
+
+File, New from Template offers Blank Document, Report, Letter, Manuscript and Meeting Notes. From a Markdown File lets you browse or upload your own starter. Create opens an independent unsaved copy and leaves the template unchanged. Relative references use the new document's saved location; use absolute virtual paths for shared assets. Templates are limited to 256 KiB. The preview omits pictures and embedded applications.
 
 View, Customize Toolbar changes the common-command row below the topbar. Add or remove commands, move them up or down in the order, and add separators between groups. Apply saves the layout; Cancel discards the draft, and Restore Defaults restores the initial choices in the form. Show the Toolbar controls visibility, and Keep Visible with the Ribbon lets the row remain available beside any ribbon tab. Each Docs window uses the Docs toolbar preference. Editor has a separate preference. A localhost run keeps a separate session for each host.
 
@@ -28,6 +30,8 @@ The site's View menu and the standard toolbar offer five views of a Markdown fil
 View, Open Markdown As chooses the view a Markdown file opens in, and each tab remembers the view you last chose for it. View, Wrap Lines turns line wrapping on and off in Text view.
 
 ## Formatting
+
+Format, Document Theme previews Plain, Manuscript, Report and Letter without changing the document until Apply. The theme sets default fonts, size and spacing. Typography, shared stylesheets and document styles retain their overrides. Plain removes the theme override. Document paper stays independent of the application's light or dark appearance. Word retains the requested font names; PDF continues to use its bundled Roboto font.
 
 The Format menu offers Bold (Ctrl+B), Italic (Ctrl+I), Underline (Ctrl+U), Strike Through, Code, Highlight (Ctrl+Shift+H), Superscript, Subscript, Text Color, Style, Bulleted List and Numbered List, and Paragraph Style, which is Paragraph (Ctrl+0) or Heading 1 to 6 (Ctrl+1 to Ctrl+6). Any of these commands can be added to the toolbar. In Text view a format wraps the selection in its Markdown or takes it off again, and a heading or a list marks each selected line. In Visual view the page is formatted directly.
 

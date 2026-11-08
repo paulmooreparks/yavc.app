@@ -1162,7 +1162,7 @@ var schemaCache = null;
         }).catch(function (err) { o.say(String(err && err.message || err), true); });
       }
       dom.addEventListener('mousedown', function (e) {
-        if (box || e.button !== 0 || e.target.closest('a[href]') && e.ctrlKey) return;
+        if (box || e.button !== 0 || e.target.closest('summary,[data-canvas-contents]') || e.target.closest('a[href]') && e.ctrlKey) return;
         e.preventDefault();
         /* The host may take the block as a form, a picture's say; its
            answer is the new source, '' to take the block out, or null. */
@@ -1198,7 +1198,7 @@ var schemaCache = null;
           else shownNode = nd;
           return true;
         },
-        stopEvent: function (e) { return !!box && box.contains(e.target); },
+        stopEvent: function (e) { return !!box && box.contains(e.target) || !!e.target.closest('summary,[data-canvas-contents]'); },
         ignoreMutation: function () { return true; },
         selectNode: function () { dom.classList.add('selected'); },
         deselectNode: function () { dom.classList.remove('selected'); }

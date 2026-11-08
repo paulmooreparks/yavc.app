@@ -170,3 +170,5 @@
 .deck-status [data-role="where"] { flex: 0 1 auto; min-width: 2rem; overflow: hidden; text-overflow: ellipsis; }
 .deck-status [data-role="kind"], .deck-status [data-role="state"] { flex-shrink: 0; }
 .deck-status [data-role="position"] { flex-shrink: 0; }
+.deck-show-controls { position: absolute; top: var(--space-2); right: var(--space-2); z-index: 10; display: flex; gap: var(--space-2); }
+@media print { .deck-show-controls { display: none; } }

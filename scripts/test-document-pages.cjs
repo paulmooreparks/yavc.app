@@ -90,7 +90,7 @@ const margin = page => page.locator('[data-measure="all"]').locator('..').getByR
             await action(page,'new',{path:'~/oversized.docs.md',text:Array.from({length:100},(_,i)=>'- List item '+i).join('\n')});
             await page.waitForFunction(() => document.querySelector('[data-role="page-problems"]')?.textContent.includes('taller than the page'));
             await command(page,'print-document');
-            await page.waitForFunction(() => Array.from(document.querySelectorAll('.yavc-notice')).some(node => node.textContent.includes('could not be printed')));
+            await page.locator('.toast.danger').filter({hasText:'could not be printed'}).waitFor();
             assert.equal(await page.locator('.ed-print-frame').count(),0);
             assert.deepEqual(errors,[]);
             console.log(engine+': pagination, source preservation, rich edit/Undo, page setup/Undo, mode changes, narrow layout and exclusion-safe print passed');

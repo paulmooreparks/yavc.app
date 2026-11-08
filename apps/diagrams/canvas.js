@@ -118,7 +118,7 @@
             /* A selected shape has a handle on its right edge, from which a
                connection is dragged out. */
             layer.querySelectorAll('.dg-handle').forEach(function (h) { h.remove(); });
-            var box = sel && !/^\(/.test(sel) && (out.shapes || []).find(function (s) { return s.id === sel; });
+            var box = sel && (out.shapes || []).find(function (s) { return s.id === sel; });
             if (box && !(host.readOnly && host.readOnly())) {
                 /* Six screen pixels whatever the drawing's scale, with a
                    wider ring that takes the pointer. */
@@ -181,7 +181,7 @@
             if (e.button !== 0 || !out) { return; }
             var handle = e.target.classList && e.target.classList.contains('dg-handle');
             var key = handle ? sel : hitOf(e.target);
-            press = { x: e.clientX, y: e.clientY, key: key, at: handle ? e.target.__at : null, kind: handle ? 'connect' : (key && key === sel && !/^\(/.test(key) ? 'move' : null), moved: false };
+            press = { x: e.clientX, y: e.clientY, key: key, at: handle ? e.target.__at : null, kind: handle ? 'connect' : (key && key === sel && shapeBox(key) ? 'move' : null), moved: false };
             if (host.readOnly && host.readOnly()) press.kind = null;
             layer.setPointerCapture(e.pointerId);
             e.preventDefault();
@@ -221,7 +221,7 @@
             }
             var key = p.key;
             if (key && host.pick && host.pick(key)) { return; }
-            if (host.tool && host.tool() && !/^\(/.test(key || '')) { host.place(key || null); return; }
+            if (host.tool && host.tool() && (!key || shapeBox(key))) { host.place(key || null); return; }
             select(key, 'pointer');
         }
         layer.addEventListener('pointerup', function (e) { release(e, false); });
@@ -256,6 +256,7 @@
             show: show, refreshAccess: mark, fit: fitLayer, onKey: onKey,
             select: function (key) { select(key, null); },
             selected: function () { return sel; },
+            reveal: function () { var hit = Array.from(layer.children).find(function (e) { return e.__key === sel; }); if (hit) hit.scrollIntoView({block:'nearest',inline:'nearest'}); },
             keys: function () { return order.slice(); },
             destroy: function () { if (ro) { ro.disconnect(); } mo.disconnect(); layer.remove(); place.classList.remove('dg-editable'); }
         };

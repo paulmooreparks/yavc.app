@@ -47,7 +47,7 @@ A shortcode the engine does not know, or one written wrongly, is drawn as the te
 
 ## The catalogue
 
-These are the shortcodes of version 1, in the order the Insert menu lists them. The engine also reads `colour` as `color`. Each one's arguments and an example are in the engine's table (`internal/shortcodes`), which the Editor's Insert menu and the help pages show.
+These are the shortcodes of version 1, in renderer-catalog order. The engine also reads `colour` as `color`. Accepted named parameters, argument requirements and examples come from `internal/shortcodes`, through the bundled engine's `shortcodes()` function and public GET `/api/shortcodes`. Editor and Docs use that table for completion and hover. Their authored menus keep task-specific labels and forms rather than repeating every catalog entry.
 
 | Shortcode | Kind | What it draws |
 |---|---|---|
@@ -61,6 +61,7 @@ These are the shortcodes of version 1, in the order the Insert menu lists them. 
 | `anchor` | inline | A place in the page a link can go to, as #name. |
 | `page` | inline | A link to one of the site's pages, by its slug, with text of its own or the slug. |
 | `figure` | block | A picture with an optional caption, centred. |
+| `diagram` | block | A saved D2, Mermaid or Canvas diagram read through the host's virtual file service. |
 | `applet` | block | One of the site's applications, running in the page. |
 | `video` | block | A hosted video, by its link or by its service and id: YouTube (played without tracking until it is played, in its privacy-enhanced mode) or Vimeo (with do-not-track). A video of your own, uploaded to this site, is a feature to come. |
 | `code` | block | A file, shown as a listing with Copy and Download, fetched as the page loads: a path on the site from /, or one of your own files under ~. |

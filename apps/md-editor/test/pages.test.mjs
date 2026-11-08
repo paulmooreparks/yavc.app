@@ -46,3 +46,15 @@ test('page planning keeps blocks whole, preserves explicit breaks and reports ov
     assert.equal(P.plan([{top:0,height:d.content+1}],page).oversized,true);
     assert.throws(() => P.plan(Array.from({length:1001},(_,i) => ({top:i,height:1,breakBefore:true})),page),/1,000 pages/);
 });
+test('keep chains move together only when they fit and never cross explicit breaks',()=>{
+    const page=P.settings({page:'letter',margins:'1in'}),d=P.dimensions(page);
+    const blocks=[{top:0,height:800,pos:0},{top:800,height:40,pos:10,keepNext:true},{top:840,height:100,pos:20}];
+    assert.equal(P.plan(blocks,page).gaps[0].index,1);
+    assert.equal(P.plan(blocks.map((b,i)=>({...b,keepNext:false})),page).gaps[0].index,2);
+    assert.equal(P.plan(blocks.map((b,i)=>({...b,breakBefore:i===2})),page).gaps[0].index,2);
+    assert.equal(P.plan(blocks.map((b,i)=>({...b,control:i===2})),page).gaps[0].index,2);
+    const chain=[{top:0,height:760,pos:0},{top:760,height:50,pos:1,keepNext:true},{top:810,height:50,pos:2,keepNext:true},{top:860,height:100,pos:3}];
+    assert.equal(P.plan(chain,page).gaps[0].index,1);
+    assert.equal(P.plan([{top:0,height:20,keepNext:true},{top:20,height:d.content+1}],page).oversized,true);
+    assert.equal(P.plan([{top:0,height:20,keepNext:true}],page).count,1);
+});
