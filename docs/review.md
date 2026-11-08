@@ -1,5 +1,11 @@
 # Stem-to-stern review, November 2026
 
+## Heading and authored block keeps, 2026-11-09
+
+The shared planner now keeps a fitting heading/content chain together. Explicit breaks win, long chains are resolved once, and a group taller than a page falls back to the existing whole-block behavior. Stock heading CSS provides an `avoid` fallback because the isolated Firefox engine does not support `avoid-page`. Review also found that preview wrappers exposed keep intent only for headings. The effective-block reader now covers authored paragraph and other single-child blocks, with matching direct/wrapped fixtures.
+
+The three-engine fixture verifies source and clean-state stability, matching print groups, authored opt-out, direct/wrapped paragraph keeps and a real generated PDF whose orphan heading is moved with its body. Wrapped explicit before/after breaks now use the same effective-block reader. PDF files retain selectable text and are checked with pdftotext. Unit coverage includes keep chains, explicit break/control boundaries and oversized groups. The earlier Firefox failure remains in its diagnostic log. Fixture setup was also corrected to use the document-specific Markdown engine and the PDF callback's documented four-parameter signature. The older page fixture's final print-refusal assertion still expected an inline error bar; it now follows the already-adopted transient toast contract. This batch does not claim line splitting or complete widow/orphan support.
+
 ## Document themes and templates, 2026-11-09
 
 Docs now offers Plain, Manuscript, Report and Letter through Format, Document Theme. Theme defaults flow through the shared settings compiler below authored typography/styles, including Editor preview, Typography, Print and Office preparation. Theme changes isolate their source history transaction. File, New from Template offers bundled starters and a browsable/uploadable Markdown file, creates an independent unsaved document through the existing window policy and never writes the template. Custom reads are bounded and rejected after ownership changes or cancellation. Preview omits author-supplied assets and embedded applications.

@@ -58,10 +58,13 @@
     }
     // The input positions exclude existing page widgets. Each block stays intact.
     function plan(blocks, page) {
-        var d = dimensions(page), gaps = [], sheet = 0, added = 0, oversized = false;
+        var d = dimensions(page), gaps = [], sheet = 0, added = 0, oversized = false, ends = [];
+        // Resolve keep chains once, so a long run of headings stays linear.
+        for(var i=blocks.length-1;i>=0;i--)ends[i]=blocks[i].keepNext&&i+1<blocks.length&&!blocks[i+1].breakBefore&&!blocks[i+1].control?ends[i+1]:i;
         blocks.forEach(function (block, index) {
             var top = block.top + added, start = sheet * (d.height + GAP), used = top - start;
-            if (index && (block.breakBefore || (used > .5 && used + block.height > d.content + .5))) {
+            var last=blocks[ends[index]],group=last.top+last.height-block.top,height=group<=d.content+.5?Math.max(block.height,group):block.height;
+            if (index && (block.breakBefore || (used > .5 && used + height > d.content + .5))) {
                 var space = d.height + GAP - used;
                 gaps.push({ index: index, pos: block.pos, height: Math.max(0, space) });
                 added += Math.max(0, space); sheet++;
@@ -76,10 +79,15 @@
         var offset = 0, top = dom.getBoundingClientRect().top, blocks = [];
         Array.from(dom.children).forEach(function (node) {
             if (node.classList.contains('doc-page-gap')) { offset += node.getBoundingClientRect().height / scale; return; }
-            var rect = node.getBoundingClientRect(), css = getComputedStyle(node);
+            var rect = node.getBoundingClientRect(), css = getComputedStyle(node), content=node;
+            while(content.matches('.doc-block,.pm-source,.dinah-src,.dinah-block')&&content.childElementCount===1)content=content.firstElementChild;
+            var contentCSS=getComputedStyle(content),previous=blocks[blocks.length-1];
             blocks.push({ node: node, pos: positions ? positions[blocks.length] : 0, top: (rect.top - top) / scale - offset,
                 height: rect.height / scale + Math.max(0, parseFloat(css.marginBottom) || 0),
-                breakBefore: /^(page|always)$/.test(css.breakBefore) || !!(blocks.length && (blocks[blocks.length - 1].node.matches('.sc-page-break') || blocks[blocks.length - 1].node.querySelector('.sc-page-break') || /^(page|always)$/.test(getComputedStyle(blocks[blocks.length - 1].node).breakAfter))) });
+                keepNext:/^(avoid|avoid-page)$/.test(css.breakAfter)||/^(avoid|avoid-page)$/.test(contentCSS.breakAfter),
+                breakAfter:/^(page|always)$/.test(css.breakAfter)||/^(page|always)$/.test(contentCSS.breakAfter),
+                control:node.matches('.sc-page-break')||!!node.querySelector('.sc-page-break'),
+                breakBefore: /^(page|always)$/.test(css.breakBefore)||/^(page|always)$/.test(contentCSS.breakBefore)||!!(previous&&(previous.control||previous.breakAfter)) });
         });
         return blocks;
     }

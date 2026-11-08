@@ -84,9 +84,13 @@ Three gaps matter most. The Editor does not apply a document's `{{style}}` CSS a
 
 35. **Typography is a picker with a draft preview** (2026-11-06, Paul requested a researched word-processor UI). PUDL combos offer common local font names and accept another family; the dialog does not enumerate private installed fonts or load fonts. Numeric size and paragraph spacing show points. Line spacing offers named presets and a custom multiplier. Defaults derive from the document's stylesheet layers, and the preview applies the same precedence as the document, including inherited heading fonts. Preview changes never edit source. Untouched values retain their original units; Apply makes one source edit, Cancel discards the draft, and Default removes an override. The shared style controller accepts an updated base layer below authored styles so the preview can reuse its containment and asynchronous-read contract.
 
+36. **Headings stay with following content when their group fits** (2026-11-09). The shared block planner resolves keep chains in one reverse pass and moves a fitting group together. Stock headings use a portable `break-after: avoid` fallback followed by `avoid-page`; authored rules can opt out or mark another block. Known single-child preview/source wrappers expose their effective block's intent, so paragraphs behave consistently through rich and wrapped measurement. Explicit page breaks win. An overlarge group falls back to the existing whole-block policy. Pagination remains source-free and keeps its transactions out of Undo. The structural PDF writer uses its documented four-parameter page-break callback to avoid orphan headings where progress is possible; Word receives the corresponding keep flag. Neither writer promises identical wrapping to the browser, and this change does not split long blocks or place footnotes on their referenced page.
+
 ## What a document looks like
 
 The implementation uses documented [CSS zoom](https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/zoom) for magnification and [pdfmake header/footer callbacks](https://pdfmake.github.io/docs/0.1/document-definition-object/headers-footers/) for output-specific page fields. DOCX headers and footers use the vendored library's [public header/footer API](https://docx.js.org/#/usage/headers-and-footers).
+
+Heading keeps use pdfmake's documented [dynamic page-break callback](https://pdfmake.github.io/docs/0.1/document-definition-object/page/). The callback retains all four declared parameters, as the documented API specifies.
 
 ```markdown
 ---
