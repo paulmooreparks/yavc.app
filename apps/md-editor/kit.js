@@ -405,7 +405,7 @@
             if (i === '-') { items.push('-'); return; }
             items.push({ id: i.id, label: i.label, run: function () { if (i.run) { i.run(); } else { insertItem(i, ctx); } } });
         });
-        out.push({ id: 'insert', label: 'Insert', glyph: 'plus', items: items });
+        out.push({ id: 'insert', label: 'Other', glyph: 'more', items: items });
         out.push(tableCommand(ctx));
         out.push(boxCommand(ctx));
         return out;
@@ -1031,7 +1031,7 @@
         var body = '<div class="md-form-fields">' + form.fields.map(function (f) {
                 var fid = id + f.key, v = values[f.key] == null ? '' : values[f.key], help = f.help ? '<p class="form-help">' + esc(f.help) + '</p>' : '';
                 var control;
-                if (f.kind === 'glyph') { control = '<input type="hidden" data-key="' + f.key + '" value="' + esc(v) + '"><input type="search" class="form-input" id="' + fid + '" aria-label="Search Glyphs" aria-describedby="' + id + 'error" data-glyph-search placeholder="Filter by name"><div class="md-glyph-options" role="group" aria-label="Glyph Choices" aria-describedby="' + id + 'error"><p data-glyph-loading>Loading glyphs…</p></div><p class="form-help" data-glyph-empty hidden>No matching glyphs.</p>'; }
+                if (f.kind === 'glyph') { control = '<input type="hidden" data-key="' + f.key + '" value="' + esc(v) + '"><input type="search" class="form-input" id="' + fid + '" aria-label="Search Glyphs" aria-describedby="' + id + 'error" data-glyph-search placeholder="Filter by name"><div class="md-glyph-options" role="listbox" tabindex="0" aria-label="Glyphs" aria-describedby="' + id + 'error"><p data-glyph-loading>Loading glyphs…</p></div><p class="form-help" data-glyph-empty hidden>No matching glyphs.</p>'; }
                 else if (f.kind === 'select') { control = '<span class="form-select-wrap"><select class="form-select" id="' + fid + '" data-key="' + f.key + '" data-value="' + esc(v) + '"><option value="' + esc(v) + '">' + esc(v || 'Loading…') + '</option></select></span>'; }
                 else if (f.kind === 'number') { control = '<span class="number-field"><input class="form-input" type="number" id="' + fid + '" data-key="' + f.key + '" value="' + esc(v) + '" min="' + f.min + '" max="' + f.max + '" step="1"></span>'; }
                 else { control = '<input class="form-input" id="' + fid + '" data-key="' + f.key + '" value="' + esc(v) + '" autocomplete="off" spellcheck="false"' + (f.placeholder ? ' placeholder="' + esc(f.placeholder) + '"' : '') + '>'; }
@@ -1050,14 +1050,14 @@
                 if (name === 'glyph') {
                     var choices = dlg.querySelector('.md-glyph-options'), search = dlg.querySelector('[data-glyph-search]');
                     glyphOptions().then(function (list) {
-                        if (!dlg.isConnected) { return; }
+                        if (!dlg.open || !unchanged()) { return; }
                         choices.replaceChildren();
                         list.forEach(function (option) {
                             var key = option[0]; if (!/^[a-z][a-z0-9-]*$/.test(key)) { return; }
-                            var button = document.createElement('label'), radio=document.createElement('input'), glyph = document.createElement('span'), label = document.createElement('span');
-                            button.className = 'check'; button.dataset.glyphChoice = key;radio.type='radio';radio.name=id+'glyph';radio.value=key;radio.checked=field('name').value===key;
+                            var button = document.createElement('div'), glyph = document.createElement('span'), label = document.createElement('span');
+                            button.className = 'md-glyph-row'; button.dataset.glyphChoice = key;button.id=id+'glyph-'+key;button.setAttribute('role','option');button.setAttribute('aria-selected',String(field('name').value===key));
                             glyph.className = 'glyph'; glyph.style.setProperty('--glyph', 'var(--glyph-' + key + ')'); glyph.setAttribute('aria-hidden', 'true');
-                            label.textContent = option[1]; button.append(radio,glyph, label); choices.append(button);
+                            label.textContent = option[1]; button.append(glyph, label); choices.append(button);
                         });
                         filterGlyphs();
                     }).catch(function () { window.yavcUtil.notice(api.body, 'The glyph list could not be loaded. Close and reopen the dialog to retry.', true); });
@@ -1065,13 +1065,25 @@
                         var query = search.value.trim().toLowerCase(), visible = 0;
                         choices.querySelectorAll('[data-glyph-choice]').forEach(function (button) { button.hidden = !button.dataset.glyphChoice.includes(query) && !button.textContent.toLowerCase().includes(query); if (!button.hidden) { visible++; } });
                         dlg.querySelector('[data-glyph-empty]').hidden = visible > 0;
+                        var selected=choices.querySelector('[aria-selected="true"]:not([hidden])');if(selected)choices.setAttribute('aria-activedescendant',selected.id);else choices.removeAttribute('aria-activedescendant');
                     }
                     search.addEventListener('input', filterGlyphs);
-                    choices.setAttribute('role','radiogroup');
-                    choices.addEventListener('change', function (event) {
-                        if(!event.target.matches('input[type="radio"]'))return;
-                        field('name').value = event.target.value;
-                        errorLine.hidden = true;
+                    function choose(row) {
+                        choices.querySelectorAll('[data-glyph-choice]').forEach(function (item) {item.setAttribute('aria-selected',String(item===row));});
+                        field('name').value=row.dataset.glyphChoice;choices.setAttribute('aria-activedescendant',row.id);errorLine.hidden=true;
+                        var outer=choices.getBoundingClientRect(),inner=row.getBoundingClientRect();if(inner.top<outer.top)choices.scrollTop-=outer.top-inner.top;else if(inner.bottom>outer.bottom)choices.scrollTop+=inner.bottom-outer.bottom;
+                    }
+                    choices.addEventListener('click',function (event) {var row=event.target.closest('[data-glyph-choice]');if(row && choices.contains(row) && !row.hidden){choose(row);choices.focus();}});
+                    var typed='',typedAt=0;
+                    choices.addEventListener('keydown',function (event) {
+                        if(event.altKey || event.ctrlKey || event.metaKey)return;
+                        var rows=Array.from(choices.querySelectorAll('[data-glyph-choice]:not([hidden])'));if(!rows.length)return;
+                        var at=rows.findIndex(function (row) {return row.getAttribute('aria-selected')==='true';}),next;
+                        if(event.key==='ArrowDown')next=Math.min(rows.length-1,at+1);else if(event.key==='ArrowUp')next=Math.max(0,at-1);else if(event.key==='Home')next=0;else if(event.key==='End')next=rows.length-1;
+                        else if(event.key==='PageDown')next=Math.min(rows.length-1,Math.max(0,at)+Math.max(1,Math.floor(choices.clientHeight/rows[0].offsetHeight)));else if(event.key==='PageUp')next=Math.max(0,at-Math.max(1,Math.floor(choices.clientHeight/rows[0].offsetHeight)));
+                        else if(event.key===' '){next=Math.max(0,at);}else if(event.key==='Enter'){event.preventDefault();api.dialog.querySelector('button[value="ok"]').click();return;}
+                        else if(event.key.length===1){typed=Date.now()-typedAt>700?'':typed;typed+=event.key.toLowerCase();typedAt=Date.now();next=rows.findIndex(function (row) {return row.dataset.glyphChoice.startsWith(typed);});if(next<0)return;}else return;
+                        if(event.key.length!==1 || event.key===' ')typed='';event.preventDefault();choose(rows[next]);
                     });
                 }
                 /* A choice fills from its list; a value it does not list is kept as a choice of its own. */

@@ -685,6 +685,31 @@
                 .then(function (answer) { return guard.current() ? answer : null; }).finally(guard.release);
         }
         function askChoice(title, body, buttons) { return window.yavcDialog.askChoice(title, body, buttons); }
+        async function slideClasses() {
+            if (!await settleForDialog(true)) return;
+            var guard=dialogGuard(true);
+            try {
+                await deckEngine();await installStyle();
+                if(!window.pudlListbox)await loadScript((H.pudl || '/pudl/')+'pudl-listbox.js');
+                if(!guard.current())return;
+                var names=deckClasses(),initial=settingsOf(current())['class'] || '',id='deck-classes-'+crypto.randomUUID();
+                var result=await window.yavcDialog.open({title:'Slide Style',signal:guard.signal,
+                    body:(names.length?'<div class="form-group"><label class="form-label" for="'+id+'-list">Available Styles</label><select class="form-select" id="'+id+'-list" multiple size="7" data-listbox>'+names.map(function (name) {return '<option value="'+esc(name)+'"'+(initial.split(/\s+/).includes(name)?' selected':'')+'>'+esc(name)+'</option>';}).join('')+'</select><p class="form-help">From the deck stylesheet and this slide’s style blocks.</p></div>':'<p class="form-help">No classes are defined in the loaded stylesheets. Add them through Deck, Edit Style Blocks or Stylesheet File, or enter a custom class below.</p>')+
+                        '<div class="form-group"><label class="form-label" for="'+id+'-value">Selected Classes</label><input class="form-input" id="'+id+'-value" data-class-value aria-describedby="'+id+'-help '+id+'-error" value="'+esc(initial)+'" autocomplete="off" spellcheck="false"><p class="form-help" id="'+id+'-help">Separate class names with spaces. Clear this field to use the default slide style.</p></div><p class="form-error" id="'+id+'-error" data-class-error role="alert" hidden></p>',
+                    buttons:[{id:'cancel',label:'Cancel'},{id:'apply',label:'Apply',primary:true}],
+                    onOpen:function (api) {
+                        var input=api.body.querySelector('#'+CSS.escape(id+'-value')),list=api.body.querySelector('select');
+                        if(list){window.pudlListbox.enhance(api.body);list.addEventListener('change',function () {var custom=input.value.split(/\s+/).filter(function (name) {return name && !names.includes(name);});input.value=Array.from(new Set(Array.from(list.selectedOptions).map(function (option) {return option.value;}).concat(custom))).join(' ');});input.addEventListener('input',function () {var chosen=input.value.split(/\s+/);Array.from(list.options).forEach(function (option) {option.selected=chosen.includes(option.value);});window.pudlListbox.refresh(list);});}
+                        input.addEventListener('input',function () {api.body.querySelector('[data-class-error]').hidden=true;input.removeAttribute('aria-invalid');});
+                    },check:function (value,body) {
+                        if(value!=='apply')return;
+                        var error=body.querySelector('[data-class-error]'),input=body.querySelector('[data-class-value]');
+                        var message=!guard.current()?'The deck or slide changed. Close and reopen this form.':input.value.trim().split(/\s+/).some(function (name) {return name && !/^[A-Za-z0-9_-]+$/.test(name);})?'Class names can contain letters, numbers, hyphens and underscores.':null;
+                        if(message){error.textContent=message;error.hidden=false;input.setAttribute('aria-invalid','true');input.focus();return true;}
+                    }});
+                if(result.value==='apply' && guard.current()){var value=result.body.querySelector('[data-class-value]').value;if(value!==initial)setSlideSetting('class',Array.from(new Set(value.trim().split(/\s+/).filter(Boolean))).join(' '));}
+            } finally {guard.release();}
+        }
         async function deckColours() {
             if (!await settleForDialog(false)) return;
             var f = deck.front, guard = dialogGuard(false);
@@ -1378,9 +1403,7 @@
                 cmd('deck-shared-stylesheet', 'Edit Shared Stylesheet…', 'file', function () { return editStyles(true); }, {
                     disabled: function () { return !(H.fs && H.fs.writeText && window.yavcStyleTools && /^~\/.+\.css$/i.test(window.yavcStyleTools.resolve(deck.front.stylesheet, styleDirectory()))); },
                     reason: 'Choose a home-folder CSS file in Stylesheet File first. This host also needs a writable file service.' }),
-                cmd('slide-class', 'Slide Style…', 'tag', function () {
-                    askText('This Slide\'s Style Classes', 'Class names from the stylesheet, separated by spaces; empty for none', function () { return settingsOf(current())['class'] || ''; }, true).then(function (v) { if (v != null) { setSlideSetting('class', v.trim()); } });
-                }),
+                cmd('slide-class', 'Slide Style…', 'tag', slideClasses),
                 cmd('styles-help', 'Styling a Deck', 'info', function () { window.open(publicOrigin() + '/slides-styles', '_blank', 'noopener'); }),
                 cmd('background-image', 'Background Picture…', 'image', function () { askText('Background Picture', 'Picture File or URL', function () { return settingsOf(current()).image || ''; }, true,{browse:true,accept:'.png,.jpg,.jpeg,.gif,.webp,.svg',help:'Leave empty to remove the background picture.'}).then(function (v) { if (v != null) { setSlideSetting('image', v.trim()); } }); }),
                 { id: 'slide-transition', label: 'Transition', items: TRANSITIONS.map(function (t) { return { id: 'slide-transition-' + t[0], label: t[1], choice: 'deck-slide-transition', value: t[0], checked: function () { return (settingsOf(current()).transition || deck.front.transition || 'fade') === t[0]; }, run: function () { setSlideSetting('transition', t[0] === (deck.front.transition || 'fade') ? null : t[0]); } }; }) },

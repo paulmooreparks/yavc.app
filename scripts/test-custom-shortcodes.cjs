@@ -68,8 +68,8 @@ async function text(page) { return (await action(page, 'editor', 'document')).te
             await dialog.getByRole('searchbox', { name: 'Search Glyphs' }).fill('che');
             const glyphs = dialog.locator('[data-glyph-choice]:visible'); await glyphs.first().waitFor();
             assert.ok(await glyphs.count() > 0); assert.equal(await glyphs.first().locator('.glyph').count(), 1);
-            await glyphs.first().getByRole('radio').check();await glyphs.first().getByRole('radio').focus();await page.keyboard.press('ArrowDown');
-            assert.equal(await dialog.locator('[data-glyph-choice] input:checked').count(), 1);
+            await glyphs.first().click();await dialog.getByRole('listbox',{name:'Glyphs',exact:true}).focus();await page.keyboard.press('ArrowDown');
+            assert.equal(await dialog.locator('[data-glyph-choice][aria-selected="true"]').count(), 1);assert.equal(await dialog.getByRole('radio').count(),0);
             assert.equal(await dialog.locator('[data-role="error"]').isVisible(), false);
             await page.setViewportSize({ width: 380, height: 800 });
             assert.ok(await dialog.evaluate(e => e.scrollWidth <= e.clientWidth + 1));

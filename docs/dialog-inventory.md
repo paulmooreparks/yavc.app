@@ -54,7 +54,7 @@ The executable evidence includes the site, content, authored, block, formatting,
 | Shortcodes | Contents | Heading scope and depth validation | Content sweep, all three engines |
 | Shortcodes | Status Label | Text and semantic status choice | Content sweep, all three engines |
 | Shortcodes | Keys | Key labels and source escaping | Content sweep, all three engines |
-| Shortcodes | Glyph | Searchable radio choices with glyph and description | Content sweep, all three engines; custom-shortcode behavior suite all three |
+| Shortcodes | Glyph | Searchable single-column list with glyph and name, no radio indicators | Picker fixture, all three engines; light/dark, narrow layout, search and keyboard insertion |
 | Shortcodes | Page Link | Page selection and link text | Content sweep, all three engines |
 | Shortcodes | Generated text parameter | Label, current value, escaped source and ownership | Content sweep, all three engines; custom-shortcode behavior suite all three |
 | Shortcodes | Generated number parameter | Bounded value and visible enhanced-field validation | Content sweep, all three engines; visible invalid input and correction checked |
@@ -74,7 +74,7 @@ The executable evidence includes the site, content, authored, block, formatting,
 | Slides | Deck Colors | Labeled native color controls and theme defaults | Content sweep, all three engines |
 | Slides | Slide Colors | Override scope and removal/default semantics | Content sweep, all three engines |
 | Slides | Deck Stylesheet File | Direct CSS path and Browse/import | Content sweep, all three engines |
-| Slides | Slide Classes | Multi-class text, current value and slide ownership | Content sweep, all three engines |
+| Slides | Slide Classes | Available shared/deck/current-slide classes, custom names and empty-state guidance | Picker fixture, all three engines; scoped catalog, custom entries, removal, validation and stale cancellation |
 | Slides | Background Picture | Direct URL/path and Browse/import | Content sweep, all three engines |
 | Slides | Deck Properties | Metadata scope and original deck ownership | Content sweep, all three engines |
 | Diagrams | Select Canvas Items | Searchable PUDL multi-select list, node/connector detail and selection count | Content sweep, all three engines; keyboard selection and hidden-selection retention checked |

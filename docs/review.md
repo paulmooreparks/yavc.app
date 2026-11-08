@@ -1,5 +1,13 @@
 # Stem-to-stern review, November 2026
 
+## Editor pane ownership and content pickers, 2026-11-08
+
+Files now occupies the outer pane below the toolbar, extending to the Editor bottom. Document tabs span the remaining workspace; Outline sits below them and follows the active document. Independent splitters and settings preserve both widths across compact navigation, floating windows and reload. Container queries handle narrow applets on wide desktops. PUDL single-pane placement prevents its splitter from persisting clamped widths while a pane is hidden. Source review caught closing compact Outline leaving a blank body; both pane visibility helpers now return to the document when incoming settings or commands hide the active compact pane, with a regression case for each path.
+
+The shared glyph chooser is a searchable single-column ARIA listbox with glyph/name rows, keyboard navigation and Enter insertion. Insert > Other replaces the repeated Insert label. Slide Style discovers accepted shared, deck and current-slide classes, preserves custom names, supports clearing and rejects stale or invalid drafts. The picker and pane fixtures pass Chromium, Firefox and WebKit, including light/dark dialogs and narrow floating panes.
+
+The content-dialog sweep, Editor session continuity and full Editor UI review also pass all three engines. The older view-toolbar fixture fails its read-only document URL-scroll assertion at line 35 in Chromium, both in this candidate and the unchanged installed v0.2.46. That existing failure remains open. Independent source and screenshot review has no remaining findings. Rapid settings writes retain newer local values until their own writes settle, preventing an earlier notification from closing a newly reopened pane.
+
 ## Bounded source bytes and lossless uploads, 2026-11-08
 
 The read-only `contentBytes` host extension returns bounded complete bytes with the revision of their stored payload. It uses the guest VFS authority and does not add another store or permit writes. The portable client validates responses and owns its copy, including when the provider returns a typed-array subclass. The shared codec accepts strict UTF-8 and BOM-labelled UTF-16, retains BOM and newline code units, and refuses malformed source. Encoding refuses isolated surrogates instead of replacing them.
