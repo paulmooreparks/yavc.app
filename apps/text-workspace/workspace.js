@@ -1167,10 +1167,20 @@
             var text = view.state.doc.toString(), K = await loadKit(), P = await K.pages(), m = await mdEngine(), S = window.yavcDocumentSettings;
             function unchanged() { return !destroyed && current() === t && view.state.doc.toString() === text; }
             if (!unchanged()) { return; }
-            try { await S.open(kind, { properties: S.properties(m.front(text)), styles: m.styles(text).map(function (block) { return block.css; }), stylesheet: currentSharedStyle, read: window.pudlHost.fs.readText, engine: m, current: unchanged, signal: styleLifetime.signal, save: function (set, mappings) {
+            try { await S.open(kind, { properties: S.properties(m.front(text)), styles: m.styles(text).map(function (block) { return block.css; }), stylesheet: currentSharedStyle, read: H.fs && H.fs.readText, engine: m, current: unchanged, signal: styleLifetime.signal, save: function (set, mappings) {
                 var order = Object.keys(set).concat(Object.keys(mappings));
-                takeVisualText(m.frontset({ text: text, set: set, mappings: mappings, order: order }).text); textChangedForPage(); refreshStyles();
+                takeVisualText(m.frontset({ text: text, set: set, mappings: mappings, order: order }).text,true); textChangedForPage(); refreshStyles();
             } }); } catch (err) { say(err.message, true); }
+        }
+        async function documentGallery() {
+            var K=await loadKit();await K.pages();await K.loadScript(K.here+'document-gallery.js'+K.stamp);return window.yavcDocumentGallery;
+        }
+        async function newFromTemplate() {
+            if(pageActive())await visual.api.sync();var tab=current(),text=view?view.state.doc.toString():'';
+            function unchanged(){return !destroyed&&current()===tab&&(!view||view.state.doc.toString()===text);}
+            var G=await documentGallery(),m=await mdEngine();if(!unchanged())return;
+            var source=await G.template({engine:m,read:H.fs&&H.fs.readText,host:picturesHost(),signal:styleLifetime.signal,current:unchanged});
+            if(source!==null&&source!==undefined&&unchanged())return liveActions['new@1']({text:source});
         }
         async function printDocument() {
             var t = current(); if (!t || t.lang !== 'markdown') { return; }
@@ -1595,14 +1605,14 @@
         /* The page's edit, as text: the least change that turns the text into
            the new text, so the cursor and the undo history in Split keep
            their sense. */
-        function takeVisualText(text) {
+        function takeVisualText(text, isolate) {
             var old = view.state.doc.toString();
             if (old === text) { return; }
             var a = 0, b = 0;
             while (a < old.length && a < text.length && old[a] === text[a]) { a++; }
             while (b < old.length - a && b < text.length - a && old[old.length - 1 - b] === text[text.length - 1 - b]) { b++; }
             visual.fromVisual = true;
-            try { view.dispatch({ changes: { from: a, to: old.length - b, insert: text.slice(a, text.length - b) }, userEvent: 'input.visual' }); }
+            try { view.dispatch({ changes: { from: a, to: old.length - b, insert: text.slice(a, text.length - b) }, userEvent: 'input.visual',annotations:isolate?CM.isolateHistory.of('full'):[] }); }
             finally { visual.fromVisual = false; }
         }
 
@@ -2232,6 +2242,7 @@
                 cmd('section-up', 'Move Section Up', 'arrow-up', function () { return moveOutline('up'); }, { shortcut: key('section-up', 'Alt-Shift-ArrowUp'), disabled: function () { var entry = outlineEntries[outlineTarget]; return !editable || !entry || entry.previous < 0; } }),
                 cmd('section-down', 'Move Section Down', 'arrow-down', function () { return moveOutline('down'); }, { shortcut: key('section-down', 'Alt-Shift-ArrowDown'), disabled: function () { var entry = outlineEntries[outlineTarget]; return !editable || !entry || entry.next < 0; } }),
                 cmd('new', 'New', 'file', function () { return liveActions['new@1']({}); }),
+                cmd('new-template','New from Template…','document',newFromTemplate,{hidden:function(){return !isDocs;},disabled:function(){return !ready;}}),
                 cmd('new-markdown','New Markdown','document',async function () {untitled++;await importedDocument('untitled-'+untitled+'.md','');},{hidden:function () {return !isDocs;}}),
                 cmd('open', 'Open…', 'folder', async function (input) {
                     if(!input || typeof input.resource!=='string')return openDialog();
@@ -2304,6 +2315,7 @@
             table.push(cmd('page-setup', 'Page Setup…', 'file', editPageSetup, { hidden: noPageLayout, disabled: noEdit }));
             table.push(cmd('header-footer', 'Header and Footer…', 'file', function () { return editDocumentOptions('furniture'); }, { hidden: noPageLayout, disabled: noEdit }));
             table.push(cmd('typography', 'Typography…', 'paragraph', function () { return editDocumentOptions('typography'); }, { hidden: unformatted, disabled: noEdit }));
+            table.push(cmd('document-theme','Document Theme…','theme',function(){return editDocumentOptions('theme');},{hidden:unformatted,disabled:noEdit}));
             table.push(cmd('document-zoom', 'Document Zoom', 'search', null, { hidden: function () { return viewMode !== 'document'; }, items: [
                 cmd('document-fit-width', 'Fit Width', null, function () { setDocumentZoom('width'); }),
                 cmd('document-fit-page', 'Fit Page', null, function () { setDocumentZoom('page'); }),
@@ -2360,12 +2372,12 @@
         function menus() {
             var titles = [
                 { label: isDocs ? 'Docs' : 'Editor', glyph: isDocs ? 'document' : 'code', items: H.identity(root, ['key-bindings']) },
-                { id: 'file', label: 'File', glyph: 'file', items: ['new', 'new-markdown', 'open', 'open-other', 'save', 'save-as', '-', 'export-docx', 'export-pdf', 'print-document', '-', 'properties', 'present', '-', 'close-document'] },
+                { id: 'file', label: 'File', glyph: 'file', items: ['new', 'new-template', 'new-markdown', 'open', 'open-other', 'save', 'save-as', '-', 'export-docx', 'export-pdf', 'print-document', '-', 'properties', 'present', '-', 'close-document'] },
                 { id: 'edit', label: 'Edit', glyph: 'pencil', items: ['undo', 'redo', '-', 'cut', 'copy', 'paste', '-', 'select-all', '-', 'find', 'go-to-line', 'section-up', 'section-down', '-', 'json-format', 'language-restart'] },
                 { id: 'insert', label: 'Insert', glyph: 'plus', items: ['link', 'insert', 'table', 'box', '-', 'insert-timestamp', 'insert-date', 'stamp-modified'] }
             ];
             /* Format, where there is formatting to do. */
-            if (formatOffered) { titles.push({ id: 'format', label: 'Format', glyph: 'paragraph', items: ['style', '-', 'bold', 'italic', 'underline', 'strike', 'code', '-', 'highlight', 'superscript', 'subscript', '-', 'color', 'class', '-', 'bullets', 'numbers', 'quote', 'table', '-', 'document-layout','page-setup', 'typography', 'header-footer', '-', 'stylesheet', 'shared-stylesheet', 'custom-shortcodes'] }); }
+            if (formatOffered) { titles.push({ id: 'format', label: 'Format', glyph: 'paragraph', items: ['style', '-', 'bold', 'italic', 'underline', 'strike', 'code', '-', 'highlight', 'superscript', 'subscript', '-', 'color', 'class', '-', 'bullets', 'numbers', 'quote', 'table', '-', 'document-layout','page-setup', 'document-theme', 'typography', 'header-footer', '-', 'stylesheet', 'shared-stylesheet', 'custom-shortcodes'] }); }
             return { titles: titles, into: { view: LAYOUT.concat(commonToolbar ? ['-', 'common-toolbar-show', 'common-toolbar-customize'] : []) } };
         }
 
@@ -2499,6 +2511,8 @@
             return { output: { changed: true } };
         }
         var liveActions = {
+            'theme@1':async function(input){docNo();var tab=current();if(tab.readOnly||tab.lang!=='markdown')throw new Error('Choose an editable Markdown document.');if(pageActive())await visual.api.sync();var text=view.state.doc.toString(),K=await loadKit();await K.pages();var m=await mdEngine();if(destroyed||tab!==current()||text!==view.state.doc.toString())throw new Error('The document changed. Try again.');window.yavcDocumentSettings.themeCSS({theme:input.value});takeVisualText(m.frontset({text:text,set:{theme:input.value==='plain'?null:input.value},order:['theme']}).text,true);textChangedForPage();refreshStyles();return {output:{theme:input.value}};},
+            'new-template@1':async function(input){var G=await documentGallery();if(destroyed)throw new Error('This workspace is no longer available.');return liveActions['new@1']({text:G.stock(input.template)});},
             'header-footer@1': async function (input) { return updateDocumentOptions(input, true); },
             'typography@1': async function (input) { return updateDocumentOptions(input, false); },
             'document-zoom@1': async function (input) { docNo(); if (viewMode !== 'document') { throw new Error('Choose Document view before setting document zoom.'); } setDocumentZoom(input.value); return { output: { value: documentZoom } }; },
@@ -2599,7 +2613,7 @@
                 return { output: { line: line } };
             }
         };
-        if (!isDocs) ['page-setup@1','typography@1','header-footer@1','export@1','print@1','document-zoom@1','table@1','format@1','define@1'].forEach(function (id) {if(liveActions[id])liveActions[id]=async function () {throw new Error('This document action moved to yavc.docs/'+id+'. Open the saved document in Docs.');};});
+        if (!isDocs) ['theme@1','new-template@1','page-setup@1','typography@1','header-footer@1','export@1','print@1','document-zoom@1','table@1','format@1','define@1'].forEach(function (id) {if(liveActions[id])liveActions[id]=async function () {throw new Error('This document action moved to yavc.docs/'+id+'. Open the saved document in Docs.');};});
         Object.keys(liveActions).forEach(function (id) {var handler=liveActions[id];liveActions[id]=async function (input) {await boot;if(destroyed || startupFailed || !view)throw new Error('This workspace is no longer available.');return handler(input);};});
         if (documentWindows) unbindDocuments = documentWindows.bind(root, {
             application: app, resource: function () {return current() && current().path;},

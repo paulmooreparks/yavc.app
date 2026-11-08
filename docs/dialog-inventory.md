@@ -12,6 +12,7 @@ The executable evidence includes the site, content, authored, block, formatting,
 
 | Owner | Dialog or variant | Contract and review finding | Rendered acceptance |
 | --- | --- | --- | --- |
+| Docs | Document Theme, New from Template | Labeled selection and scoped paper preview; Apply/Create commit; Cancel leaves source untouched; template paths browse/upload and associate errors with the field | Gallery fixture covers both themes, wide/narrow sizes, upload, Undo, delayed cancellation and size refusal |
 | Shared | Text question | One labeled field, validation, explicit action, Cancel and Escape | Site sweep, all three engines |
 | Shared | Choice question | Explicit action choices with safe cancellation | Site sweep, all three engines |
 | Shared | Destructive confirmation | Warning and named destructive action, safe initial focus | Site sweep, all three engines |

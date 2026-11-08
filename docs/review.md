@@ -1,5 +1,13 @@
 # Stem-to-stern review, November 2026
 
+## Document themes and templates, 2026-11-09
+
+Docs now offers Plain, Manuscript, Report and Letter through Format, Document Theme. Theme defaults flow through the shared settings compiler below authored typography/styles, including Editor preview, Typography, Print and Office preparation. Theme changes isolate their source history transaction. File, New from Template offers bundled starters and a browsable/uploadable Markdown file, creates an independent unsaved document through the existing window policy and never writes the template. Custom reads are bounded and rejected after ownership changes or cancellation. Preview omits author-supplied assets and embedded applications.
+
+The three-engine gallery fixture covers preview cancellation, Apply/Undo/Redo, app-theme parity, authored overrides, export font size, Editor preview, Typography inheritance, custom upload/copy, stock starter actions, narrow forms, delayed cancellation and oversized templates. Enlarged-text layouts and the existing Typography regressions also pass all three engines. The unrelated host verifies theme containment, saved diagram updates and an independent template copy using its command surface. Its initial action-broker assertion encountered the fixture's intentionally absent file capabilities; it now tests the existing minimal command contract without advertising unsupported capabilities.
+
+The first upload attempt exposed an object passed as the file browser's DOM host; the shared default host fixes it. Source review found missing field association for template-path errors. Those errors now retain their specific message, set aria-invalid/aria-describedby and focus the field when Create is refused. A proposed Cancel finding was withdrawn after checking the documented shared-dialog button/submit paths and the passing real Cancel tests. The first desktop template test asserted the second rich rendering synchronously and now waits for the existing asynchronous source-to-page update.
+
 ## Saved diagram dependencies, 2026-11-09
 
 Docs, Editor preview and Slides now support a diagram file shortcode through their receiving host's text reader, dependency directory and change notifications. Its form uses the shared file browser with upload, filtered extensions, optional description, width and caption. Relative references rebase after Save As. Invalid saved updates retain the last good image with a local warning; a changed base clears the previous image. The loader bounds file count, displayed figures and source bytes and checks document ownership after every asynchronous read/render.

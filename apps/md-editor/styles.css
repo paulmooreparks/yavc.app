@@ -50,3 +50,10 @@
 .md-page-settings > .check { margin-block: var(--space-3); }
 @media (max-width: 620px) { .md-page-setup-grid { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 480px) { .md-page-pair { grid-template-columns: minmax(0, 1fr); } }
+.md-gallery-dialog.dialog { width:min(62rem,calc(100vw - 2rem));max-width:calc(100vw - 2rem); }
+.md-gallery-layout { display:grid;grid-template-columns:minmax(14rem,1fr) minmax(0,1.5fr);gap:var(--space-5); }
+.md-gallery-controls,.md-gallery-sample { min-width:0; }
+.md-gallery-boundary { contain:paint;max-height:26rem;overflow:auto;border:1px solid var(--border);border-radius:var(--radius-sm); }
+.md-gallery-preview.doc-page { padding:var(--space-4);width:auto;min-width:0;min-height:16rem;overflow-wrap:anywhere; }
+.md-gallery-dialog [hidden] { display:none; }
+@media (max-width:680px) { .md-gallery-layout {grid-template-columns:minmax(0,1fr);} .md-gallery-boundary {max-height:18rem;} }
