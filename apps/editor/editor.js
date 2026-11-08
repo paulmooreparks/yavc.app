@@ -1218,6 +1218,7 @@
         function pageActive() { return !!(visual.api && visual.api.active()); }
         function pageHost() {
             return {
+                signal: styleLifetime.signal,
                 /* The / menu on the page offers the Insert menu's shortcodes. */
                 inserts: function () {
                     var extra = [];
@@ -1412,6 +1413,9 @@
            in Text and Preview, and in Split whichever has the keyboard. */
         function editCtx() {
             return {
+                identity: current, signal: styleLifetime.signal,
+                prepareFormats: async function () { clearTimeout(styleTimer); await refreshStyles(); },
+                styleScope: function () { return el.page.getAttribute('data-md-style') || ''; },
                 page: function () { return visual.api; }, text: function () { return view; },
                 onPage: function () { return formatsThePage(); },
                 readOnly: function () { var t = current(); return !t || !!t.readOnly; },
@@ -1429,11 +1433,14 @@
             if (!t || t.readOnly || !view) { return; }
             try {
                 if (pageActive() && visual.api.sync) { await visual.api.sync(); }
+                if (destroyed || current() !== t) return;
                 var m = await mdEngine(), text = view.state.doc.toString();
+                if (destroyed || current() !== t) return;
                 var front = m.front(text);
-                var r = await window.yavcMdEditor.askProperties(front, { title: 'Properties of ' + (t.name || 'the Document') });
+                function unchanged() { return !destroyed && current() === t && !t.readOnly && view.state.doc.toString() === text; }
+                var r = await window.yavcMdEditor.askProperties(front, { title: 'Properties of ' + (t.name || 'the Document'), current: unchanged, signal: styleLifetime.signal });
                 if (!r || !r.order.length) { return; }
-                if (view.state.doc.toString() !== text) { say('The document changed while the dialog was open, so the properties were not written. Try again.', true); return; }
+                if (!unchanged()) { say('The document changed while the dialog was open, so the properties were not written. Try again.', true); return; }
                 var next = m.frontset({ text: text, set: r.set, order: r.order }).text;
                 var a = 0;
                 while (a < text.length && a < next.length && text[text.length - 1 - a] === next[next.length - 1 - a]) { a++; }
@@ -1913,6 +1920,15 @@
                     var restored;
                     try { restored = await recovery.restore(resources, k.path, k.baseline, k.draft); }
                     catch (err) { waiting.push(k); continue; }
+                    // A legacy draft identical to the current buffer contains no unsaved edit.
+                    if (restored.conflict === 'unknown') {
+                        try {
+                            var sameFile = await resources.read(k.path);
+                            if (normalizedSource(restored.text) === normalizedSource(sameFile.text)) {
+                                restored = { snapshot: sameFile, baseline: null, text: sameFile.text, modified: false, conflict: null };
+                            }
+                        } catch (err) { /* Keep the original draft when its file is unavailable. */ }
+                    }
                     if (destroyed) return null;
                     var name = (restored.snapshot && restored.snapshot.name) || k.name || String(k.path).split('/').pop();
                     addTab({ path: k.path, name: name, lang: languageFor(name), resource: restored.snapshot, baseline: restored.baseline, conflict: restored.conflict,
@@ -1960,7 +1976,10 @@
         var unguard = window.yavcDocTabs.guard(root, {
             changed: function () { return tabs.filter(dirtyTab).map(function (t) { return t.name; }); },
             keptOnReload: function () { if (pageActive() && visual.api.pending()) return false; return resources ? !!snap && snap.flush() : ownsSession && keepSession(); },
-            keptOnClose: function () { return !resources && ownsSession && keepSession(); },
+            keptOnClose: function () {
+                if (pageActive() && visual.api.pending()) return false;
+                return resources ? !!(snap && ownsSession && H.snapshot && H.snapshot.remembersClosed && snap.flush()) : ownsSession && keepSession();
+            },
             saveAll: async function () {
                 for (var i = 0; i < tabs.length; i++) {
                     if (!dirtyTab(tabs[i])) { continue; }
@@ -2281,12 +2300,12 @@
             var titles = [
                 { label: 'Editor', glyph: 'document', items: window.pcAppletIdentity(root, ['key-bindings']) },
                 { id: 'file', label: 'File', glyph: 'file', items: ['new', 'open', 'save', 'save-as', '-', 'export-docx', 'export-pdf', 'print-document', '-', 'properties', 'present', '-', 'close-document'] },
-                { id: 'edit', label: 'Edit', glyph: 'pencil', items: ['undo', 'redo', '-', 'cut', 'copy', 'paste', '-', 'select-all', '-', 'find', '-', 'json-format', 'language-restart'] },
+                { id: 'edit', label: 'Edit', glyph: 'pencil', items: ['undo', 'redo', '-', 'cut', 'copy', 'paste', '-', 'select-all', '-', 'find', 'go-to-line', 'section-up', 'section-down', '-', 'json-format', 'language-restart'] },
                 { id: 'insert', label: 'Insert', glyph: 'plus', items: ['link', 'insert', 'table', 'box', '-', 'insert-timestamp', 'insert-date', 'stamp-modified'] }
             ];
             /* Format, where there is formatting to do. */
             if (formatOffered) { titles.push({ id: 'format', label: 'Format', glyph: 'paragraph', items: ['style', '-', 'bold', 'italic', 'underline', 'strike', 'code', '-', 'highlight', 'superscript', 'subscript', '-', 'color', 'class', '-', 'bullets', 'numbers', 'quote', 'table', '-', 'page-setup', 'typography', 'header-footer', '-', 'stylesheet', 'shared-stylesheet', 'custom-shortcodes'] }); }
-            return { titles: titles, into: { view: LAYOUT.concat(commonToolbar ? ['-', 'common-toolbar-show', 'common-toolbar-customize'] : []), go: ['go-to-line', '-', 'section-up', 'section-down'] } };
+            return { titles: titles, into: { view: LAYOUT.concat(commonToolbar ? ['-', 'common-toolbar-show', 'common-toolbar-customize'] : []) } };
         }
 
         /* === Start ======================================================== */
@@ -2300,7 +2319,7 @@
             if (resourceSession) { resources = resourceSession.client; recovery = resourceSession.recovery; }
             var snapshotHost = H.snapshot || window.pcSnapshot;
             restoring = true;
-            if (snapshotHost) snap = snapshotHost.join(root, takeSnapshot, { validate: resourceSession ? resourceSession.validate : function (value) { if (value && value.version === 2) throw new Error('This recovery snapshot requires its resource host. Its saved copy has been retained.'); } });
+            if (snapshotHost) snap = snapshotHost.join(root, takeSnapshot, { remember: !!resources && ownsSession, validate: resourceSession ? resourceSession.validate : function (value) { if (value && value.version === 2) throw new Error('This recovery snapshot requires its resource host. Its saved copy has been retained.'); } });
             if (resources && (!snap || typeof snap.flush !== 'function')) { if (snap) snap.leave(); snap = null; throw new Error('Resource editing requires recovery write acknowledgement.'); }
             lspComp = new CM.Compartment();
             try {
@@ -2503,6 +2522,7 @@
                 /* The session as the Editor closes, for when it opens again. */
                 if (detachLive) { detachLive(); }
                 keepSession();
+                if (snap) snap.flush();
                 destroyed = true;
                 styleLifetime.abort();
                 styleRevision++; clearTimeout(styleTimer); if (documentStyles) { documentStyles.destroy(); }
@@ -2510,7 +2530,7 @@
                 if (unConfig) { unConfig(); }
                 unguard();
                 if (explorer) { explorer.destroy(); }
-                finalSync.catch(function (err) { say(err.message, true); }).finally(function () { keepSession(); if (snap) { snap.leave(); } if (visual.api) { visual.api.destroy(); } if (view) { view.destroy(); } });
+                finalSync.catch(function (err) { say(err.message, true); }).finally(function () { keepSession(); if (snap) { snap.flush(); snap.leave(); } if (visual.api) { visual.api.destroy(); } if (view) { view.destroy(); } });
                 if (lsp) { lsp.dispose(); }
             },
             ready: boot

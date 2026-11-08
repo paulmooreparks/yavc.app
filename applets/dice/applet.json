@@ -1,7 +1,7 @@
 {
   "name": "dice",
   "title": "Dice",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "Rolls up to three dice, fairly.",
   "license": "Apache-2.0",
   "src": "dice.js",

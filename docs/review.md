@@ -1,5 +1,25 @@
 # Stem-to-stern review, November 2026
 
+## Complete dialog review and shared forms, 2026-11-08
+
+`dialog-inventory.md` records every authored dialog and generated family, with the applicable rendered and behavioral evidence. The scope includes site and permission dialogs, all content applets, Files, Settings, Terminal and the remaining bundled applets. `shared-dialog-review.md` records the design changes, and `file-fields-contract.md` specifies the optional host-owned browsing and import capability.
+
+Text Style and Text Color now show current or mixed values, preview a scoped choice, and apply once through an explicit footer action. Source formatting uses parser-confirmed ordinary text, preserving literal code, comments and escaped markup. Canvas selection and score selection use searchable PUDL lists. D2 destinations are discoverable, Canvas dimensions are separate numeric fields, and every filesystem field offers direct entry and Browse. Unsupported native color inputs hide their cramped duplicate fallback while retaining the complete editable color-value field.
+
+Dialog ownership covers the original resource, source, selection and applet lifetime. Computer dependencies import into a separately chosen create-only VFS destination. Cancellation checks reach the IndexedDB authority transaction, including a commit queued behind another writer. A blocked-transaction fixture verifies that cancellation leaves no imported entry. Native dialogs share Tab containment, exclude disabled fieldset descendants and leave game keys inactive. The review also corrected accessible titles, duplicate identifiers, textarea structure, announced JSON errors and navigation links.
+
+The site menubar no longer has a Go contribution bucket. Editor and Diagrams retain navigation in their own Edit menus, Files has Folder navigation, and Flashcards retains navigation in Deck. The alias-route regression now checks launcher access instead of the removed Go menu link.
+
+The site, content, authored, block/picture, formatting, Files and dependency suites pass Chromium, Firefox and WebKit. They cover accessible names, light/dark layouts, narrow bounds, keyboard use, cancellation, current values, removals, commits, stale targets, duplicate creation and disposal. Focused styles, custom shortcodes, resource adoption, editing commands, Page Setup, Typography, document furniture, Save As and guest-store suites also pass all three engines. Toolbar behavior passes Chromium and its focused visual/keyboard checks pass Firefox and WebKit. The required check script passes Go formatting, vet, tests, vulnerability checks, native/WASM builds, 80 browser-module tests and all 15 source rules. Independent source and PUDL review has no remaining findings.
+
+The broader VFS-consumer fixture intermittently reports a Firefox page crash during Diagrams reload. The same fixture reproduces that failure on the unchanged installed v0.2.45 release. Three isolated candidate reruns pass, but those successes do not close the intermittent failure. Browser debug logs retain the Juggler navigation errors and the original failed result. Native operating-system picker internals, physical camera permissions and desktop webview acceptance were not exercised. The installed release is unchanged.
+
+## Editor workspace continuity, 2026-11-08
+
+Resource adoption stopped updating Editor's old persistent session while leaving that record available for migration. After its reload snapshot was discarded, reopening the window could restore previously closed tabs and old drafts. The snapshot host now supports an opt-in remembered workspace and durable acknowledgement; Editor keeps its primary workspace through closure without introducing another file authority. Unchanged legacy drafts are compared against a fresh issued resource before being marked clean. Different drafts keep their original conflict protection.
+
+`scripts/test-editor-session.cjs` passes in Chromium, Firefox and WebKit using the shipped Document Pages sample. It checks migration, closing one of three tabs, clean Save, reopening without the closed tab, unsaved recovery and a subsequent successful Save. Snapshot unit tests cover separate writers, idle flushes, per-tab reload precedence, sealed-parent cleanup, serialization failure and durable quota refusal. The complete dialog review above records the rest of this batch.
+
 ## No-op source preservation and file resolution foundation, 2026-11-08
 
 Slides 0.30.0 preserves original source spans when opening and saving a deck, including BOM, separator whitespace and line endings. Editor 45.31.0 submits the original resource text when the canonical buffer is unchanged and keeps a canonical dirty baseline. The source audit records the still-open byte-encoding and edited mixed-EOL gates rather than treating this corpus as complete extraction acceptance.

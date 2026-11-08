@@ -2633,8 +2633,8 @@ var qrcodegen;
             '<h3 class="dialog-title" id="bt-json-title-' + n + '">Layout JSON</h3>' +
             '<div class="dialog-body">' +
             '<p class="form-help">One layout object. The <a href="' + guideUrl() + '#format" data-win-open="' + GUIDE_KEY + '">guide</a> describes every key. It is saved with your layouts, in ' + esc(Lib.where()) + ', and in a linked layouts file if there is one.</p>' +
-            '<textarea class="form-textarea bt-json" data-role="json" spellcheck="false" aria-label="Layout JSON"></textarea>' +
-            '<ul class="form-error bt-json-errors" data-role="json-errors" hidden></ul>' +
+            '<textarea class="form-textarea bt-json" data-role="json" spellcheck="false" aria-label="Layout JSON" aria-describedby="bt-json-errors-' + n + '"></textarea>' +
+            '<ul class="form-error bt-json-errors" id="bt-json-errors-' + n + '" data-role="json-errors" role="alert" hidden></ul>' +
             '<p class="form-help" data-role="json-file" hidden>Or <a href="#" data-action="edit-file">edit every layout at once</a>, as the file ' + esc(Lib.path || '') + '. This dialog closes without saving.</p>' +
             '</div>' +
             '<div class="dialog-actions">' +
@@ -2701,6 +2701,7 @@ var qrcodegen;
         /* A notice may carry one action, such as reopening a linked file,
            which needs the click to count as the reader's own gesture. */
         var noticeHandler = null;
+        el.json.addEventListener('input',function () {el.json.removeAttribute('aria-invalid');el.jsonErrors.hidden=true;});
         function notify(msg, actionLabel, handler) {
             el.noticeText.textContent = msg;
             el.noticeAction.hidden = !actionLabel;
@@ -2759,6 +2760,7 @@ var qrcodegen;
 
         function adoptHandle(handle, fromOpen) {
             return readHandle(handle).then(function (obj) {
+                if(instance.destroyed)throw Object.assign(new Error('The tool was closed.'),{name:'AbortError'});
                 var res = B.layouts.validateFile(obj);
                 if (!res.ok) { throw new Error(res.errors.slice(0, 2).join(' ')); }
                 var inFile = res.layouts.filter(function (L) { return !isDemo(L.id); }).length;
@@ -2768,6 +2770,7 @@ var qrcodegen;
                 /* Layouts that were only in the library go into the file. */
                 if (library.length !== inFile) { return writeHandle(handle, library); }
             }).then(function () {
+                if(instance.destroyed)return;
                 renderLayoutMenu();
                 if (fromOpen) { notify('Linked to ' + handle.name + '. Changes to your layouts are written to it.'); }
                 else { el.notice.hidden = true; }
@@ -2777,8 +2780,10 @@ var qrcodegen;
         function linkExisting() {
             window.showOpenFilePicker({ types: [{ description: 'Barcode layouts', accept: { 'application/json': ['.json'] } }] })
                 .then(function (handles) {
+                    if(instance.destroyed)throw Object.assign(new Error('The tool was closed.'),{name:'AbortError'});
                     var h = handles[0];
                     return h.requestPermission({ mode: 'readwrite' }).then(function (p) {
+                        if(instance.destroyed)throw Object.assign(new Error('The tool was closed.'),{name:'AbortError'});
                         if (p !== 'granted') { throw new Error('permission to write the file was refused'); }
                         return adoptHandle(h, true).then(function () { return idb('put', h).catch(function () { }); });
                     });
@@ -2787,9 +2792,12 @@ var qrcodegen;
         }
 
         function linkNew() {
+            var captured=JSON.parse(JSON.stringify(library));
             window.showSaveFilePicker({ suggestedName: 'barcode-layouts.json', types: [{ description: 'Barcode layouts', accept: { 'application/json': ['.json'] } }] })
                 .then(function (h) {
-                    return writeHandle(h, library).then(function () {
+                    if(instance.destroyed)throw Object.assign(new Error('The tool was closed.'),{name:'AbortError'});
+                    return writeHandle(h, captured).then(function () {
+                        if(instance.destroyed)return;
                         linked = h; pendingHandle = null;
                         renderLayoutMenu();
                         notify('Created ' + h.name + ' with ' + library.length + ' layout' + (library.length === 1 ? '' : 's') + '. Changes are written to it.');
@@ -3685,6 +3693,7 @@ var qrcodegen;
         function showJsonErrors(errs) {
             el.jsonErrors.innerHTML = errs.map(function (e) { return '<li>' + esc(e) + '</li>'; }).join('');
             el.jsonErrors.hidden = false;
+            el.json.setAttribute('aria-invalid','true'); el.json.focus();
         }
 
         /* Adds the layouts in a file's text to the library. */

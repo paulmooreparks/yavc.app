@@ -17,8 +17,8 @@
             '<button type="button" class="btn btn-primary dice-roll">Roll</button>' +
             '<p class="dice-history"></p>' +
             '<p class="dice-status" role="status" aria-live="polite"></p>' +
-            '<dialog class="dialog dice-about" aria-labelledby="dice-about-title">' +
-            '<h3 class="dialog-title" id="dice-about-title">About Dice</h3>' +
+            '<dialog class="dialog dice-about" aria-label="About Dice">' +
+            '<h3 class="dialog-title">About Dice</h3>' +
             '<div class="dialog-body"><p>Dice rolls up to three dice. Press Roll, or R, to roll them, and Shift+R to roll ten times. ' +
             'The Set menu chooses how many dice there are and can hold the first one, and Show the total is under View.</p></div>' +
             '<div class="dialog-actions"><button type="button" class="btn btn-primary" data-dice="about-close">Close</button></div>' +

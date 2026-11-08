@@ -1,7 +1,7 @@
 {
   "name": "flashcards",
   "title": "Barcode Flash Cards",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "A drill for recognising barcode symbologies on sight.",
   "license": "Apache-2.0",
   "src": "flashcards.js",

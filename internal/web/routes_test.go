@@ -92,7 +92,7 @@ func TestHostAlias(t *testing.T) {
 	defer delete(hostAliases, "gone")
 	s := newSite(t, testDomain)
 	body := req(t, s, "GET", "http://roll."+testDomain+"/", "").Body.String()
-	for _, want := range []string{`<title>Roll`, `data-dice-start="quick" data-applet="dice"`, `>Dice on the Desktop<`} {
+	for _, want := range []string{`<title>Roll`, `data-dice-start="quick" data-applet="dice"`, `data-site-start-app="dice"`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("the alias's page lacks %s", want)
 		}

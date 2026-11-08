@@ -40,8 +40,9 @@ async function cssText(dialog, text) { await dialog.locator('.cm-editor').evalua
             await color(page.locator('[data-ed-page] .custom').first(), 'rgb(60, 40, 20)');
             await page.evaluate(() => pudlCommands.run('undo', null, document.querySelector('[data-applet]')));
             await color(page.locator('[data-ed-page] .custom').first(), 'rgb(10, 30, 50)');
-            await command(page, 'class'); dialog = page.getByRole('dialog', { name: 'Style the Words', exact: true });
-            await dialog.getByRole('button', { name: 'custom', exact: true }).waitFor(); await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+            await action(page,'editor','view',{mode:'visual'});await page.locator('.ProseMirror h1').click();
+            await command(page, 'class'); dialog = page.getByRole('dialog', { name: 'Text Style', exact: true });
+            await dialog.getByLabel('Text Style',{exact:true}).waitFor();assert.ok((await dialog.locator('option').allTextContents()).includes('custom'));await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();await action(page,'editor','view',{mode:'preview'});
             await page.evaluate(() => pudlHost.fs.writeText('~/Styles/shared.css', '.shared { color: rgb(12, 34, 56); }'));
             await action(page, 'editor', 'set-text', { text: '---\nstylesheet: ../Styles/shared.css\n---\n\n{{class:shared}}\nShared words.\n{{/class}}\n' });
             await color(page.locator('[data-ed-page] .shared').first(), 'rgb(12, 34, 56)');

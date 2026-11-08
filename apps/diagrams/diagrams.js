@@ -532,16 +532,34 @@
             return t.cvDoc.nodes.filter(function (x) { return !window.yavcCanvas.isAnchor(x); }).map(function (x) { return { id: x.id, kind: 'node' }; }).concat(t.cvDoc.edges.map(function (x) { return { id: x.id, kind: 'edge' }; }));
         }
         function canvasSelectAll() { var t = current(); if (!canvasWhy(false)) { t.cv.select(canvasItems(t)); } }
-        function canvasSelectItems() {
+        async function canvasSelectItems() {
             if (canvasWhy(false)) { return; }
-            var t = current(), text = t.text, items = canvasItems(t), selected = canvasSelections();
-            return window.yavcDialog.open({ title: 'Select Canvas Items', body: '<fieldset class="form-fieldset"><legend>Items</legend>' + items.map(function (s, i) {
+            var t = current(), text = t.text, items = canvasItems(t), selected = canvasSelections(), filterId = 'dg-items-' + crypto.randomUUID();
+            if(!window.pudlListbox)await loadScript((H.pudl || '/pudl/')+'pudl-listbox.js');
+            if(destroyed || t!==current() || t.text!==text)return;
+            return window.yavcDialog.open({ title: 'Select Canvas Items', className: 'dg-item-dialog', signal: lifetime.signal,
+                body: '<div class="form-group"><label class="form-label" for="' + filterId + '">Find an Item</label><input type="search" class="form-input" id="' + filterId + '" data-item-filter></div><p class="form-help" data-selection-count aria-live="polite"></p><div class="listbox dg-item-list" data-listbox="multiple" data-listbox-rows="7" aria-label="Diagram Items">' + items.map(function (s, i) {
                 var checked = selected.some(function (x) { return x.id === s.id && x.kind === s.kind; });
-                return '<label class="check"><input type="checkbox" data-select-index="' + i + '"' + (checked ? ' checked' : '') + '> ' + esc((s.kind === 'node' ? 'Node ' : 'Connector ') + s.id) + '</label>';
-            }).join('') + '</fieldset>', buttons: [{ id: 'cancel', label: 'Cancel' }, { id: 'apply', label: 'Select', primary: true }] }).then(function (r) {
+                var entry = s.kind === 'node' ? t.cvDoc.nodes.find(function (x) { return x.id === s.id; }) : t.cvDoc.edges.find(function (x) { return x.id === s.id; });
+                var label = entry && (entry.text || entry.label), caption = label ? String(label).replace(/\s+/g, ' ').slice(0, 100) : s.id;
+                return '<div class="listbox-row" data-item-row data-value="' + i + '" aria-selected="' + checked + '"><span class="listbox-title">' + esc(caption) + '</span><span class="listbox-detail">' + esc((s.kind === 'node' ? 'Node' : 'Connector') + ' · ' + s.id) + '</span></div>';
+            }).join('') + '</div><p class="form-help" data-no-items hidden>No matching items.</p>', buttons: [{ id: 'cancel', label: 'Cancel' }, { id: 'apply', label: 'Select', primary: true }],
+                onOpen: function (api) {
+                    var list=api.body.querySelector('[data-listbox]');window.pudlListbox.enhance(api.body);
+                    function refresh() {
+                        var query = api.body.querySelector('[data-item-filter]').value.trim().toLowerCase(), visible = 0;
+                        api.body.querySelectorAll('[data-item-row]').forEach(function (row) { row.hidden = !row.textContent.toLowerCase().includes(query); if (!row.hidden) visible++; });
+                        api.body.querySelector('[data-no-items]').hidden = !!visible;
+                        api.body.querySelector('[data-selection-count]').textContent = window.pudlListbox.value(list).length + ' selected of ' + items.length + ' items';
+                        window.pudlListbox.refresh(list);
+                    }
+                    api.body.addEventListener('input', refresh);api.body.addEventListener('pudl:listbox-change',refresh);refresh();
+                }, check: function (value, body) {
+                    if (value === 'apply' && (destroyed || t !== current() || t.text !== text)) { window.yavcUtil.notice(body, 'The diagram changed. Close and reopen this selection.', true); return true; }
+                } }).then(function (r) {
                 if (r.value !== 'apply' || destroyed || t !== current()) { return; }
                 if (t.text !== text) { say('The canvas changed while the selection dialog was open. Open it again to choose current items.', 'warn'); return; }
-                t.cv.select(Array.from(r.body.querySelectorAll('[data-select-index]:checked')).map(function (e) { return items[Number(e.dataset.selectIndex)]; }));
+                t.cv.select(Array.from(r.body.querySelectorAll('[data-item-row][aria-selected="true"]')).map(function (e) { return items[Number(e.dataset.value)]; }));
             });
         }
         /* CodeMirror's JSON parser supplies offsets. Only objects directly
@@ -684,18 +702,28 @@
             if (canvasWhy('shape')) { return; }
             var t = current(), s = canvasSelection(), text = t.text;
             var targets = t.cvDoc.nodes.filter(function (x) { return x.id !== s.id && !window.yavcCanvas.isAnchor(x); }).map(function (x) { return x.id; });
+            if (!targets.length) { say('Add another shape before connecting.',true); return; }
             window.yavcDialog.askText('Connect to a Node', 'Target Node', targets[0] || '', {
-                okLabel: 'Connect', help: 'Give the target node ID. Change either side in the inspector after connecting.',
-                validate: function (v) { return targets.indexOf(v) < 0 ? 'Choose another node in this canvas.' : null; }
+                signal:lifetime.signal, choices:targets.map(function (id) { var node=t.cvDoc.nodes.find(function (node) {return node.id===id;}); return [id,(node.text || node.label || id).replace(/\s+/g,' ').slice(0,100) + ' (' + id + ')']; }),
+                okLabel: 'Connect', help: 'Change either anchor in the Inspector after connecting.',
+                validate: function (v) { return t !== current() || t.text !== text ? 'The diagram changed. Close and reopen this form.' : targets.indexOf(v) < 0 ? 'Choose another node in this canvas.' : null; }
             }).then(function (v) { if (v != null && t === current()) { canvasEdit({ op: 'connect', from: s.id, to: v }, text); } });
         }
         function canvasResize() {
             if (canvasWhy('shape')) { return; }
             var t = current(), s = canvasSelection(), text = t.text, node = t.cvDoc.nodes.find(function (x) { return x.id === s.id; });
-            window.yavcDialog.askText('Resize the Node', 'Width and Height', node.width + ' ' + node.height, {
-                okLabel: 'Resize', help: 'Give the width and height in whole pixels, separated by a space.',
-                validate: function (v) { return !/^\d+\s+\d+$/.test(v.trim()) || v.trim().split(/\s+/).some(function (x) { return !Number.isSafeInteger(+x) || +x < 1; }) ? 'Give two positive whole numbers.' : null; }
-            }).then(function (v) { if (v != null && t === current()) { var dims = v.trim().split(/\s+/).map(Number); canvasEdit({ op: 'resize', key: s.id, width: dims[0], height: dims[1] }, text); } });
+            var prefix='dg-size-'+crypto.randomUUID(), values;
+            return window.yavcDialog.open({title:'Resize Shape',signal:lifetime.signal,
+                body:numberField(prefix+'-width','width','Width (px)',String(node.width),1,Number.MAX_SAFE_INTEGER)+numberField(prefix+'-height','height','Height (px)',String(node.height),1,Number.MAX_SAFE_INTEGER),
+                buttons:[{id:'cancel',label:'Cancel'},{id:'apply',label:'Resize',primary:true}],
+                onOpen:function (api) {api.dialog.querySelector('form').noValidate=true;api.body.addEventListener('input',clearDialogNumberError,true);},
+                check:function (choice,body) {
+                    if(t!==current() || t.text!==text || readOnly(t)) { window.yavcUtil.notice(body,'The diagram changed. Close and reopen this form.',true);return true; }
+                    values={};var invalid=[];
+                    ['width','height'].forEach(function (key) {var input=body.querySelector('[data-set="'+key+'"]'),target=visibleField(input),value=Number(input.value);values[key]=value;var bad=target.getAttribute('aria-invalid')==='true'||!Number.isSafeInteger(value)||value<1;markField(input,bad?'Enter a positive whole number.':null);if(bad){input.dataset.dialogNumberError='true';invalid.push(target);}});
+                    if(invalid.length)invalid[0].focus();return invalid.length>0;
+                }
+            }).then(function (answer) {if(answer.value==='apply' && t===current() && t.text===text)canvasEdit({op:'resize',key:s.id,width:values.width,height:values.height},text);});
         }
         function canvasReconnect(end) {
             if (canvasWhy('edge')) { return; }
@@ -712,14 +740,16 @@
                 var get = function (k) { return body.querySelector('[data-set="' + k + '"]').value; };
                 return { op: 'reconnect', kind: 'edge', key: s.id, end: end, node: get('target') || null, side: get('target') ? get('side') || null : null, x: get('x') === '' ? NaN : Number(get('x')), y: get('y') === '' ? NaN : Number(get('y')) };
             }
-            return window.yavcDialog.open({ title: end === 'from' ? 'Reconnect the Start' : 'Reconnect the End', body: body,
+            return window.yavcDialog.open({ title: end === 'from' ? 'Reconnect the Start' : 'Reconnect the End', body: body, signal:lifetime.signal,
                 buttons: [{ id: 'cancel', label: 'Cancel' }, { id: 'apply', label: 'Reconnect', primary: true }],
                 check: function (value, body) {
+                    if(t!==current() || t.text!==text || readOnly(t)) {window.yavcUtil.notice(body,'The diagram changed. Close and reopen this form.',true);return true;}
                     var req = read(body);
                     var invalid = [];
                     ['x', 'y'].forEach(function (k) {
-                        var field = body.querySelector('[data-set="' + k + '"]'), bad = !req.node && !Number.isSafeInteger(req[k]);
+                        var field = body.querySelector('[data-set="' + k + '"]'), bad = !req.node && (visibleField(field).getAttribute('aria-invalid')==='true'||!Number.isSafeInteger(req[k]));
                         markField(field, bad ? 'Give a whole-number coordinate within the safe numeric range.' : null);
+                        if(bad)field.dataset.dialogNumberError='true';
                         if (bad) { invalid.push(field); }
                     });
                     if (invalid.length) {
@@ -730,6 +760,7 @@
                 },
                 onOpen: function (o) {
                     o.dialog.querySelector('form').noValidate = true;
+                    o.body.addEventListener('input',clearDialogNumberError,true);
                     function changed() {
                         var free = !o.body.querySelector('[data-set="target"]').value;
                         ['x', 'y'].forEach(function (k) { o.body.querySelector('[data-set="' + k + '"]').disabled = !free; });
@@ -1200,6 +1231,8 @@
         }
         /* A change D2 refused is marked at its field, with the reason
            beside it; the next change that works takes the mark away. */
+        function visibleField(f) {var group=f.closest('.form-group'),label=group && group.querySelector('label');return label && label.control || f;}
+        function clearDialogNumberError(event) {var group=event.target.closest('.form-group'),input=group && group.querySelector('input[data-dialog-number-error]');if(input){markField(input,null);visibleField(input).removeAttribute('aria-invalid');delete input.dataset.dialogNumberError;}}
         function markField(f, problem) {
             var errId = (f.id || 'dg-in-field') + '-error', old = document.getElementById(errId);
             if (old) { old.remove(); }
@@ -1394,10 +1427,11 @@
             if (!key || isConnection(key) || !canEdit()) { return; }
             var original = t.text;
             var names = ((t.outline && t.outline.shapes) || []).map(function (s) { return s.id; }).filter(function (id) { return id !== key && id.indexOf(key + '.') !== 0; });
+            if (!names.length) {say('There are no other shapes to move into.',true);return;}
             window.yavcDialog.askText('Move Into a Shape', 'Container', '', {
-                okLabel: 'Move',
-                help: 'The full name of the shape to move ' + key + ' into, such as ' + (names[0] || 'site') + '. It becomes a container if it is not one.',
-                validate: function (v) { return !v ? 'Give the name of a shape.' : names.indexOf(v) < 0 ? 'There is no shape called ' + v + ' here.' : null; }
+                okLabel: 'Move',signal:lifetime.signal,choices:names.map(function (id) {return [id,id];}),
+                help: 'Move ' + key + ' into this shape. The destination becomes a container.',
+                validate: function (v) { return t!==current() || t.text!==original ? 'The diagram changed. Close and reopen this form.' : names.indexOf(v) < 0 ? 'Choose a shape in this diagram.' : null; }
             }).then(function (v) { if (v && !destroyed && t === current() && t.text === original && !readOnly(t)) { moveTo(key, v); } });
         }
         /* The next free name for a new shape in a container ('' for the
@@ -1431,9 +1465,9 @@
             var now = item ? (item.label || '') : '';
             var conn = isConnection(key);
             window.yavcDialog.askText(conn ? 'The Connection\'s Label' : 'The Shape\'s Label', 'Label', now, {
-                okLabel: 'Set Label',
+                okLabel: 'Apply',signal:lifetime.signal,multiline:true,
                 help: conn ? 'The words shown on the connection. Leave it empty for none.' : 'The words shown on the shape. Leave it empty to show its name, ' + lastName(key) + '.',
-                validate: function (v) { return /[{}]/.test(v) ? 'A label cannot hold a brace, { or }.' : null; }
+                validate: function (v) { return destroyed || t!==current() || t.text!==original || readOnly(t) ? 'The diagram changed. Close and reopen this form.' : /[{}]/.test(v) ? 'A label cannot hold a brace, { or }.' : null; }
             }).then(function (v) {
                 if (v == null || v === now || destroyed || t !== current() || t.text !== original || readOnly(t)) { return; }
                 applyEdit({ op: 'set', key: key, value: v === '' ? (conn ? '' : lastName(key)) : v }).then(function (out) { done(out, 'Set the label.'); });
@@ -1446,9 +1480,10 @@
             var original = t.text;
             var siblings = ((t.outline && t.outline.shapes) || []).filter(function (s) { return (s.parent || '') === parent && s.id !== key; }).map(function (s) { return lastName(s.id).toLowerCase(); });
             window.yavcDialog.askText('Rename the Shape', 'Name', lastName(key), {
-                okLabel: 'Rename',
+                okLabel: 'Rename',signal:lifetime.signal,
                 help: 'The name the text and every connection use for it. Its label, the words shown, stays as it is.',
                 validate: function (v) {
+                    if(destroyed || t!==current() || t.text!==original || readOnly(t))return 'The diagram changed. Close and reopen this form.';
                     if (!v) { return 'A shape needs a name.'; }
                     if (/[.:;{}()\[\]<>|`'"#&*$@\\]/.test(v) || /->|<-|--/.test(v)) { return 'A name cannot hold a dot, a colon, a brace, a bracket, an arrow, a quote or # & * $ @ |.'; }
                     if (RESERVED.indexOf(v.toLowerCase()) >= 0) { return v + ' is one of D2\'s own words, so it cannot name a shape.'; }
@@ -1995,9 +2030,9 @@
             return { titles: [
                 { label: 'Diagrams', glyph: 'document', items: H.identity ? H.identity(root, []) : [] },
                 { id: 'file', label: 'File', glyph: 'file', items: ['new', 'new-mermaid', 'new-canvas', 'open', 'save', 'save-as', '-', 'edit-in-editor', '-', 'export-svg', 'export-png', 'export-source', '-', 'close-diagram'] },
-                { id: 'edit', label: 'Edit', glyph: 'pencil', items: ['undo', 'redo', '-', 'cv-copy', 'cv-paste', 'cv-duplicate', 'cv-delete', 'copy-embed', '-', 'cv-select-all', 'cv-select-items', '-', 'find', '-', 'format-text', 'redraw', 'language-restart'] },
+                { id: 'edit', label: 'Edit', glyph: 'pencil', items: ['undo', 'redo', '-', 'cv-copy', 'cv-paste', 'cv-duplicate', 'cv-delete', 'copy-embed', '-', 'cv-select-all', 'cv-select-items', '-', 'find', 'go-to-line', 'cv-next', 'cv-previous', '-', 'format-text', 'redraw', 'language-restart'] },
                 { id: 'shape', label: 'Shape', glyph: 'square', items: (isD2() || isCanvas() ? [{ label: 'Drawing Tool', glyph: 'square', items: ['tool-select'].concat(PALETTE.map(function (k) { return 'tool-' + k[0]; })) }, '-'] : []).concat(['shape-add', 'shape-add-inside', 'connect', 'cv-new', 'cv-group', 'cv-connect', 'cv-reconnect-start', 'cv-reconnect-end', 'cv-resize', 'cv-edit-text', '-', { label: 'Align and Distribute', items: ['cv-align-left', 'cv-align-center', 'cv-align-right', 'cv-align-top', 'cv-align-middle', 'cv-align-bottom', '-', 'cv-distribute-horizontal', 'cv-distribute-vertical'] }, '-', 'shape-label', 'shape-rename', 'shape-type', '-', 'shape-move-into', 'shape-move-top', 'cv-left', 'cv-right', 'cv-up', 'cv-down', 'cv-forward', 'cv-back', '-', 'shape-delete']) }
-            ], into: { view: ['view-preview', 'view-text', 'view-split', '-', 'dock', 'fit', 'toggle-inspector', 'toggle-outline'].concat(commonToolbar ? ['-', 'common-toolbar-show', 'common-toolbar-customize'] : [], ['-', 'cv-pan', 'cv-pan-left', 'cv-pan-right', 'cv-pan-up', 'cv-pan-down', 'cv-zoom-in', 'cv-zoom-out', 'cv-actual']), go: ['go-to-line', 'cv-next', 'cv-previous'] } };
+            ], into: { view: ['view-preview', 'view-text', 'view-split', '-', 'dock', 'fit', 'toggle-inspector', 'toggle-outline'].concat(commonToolbar ? ['-', 'common-toolbar-show', 'common-toolbar-customize'] : [], ['-', 'cv-pan', 'cv-pan-left', 'cv-pan-right', 'cv-pan-up', 'cv-pan-down', 'cv-zoom-in', 'cv-zoom-out', 'cv-actual']) } };
         }
         root.addEventListener('pudl:contextmenu', function (e) {
             var t = e.detail.target;

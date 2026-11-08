@@ -99,10 +99,12 @@
                     '<div class="form-group"><label class="form-label" for="' + id + '-select">Definition</label><span class="form-select-wrap"><select class="form-select" id="' + id + '-select" data-macro-select>' + drafts.map(function (draft, i) { return '<option value="' + i + '">' + esc(i === entries.length ? 'New Definition' : draft.name) + '</option>'; }).join('') + '</select></span></div>' +
                     '<div class="form-group"><label class="form-label" for="' + id + '-name">Shortcode Name</label><input class="form-input" id="' + id + '-name" data-macro-name placeholder="callout" aria-describedby="' + id + '-name-error"><p class="form-error" id="' + id + '-name-error" data-macro-name-error role="alert" hidden></p></div>' +
                     '<div class="form-group"><label class="form-label" for="' + id + '-body">Template Markdown</label><textarea class="form-textarea" id="' + id + '-body" data-macro-body rows="12" spellcheck="false"></textarea></div>' +
-                    '<div class="form-group"><label class="form-label" for="' + id + '-shared">Shared Definitions File</label><input class="form-input" id="' + id + '-shared" data-macro-shared value="' + esc(context.reference) + '" placeholder="~/Shortcodes/shared.md"><p class="form-help">Optional local Markdown file. Edit it in Editor; this document can override its definitions.</p></div>',
+                    window.yavcDialog.pathField({id:id+'-shared',label:'Shared Definitions File',value:context.reference,accept:'.md',maxBytes:256*1024,help:'Optional local Markdown file. Edit it in Editor; this document can override its definitions.'}),
                 buttons: [{ id: 'cancel', label: 'Cancel' }, { id: 'apply', label: 'Apply Definitions', primary: true }],
                 onOpen: function (opened) {
                     api = opened; show(); opts.signal.addEventListener('abort', abort, { once: true });
+                    api.body.querySelector('#'+id+'-shared').setAttribute('data-macro-shared','');
+                    window.yavcDialog.wirePaths(api,opts);
                     api.body.querySelector('[data-macro-select]').addEventListener('change', function (event) { capture(); selected = +event.target.value; show(); });
                     api.dialog.addEventListener('cancel', function (event) { if (busy) { event.preventDefault(); } });
                     api.dialog.querySelector('[data-choice="cancel"]').addEventListener('click', function (event) { if (busy) { event.preventDefault(); event.stopImmediatePropagation(); } }, true);

@@ -23,10 +23,14 @@
 @media (max-width: 480px) { .md-document-options { grid-template-columns: minmax(0, 1fr); } }
 .md-style-dialog.dialog { width: min(60rem, calc(100vw - 2rem)); max-width: calc(100vw - 2rem); }
 .md-style-code { height: min(45vh, 26rem); min-height: 12rem; min-width: 0; }
+.md-format-preview-boundary { contain: layout paint; border: 1px solid var(--border); border-radius: var(--radius-sm); margin-block-end: var(--space-3); max-height: 10rem; overflow: auto; }
+.md-format-preview { padding: var(--space-3); min-height: 4rem; width: auto; overflow-wrap: anywhere; }
+.md-format-preview p { margin: 0; }
+.md-editor-dialog [hidden] { display: none; }
 /* Glyph previews keep their descriptions visible as the dialog narrows. */
 .md-glyph-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(10rem, 100%), 1fr)); gap: var(--space-2); max-height: 22rem; overflow-y: auto; padding: var(--space-1); }
-.md-glyph-options .btn { justify-content: flex-start; min-width: 0; text-align: start; }
-.md-glyph-options .btn > span:not(.glyph) { overflow-wrap: anywhere; }
+.md-glyph-options .check { display:flex;align-items:center;gap:var(--space-2);padding:var(--space-2);min-width:0;overflow-wrap:anywhere; }
+.md-glyph-options .check > span:not(.glyph) { overflow-wrap: anywhere; }
 .md-glyph-options [hidden] { display: none; }
 .md-page-setup.dialog { width: min(54rem, calc(100vw - 2rem)); max-width: calc(100vw - 2rem); }
 .md-page-setup .dialog-body { max-height: 72svh; overflow: auto; }

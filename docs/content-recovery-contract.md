@@ -22,7 +22,19 @@ Joining selects the newest applicable snapshot but retains alternate keys until 
 
 The returned handle adds synchronous `flush()`, which reports whether the latest value was stored. Serialization and quota failures return false and preserve the previous stored snapshot. A failed snapshot remains dirty for a later attempt. A left handle cannot flush. Diagrams' reload guard calls this acknowledgement before claiming unsaved work is retained; a failed flush keeps the normal browser unsaved-work warning available.
 
-This is a yavc host extension, not a claim that PUDL publishes this recovery contract. Another host must implement the documented version before combining recovery with the experimental resource capability. Legacy snapshot implementations are refused before registration. Production Editor/Docs/Slides recovery adapters and migration remain separate work.
+This is a yavc host extension, not a claim that PUDL publishes this recovery contract. Another host must implement the documented version before combining recovery with the experimental resource capability. Legacy snapshot implementations are refused before registration. The installed resource adopters are recorded in `diagram-resource-adoption.md` and `editor-slides-resource-adoption.md`; extraction into another application's host remains a separate acceptance gate.
+
+## Remembering a closed workspace
+
+The yavc snapshot host advertises `remembersClosed: true`. A primary applet instance can opt into `join(root, take, {remember: true, validate})`. The host stores each live registration's workspace under its own origin-local `pc-resume:` key. An applicable per-tab reload snapshot takes precedence, preserving that browser tab's workspace. When none exists, the host restores the newest remembered workspace. Closing a window still removes its reload snapshot, while the remembered workspace survives. A secondary instance must omit this option. Another host can omit the capability; Editor then retains its normal unsaved-window warning.
+
+Registrations have separate random identities so an older page cannot overwrite another page's draft. A workspace timestamp advances when its captured state changes, rather than when an idle page flushes. Divergent copies remain retained; the host does not delete another live writer's record. These copies consume the browser's storage quota. If that quota is exhausted, durable acknowledgement fails and the normal close warning remains available. This facility requires the secure-context Web Crypto API, including localhost development.
+
+A registration seals its own record when it leaves and can no longer flush. A replacement registration may retire only the sealed parent it actually continued, after successfully storing the complete replacement and verifying the parent's timestamp and full payload. Routine close and reopen therefore does not accumulate a copy on every visit. Active, changed or divergent records remain available. A non-BFCache page exit also seals its registrations; an omitted exit event merely retains an extra recovery copy.
+
+The validator runs before a remembered workspace is registered. A failed durable write makes `flush()` return false even if the per-tab reload write succeeded. Editor therefore cannot claim a draft will survive window closure when only its reload copy was written. The retained original resource revisions still govern all later saves.
+
+Editor also handles unchanged legacy drafts during migration. It reads the current resource and compares the full draft after canonical line-ending normalization. If the text matches, there is no unsaved change to recover. If it differs or cannot be read, the unversioned draft remains protected and ordinary Save remains unavailable.
 
 ## Verification
 

@@ -358,10 +358,12 @@
             if (window.showSaveFilePicker) {
                 try {
                     var h = await window.showSaveFilePicker({ suggestedName: 'theme.css', types: [{ description: 'CSS', accept: { 'text/css': ['.css'] } }] });
+                    if(gone)return;
                     var w = await h.createWritable();
+                    if(gone) {await w.abort();return;}
                     await w.write(blob);
                     await w.close();
-                    say('Saved ' + h.name + '.');
+                    if(!gone)say('Saved ' + h.name + '.');
                 } catch (err) { if (err && err.name !== 'AbortError') { say('The theme could not be saved.'); } }
                 return;
             }
@@ -463,7 +465,8 @@
         function onFile() {
             var f = file.files && file.files[0];
             if (!f) { return; }
-            f.text().then(openCss, function () { say('That file could not be read.'); });
+            var original=JSON.stringify(st);
+            f.text().then(function (text) {if(!gone && JSON.stringify(st)===original)openCss(text);}, function () { if(!gone)say('That file could not be read.'); });
             file.value = '';
         }
         /* A hex field the reader left half-typed goes back to the value. */

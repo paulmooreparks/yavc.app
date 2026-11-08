@@ -1,7 +1,7 @@
 {
   "name": "theme-studio",
   "title": "PUDL Theme Studio",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Edit a PUDL theme's light and dark palettes, watch PUDL's components take them, and check their contrast.",
   "license": "Apache-2.0",
   "src": "theme-studio.js",

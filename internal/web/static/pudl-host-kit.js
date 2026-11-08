@@ -98,7 +98,11 @@
             if (result.length) { result.push('-'); }
             result.push({ label: 'Copy Link to This Applet', run: function () {
                 return navigator.clipboard.writeText(location.href).catch(function () {
-                    window.alert('The link could not be copied. Copy the address from your browser.');
+                    var old=root.querySelector('[data-host-copy-notice]');if(old)old.remove();
+                    var notice=document.createElement('div');notice.className='notice danger';notice.setAttribute('role','alert');notice.setAttribute('data-host-copy-notice','');
+                    var content=document.createElement('div');content.className='notice-content';
+                    var text=document.createElement('p');text.className='notice-body';text.textContent='The link could not be copied. Copy the address from your browser.';
+                    content.appendChild(text);notice.appendChild(content);root.prepend(notice);
                 });
             } });
         }

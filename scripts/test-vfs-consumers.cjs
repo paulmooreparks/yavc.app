@@ -40,6 +40,6 @@ const action=(p,app,name,input)=>p.evaluate(({app,name,input})=>pudlActions.run(
    await p.screenshot({path:path.join(evidence,engine+'-legacy-fork.png')});
    assert.deepEqual(errors,[]);
    console.log(engine+': real Terminal touch, Editor/Slides/Diagrams save and reload, visible fork warning and download passed');
-  }catch(e){await p.screenshot({path:path.join(evidence,engine+'-failure.png')});fs.writeFileSync(path.join(evidence,engine+'-failure.txt'),JSON.stringify({phase,url:p.url(),errors,text:(await p.locator('body').innerText()).slice(-8000)},null,2));throw e;}finally{await context.close();await browser.close();}
+  }catch(e){console.error(engine+' '+phase+': '+e.message);await p.screenshot({path:path.join(evidence,engine+'-failure.png')}).catch(()=>{});fs.writeFileSync(path.join(evidence,engine+'-failure.txt'),JSON.stringify({phase,url:p.url(),errors,text:await p.locator('body').innerText().then(text=>text.slice(-8000)).catch(()=>null)},null,2));throw e;}finally{await context.close();await browser.close();}
  }
 })().catch(e=>{console.error(e);process.exitCode=1;});

@@ -34,7 +34,7 @@
         var shell = root.querySelector('[data-role="shell"]');
         function commandsChanged() { if (opts.commandsChanged) { opts.commandsChanged(); } if (window.pudlMenubar) { window.pudlMenubar.refresh(); } }
 
-        var F = null, FB = null, b = null, el = null, destroyed = false;
+        var F = null, FB = null, b = null, el = null, destroyed = false,lifetime=new AbortController();
         /* A folder handed over or in the address comes first; then, after
            a reload, the folder the snapshot was taken in (js/snapshot.js),
            since a window's address doesn't keep it. */
@@ -259,17 +259,18 @@
                 case 'download': if (c) { download(c); } return;
                 case 'copy': if (c) { await copyHome(c); } return;
                 case 'new-file': {
-                    var name = await window.yavcDialog.askText('New File', 'Name', '', { text: 'In ' + F.displayPath(dir), okLabel: 'Create', validate: nameCheck });
-                    if (name == null) { return; }
-                    var res = await F.write(dir, name, '', false);
+                    var name = await window.yavcDialog.askText('New File', 'Name', '', { signal:lifetime.signal,text: 'In ' + F.displayPath(dir), okLabel: 'Create', validate: nameCheck });
+                    if (name == null || destroyed) { return; }
+                    if (!F.realOf(dir).server && !F.realOf(dir).settings && typeof F.importFile !== 'function') { say('Reload this page before creating a file.', true); return; }
+                    var res = (F.realOf(dir).server || F.realOf(dir).settings) ? await F.write(dir, name, '', false,undefined,{signal:lifetime.signal}) : await F.importFile(dir,new File([],name,{type:'text/plain'}),{signal:lifetime.signal});
                     if (res.error) { say(res.error, true); return; }
                     b.refresh(); b.select(name); say('Made ' + name + '.');
                     return;
                 }
                 case 'new-folder': {
-                    var dname = await window.yavcDialog.askText('New Folder', 'Name', '', { text: 'In ' + F.displayPath(dir), okLabel: 'Create', validate: nameCheck });
-                    if (dname == null) { return; }
-                    var e1 = await F.mkdir(dir, dname, false);
+                    var dname = await window.yavcDialog.askText('New Folder', 'Name', '', { signal:lifetime.signal,text: 'In ' + F.displayPath(dir), okLabel: 'Create', validate: nameCheck });
+                    if (dname == null || destroyed) { return; }
+                    var e1 = await F.mkdir(dir, dname, false,{signal:lifetime.signal});
                     if (e1) { say(e1, true); return; }
                     b.refresh(); b.select(dname); say('Made ' + dname + '/.');
                     return;
@@ -277,23 +278,23 @@
                 case 'upload': el.fileInput.value = ''; el.fileInput.click(); return;
                 case 'rename': {
                     if (!c) { return; }
-                    var nn = await window.yavcDialog.askText('Rename', 'New Name for ' + c.name, c.name, { okLabel: 'Rename', validate: function (v) { return v === c.name ? null : nameCheck(v); } });
-                    if (nn == null || nn === c.name) { return; }
-                    var e2 = await F.move(dir, c, nn);
+                    var nn = await window.yavcDialog.askText('Rename', 'New Name for ' + c.name, c.name, { signal:lifetime.signal,okLabel: 'Rename', validate: function (v) { return v === c.name ? null : nameCheck(v); } });
+                    if (nn == null || nn === c.name || destroyed) { return; }
+                    var e2 = await F.move(dir, c, nn,undefined,{signal:lifetime.signal});
                     if (e2) { say(e2, true); return; }
                     b.refresh(); b.select(nn); say('Renamed to ' + nn + '.');
                     return;
                 }
                 case 'move': {
                     if (!c) { return; }
-                    var dest = await window.yavcDialog.askText('Move ' + c.name, 'To the Folder', F.displayPath(dir), { help: 'For example ~/notes', okLabel: 'Move', validate: function (v) {
+                    var dest = await window.yavcDialog.askText('Move ' + c.name, 'To the Folder', F.displayPath(dir), { signal:lifetime.signal,browse:'folder',help: 'For example ~/notes', okLabel: 'Move', validate: function (v) {
                         var d = F.resolve(dir, v);
                         if (!d || !d.children) { return 'There\'s no folder at ' + v + '.'; }
                         if (!d.home) { return 'Only folders in your home directory (~)' + (F.mounted ? ' or under /wwwroot' : '') + ' can take it.'; }
                         return null;
                     } });
-                    if (dest == null) { return; }
-                    var e3 = await F.move(dir, c, dest);
+                    if (dest == null || destroyed) { return; }
+                    var e3 = await F.move(dir, c, dest,undefined,{signal:lifetime.signal});
                     if (e3) { say(e3, true); return; }
                     b.refresh(); say('Moved ' + c.name + ' to ' + dest + '.');
                     return;
@@ -302,9 +303,9 @@
                     if (!c) { return; }
                     var many = c.children ? ' and everything in it (' + c.children.length + (c.children.length === 1 ? ' item' : ' items') + ')' : '';
                     var where = F.realOf(c).server ? '. A copy is kept in the history for 30 days.' : ' from this browser. It can\'t be undone.';
-                    var ok = await window.yavcDialog.confirm('Delete ' + c.name + '?', 'This deletes ' + F.displayPath(c) + many + where, { okLabel: 'Delete', danger: true });
-                    if (!ok) { return; }
-                    var e4 = await F.remove(c, true);
+                    var ok = await window.yavcDialog.confirm('Delete ' + c.name + '?', 'This deletes ' + F.displayPath(c) + many + where, { signal:lifetime.signal,okLabel: 'Delete', danger: true });
+                    if (!ok || destroyed) { return; }
+                    var e4 = await F.remove(c, true,undefined,{signal:lifetime.signal});
                     if (e4) { say(e4, true); return; }
                     b.select(null, false); b.refresh(); say('Deleted ' + c.name + '.');
                     return;
@@ -368,14 +369,15 @@
            looks up in the command table. The Folder title holds every
            command the toolbar has, because the toolbar hides while the menu
            bar shows as a ribbon (PUDL 0.80.1) and the Folder tab must then
-           offer all of them; Go and View list theirs again where a reader
-           of the menus looks for them. Files' help is a page of the site,
+           offer all of them. Folder holds Files navigation, while View
+           holds display preferences. Files' help is a page of the site,
            /help/files, which the site's Help menu links to (DESIGN.md,
            decision 19). */
         function menus() {
             return { titles: [{ label: 'Files', items: window.pcAppletIdentity(root) },
-                { id: 'file', label: 'File', items: ['new-file', 'new-folder', 'upload', '-', 'open', 'edit', 'run', 'download', 'terminal', '-', 'rename', 'move', 'copy', '-', 'delete'] }],
-                into: { go: ['up', 'home'], view: ['hidden'] } };
+                { id: 'file', label: 'File', items: ['new-file', 'new-folder', 'upload', '-', 'open', 'edit', 'run', 'download', 'terminal', '-', 'rename', 'move', 'copy', '-', 'delete'] },
+                { id: 'folder', label: 'Folder', glyph:'folder',items:['up','home'] }],
+                into: { view: ['hidden'] } };
         }
 
         function setHidden(on) { showHidden = !!on; if (b) { b.showHidden(showHidden); commandsChanged(); } }
@@ -460,6 +462,7 @@
             menus: menus,
             destroy: function () {
                 destroyed = true;
+                lifetime.abort();
                 if (snap) { snap.leave(); }
                 if (unConfig) { unConfig(); }
                 if (b) { b.destroy(); }

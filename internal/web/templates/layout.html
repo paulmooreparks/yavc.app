@@ -60,6 +60,7 @@
   <script src="{{asset "/static/bridge.js"}}" defer></script>
   <script src="{{asset "/pudl/pudl-menubar.js"}}" defer></script>
   <script src="{{asset "/pudl/pudl-dialog.js"}}" defer></script>
+  <script src="{{asset "/pudl/pudl-listbox.js"}}" defer></script>
   <script src="{{asset "/pudl/pudl-tooltip.js"}}" defer></script>
   <script src="{{asset "/pudl/pudl-tree.js"}}" defer></script>
   <script src="{{asset "/pudl/pudl-fields.js"}}" defer></script>
@@ -85,7 +86,6 @@
           <li data-menubar-id="site"><img src="{{asset "/static/icon.svg"}}" alt=""> {{.Site}}<ul>
             <li><a href="{{.SiteURL}}">Desktop</a></li>
           </ul></li>
-          <li data-menubar-id="go">Go<ul></ul></li>
           <li data-menubar-id="view">View<ul>
             <li>Mode<ul data-menu-radio>
               <li><button type="button" data-site-command="mode" data-args="light" {{checked .Appearance.Mode "light"}}>Light</button></li>
@@ -196,9 +196,6 @@
         <ul data-menubar-source hidden>
           <li data-menubar-id="site"><img src="{{asset "/static/icon.svg"}}" alt=""> {{.Site}}<ul>
             <li><a href="{{.SiteURL}}">Desktop</a></li>
-          </ul></li>
-          <li data-menubar-id="go">Go<ul>
-            <li><a href="{{.SiteURL}}?open={{.Applet.Name}}&amp;top={{.Applet.Name}}">{{.Applet.Title}} on the Desktop</a></li>
           </ul></li>
           <li data-menubar-id="view">View<ul>
             <li>Mode<ul data-menu-radio>

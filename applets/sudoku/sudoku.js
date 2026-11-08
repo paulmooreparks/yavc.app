@@ -100,7 +100,7 @@ SOFTWARE.
               '</div>' +
             '</div>' +
             '<a class="sudoku-share-link" data-role="share-link" href="#" hidden>Link to this board</a>' +
-            '<dialog class="dialog sudoku-help">' +
+            '<dialog class="dialog sudoku-help" aria-label="How to play">' +
               '<h3 class="dialog-title">How to play</h3>' +
               '<div class="dialog-body">' +
                 '<ul>' +

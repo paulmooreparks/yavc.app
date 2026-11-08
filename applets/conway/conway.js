@@ -71,7 +71,7 @@
                 '<input class="form-input conway-share-url" data-role="share-url" readonly aria-label="Address of this board" />' +
               '</div>' +
               '<div class="dialog-actions">' +
-                '<button type="button" class="btn" data-action="share-open">Open this board</button>' +
+                '<a data-action="share-open">Open this board</a>' +
                 '<button type="button" class="btn" data-action="share-close">Close</button>' +
                 '<button type="button" class="btn btn-primary" data-action="share-copy">Copy link</button>' +
               '</div>' +
@@ -508,6 +508,7 @@
         function boardAddress() { return new URL(shareBase() + '?' + stateString(), location.origin).href; }
         function openShare() {
             el.shareUrl.value = boardAddress();
+            el.shareOpen.href = el.shareUrl.value;
             el.shareOpen.hidden = ownUrl;
             el.shareCopy.textContent = 'Copy link';
             el.shareDialog.showModal();
@@ -525,7 +526,8 @@
         q('[data-action="help-close"]').addEventListener('click', function () { helpDialog.close(); });
         helpDialog.addEventListener('click', function (e) { if (e.target === helpDialog) { helpDialog.close(); } });
         el.shareDialog.addEventListener('click', function (e) { if (e.target === el.shareDialog) { el.shareDialog.close(); } });
-        el.shareOpen.addEventListener('click', function () {
+        el.shareOpen.addEventListener('click', function (event) {
+            if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
             var url = el.shareUrl.value;
             el.shareDialog.close();
             /* In a window, the board goes to the game through PUDL's
@@ -535,9 +537,8 @@
             if (opts.host === 'window' && window.pudlApplets.request) {
                 var p = new URLSearchParams(stateString()), req = { path: p.get('init') || '' };
                 ['boardSize', 'cellSize', 'speed', 'saveHistory', 'wrap'].forEach(function (k) { if (p.has(k)) { req[k] = p.get(k); } });
-                if (window.pudlApplets.request('board', req, root)) { return; }
+                if (window.pudlApplets.request('board', req, root)) { event.preventDefault(); return; }
             }
-            location.assign(url);
         });
 
         function syncSettings() {
