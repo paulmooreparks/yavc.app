@@ -18,7 +18,7 @@ const evidence = path.join(os.tmpdir(), 'yavc-launcher-review'); fs.mkdirSync(ev
             await page.locator('[data-applet="dice"][data-applet-state="running"]').waitFor();
             assert.equal(await page.locator('#site-start-button, .site-menubar [data-menu-id="applets"]').count(), 0);
             const root = page.locator('#site-start');
-            async function open() { if (await root.isHidden()) await page.evaluate(() => pudlMenubar.launcherButton({ visible: true }).click()); else await page.evaluate(() => pudlLauncher.open(document.getElementById('site-start'))); await root.waitFor({ state: 'visible' }); }
+            async function open() { await page.waitForFunction(()=>window.pudlLauncher?.state(document.getElementById('site-start'))); await page.evaluate(() => { const catalog=document.getElementById('site-start'); if(pudlLauncher.state(catalog).visible) pudlLauncher.open(catalog); else pudlMenubar.launcherButton({visible:true}).click(); }); await root.waitFor({ state: 'visible' }); }
             await open();
             for (const text of ['Settings', 'About yavc.app']) {
                 const action = root.locator('header').getByRole('link', { name: text, exact: true });
