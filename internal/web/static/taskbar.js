@@ -8,16 +8,18 @@
         var catalog = new Map(), saving = Promise.resolve(), ready = false;
         document.querySelectorAll('#site-start [data-start-item] a[data-site-start-app]').forEach(function (link) {
             var id = link.dataset.siteStartApp, picture = link.querySelector('img'), label = link.querySelector('.start-name');
-            if (/^[A-Za-z0-9_-]+$/.test(id) && label) catalog.set(id, { id: id, label: label.textContent.trim(), glyph: 'app', icon: picture ? picture.src : undefined, command: true });
+            if (/^[A-Za-z0-9_-]+$/.test(id) && label) catalog.set(id, { id: id, kind: 'applet', label: label.textContent.trim(), glyph: 'app', icon: picture ? picture.src : undefined, command: true });
         });
         var providers = [{ id: 'applications', resolve: async function (request) {
             return catalog.has(request.id) ? { status: 'available', destination: Object.assign({}, catalog.get(request.id)) } : { status: 'unavailable' };
         } }];
-        function strings(values, order) { return Array.isArray(values) ? values.slice(0, 512).filter(function (value) { return typeof value === 'string' && (order ? /^(pin:)?[A-Za-z0-9_-]{1,128}$/ : /^[A-Za-z0-9_-]{1,128}$/).test(value); }) : []; }
+        function strings(values, order) { return Array.isArray(values) ? values.filter(function (value) { return typeof value === 'string' && (order ? /^(?:(?:pin|group):)?[A-Za-z0-9_-]+$/ : /^[A-Za-z0-9_-]+$/).test(value); }) : []; }
         function preferences(value) {
-            return { pins: strings(value.pins, false), order: strings(value.order, true), references: Array.isArray(value.references) ? value.references.slice(0, 512).filter(function (item) {
-                return item && typeof item.id === 'string' && typeof item.provider === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(item.id) && /^[A-Za-z0-9_-]{1,128}$/.test(item.provider);
+            var result = { pins: strings(value.pins, false), order: strings(value.order, true), references: Array.isArray(value.references) ? value.references.filter(function (item) {
+                return item && typeof item.id === 'string' && typeof item.provider === 'string' && /^[A-Za-z0-9_-]+$/.test(item.id) && /^[A-Za-z0-9_-]+$/.test(item.provider);
             }).map(function (item) { return { id: item.id, provider: item.provider }; }) : [] };
+            result.pins.forEach(function (id) { if (catalog.has(id) && !result.references.some(function (item) { return item.id === id; })) result.references.push({ id: id, provider: 'applications' }); });
+            return result;
         }
         function configure(value) { pudlWindows.configureTaskbar(Object.assign({ providers: providers, scope: 'desktop:' + location.origin }, preferences(value))); }
         layer.addEventListener('pudl:taskbar-change', function (e) {

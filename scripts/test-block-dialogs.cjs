@@ -1,8 +1,9 @@
 // Copyright 2026 Paul Parks. SPDX-License-Identifier: Apache-2.0
 const assert=require('node:assert/strict'),pw=require('playwright'),fs=require('node:fs'),os=require('node:os'),path=require('node:path');
-const port=process.env.YAVC_CHROME_TEST_PORT||'8442',out=path.join(os.tmpdir(),'yavc-block-dialog-evidence');fs.mkdirSync(out,{recursive:true});
+const dialogLayout=require('./dialog-layout.cjs');
+const port=process.env.YAVC_CHROME_TEST_PORT||'8442',out=path.join(os.tmpdir(),'yavc-block-dialog-evidence'+(process.env.YAVC_DIALOG_LARGE_TEXT==='1'?'-large':''));fs.mkdirSync(out,{recursive:true});
 const action=(p,app,name,input={})=>p.evaluate(({app,name,input})=>pudlActions.run('yavc.'+app+'/'+name+'@1',input,{grant:'all'}),{app,name,input});
-(async()=>{for(const engine of process.argv.slice(2).length?process.argv.slice(2):['chromium','firefox','webkit']){const b=await pw[engine].launch({headless:true});try{for(const app of ['docs','slides']){const p=await b.newPage({viewport:{width:1200,height:900}});p.setDefaultTimeout(15000);try{
+(async()=>{for(const engine of process.argv.slice(2).length?process.argv.slice(2):['chromium','firefox','webkit']){const b=await pw[engine].launch({headless:true});try{for(const app of ['docs','slides']){const p=await b.newPage({viewport:{width:1200,height:900}});await dialogLayout.prepare(p);p.setDefaultTimeout(15000);try{
  await p.goto(`http://${app}.localhost:${port}/`);await p.locator('[data-applet-state="running"]').waitFor();if(app==='docs')await p.locator('.cm-content').waitFor({state:'attached'});
  const kinds=[['info','Information'],['note','Note'],['tip','Tip'],['warning','Warning'],['expand','Expand'],['class','Style Class']];
  const source=kinds.map(([kind])=>'{{'+kind+':Original}}\n\nBody for '+kind+'.\n\n{{/'+kind+'}}').join('\n\n')+'\n\n{{figure:/static/icon.svg alt="Example" width=50%}}\n';

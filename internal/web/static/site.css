@@ -14,6 +14,12 @@
 .site-start .start-header { align-items: flex-start; }
 .site-start [data-row-actions] { flex: none; }
 .site-launcher-slot .site-start { height: 100%; }
+.site-launcher-size { width: min(24rem, calc(100vw - 2rem)); }
+.site-launcher-size-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
+.site-launcher-size-fields:has(> label[hidden]) { grid-template-columns: minmax(0, 1fr); }
+.site-launcher-size-fields .form-label { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
+.site-launcher-size-fields .number-field { min-width: 0; width: 100%; }
+.site-launcher-size [hidden] { display: none; }
 
 [data-toolbar-slot]:has(> .yavc-command-toolbar[hidden]) { display: none; }
 .yavc-command-toolbar[hidden] { display: none; }
@@ -117,6 +123,7 @@ body.desktop { height: 100dvh; display: flex; flex-direction: column; overflow: 
 
 /* The About dialogs. */
 .about-dialog { max-width: 36rem; }
+.about-dialog .dialog-body { overflow-wrap: anywhere; }
 .about-dialog .dialog-title { display: flex; align-items: center; gap: 8px; }
 .about-dialog .dialog-title img { width: 22px; height: 22px; }
 .about-dialog .dialog-body p:last-child { margin-bottom: 0; }

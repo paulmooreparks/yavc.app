@@ -1,5 +1,13 @@
 # Stem-to-stern review, November 2026
 
+## PUDL 0.105.0 integration, 2026-11-08
+
+The official archive, checksum and tag commit were verified before replacing the complete 193-file distribution. The new provenance test checks all paths and bytes in the required commit gate. The host migration and browser coverage are recorded in `pudl-upgrade-0.105.0.md`.
+
+Launcher state now retains desktop presentation and requested popup/pane sizes independently of compact visibility. The host removes its Escape override, preserves early native Start input during preference loading, and confirms accepted managed activation through PUDL. A read failure cannot overwrite saved preferences. Taskbar preferences retain long menu IDs and unavailable references, and application descriptors declare their destination kind. Source review caught early compact input overwriting a saved pane preference; the correction and a held-load compact/widen test preserve it.
+
+The repeated dialog review includes enlarged text in both appearances and narrow layouts. Picture width and unit controls now fit a constrained grid, and About text wraps long addresses. The existing dialog inventory remains the coverage map. Earlier failed fixture logs remain available separately from the passing runs; the test updates wait for committed preferences and use the new compact opener and documented taskbar action labels.
+
 ## Repeat dialog layout review, 2026-11-08
 
 The Key Bindings width rule did not override PUDL's 480-pixel maximum. Its native fieldset also lacked the PUDL grouping class, and Restore Defaults followed it without separation. The dialog now uses a 52rem desktop width, a wider command column and a consistent section gap. Command options show their human-readable labels without redundant internal command identifiers. The focused fixture measures every command option's text width and the space above Restore Defaults, in both appearances and all three engines. Narrow layouts retain stacked rows and scrolling.

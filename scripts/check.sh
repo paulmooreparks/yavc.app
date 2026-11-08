@@ -49,6 +49,9 @@ step "Browser module tests"
 # writer and renderer (docs/canvas-extension.md).
 node --test 'apps/*/test/*.test.mjs'
 
+step "Bundled PUDL release provenance"
+node --test scripts/test-pudl-distribution.mjs
+
 step "The project's own rules"
 node scripts/check.mjs "${since[@]}"
 
