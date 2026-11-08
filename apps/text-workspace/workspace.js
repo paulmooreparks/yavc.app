@@ -714,6 +714,7 @@
             }
             t.resource = accepted; t.baseline = null; t.conflict = null; t.path = accepted.resource;
             t.name = accepted.name || t.name; t.lang = languageFor(t.name); t.savedRaw = text; t.saved = normalizedSource(text);
+            if(current()===t)window.yavcMdEditor.refreshReferences(root,picturesHost());
             t.readOnly = !resources.canWrite(accepted); t.saveFailed = !!syncError; t.fresh = false; t.external = false;
             t.modified = !!syncError || (current() === t ? view.state : t.state).doc.toString() !== t.saved || ticket !== t.saveTicket;
             var effects = [langComp.reconfigure(langExtension(t.lang)), lintComp.reconfigure(lintExtension(t))];
@@ -1499,6 +1500,8 @@
                 site: function () { return Promise.resolve({ F: F, FB: FB }); },
                 root: root, say: say,
                 macroContext: currentMacroEngine,
+                read: function (path) { if(!H.fs || !H.fs.readText)throw new Error('This host cannot read dependencies.');return H.fs.readText(path); },
+                watch: H.fs && H.fs.onChange ? function(fn){return H.fs.onChange(fn);} : null,
                 signal: styleLifetime.signal, identity: current, text: function () { return view ? view.state.doc.toString() : ''; },
                 dir: styleDirectory
             };

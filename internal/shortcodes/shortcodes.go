@@ -660,6 +660,32 @@ func init() {
 			}
 			return out + `</figure>`, nil
 		}})
+	add(&def{name: "diagram", kind: block, title: "Diagram", what: "A saved D2, Mermaid or Canvas file drawn through the host's virtual file service.",
+		example: `{{diagram:~/diagrams/plan.canvas alt="Request flow" width=80% caption="The saved plan."}}`,
+		render: func(c Call, doc ast.Node, src []byte) (string, error) {
+			path, ok := c.Get("src", 0)
+			if !ok || len(path) > 4096 || !diagramPathRe.MatchString(path) || strings.HasPrefix(path, "//") || strings.HasPrefix(path, "~") && !strings.HasPrefix(path, "~/") || diagramUnsafeRe.MatchString(path) {
+				return "", problem{"diagram needs a local .d2, .mmd, .mermaid or .canvas path."}
+			}
+			for name := range c.Named {
+				if name != "src" && name != "alt" && name != "width" && name != "caption" {
+					return "", problem{"diagram does not support the " + name + " option."}
+				}
+			}
+			style := ""
+			if width, ok := c.Get("width", -1); ok {
+				if !diagramWidthRe.MatchString(width) {
+					return "", problem{"diagram width must be a whole percentage from 1% to 100%."}
+				}
+				style = ` style="width:` + Esc(width) + `;max-width:100%"`
+			}
+			alt, _ := c.Get("alt", -1)
+			out := `<figure class="sc-figure" data-diagram-src="` + Esc(path) + `" data-diagram-alt="` + Esc(alt) + `"` + style + `><div data-diagram-body><p class="form-help">Diagram: ` + Esc(path) + `</p></div>`
+			if caption, ok := c.Get("caption", -1); ok && strings.TrimSpace(caption) != "" {
+				out += `<figcaption>` + inlineHTML(caption) + `</figcaption>`
+			}
+			return out + `</figure>`, nil
+		}})
 	add(&def{name: "applet", kind: block, title: "Applet", what: "One of the site's applications, running in the page.",
 		example: "{{applet:conway fit=flow}}",
 		render: func(c Call, doc ast.Node, src []byte) (string, error) {
@@ -860,12 +886,15 @@ func init() {
 }
 
 var (
-	anchorRe  = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_-]*$`)
-	slugRe    = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*(/[a-z0-9][a-z0-9-]*)*$`)
-	sizeRe    = regexp.MustCompile(`^\d+(\.\d+)?(%|px|rem|em|ch)$`)
-	appletRe  = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
-	youTubeRe = regexp.MustCompile(`^[A-Za-z0-9_-]{6,20}$`)
-	vimeoRe   = regexp.MustCompile(`^[0-9]{5,16}$`)
+	anchorRe        = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_-]*$`)
+	slugRe          = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*(/[a-z0-9][a-z0-9-]*)*$`)
+	sizeRe          = regexp.MustCompile(`^\d+(\.\d+)?(%|px|rem|em|ch)$`)
+	diagramPathRe   = regexp.MustCompile(`(?i)\.(d2|mmd|mermaid|canvas)$`)
+	diagramWidthRe  = regexp.MustCompile(`^(?:[1-9][0-9]?|100)%$`)
+	diagramUnsafeRe = regexp.MustCompile(`[:\\?#\x00-\x1f\x7f]`)
+	appletRe        = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
+	youTubeRe       = regexp.MustCompile(`^[A-Za-z0-9_-]{6,20}$`)
+	vimeoRe         = regexp.MustCompile(`^[0-9]{5,16}$`)
 	// A hosted video's link, as a person copies it from the service.
 	youTubeLink = regexp.MustCompile(`^(?:https?://)?(?:www\.|m\.)?(?:youtube\.com/(?:watch\?(?:.*&)?v=|embed/|shorts/|live/|v/)|youtu\.be/|youtube-nocookie\.com/embed/)([A-Za-z0-9_-]{6,20})`)
 	vimeoLink   = regexp.MustCompile(`^(?:https?://)?(?:www\.|player\.)?vimeo\.com/(?:video/)?([0-9]{5,16})`)

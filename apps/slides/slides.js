@@ -395,8 +395,10 @@
                 site: function () { return H.fs && H.fs.site ? H.fs.site() : Promise.reject(new Error('there is no file service here')); },
                 root: root, say: say,
                 macroContext: currentMacroEngine,
+                read: function (path) {if(!H.fs || !H.fs.readText)throw new Error('This host cannot read dependencies.');return H.fs.readText(path);},
+                watch: H.fs && H.fs.onChange ? function(fn){return H.fs.onChange(fn);} : null,
                 signal: styleLifetime.signal, identity: function () { return deck; }, text: fullText,
-                dir: function () { return path ? (path.replace(/\/[^\/]*$/, '') || '~') : null; }
+                dir: styleDirectory
             };
         }
         function pageHost() {
@@ -868,7 +870,7 @@
         var deckStyle = null, slideStyles = new Map(), styleRevision = 0;
         var styleNotice = document.createElement('div'); styleNotice.className = 'notice warn'; styleNotice.hidden = true; styleNotice.setAttribute('role', 'status');
         styleNotice.innerHTML = '<div class="notice-content"><p class="notice-body"></p></div>'; root.insertBefore(styleNotice, el.main);
-        function styleDirectory() { return path && path.indexOf('/') >= 0 ? path.slice(0, path.lastIndexOf('/')) : '~'; }
+        function styleDirectory() { if(resources)return H.contentWorkspace && H.contentWorkspace.directory ? H.contentWorkspace.directory(path) : null;return path && path.indexOf('/')>=0?path.slice(0,path.lastIndexOf('/')):null; }
         function styleSections(index) {
             styledSections.forEach(function (section) { if (!root.contains(section)) { styledSections.delete(section); } });
             return Array.from(styledSections).filter(function (section) { return index == null || section.getAttribute('data-slide-index') === String(index); });
@@ -1103,6 +1105,7 @@
                 t.savedText = submitted; t.saveFailed = !!syncError;
                 if (tab() === t) {
                     path = t.path; modified = t.modified; refreshAccess();
+                    window.yavcMdEditor.refreshReferences(el.slide,picturesHost());
                     if (!syncError && readOnly() && page) { await page.enable(false); drawSlide(); }
                     updateLocation(); announce(); say(syncError ? 'The submitted source was saved, but the newer rich draft could not synchronize. Copy it before leaving. ' + syncError.message : 'Saved ' + (t.name || path) + (modified ? '; newer edits are still unsaved.' : '.'), !!syncError);
                 }

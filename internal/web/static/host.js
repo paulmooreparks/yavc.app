@@ -124,6 +124,7 @@
             var url=new URL('/applet/slides',location.origin);url.searchParams.set('file',request.resource);url.searchParams.set('presenter','1');url.searchParams.set('presenter-channel',request.channel);return url.href;
         }},
         contentWorkspace: { version: 1,
+            directory: function (resource) {var F=window.pcSiteFs;if(!F || typeof resource!=='string')return null;var node=F.resolve(null,resource);return node && !node.children ? F.splitPath(F.displayPath(node)).dir : null;},
             browser: function () { return withDialog().then(function (x) { return {F:x[0],FB:x[1]}; }); },
             split: {of:function (handle,change) {return window.pcSplit.of(handle,change);}},
             openPage: function (href) { if(!window.pudlWindows || !document.querySelector('[data-win-layer]'))return false;var url=new URL(href,location.href),match=url.origin===location.origin && /^\/page\/([A-Za-z0-9_-]+)$/.exec(url.pathname);if(!match)return false;var key=match[1],win=document.querySelector('.win[data-win="'+key+'"]');if(win && window.pudlWindows.state().open.indexOf(key)>=0){window.pudlWindows.raise(key);if(window.pcLoadWindow)window.pcLoadWindow(win,'',true).catch(function () {});}else window.pudlWindows.open(key);return true;},

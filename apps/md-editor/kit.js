@@ -186,7 +186,7 @@
         ['expand', 'Expand', '{{expand:The title}}\n' + PLACEHOLDER + '\n{{/expand}}'],
         ['video', 'Video…', null],
         ['applet', 'Applet…', null],
-        ['diagram', 'Diagram', '```mermaid\ngraph LR; A-->B;\n```'],
+        ['diagram', 'Diagram from a File…', null],
         ['code', 'Code Listing from a File…', null],
         ['color', 'Colored Words', '{{color:accent}}these words{{/color}}'],
         ['toc', 'Contents…', null],
@@ -957,6 +957,16 @@
                 if (!/^[a-z][a-z0-9-]*$/.test(name)) { return { problem: 'Choose an applet.', field: 'name' }; }
                 return '{{applet:' + name + ' fit=' + (v.fit === 'fill' ? 'fill' : 'flow') + (plain(v.state) ? ' state=' + quoteArg(plain(v.state)) : '') + '}}';
             } },
+        diagram: { title: 'A Diagram from a File', fields: [
+            {key:'src',label:'Diagram File',browse:true,maxBytes:2*1024*1024,accept:'.d2,.mmd,.mermaid,.canvas',placeholder:'~/diagrams/plan.canvas',help:'Choose a saved D2, Mermaid or Canvas file from this host, or upload one.'},
+            {key:'alt',label:'Description',help:'What the diagram shows, for readers who cannot see the image.'},
+            {key:'width',label:'Width (%)',kind:'number',min:1,max:100,help:'Leave empty to use the available space, up to the image size.'},
+            {key:'caption',label:'Caption'}],
+            read:function(sc){return {src:sc.named.src||sc.positional[0]||'',alt:sc.named.alt||'',width:(sc.named.width||'').replace(/%$/,''),caption:sc.named.caption||''};},
+            write:function(v){var src=plain(v.src);if(src.length>4096||!/\.(d2|mmd|mermaid|canvas)$/i.test(src)||/[:\\?#\u0000-\u001f\u007f]/.test(src)||src.startsWith('//')||src.startsWith('~')&&!src.startsWith('~/'))return {problem:'Choose a local D2, Mermaid or Canvas file.',field:'src'};
+                var width=plain(v.width);if(width&&(!/^\d+$/.test(width)||+width<1||+width>100))return {problem:'Use a whole percentage from 1 to 100.',field:'width'};
+                return '{{diagram:'+quoteArg(src)+(plain(v.alt)?' alt='+quoteArg(plain(v.alt)):'')+(width?' width='+width+'%':'')+(plain(v.caption)?' caption='+quoteArg(plain(v.caption)):'')+'}}';}
+        },
         code: { title: 'A Code Listing from a File', fields: [
             { key: 'src', label: 'File', placeholder: '~/code/example.js', browse: true, maxBytes: 256 * 1024, help: 'A file accepted by this host; the page shows it as it is when the page is read.' },
             { key: 'lang', label: 'Language', placeholder: 'From the file name', help: 'Optional, such as javascript or go, for syntax coloring.' }],
@@ -1035,7 +1045,7 @@
                 else if (f.kind === 'select') { control = '<span class="form-select-wrap"><select class="form-select" id="' + fid + '" data-key="' + f.key + '" data-value="' + esc(v) + '"><option value="' + esc(v) + '">' + esc(v || 'Loading…') + '</option></select></span>'; }
                 else if (f.kind === 'number') { control = '<span class="number-field"><input class="form-input" type="number" id="' + fid + '" data-key="' + f.key + '" value="' + esc(v) + '" min="' + f.min + '" max="' + f.max + '" step="1"></span>'; }
                 else { control = '<input class="form-input" id="' + fid + '" data-key="' + f.key + '" value="' + esc(v) + '" autocomplete="off" spellcheck="false"' + (f.placeholder ? ' placeholder="' + esc(f.placeholder) + '"' : '') + '>'; }
-                if (f.browse && host && host.site) { control = '<div class="yavc-path-field">' + control.replace('data-key=', 'data-file-path' + (f.maxBytes ? ' data-max-bytes="' + f.maxBytes + '"' : '') + ' data-key=') + '<button type="button" class="btn" data-browse-for="' + fid + '">Browse…</button></div>'; }
+                if (f.browse && host && host.site) { control = '<div class="yavc-path-field">' + control.replace('data-key=', 'data-file-path' + (f.accept ? ' data-accept="' + esc(f.accept) + '"' : '') + (f.maxBytes ? ' data-max-bytes="' + f.maxBytes + '"' : '') + ' data-key=') + '<button type="button" class="btn" data-browse-for="' + fid + '">Browse…</button></div>'; }
                 return '<div class="form-group"><label class="form-label" for="' + fid + '">' + esc(f.label) + '</label>' + control + help + '</div>';
             }).join('') + '<p class="form-error" id="' + id + 'error" data-role="error" role="alert" hidden></p></div>';
         var dlg = null, errorLine = null;
@@ -1391,7 +1401,7 @@
         }
         /* The engine reports a fault in the diagram itself; what reaches
            this catch is the engine failing to load. */
-        d2Ready.then(function (engine) { return engine.draw(place, source); })
+        return d2Ready.then(function (engine) { return engine.draw(place, source); })
             .catch(function () { diagramFailed(place, 'the diagram engine did not load. Reloading the page tries again.'); });
     }
     /* Draws the engine's preview blocks into an element. A block whose
@@ -1401,6 +1411,12 @@
        2026-11-03). opts: { pictures: the host's picture service,
        diagrams: false to leave diagrams undrawn, applets: false to leave
        applets unstarted, as a thumbnail does }. */
+    function refreshReferences(target, host) {
+        if(!target.querySelector('[data-diagram-src]'))return;
+        Promise.all([styles(),loadScript(window.yavcUtil.versioned(new URL('../diagram-kit/references.js',HERE).href))]).then(function(){
+            window.yavcDiagramReferences.attach(target,host,function(kind,place,source){return kind==='canvas'?drawCanvas(place,source):kind==='d2'?drawD2(place,source):drawDiagram(place,source);});
+        }).catch(function(error){if(target.isConnected)target.querySelectorAll('[data-diagram-body]').forEach(function(body){window.yavcUtil.notice(body,'The diagram loader could not start: '+error.message,'warn');});});
+    }
     function drawBlocks(target, blocks, opts) {
         opts = opts || {};
         var old = Array.prototype.filter.call(target.children, function (c) { return c.classList && c.classList.contains('doc-block'); });
@@ -1438,6 +1454,7 @@
             loadImages(f.el, opts.pictures);
             loadListings(f.el);
         });
+        if(opts.diagrams!==false)refreshReferences(target,opts.pictures);
     }
 
     /* === Properties =======================================================
@@ -1559,7 +1576,7 @@
         tableCommand: tableCommand, quoteState: quoteState, wordCount: wordCount, readingMinutes: readingMinutes,
         commands: commands, editing: editing, apply: apply, classesOf: classesOf, insertItem: insertItem, inserts: inserts, textFormat: textFormat, textInsert: textInsert,
         askText: askText, askFields: askFields, askChoice: askChoice, askProperties: askProperties, STOCK: STOCK, askColour: askColour, askColours: askColours, askClass: askClass,
-        askFigure: askFigure, editBlock: editBlock, drawBlocks: drawBlocks, drawDiagram: drawDiagram, pictureFor: pictureFor, askShortcode: askShortcode, FORMS: FORMS, boxCommand: boxCommand, BOXES: BOXES, loadImages: loadImages, parseFigure: parseFigure, buildFigure: buildFigure, parseShortcode: parseShortcode,
+        askFigure: askFigure, editBlock: editBlock, drawBlocks: drawBlocks, refreshReferences:refreshReferences, drawDiagram: drawDiagram, pictureFor: pictureFor, askShortcode: askShortcode, FORMS: FORMS, boxCommand: boxCommand, BOXES: BOXES, loadImages: loadImages, parseFigure: parseFigure, buildFigure: buildFigure, parseShortcode: parseShortcode,
         _page: null
     };
 })();

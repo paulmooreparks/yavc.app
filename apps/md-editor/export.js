@@ -82,7 +82,7 @@
         if ((rendered.problems || []).length) { throw new Error('Fix the document warnings before exporting.'); }
         // The HTML cleaner uses an inert template, so omitted assets have not loaded.
         fragment.querySelectorAll('[data-export="omit"],.sc-draft-note').forEach(function (node) { node.remove(); });
-        if (fragment.querySelector('.sc-problem,.sc-glyph,.dinah-diagram-placeholder,[data-applet],iframe,video,audio,svg,canvas,math,details,code[data-code-src]')) { throw new Error('This document contains an invalid shortcode, diagram, glyph, embedded app, SVG, interactive element or external code listing that this export cannot represent yet.'); }
+        if (fragment.querySelector('.sc-problem,.sc-glyph,.dinah-diagram-placeholder,[data-diagram-src],[data-applet],iframe,video,audio,svg,canvas,math,details,code[data-code-src]')) { throw new Error('This document contains an invalid shortcode, diagram, glyph, embedded app, SVG, interactive element or external code listing that this export cannot represent yet.'); }
         var pictures = new Map();
         fragment.querySelectorAll('img').forEach(function (img) { pictures.set(img, { source: img.getAttribute('src'), path: img.dataset.attachment }); img.removeAttribute('src'); img.removeAttribute('srcset'); img.removeAttribute('loading'); });
         var boundary = document.createElement('div'), surface = document.createElement('div');

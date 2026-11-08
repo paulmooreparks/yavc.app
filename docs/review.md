@@ -1,5 +1,13 @@
 # Stem-to-stern review, November 2026
 
+## Saved diagram dependencies, 2026-11-09
+
+Docs, Editor preview and Slides now support a diagram file shortcode through their receiving host's text reader, dependency directory and change notifications. Its form uses the shared file browser with upload, filtered extensions, optional description, width and caption. Relative references rebase after Save As. Invalid saved updates retain the last good image with a local warning; a changed base clears the previous image. The loader bounds file count, displayed figures and source bytes and checks document ownership after every asynchronous read/render.
+
+The actual-host fixture passes Chromium, Firefox and WebKit for D2, Mermaid and Canvas references, cross-applet saves, invalid-update retention, repaired files, Save As rebasing and explicit Office-export refusal. It exercises upload and the form in both themes at wide and narrow sizes. An independent synthetic host covers delayed ownership changes, rebasing, disposal and exhausted read budgets. The assembled portable package also passes all three engines with host-owned diagram updates and isolated source/rich writes. Source review found no actionable issues.
+
+The first Slides save exposed an undefined notes-element refresh; refreshing the actual slide fixes it. The first budget assertion counted hidden notice elements and was corrected to visible notices. The expanded portable fixture initially clicked its new diagram instead of its text paragraph, then expected a wrapped SVG label to remain one contiguous string. The upload fixture initially waited on a locator matching two nested dialogs. These fixture corrections retain the earlier failed logs separately from passing results.
+
 ## Diagram navigation, conversion and Canvas embeds, 2026-11-09
 
 D2 now exposes a PUDL navigation tree with its containers, shapes and connections. Drawing/source selection updates the tree, source navigation clears stale selection, and F6 reaches visible editing panes without swallowing dialog or nested-app keys. A matching compile and outline must complete before stale items activate. Outline links retain normal modified-click behavior and refresh their resource/view/window context after Save As or address changes. Standalone state now retains the selected item in its URL.
