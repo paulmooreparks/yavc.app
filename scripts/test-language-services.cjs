@@ -84,6 +84,8 @@ async function run(engine) {
                 // Worker failure preserves the buffer and leaves ordinary editing usable.
                 await page.evaluate(() => lspEvidence.workers.at(-1).dispatchEvent(new ErrorEvent('error', { message: 'Synthetic worker failure', cancelable: true })));
                 await page.waitForFunction(() => !window.CM.LSPPlugin.get(window.CM.EditorView.findFromDOM(document.querySelector('.cm-editor'))));
+                await page.locator('.yavc-notice.warn').filter({hasText:'Language assistance is unavailable'}).waitFor();
+                assert.equal(await page.locator('.toast').filter({hasText:'Language assistance is unavailable'}).count(),0);
                 assert.equal(await text(), next); await caret(0); await page.keyboard.type(' '); await page.keyboard.press('Control+z'); assert.equal(await text(), next);
                 await page.evaluate(app => window.pudlCommands.run('language-restart', undefined, document.querySelector(app === 'diagrams' ? '.dg' : '.pc-editor')), app);
                 await page.waitForFunction(() => { const p = CM.LSPPlugin.get(CM.EditorView.findFromDOM(document.querySelector('.cm-editor'))); return p && p.client.serverCapabilities; });

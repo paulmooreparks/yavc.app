@@ -14,7 +14,7 @@
 .md-type-defaults { margin-top: var(--space-2); }
 @media (max-width: 620px) { .md-type-controls fieldset:first-child { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 480px) { .md-type-controls fieldset, .md-type-controls fieldset:first-child { grid-template-columns: minmax(0, 1fr); } }
-.md-document-dialog { width: min(38rem, calc(100vw - 2rem)); }
+.md-document-dialog { width: min(44rem, calc(100vw - 2rem)); max-width: calc(100vw - 2rem); }
 .md-document-dialog .dialog-body { max-height: 72svh; overflow: auto; }
 .md-document-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
 .md-furniture-fields { min-width: 0; margin-block: var(--space-3); }
@@ -40,8 +40,7 @@
 .md-page-setup .dialog-body { max-height: 72svh; overflow: auto; }
 .md-page-setup-units { max-width: 14rem; margin-bottom: var(--space-4); }
 .md-page-setup-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-5); }
-.md-page-settings { min-width: 0; margin: 0; padding: 0; border: 0; }
-.md-page-settings legend { margin-bottom: var(--space-3); font-weight: 700; }
+.md-page-settings { min-width: 0; margin: 0; }
 .md-page-pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-3); }
 .md-page-measure { display: flex; align-items: center; gap: var(--space-2); }
 .md-page-measure > .number-field { min-width: 0; width: 100%; }
@@ -50,3 +49,4 @@
 .md-page-setup [hidden] { display: none; }
 .md-page-settings > .check { margin-block: var(--space-3); }
 @media (max-width: 620px) { .md-page-setup-grid { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 480px) { .md-page-pair { grid-template-columns: minmax(0, 1fr); } }

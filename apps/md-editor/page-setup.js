@@ -84,12 +84,12 @@
         try {
             return await window.yavcDialog.open({ title: 'Page Setup', className: 'md-page-setup', body:
                 '<div class="md-page-setup-units">' + choice('units','Units',option('in','Inches') + option('mm','Millimeters') + option('cm','Centimeters') + option('pt','Points')) + '</div>' +
-                '<div class="md-page-setup-grid"><fieldset class="md-page-settings"><legend>Paper</legend>' +
+                '<div class="md-page-setup-grid"><fieldset class="form-fieldset md-page-settings"><legend>Paper</legend>' +
                 '<div class="form-group"><label class="form-label" for="' + id + '-filter">Find a Paper Size</label><input class="form-input" type="search" id="' + id + '-filter" data-paper-filter placeholder="For example, A4, Letter or JIS"></div>' +
                 choice('paper','Paper Size','') + '<div class="md-page-pair">' + field('width','Width') + field('height','Height') + '</div>' +
                 choice('orientation','Orientation',option('portrait','Portrait') + option('landscape','Landscape')) +
                 '<p class="form-help">Choose a standard size, or enter a custom width and height. Changing a dimension selects Custom Size.</p></fieldset>' +
-                '<fieldset class="md-page-settings"><legend>Margins</legend>' + choice('preset','Preset',presets.map(function (p) { return option(p.id,p.label); }).join('') + option('custom','Custom Margins')) +
+                '<fieldset class="form-fieldset md-page-settings"><legend>Margins</legend>' + choice('preset','Preset',presets.map(function (p) { return option(p.id,p.label); }).join('') + option('custom','Custom Margins')) +
                 '<label class="check"><input type="checkbox" data-link-margins>Use the Same Margin on All Sides</label>' + field('all','All Sides') +
                 '<div class="md-page-pair">' + field('top','Top') + field('bottom','Bottom') + field('left','Left') + field('right','Right') + '</div></fieldset></div>',
                 buttons: [{ id: 'cancel', label: 'Cancel' }, { id: 'apply', label: 'Apply', primary: true }],

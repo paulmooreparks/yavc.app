@@ -21,8 +21,8 @@
             return group(key, label, '<div class="md-type-measure"><span class="number-field"><input class="form-input" type="number" id="' + id + '-' + key + '" data-type-field="' + key + '" aria-describedby="' + id + '-' + key + '-unit" min="' + min + '" max="' + max + '" step="' + step + '"></span><span aria-hidden="true">' + unit + '</span><span class="visually-hidden" id="' + id + '-' + key + '-unit">Points</span></div>');
         }
         var body = '<p class="form-help">Set the typography for the whole document.</p><div class="md-type-layout"><div class="md-type-controls">' +
-            '<fieldset><legend>Fonts</legend>' + font('font', 'Body Font') + font('heading-font', 'Heading Font') + number('size', 'Font Size', 6, 72, .5, 'pt') + '</fieldset>' +
-            '<fieldset><legend>Spacing</legend><div class="form-group"><label class="form-label" for="' + id + '-spacing">Line Spacing</label><span class="form-select-wrap"><select class="form-select" id="' + id + '-spacing" data-type-field="spacing">' +
+            '<fieldset class="form-fieldset"><legend>Fonts</legend>' + font('font', 'Body Font') + font('heading-font', 'Heading Font') + number('size', 'Font Size', 6, 72, .5, 'pt') + '</fieldset>' +
+            '<fieldset class="form-fieldset"><legend>Spacing</legend><div class="form-group"><label class="form-label" for="' + id + '-spacing">Line Spacing</label><span class="form-select-wrap"><select class="form-select" id="' + id + '-spacing" data-type-field="spacing">' +
             '<option value="">Stylesheet Default</option><option value="1">Single</option><option value="1.15">1.15 Lines</option><option value="1.5">1.5 Lines</option><option value="2">Double</option><option value="custom">Multiple</option></select></span></div>' +
             '<div class="form-group" data-type-multiple hidden><label class="form-label" for="' + id + '-multiple">Multiple</label><span class="number-field"><input class="form-input" type="number" id="' + id + '-multiple" data-type-field="multiple" min="1" max="3" step=".05"></span></div>' +
             number('paragraph-spacing', 'Space After Paragraph', 0, 72, .5, 'pt') + '</fieldset></div>' +

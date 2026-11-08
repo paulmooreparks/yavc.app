@@ -112,7 +112,7 @@
         async function toggle() {
             var next = Object.assign({}, prefs, { visible: !prefs.visible });
             try { await persist(next); }
-            catch (err) { if (!destroyed) { U.notice(slot, 'Toolbar settings were not saved: ' + err.message, true); } }
+            catch (err) { if (!destroyed) { U.toast('Toolbar settings were not saved: ' + err.message, true); } }
         }
         function customize() {
             if (opening) { return opening; }

@@ -14,11 +14,11 @@ const evidence = path.join(os.tmpdir(), 'yavc-launcher-review'); fs.mkdirSync(ev
         const errors = []; page.on('pageerror', e => errors.push(e.message));
         try {
             await page.goto(`http://localhost:${port}/?open=dice&top=dice`);
-            await page.waitForFunction(() => !!window.pudlLauncher && !!window.pudlHost);
-            await page.locator('[data-applet="dice"]').waitFor();
+            await page.waitForFunction(() => !!window.pudlHost && !!window.pudlLauncher?.state(document.getElementById('site-start')));
+            await page.locator('[data-applet="dice"][data-applet-state="running"]').waitFor();
             assert.equal(await page.locator('#site-start-button, .site-menubar [data-menu-id="applets"]').count(), 0);
             const root = page.locator('#site-start');
-            async function open() { await page.evaluate(() => pudlMenubar.launcherButton({ visible: true }).click()); await root.waitFor({ state: 'visible' }); }
+            async function open() { await page.waitForFunction(()=>window.pudlLauncher?.state(document.getElementById('site-start'))); await page.evaluate(() => { const catalog=document.getElementById('site-start'); if(pudlLauncher.state(catalog).visible) pudlLauncher.open(catalog); else pudlMenubar.launcherButton({visible:true}).click(); }); await root.waitFor({ state: 'visible' }); }
             await open();
             for (const text of ['Settings', 'About yavc.app']) {
                 const action = root.locator('header').getByRole('link', { name: text, exact: true });
@@ -60,7 +60,7 @@ const evidence = path.join(os.tmpdir(), 'yavc-launcher-review'); fs.mkdirSync(ev
             await open(); await root.locator('[data-launcher-pin]').click();
             await page.waitForFunction(() => pudlLauncher.state(document.querySelector('#site-start')).presentation === 'pane');
             assert.equal(new URL(page.url()).searchParams.get('start-mode'), 'pane');
-            await page.waitForFunction(async () => (await pudlHost.config.load('site-launcher', {})).pinned === true);
+            await page.waitForFunction(async () => (await (await fetch('/config/site-launcher')).json()).presentation === 'pane');
             // A fresh address uses the saved presentation and must canonicalize it for Back.
             await page.goto(`http://localhost:${port}/?open=dice&top=dice`);
             await page.waitForFunction(() => new URL(location.href).searchParams.get('start-mode') === 'pane');
@@ -73,7 +73,7 @@ const evidence = path.join(os.tmpdir(), 'yavc-launcher-review'); fs.mkdirSync(ev
             await page.setViewportSize({ width: 360, height: 850 });
             await page.screenshot({ path: path.join(evidence, engine + '-narrow.png') });
             await page.keyboard.press('Escape');
-            await page.waitForFunction(() => pudlMenubar.launcherButton({ visible: true }) === document.activeElement);
+            await page.waitForFunction(() => document.querySelector('.win-bar .win-bar-launcher') === document.activeElement);
             await page.setViewportSize({ width: 1280, height: 900 });
             await page.goto(`http://diagrams.localhost:${port}/?file=~/Documents/example.canvas&start=1`);
             await root.waitFor({ state: 'visible' });

@@ -133,8 +133,38 @@
 .pc-editor .ed-scroll:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
 /* The page sits in from its frame, as a page does; the margin scales with the pane. */
 .pc-editor .ed-scroll > .doc-page { padding: clamp(16px, 4vw, 48px) clamp(20px, 6vw, 72px); box-sizing: border-box; max-width: 100%; }
+/* The document palette also supplies semantic shortcode colors. App chrome
+   outside the styled page continues to use the host's appearance. */
+.pc-editor [data-ed-page][data-md-style] {
+  color-scheme: light;
+  --text: var(--doc-ink); --text-muted: var(--doc-muted);
+  --surface: var(--doc-page); --surface-alt: var(--doc-code);
+  --border: var(--doc-rule); --accent: var(--doc-accent);
+  --warn: var(--doc-warning); --danger: var(--doc-danger); --positive: var(--doc-positive);
+}
+.pc-editor .ed-scroll { --sheet-gutter: var(--surface-alt); }
+.ed-key-bindings.dialog { width: min(52rem, calc(100vw - 2rem)); max-width: calc(100vw - 2rem); }
+.ed-key-bindings .dialog-body { display: flex; flex-direction: column; align-items: stretch; gap: var(--space-4); }
+.ed-key-bindings .dialog-body > :is(p, .form-group, .form-fieldset) { margin: 0; }
+.ed-key-bindings .dialog-body > button { align-self: flex-start; }
+.ed-key-bindings [data-bindings-errors]:empty { display: none; }
+.ed-bindings-list { max-height: min(20rem, 38svh); overflow: auto; }
+.ed-bindings-list table { width: 100%; table-layout: fixed; }
+.ed-bindings-list th:first-child { width: 30%; }
+.ed-bindings-list label { white-space: nowrap; }
+.ed-bindings-list select { width: 100%; min-width: 0; }
+.ed-binding-add { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,3fr) auto; align-items: end; gap: var(--space-3); margin-block-end: var(--space-3); }
+.ed-binding-add .form-group { margin: 0; min-width: 0; }
+.ed-key-bindings [hidden] { display: none; }
+@media (max-width: 520px) {
+  .ed-binding-add { grid-template-columns: minmax(0,1fr); }
+  .ed-bindings-list :is(table, tbody, tr, th, td) { display: block; width: auto; }
+  .ed-bindings-list thead { display: none; }
+  .ed-bindings-list th { border-bottom: 0; }
+  .ed-bindings-list td { padding-top: 0; }
+}
 .pc-editor.ed-reading .ed-scroll { cursor: default; }
-.pc-editor .editor-dialog { width: min(36rem, 92vw); }
+.pc-editor .editor-dialog { width: min(36rem, 92vw); max-width: 92vw; }
 .pc-editor.ed-document .ed-scroll { padding: var(--space-4); background: var(--surface-alt); }
 .pc-editor.ed-document .ed-scroll > .doc-paginated { margin-inline: auto; }
 .ed-print-frame { position: fixed; left: -100000px; top: 0; width: 1200px; height: 1200px; border: 0; }

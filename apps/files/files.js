@@ -75,11 +75,10 @@
             if (opts.changed) { opts.changed(stateString()); }
         }
 
-        /* A passing message goes in the status line; an error is a notice
-           above the list, which stays until dismissed or the next one. */
+        /* Passing messages use the status line; failed operations use toasts. */
         function say(msg, isError) {
             if (!el) { return; }
-            if (isError && msg) { window.yavcUtil.notice(el.main, msg, true); el.status.textContent = ''; return; }
+            if (isError && msg) { window.yavcUtil.toast(msg, 'danger'); el.status.textContent = ''; return; }
             el.status.textContent = msg || '';
         }
 

@@ -9,3 +9,5 @@ Files occupies the outer pane below the toolbar. Document tabs run to its right.
 Editor supports JSON completion, diagnostics and formatting through the shared language-service integration. Ctrl+Space requests completion. Shift+Alt+F formats supported JSON in one undoable change. Language assistance cannot write a read-only resource.
 
 Editor retains its own tabs, drafts and settings. Existing document drafts remain recoverable here as source. Save the draft before opening it in Docs. Each standalone subdomain has its own browser-local files; moving between applets on the same desktop keeps the host file authority.
+
+Editor, Key Bindings opens its shortcut preferences dialog. Search shortcuts, assign a command, choose Disabled or restore defaults, then Apply. Cancel leaves the settings unchanged. Docs has its own bindings. These preferences use the host settings service and leave the active document open.

@@ -75,9 +75,13 @@ A right-click on the text or the page gives Undo, Redo, Find and the Format menu
 
 ## Keys
 
-Docs, Key Bindings opens `~/.config/docs.json`, where each key is bound to a command by its name. A key set to null does nothing, and saved changes apply at once. The file lists the commands you can bind.
+Docs, Key Bindings opens the shortcut preferences dialog. Search existing shortcuts, choose a command or Disabled, or add a shortcut using names such as `Mod-Shift-k`. Default restores one shortcut; Restore Defaults resets the draft. Apply saves through the host settings service, and Cancel discards the draft. Changes apply immediately to text and rich editing without opening a settings file as a document.
 
 ## Document styles
+
+`{{no-export}}words{{/no-export}}` excludes those words from Word/PDF output without leaving their space behind. A multiline `no-export` block excludes its whole body, including headings and page breaks. Both forms remain visible and directly editable while authoring. The underline and Not Exported label identify content that will be omitted; they do not make it read-only.
+
+The page uses the same paper colors in light and dark application appearance, including tables, rules, code blocks and shortcode colors. Editor's Markdown previews use the same defaults. A document stylesheet can override `--doc-page`, `--doc-ink`, `--doc-muted`, `--doc-accent`, `--doc-rule`, `--doc-code`, `--doc-warning`, `--doc-danger` and `--doc-positive`. Changing application appearance does not change those authored colors.
 
 Format, Document Stylesheet opens the CSS editor for this document. Ctrl+Shift+F opens it too. Choose an existing style block or New Style Block, edit its CSS, then Apply Styles or press Ctrl+S. The change enters the document's Undo history. Cancel leaves the source unchanged. A warning explains CSS that the preview cannot apply; the source keeps what you wrote.
 

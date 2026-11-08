@@ -417,8 +417,8 @@ func (p parser) walk(n ast.Node, marks []Mark, out *[]*Node) error {
 				return ErrNotEditable
 			}
 		case *shortcodes.Inline:
-			// A colour span is the color mark; any other shortcode in the
-			// text keeps the block as its Markdown.
+			// Supported paired spans become editable marks. Other shortcodes
+			// retain their source or use their declared inline atom.
 			if err := flush(); err != nil {
 				return err
 			}
@@ -441,6 +441,8 @@ func (p parser) walk(n ast.Node, marks []Mark, out *[]*Node) error {
 				markType = "class"
 			case "mark", "sup", "sub":
 				markType = name
+			case "no-export":
+				markType = "no_export"
 			default:
 				return ErrNotEditable
 			}
@@ -449,7 +451,7 @@ func (p parser) walk(n ast.Node, marks []Mark, out *[]*Node) error {
 					return ErrNotEditable
 				}
 				marks = marks[:len(marks)-1]
-			} else if markType == "mark" || markType == "sup" || markType == "sub" {
+			} else if markType == "mark" || markType == "sup" || markType == "sub" || markType == "no_export" {
 				// These take no arguments, so there is no spelling to keep.
 				marks = withMark(marks, Mark{Type: markType})
 			} else {
@@ -775,7 +777,7 @@ func intAttr(n *Node, key string, def int) int {
 }
 
 // markOrder is the order marks are opened in, outermost first.
-var markOrder = []string{"class", "color", "mark", "sup", "sub", "link", "strong", "em", "underline", "strike", "code"}
+var markOrder = []string{"no_export", "class", "color", "mark", "sup", "sub", "link", "strong", "em", "underline", "strike", "code"}
 
 func delimiters(m Mark) (string, string) {
 	switch m.Type {
@@ -797,6 +799,8 @@ func delimiters(m Mark) (string, string) {
 		return "{{class:" + strings.ReplaceAll(strings.TrimSpace(v), "}", "") + "}}", "{{/class}}"
 	case "mark", "sup", "sub":
 		return "{{" + m.Type + "}}", "{{/" + m.Type + "}}"
+	case "no_export":
+		return "{{no-export}}", "{{/no-export}}"
 	case "strike":
 		return "~~", "~~"
 	case "link":
@@ -828,8 +832,15 @@ func serializeInline(nodes []*Node, cell bool) (string, error) {
 		}
 		return false
 	}
+	pending := ""
+	flush := func() { b.WriteString(pending); pending = "" }
 	closeTo := func(keep int) {
 		for len(open) > keep {
+			// Whitespace inside an exclusion must stay excluded. Moving it
+			// past this delimiter would introduce spaces into exported text.
+			if open[len(open)-1].Type == "no_export" {
+				flush()
+			}
 			_, end := delimiters(open[len(open)-1])
 			b.WriteString(end)
 			open = open[:len(open)-1]
@@ -841,8 +852,6 @@ func serializeInline(nodes []*Node, cell bool) (string, error) {
 	// before the marks open, and spaces at the end of text are held in
 	// pending until it is known whether marks close after them, and then
 	// written after the closing delimiters.
-	pending := ""
-	flush := func() { b.WriteString(pending); pending = "" }
 	for at, n := range nodes {
 		// A text node with no text is not one ProseMirror makes, and would
 		// write a pair of delimiters around nothing.
@@ -867,6 +876,11 @@ func serializeInline(nodes []*Node, cell bool) (string, error) {
 		}
 		closeTo(keep)
 		flush()
+		if len(outer) > 0 && outer[0].Type == "no_export" && !has(open, outer[0]) {
+			start, _ := delimiters(outer[0])
+			b.WriteString(start)
+			open = append(open, outer[0])
+		}
 		// Plain text is escaped whole, so each character is escaped for
 		// what really stands beside it, and its spaces are then split off.
 		var body string

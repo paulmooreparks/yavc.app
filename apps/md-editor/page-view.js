@@ -164,6 +164,9 @@ var schemaCache = null;
       },
       // In the order pageview writes them, outermost first.
       marks: {
+        no_export: {
+          parseDOM: [{ tag: 'span.sc-no-export[data-export="omit"]' }],
+          toDOM: function () { return ['span', { class: 'sc-no-export', 'data-export': 'omit', title: 'Not exported', role: 'note', 'aria-label': 'Not exported' }, 0]; } },
         link: { attrs: { href: {}, title: { default: null }, auto: { default: false } }, inclusive: false,
           // A pasted link to an address that is not safe is pasted as its
           // text, and one written in the document is drawn without its
@@ -266,8 +269,12 @@ var schemaCache = null;
         if (ticket !== loading || !on) return;
         if (o.text() !== text) return load();
         PM = both[0];
-        var schema = schemaOf(PM), doc = schema.nodeFromJSON(both[1]);
-        var state = PM.EditorState.create({ doc: doc, plugins: plugins(schema) });
+        var schema = schemaOf(PM), doc = schema.nodeFromJSON(both[1]), first = 0;
+        while (first < doc.content.size && hiddenSource(doc.nodeAt(first))) { first += doc.nodeAt(first).nodeSize; }
+        // Metadata is retained in the model, but opening a page places the
+        // caret in visible content. A metadata-only page needs a typing slot.
+        if (first && first === doc.content.size) { doc = doc.copy(doc.content.append(PM.Fragment.from(schema.nodes.paragraph.create()))); }
+        var state = PM.EditorState.create({ doc: doc, selection: first ? PM.TextSelection.near(doc.resolve(first)) : undefined, plugins: plugins(schema) });
         if (view) view.updateState(state);
         else {
           o.page.replaceChildren();
@@ -712,7 +719,12 @@ var schemaCache = null;
 
     function plugins(schema) {
       var n = schema.nodes;
-      var keys = PM.keymap(Object.fromEntries((o.keys() || []).map(function (k) { return [k.key, function () { return k.run(); }]; })));
+      // Consult current preferences without rebuilding the editor state or
+      // replacing its undo history when bindings change.
+      var keys = new PM.Plugin({ props: { handleKeyDown: function (v, event) {
+        var current = PM.keymap(Object.fromEntries((o.keys() || []).map(function (k) { return [k.key, function () { return k.run(); }]; })));
+        return current.props.handleKeyDown(v, event);
+      } } });
       function sink(state, d) { return PM.sinkListItem(n.list_item)(state, d); }
       function lift(state, d) { return PM.liftListItem(n.list_item)(state, d); }
       // Tab in a table's last cell adds a row and moves into it.
@@ -1068,14 +1080,31 @@ var schemaCache = null;
     /* Inserts Markdown as blocks where a new block goes, such as an image
        or a link to a file added to the draft. */
     function insertMarkdown(markdown) {
+      if (!view || !on || sourceStale || frozen) return Promise.resolve(false);
+      var target=view, doc=view.state.doc, selection=view.state.selection, ticket=loading;
       return Promise.resolve(o.blocksOf(markdown)).then(function (json) {
-        if (!view) return;
+        if (view!==target || !on || sourceStale || frozen || loading!==ticket || view.state.doc!==doc || !view.state.selection.eq(selection)) {
+          if(on)o.say('The document or selection changed before insertion. Try again.',true);
+          return false;
+        }
         insertBlocks((json || []).map(function (j) { return view.state.schema.nodeFromJSON(j); }), null, true);
-      });
+        return true;
+      }).catch(function(err){if(on)o.say(String(err && err.message || err),true);return false;});
     }
 
     /* A block drawn as the preview draws it; a click edits its source in
        place, and leaving the box draws it again. */
+    function hiddenStyles(root) {
+      return !!root.querySelector('.sc-style[hidden]') && Array.from(root.childNodes).every(function (node) {
+        if (node.nodeType === 3) return !node.textContent.trim();
+        return node.nodeType === 1 && (node.matches('.sc-style[hidden]') || node.matches('.doc-block') && hiddenStyles(node));
+      });
+    }
+    function hiddenSource(node) {
+      if (!node || node.type.name !== 'source_block') return false;
+      if (node.attrs.kind === 'definition') return !(node.attrs.html || '').includes('sc-problem');
+      return hiddenStyles(window.yavcHTML.fragment(node.attrs.html || ''));
+    }
     function sourceView(node, v, getPos) {
       var dom = document.createElement('div');
       dom.className = 'pm-source';
@@ -1088,6 +1117,9 @@ var schemaCache = null;
         var inner = document.createElement('div');
         dom.replaceChildren(inner);
         o.draw(inner, nd.attrs.html || '<pre>' + (nd.attrs.src || '').replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</pre>', nd.attrs.diagrams || []);
+        // A valid stylesheet contributes no drawn block or selectable outline.
+        // Keep the source node so unchanged Markdown still serializes verbatim.
+        if (hiddenStyles(inner)) { dom.hidden = true; }
       }
       function edit() {
         if (box) return;
@@ -1105,7 +1137,7 @@ var schemaCache = null;
         box.addEventListener('blur', done);
         fit();
         box.focus();
-        o.say('This block is edited as its Markdown. Escape or Ctrl+Enter puts it back on the page.');
+        o.say('');
       }
       function done() {
         if (!box) return;
@@ -1179,7 +1211,7 @@ var schemaCache = null;
        adds a column, lifts its content onto the page, or turns it back into
        Markdown (docs/page-view-design.md, decision 5). */
     var BOX_TITLED = { info: 'Title', note: 'Title', tip: 'Title', warning: 'Title', expand: 'Title', 'class': 'Class' };
-    var BOX_NAMES = { info: 'Information', note: 'Note', tip: 'Tip', warning: 'Warning', expand: 'Expand', 'class': 'Style Class', 'draft-note': 'Note to Self', notes: 'Speaker Notes', columns: 'Columns' };
+    var BOX_NAMES = { info: 'Information', note: 'Note', tip: 'Tip', warning: 'Warning', expand: 'Expand', 'class': 'Style Class', 'no-export': 'Not Exported', 'draft-note': 'Note to Self', notes: 'Speaker Notes', columns: 'Columns' };
     function escText(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
     function boxView(node, v, getPos) {
       var isColumns = node.type.name === 'columns', current = node, contentDOM;

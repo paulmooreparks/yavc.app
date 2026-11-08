@@ -1,7 +1,8 @@
 // Copyright 2026 Paul Parks. SPDX-License-Identifier: Apache-2.0
 // This exercises authored dialog layouts without accepting destructive actions.
 const assert=require('node:assert/strict'),pw=require('playwright'),fs=require('node:fs'),os=require('node:os'),path=require('node:path');
-const port=process.env.YAVC_CHROME_TEST_PORT||'8442',out=path.join(os.tmpdir(),'yavc-authored-dialog-evidence');fs.mkdirSync(out,{recursive:true});
+const dialogLayout=require('./dialog-layout.cjs');
+const port=process.env.YAVC_CHROME_TEST_PORT||'8442',out=path.join(os.tmpdir(),'yavc-authored-dialog-evidence'+(process.env.YAVC_DIALOG_LARGE_TEXT==='1'?'-large':''));fs.mkdirSync(out,{recursive:true});
 const applications=['settings','terminal','barcodes','barcode-scanner','sight-reader','asteroids','invaders','sudoku','conway','dice','diff','theme-studio'];
 const score='<?xml version="1.0"?><!DOCTYPE score-partwise><score-partwise version="3.1"><work><work-title>Dialog Review</work-title></work><part-list><score-part id="P1"><part-name>Upper</part-name></score-part><score-part id="P2"><part-name>Lower</part-name></score-part></part-list><part id="P1"><measure number="1"><attributes><divisions>1</divisions><key><fifths>0</fifths></key><time><beats>4</beats><beat-type>4</beat-type></time><clef><sign>G</sign><line>2</line></clef></attributes><note><pitch><step>C</step><octave>4</octave></pitch><duration>4</duration><type>whole</type></note></measure></part><part id="P2"><measure number="1"><attributes><divisions>1</divisions><key><fifths>0</fifths></key><time><beats>4</beats><beat-type>4</beat-type></time><clef><sign>F</sign><line>4</line></clef></attributes><note><pitch><step>C</step><octave>3</octave></pitch><duration>4</duration><type>whole</type></note></measure></part></score-partwise>';
 async function layoutMenu(p,name){await p.locator('.menubar-title').filter({hasText:/^Layout$/}).click();await p.getByRole('menuitem',{name,exact:true}).click();}
@@ -19,7 +20,7 @@ async function populate(p,app,dialog,index){
 (async()=>{const results=[];for(const engine of process.argv.slice(2).length?process.argv.slice(2):['chromium','firefox','webkit']){
  const browser=await pw[engine].launch({headless:true});
  try{for(const app of applications){
-  const p=await browser.newPage({viewport:{width:1200,height:900}});p.setDefaultTimeout(15000);
+  const p=await browser.newPage({viewport:{width:1200,height:900}});await dialogLayout.prepare(p);p.setDefaultTimeout(15000);
   try{
    await p.goto(`http://${app}.localhost:${port}/`);
    await p.locator('[data-applet][data-applet-state="running"]').waitFor();
@@ -37,7 +38,7 @@ async function populate(p,app,dialog,index){
      await p.evaluate(theme=>pudlSetTheme(theme),width===360?'dark':'light');
      const measurement=await dialog.evaluate(el=>({width:el.getBoundingClientRect().width,overflow:el.scrollWidth>el.clientWidth+2,viewport:innerWidth}));
      entry.layouts.push(measurement);
-     await p.screenshot({animations:'disabled',path:path.join(out,engine+'-'+app+'-'+i+'-'+width+'.png')});
+     await dialog.screenshot({animations:'disabled',path:path.join(out,engine+'-'+app+'-'+i+'-'+width+'.png')});
      assert.ok(measurement.width<=width+1,app+' '+title+' exceeds viewport');assert.equal(measurement.overflow,false,app+' '+title+' has horizontal overflow');
     }
     for(let step=0;step<8;step++){await p.keyboard.press('Tab');assert.equal(await dialog.evaluate(el=>el.contains(document.activeElement)||el===document.activeElement),true,app+' '+title+' loses keyboard focus');}

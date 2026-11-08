@@ -10,7 +10,8 @@
      yavcUtil.siteFs()                a promise of the site file system, loaded and ready
      yavcUtil.download(name, blob)    hands the person a file through the browser
      yavcUtil.shortcut(key)           a CodeMirror key (Mod-b) as PUDL spells a shortcut (Mod+B)
-     yavcUtil.notice(ref, text, kind) PUDL's dismissible notice before ref; kind true for an error */
+     yavcUtil.notice(ref, text, kind) PUDL's persistent notice before ref
+     yavcUtil.toast(text, kind)      a transient operation result, with a dialog fallback */
 (function () {
     'use strict';
     if (window.yavcUtil) { return; }
@@ -105,5 +106,17 @@
         return n;
     }
 
-    window.yavcUtil = Object.freeze({ esc: esc, versioned: versioned, loadScript: loadScript, loadGlobal: loadGlobal, siteFs: siteFs, download: download, shortcut: shortcut, notice: notice, version: V });
+    /* Failed commands are transient. Persistent diagnostics and validation
+       continue to use notice beside their owning content or field. */
+    function toast(text, kind) {
+        var severity = kind === true ? 'danger' : kind;
+        function show() { return window.pudlToast(String(text), {kind: severity}); }
+        if (window.pudlToast) { return Promise.resolve(show()); }
+        var base = new URL((window.pudlHost || {}).pudl || '/pudl/', document.baseURI);
+        return loadScript(versioned(new URL('pudl-toast.js', base).href)).then(show).catch(function () {
+            return window.yavcDialog.open({title:'Operation Could Not Be Completed', body:'<p>'+esc(text)+'</p>', buttons:[{id:'ok',label:'OK',primary:true}]});
+        });
+    }
+
+    window.yavcUtil = Object.freeze({ esc: esc, versioned: versioned, loadScript: loadScript, loadGlobal: loadGlobal, siteFs: siteFs, download: download, shortcut: shortcut, notice: notice, toast: toast, version: V });
 })();

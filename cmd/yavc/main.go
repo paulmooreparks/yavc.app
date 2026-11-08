@@ -32,7 +32,11 @@ func main() {
 	data := flag.String("data", "data", "the folder the engine keeps sessions in")
 	retain := flag.Duration("retain", 90*24*time.Hour, "how long a session lives unseen")
 	title := flag.String("title", "yavc.app", "the site's name")
+	grouping := flag.String("document-grouping", "single", "editing windows: single or tabbed")
 	flag.Parse()
+	if *grouping != "single" && *grouping != "tabbed" {
+		log.Fatal("document-grouping must be single or tabbed")
+	}
 
 	// The engine stops on an interrupt or a termination signal, letting the
 	// requests in progress finish first.
@@ -63,7 +67,7 @@ func main() {
 
 	s, err := web.New(&web.Server{
 		Domain: *domain, Secure: *secure, Applets: strings.Split(*applets, ","), PUDL: *pudl, Pages: *pages, Bin: *bin, Home: *home,
-		Sessions: store, Title: *title,
+		Sessions: store, Title: *title, DocumentGrouping: *grouping,
 	})
 	if err != nil {
 		log.Fatal(err)

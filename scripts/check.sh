@@ -48,6 +48,11 @@ step "Browser module tests"
 # Modules that need no DOM, tested under Node: the JSON Canvas reader,
 # writer and renderer (docs/canvas-extension.md).
 node --test 'apps/*/test/*.test.mjs'
+node --test scripts/test-document-tabs.mjs
+node --test scripts/test-document-windows.mjs
+
+step "Bundled PUDL release provenance"
+node --test scripts/test-pudl-distribution.mjs
 
 step "The project's own rules"
 node scripts/check.mjs "${since[@]}"

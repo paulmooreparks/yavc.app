@@ -174,9 +174,12 @@
     function join(root, take, options) {
         var key = keyOf(root);
         var plan = newest(key, root), entry = plan.entry;
+        var windows = window.pudlHost && window.pudlHost.documentWindows;
+        var initial = windows && windows.initial(root);
+        if (initial) { entry = initial.value ? {t: Date.now(), v: initial.value} : null; plan.remove = []; }
         var resumeKey = options && options.remember ? root.getAttribute('data-applet') : null;
         var resume = resumeKey ? remembered(resumeKey) : null;
-        if (resume && !entry) entry = resume;
+        if (resume && !entry && !initial) entry = resume;
         // Validation precedes registration and cleanup of other snapshots.
         if (options && typeof options.validate === 'function') options.validate(entry ? entry.v : null);
         var j = { root: root, key: key, take: take, dirty: false, active: true, pendingCleanup: plan.remove,

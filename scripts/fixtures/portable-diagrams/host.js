@@ -16,7 +16,7 @@
     fixture.persist=function(){sessionStorage.setItem('fixture:resources',JSON.stringify(Array.from(records)));};
     if(options.has('holdRead'))readPause=new Promise(function(resolve){fixture.releaseRead=resolve;});
     window.pudlHost=pudlHostKit.host({
-        pages:'/different-application/', identity:function(){return [];},
+        pages:'/different-application/', pudl:new URL('../pudl/',location.href).href, identity:function(){return [];},
         contentResources:{version:1,
             read:async function(request){if(readPause&&request.resource==='memory:first.d2'){fixture.readPending=true;await readPause;}var record=records.get(request.resource);if(!record)throw new Error('Resource not found');return {resource:request.resource,text:record.text,revision:String(record.revision),writable:!record.readOnly,name:record.name};},
             write:async function(request){
