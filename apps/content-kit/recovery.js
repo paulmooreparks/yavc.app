@@ -22,6 +22,8 @@
             if (tab.path != null) token(tab.path);
             if (tab.name != null && (typeof tab.name !== 'string' || !tab.name || tab.name.length > 255 || /[\x00-\x1f\x7f]/.test(tab.name))) throw new Error('The recovered display name is invalid.');
             if (tab.text != null && (typeof tab.text !== 'string' || tab.text.length > MAX_TEXT)) throw new Error('The recovered draft exceeds its text limit.');
+            if(tab.newlines!==undefined&&(typeof tab.newlines!=='string'||tab.newlines.length>MAX_TEXT||!/^[LRC]*$/.test(tab.newlines)||tab.text!=null&&tab.newlines.length!==(tab.text.match(/\r\n|\r|\n/g)||[]).length))throw new Error('The recovered source line endings are invalid. The saved copy has been retained.');
+            if(tab.sourceHistory!=null&&(!tab.sourceHistory||tab.sourceHistory.version!==1||!Array.isArray(tab.sourceHistory.done)||!Array.isArray(tab.sourceHistory.undone)||tab.sourceHistory.done.length+tab.sourceHistory.undone.length>200))throw new Error('The recovered source history is invalid. The saved copy has been retained.');
             total += tab.text ? tab.text.length : 0;
             if (total > MAX_TOTAL) throw new Error('The recovery snapshot exceeds its text limit.');
             baseline(tab.baseline, tab.path);

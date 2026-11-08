@@ -160,7 +160,7 @@
         var wrapOn = true, viewsOffered = false, formatOffered = false, sourceOffered = false, siteUrl = null;
         function commandsChanged() { if (destroyed) { return; } if (opts.commandsChanged) { opts.commandsChanged(); } if (tabRow) { tabRow.render(); } }
 
-        var CM = null, F = null, view = null, destroyed = false, startupFailed = false, unsubscribe = null, styleLifetime = new AbortController();
+        var CM = null, sourceHistory = null, F = null, view = null, destroyed = false, startupFailed = false, unsubscribe = null, styleLifetime = new AbortController();
         var tabs = [], active = -1, untitled = 0;
         var H = window.pudlHost || {}, resourceSession = null, resources = null, recovery = null;
         var documentWindows = H.documentWindows, documentReady = false, receivingDocument = false, unbindDocuments = null;
@@ -198,10 +198,9 @@
         function current() { return tabs[active] || null; }
         function normalizedSource(text) { return text.replace(/\r\n?/g, '\n'); }
         function submittedText(t) {
-            var text = (current() === t ? view.state : t.state).doc.toString();
-            var original = t.resource ? t.resource.text : t.savedRaw;
-            return typeof original === 'string' && text === normalizedSource(original) ? original : text;
+            return sourceHistory.raw(current() === t ? view.state : t.state);
         }
+        function sourceModified(t,state){return t.saved===null||sourceHistory.raw(state||(current()===t?view.state:t.state))!==t.savedRaw;}
         function dirtyTab(t) { return !!(t && (t.modified || (t === current() && pageActive() && visual.api.pending()))); }
         function stateString() { var t = current(); return t && t.path ? 'file=' + encodeURIComponent(t.path).replace(/%2F/g, '/').replace(/%7E/g, '~') + '&view='+viewMode+(t.navigationLine > 1 ? '&line=' + t.navigationLine : '') : ''; }
         function announce(push) {
@@ -340,15 +339,15 @@
         }
 
         function stateFor(tab, text) {
-            return CM.EditorState.create({ doc: text, extensions: extensionsFor(tab) });
+            return CM.EditorState.create({ doc: text, extensions: extensionsFor(tab,text) });
         }
         function languageAssistance(tab) {
             return lsp && ['json','css','html'].indexOf(tab.lang) >= 0 ? lsp.extension(/\.canvas$/i.test(tab.path || tab.name) ? 'canvas' : tab.lang, !!tab.readOnly) : [];
         }
-        function extensionsFor(tab) {
+        function extensionsFor(tab,raw) {
             return [
                     CM.lineNumbers(), CM.highlightActiveLineGutter(), CM.highlightSpecialChars(),
-                    CM.history(), CM.drawSelection(), CM.dropCursor(), CM.indentOnInput(),
+                    sourceHistory.extension(raw), CM.drawSelection(), CM.dropCursor(), CM.indentOnInput(),
                     CM.bracketMatching(), CM.closeBrackets(), CM.rectangularSelection(), CM.crosshairCursor(),
                     CM.highlightActiveLine(), CM.highlightSelectionMatches(),
                     /* The Editor's own bindings come first, so they win over
@@ -357,7 +356,7 @@
                     /* CodeMirror's history keys include Ctrl+U, undo selection,
                        which would answer before the menu's Underline does. */
                     CM.keymap.of([].concat(
-                        CM.closeBracketsKeymap, CM.defaultKeymap, CM.searchKeymap, CM.historyKeymap.filter(function (b) { return b.key !== 'Mod-u'; }), CM.lintKeymap, [CM.indentWithTab])),
+                        [{key:'Mod-z',run:function(v){return sourceHistory.run('undo',v);}},{key:'Mod-y',run:function(v){return sourceHistory.run('redo',v);}},{key:'Mod-Shift-z',run:function(v){return sourceHistory.run('redo',v);}}],CM.closeBracketsKeymap, CM.defaultKeymap, CM.searchKeymap, CM.lintKeymap, [CM.indentWithTab])),
                     window.yavcMdEditor.codeSearch(CM, keepQuery),
                     makeTheme(CM),
                     wrapComp.of(wrapOn ? CM.EditorView.lineWrapping : []),
@@ -382,7 +381,7 @@
         /* === Tabs ======================================================== */
 
         function markModified(tab) {
-            var mod = !!tab.savePending || !!tab.saveFailed || view.state.doc.toString() !== tab.saved;
+            var mod = !!tab.savePending || !!tab.saveFailed || sourceModified(tab,view.state);
             if (mod !== tab.modified) { tab.modified = mod; renderTabs(); }
         }
 
@@ -664,7 +663,7 @@
             } finally {
                 t.savePending--;
                 if (!destroyed && tabs.indexOf(t) >= 0) {
-                    t.modified = !!t.savePending || !!t.saveFailed || (current() === t ? view.state : t.state).doc.toString() !== t.saved;
+                    t.modified = !!t.savePending || !!t.saveFailed || sourceModified(t);
                     renderTabs(); keep();
                 }
             }
@@ -719,7 +718,7 @@
             t.name = accepted.name || t.name; t.lang = languageFor(t.name); t.savedRaw = text; t.saved = normalizedSource(text);
             if(current()===t)window.yavcMdEditor.refreshReferences(root,picturesHost());
             t.readOnly = !resources.canWrite(accepted); t.saveFailed = !!syncError; t.fresh = false; t.external = false;
-            t.modified = !!syncError || (current() === t ? view.state : t.state).doc.toString() !== t.saved || ticket !== t.saveTicket;
+            t.modified = !!syncError || sourceModified(t) || ticket !== t.saveTicket;
             var effects = [langComp.reconfigure(langExtension(t.lang)), lintComp.reconfigure(lintExtension(t))];
             if (current() === t) view.dispatch({ effects: effects }); else t.state = t.state.update({ effects: effects }).state;
             await refreshAccess(t, !!syncError); if (destroyed || !tabs.includes(t)) return false;
@@ -741,7 +740,7 @@
             });
             t.saveQueue = pending.catch(function () {});
             try { return await pending; } catch (err) { if (!destroyed) say(err.message, true); return false; }
-            finally { t.savePending--; if (!destroyed && tabs.includes(t)) { t.modified = !!t.savePending || !!t.saveFailed || (current() === t ? view.state : t.state).doc.toString() !== t.saved; renderTabs(); keep(); } }
+            finally { t.savePending--; if (!destroyed && tabs.includes(t)) { t.modified = !!t.savePending || !!t.saveFailed || sourceModified(t); renderTabs(); keep(); } }
         }
 
         var download = window.yavcUtil.download;
@@ -1664,8 +1663,8 @@
         document.addEventListener('selectionchange', function () { if (readsAsPreview()) commandsChanged(); }, { signal: styleLifetime.signal });
         function formatsThePage() { return pageActive() && (viewMode === 'visual' || viewMode === 'document' || (viewMode === 'split' && editingPane !== 'text')); }
         function editing() {
-            if (!editingCommands && window.yavcMdEditor) editingCommands = window.yavcMdEditor.editing({
-                source: function () { return view; }, page: function () { return visual.api; }, rich: formatsThePage,
+            if (!editingCommands && sourceHistory && window.yavcMdEditor) editingCommands = window.yavcMdEditor.editing({
+                source: function () { return view; }, sourceHistory:sourceHistory,page: function () { return visual.api; }, rich: formatsThePage,
                 preview: function () { return readsAsPreview() && (viewMode!=='split' || editingPane!=='text') ? el.page : null; }, unified: true,
                 identity: current, alive: function () { return !destroyed && !!view && !!current(); },
                 historyReadOnly: function () { var t = current(); return !t || !!t.readOnly; },
@@ -1770,20 +1769,22 @@
            and the place in the file stay where they were. It isn't the
            reader's edit, so undo doesn't take it back. */
         function outsideChange(state, text) {
+            var raw=text;text=normalizedSource(text);
             var old = state.doc.toString(), start = 0, end = 0;
             var max = Math.min(old.length, text.length);
             while (start < max && old.charCodeAt(start) === text.charCodeAt(start)) { start++; }
             while (end < max - start && old.charCodeAt(old.length - 1 - end) === text.charCodeAt(text.length - 1 - end)) { end++; }
             return {
                 changes: { from: start, to: old.length - end, insert: text.slice(start, text.length - end) },
+                effects:sourceHistory.adopt(raw),
                 annotations: CM.Transaction.addToHistory.of(false)
             };
         }
 
         function takeOutside(t, i, text) {
-            if (i < 0 || text === t.saved) { return; }
+            if (i < 0 || text === t.savedRaw) { return; }
             if (t.submittedWrite && t.path === t.submittedWrite.path && text === t.submittedWrite.text) { return; }
-            var edited = (i === active ? view.state.doc.toString() : t.state.doc.toString()) !== t.saved;
+            var edited = sourceModified(t);
             if (!edited) {
                 t.savedRaw = text; t.saved = normalizedSource(text);
                 if (i === active) { view.dispatch(outsideChange(view.state, text)); t.modified = false; }
@@ -1919,12 +1920,12 @@
                 var st = t.state, text = st.doc.toString();
                 if (!t.path && !t.modified) { return; }
                 if (t === front) { frontAt = list.length; }
-                var json = st.toJSON({ history: CM.historyField });
+                var json = st.toJSON({ sourceHistory: sourceHistory.field });
                 list.push({
                     path: t.path, name: t.name, lang: t.lang, mtime: t.mtime, fresh: !!t.fresh,
                     baseline: resources ? recovery.capture(resources, t.resource, t.baseline) : undefined,
-                    draft: t.modified ? text : null, sum: t.modified ? null : fingerprint(text),
-                    selection: json.selection, history: json.history, scroll: t.scroll == null ? null : t.scroll,
+                    draft: t.modified ? text : null, sum: t.modified ? null : fingerprint(text),rawSum:t.modified?null:fingerprint(sourceHistory.raw(st)),
+                    selection: json.selection, sourceHistory:json.sourceHistory,newlines:sourceHistory.endings(st),scroll: t.scroll == null ? null : t.scroll,
                     search: searchOf(st), view: t === front ? viewMode : (t.view || 'text')
                 });
             });
@@ -1932,7 +1933,7 @@
             if (resources) out.version = 2;
             /* Undo history is the first thing let go when the whole would be
                too large for the browser to keep. */
-            if (JSON.stringify(out).length > SNAPSHOT_MAX) { list.forEach(function (k) { k.history = null; }); }
+            if (JSON.stringify(out).length > SNAPSHOT_MAX) { list.forEach(function (k) { k.sourceHistory = null; }); }
             return out;
         }
 
@@ -1942,17 +1943,19 @@
            since keeps its cursor near where it was, without its history. */
         async function applyKept(t, k) {
             var text = typeof k.draft === 'string' ? k.draft : t.saved;
-            var exact = typeof k.draft === 'string' || (k.sum != null && k.sum === fingerprint(t.saved));
+            var unchangedRevision=!resources||!k.baseline||!!t.resource&&k.baseline.revision===t.resource.revision;
+            var exact = typeof k.draft === 'string' || unchangedRevision&&(k.rawSum!=null?k.rawSum===fingerprint(t.savedRaw):k.sum!=null&&k.sum===fingerprint(t.saved));
             var state = null;
+            var raw=exact&&typeof k.newlines==='string'?window.yavcSourceHistory.restore(text,k.newlines):typeof k.draft!=='string'&&typeof t.savedRaw==='string'&&normalizedSource(t.savedRaw)===text?t.savedRaw:text;
             if (exact && k.selection) {
                 try {
                     var json = { doc: text, selection: k.selection };
-                    if (k.history) { json.history = k.history; }
-                    state = CM.EditorState.fromJSON(json, { extensions: extensionsFor(t) }, k.history ? { history: CM.historyField } : undefined);
+                    if (k.sourceHistory) { json.sourceHistory = k.sourceHistory; }
+                    state = CM.EditorState.fromJSON(json, { extensions: extensionsFor(t,raw) }, k.sourceHistory ? { sourceHistory: sourceHistory.field } : undefined);
                 } catch (err) { state = null; }
             }
             if (!state) {
-                state = stateFor(t, text);
+                state = stateFor(t, raw);
                 var head = k.selection && k.selection.ranges && k.selection.ranges[k.selection.main || 0];
                 if (head) {
                     var at = Math.min(head.head, text.length);
@@ -1966,7 +1969,7 @@
             t.scroll = k.scroll;
             t.view = supportsView(t, k.view) ? k.view : resolvedView(t, markdownDefault());
             t.openSearch = !!(k.search && k.search.open);
-            t.modified = text !== t.saved;
+            t.modified = sourceModified(t,state);
             /* The tab in front takes its new state through activate(), which
                would otherwise keep the old one. */
             var i = tabs.indexOf(t);
@@ -1997,6 +2000,7 @@
             if (!isDocs && all.some(function (k) {return k && /^(document|visual)$/.test(k.view);})) back.push('legacy document source (open saved documents in Docs for visual editing)');
             if (frontTab) { var fi = tabs.indexOf(frontTab); if (fi >= 0) { await activate(fi); } }
             var msg = back.length ? 'Your unsaved changes to ' + back.join(', ') + ' are back.' : '';
+            if(all.some(function(k){return k&&k.history&&!k.sourceHistory;}))msg+=(msg?' ':'')+'The source and selection were restored. The previous editing history cannot be migrated.';
             if (resources && tabs.some(function (t) { return !!t.conflict; })) msg += ' Some drafts no longer match their original revision. Save As preserves a copy without replacing the changed file.';
             if (waiting.length) {
                 msg += (msg ? ' ' : '') + 'Unsaved changes to ' + waiting.map(function (k) { return k.path; }).join(', ') +
@@ -2020,7 +2024,8 @@
                     if (restored.conflict === 'unknown') {
                         try {
                             var sameFile = await resources.read(k.path);
-                            if (normalizedSource(restored.text) === normalizedSource(sameFile.text)) {
+                            var recoveredRaw=typeof k.newlines==='string'?window.yavcSourceHistory.restore(normalizedSource(restored.text),k.newlines):restored.text;
+                            if (recoveredRaw === sameFile.text) {
                                 restored = { snapshot: sameFile, baseline: null, text: sameFile.text, modified: false, conflict: null };
                             }
                         } catch (err) { /* Keep the original draft when its file is unavailable. */ }
@@ -2424,6 +2429,7 @@
         var boot = Promise.all([loadCodeMirror(), loadSiteFs().then(function (api) { F = api; return F ? F.load() : null; }), loadBrowser()]).then(async function (res) {
             if (destroyed) { return; }
             CM = res[0];
+            await loadScript(resourceAsset('source-history.js'));sourceHistory=window.yavcSourceHistory.create(CM);
             await loadScript(resourceAsset('resource-session.js'));
             resourceSession = await window.yavcResourceSession.open(H, function (file) { return loadScript(resourceAsset(file)); });
             if (destroyed) return;

@@ -1,7 +1,7 @@
 // The parts of CodeMirror 6 the site's editor uses, bundled into one file
 // that defines the global CM. Built with:
 //   esbuild entry.js --bundle --format=iife --global-name=CM --minify --legal-comments=eof
-export { EditorState, Compartment, StateEffect, StateField, Transaction } from '@codemirror/state';
+export { EditorState, EditorSelection, ChangeSet, Facet, Compartment, StateEffect, StateField, Transaction } from '@codemirror/state';
 export {
     EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter,
     drawSelection, dropCursor, rectangularSelection, crosshairCursor, highlightSpecialChars,

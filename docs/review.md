@@ -704,3 +704,9 @@ Footnotes retain source definitions, rich body editing, one-step insertion Undo 
 
 Chromium, Firefox and WebKit pass the footnote editing, scoped-surface navigation, page-note placement and Word export fixtures. Native Word package checks confirm editable footnotes, repeated-reference fields and exclusion pruning. The PDF fixtures generate selectable linked notes, including long-note continuation. PyMuPDF 1.26.7 verifies every continuation token appears once, notes remain below body text and inside margins, and excluded definitions disappear. Source review caught lost code indentation, ignored justification and overly broad trusted-note style exemptions; focused regressions cover all three fixes. The generated PDF was rendered and inspected. The interactive planner still refuses nested definitions and oversized notes, and those cases remain active work.
 
+# Reversible source line endings, 2026-11-09
+
+Editor and Docs now retain raw separators in their source history. Public CodeMirror change and selection APIs supply reversible edits; a project serializer retains ending sequences across reload. The source and current ending sequence survive the existing snapshot history-size fallback. Old CodeMirror history is not interpreted through private fields, and recovery tells the reader when that older history cannot migrate.
+
+Node tests cover repeated identical lines, mixed CRLF/LF/CR, Unicode offsets, disjoint changes, grouping, malformed recovery and external-source adoption. Real Docs and Editor edits, Save, Undo, Redo and recovered Undo pass in Chromium, Firefox and WebKit. The existing cross-browser conditional-save/recovery suite and rich footnote insertion/body-edit Undo checks also pass. The first browser run exposed command initialization before the source-history service was ready; command construction now waits for that service.
+

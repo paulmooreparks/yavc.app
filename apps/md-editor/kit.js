@@ -95,7 +95,7 @@
     var cmReady = null, pvReady = null, mmReady = null;
     function libs() {
         if (window.CM && window.CM.EditorView) { return Promise.resolve(window.CM); }
-        if (!cmReady) { cmReady = loadScript(HERE + 'vendor/codemirror-6.43/codemirror.js?v=8').then(function () { return window.CM; }).catch(function (e) { cmReady = null; throw e; }); }
+        if (!cmReady) { cmReady = loadScript(HERE + 'vendor/codemirror-6.43/codemirror.js?v=9').then(function () { return window.CM; }).catch(function (e) { cmReady = null; throw e; }); }
         return cmReady;
     }
     var pagesReady = null;
@@ -568,7 +568,7 @@
             if (ctx.unified) {
                 if (page && page.active() && page.pending()) return name === 'undo';
             } else if (ctx.rich() && page) return page.historyAvailable(name);
-            return !!(source && window.CM && window.CM[name + 'Depth'](source.state));
+            return !!(source && (ctx.sourceHistory ? ctx.sourceHistory.can(name,source.state) : window.CM && window.CM[name + 'Depth'](source.state)));
         }
         async function history(name) {
             if (!canHistory(name)) return;
@@ -577,6 +577,7 @@
                 if (page && page.active()) await page.sync();
                 if (!ctx.alive() || (ctx.historyReadOnly ? ctx.historyReadOnly() : ctx.readOnly()) || ctx.identity() !== identity || ctx.source() !== source) return;
                 if (!ctx.unified && rich) { if (ctx.page() === page && page.active()) { page.run(name); await page.sync(); } }
+                else if(ctx.sourceHistory)ctx.sourceHistory.run(name,source);
                 else window.CM[name](source);
                 ctx.changed();
             } catch (err) { if (ctx.alive()) ctx.say(err.message || String(err), true); }

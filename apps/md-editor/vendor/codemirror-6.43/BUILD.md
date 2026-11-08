@@ -1,5 +1,7 @@
 # CodeMirror 6 for the site's editor
 
+On 2026-11-09 the shared bundle added the documented EditorSelection, ChangeSet and Facet exports for reversible source history. Package versions remain pinned. The kit loads the regenerated bundle with `?v=9`. Source history uses its own versioned serializer and does not access CodeMirror history internals.
+
 On 2026-11-09 the shared bundle added the existing pinned HTML language export for Editor's HTML source assistance. The language worker adds pinned Microsoft CSS 6.3.10 and HTML 5.6.2 services. The reproducible build and package manifest cover both outputs; the kit loads CodeMirror with `?v=8`.
 
 On 2026-11-07 the shared editing commands added the documented `undoDepth`, `redoDepth` and `isolateHistory` exports. The pinned build and manifest were regenerated without changing package versions. The kit loads this bundle with `?v=7`.

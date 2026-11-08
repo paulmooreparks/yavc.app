@@ -1,0 +1,11 @@
+# Source history and original line endings
+
+Editor and Docs need to retain CRLF, LF and CR endings on untouched source lines, including when an edit is undone or recovered after a reload. CodeMirror normalizes its document to logical lines. Its public history serializer does not retain arbitrary custom inverse effects, so an implementation cannot depend on those effects surviving recovery.
+
+The workspace will use a project-owned source history field built on CodeMirror's documented ChangeSet, EditorSelection, StateField and StateEffect interfaces. Each event keeps forward and reverse changes, the selections on both sides and compact original-ending strings. Adjacent typing can group while commands remain isolated. Rich editing continues to synchronize one source transaction into the same history. Read-only policy remains outside the history implementation.
+
+The current field retains the raw source, while history entries keep only the ending sequence and text changes. Insertion chooses the current line's ending, then the previous line's ending, then LF. Existing endings outside the changed range remain byte-for-byte intact. Undo and Redo restore the recorded ending sequence rather than recomputing it. Dirty checks compare the raw saved baseline because matching visible text can still have different separators. Recovery serializes the project-owned field through its own versioned format. Live history has both a 200-event ceiling and a conservative aggregate 16 MiB budget; the oldest events are discarded first. The existing snapshot size limit may also discard old history, but the current ending sequence and draft remain recoverable.
+
+Recovery validates serialized changes by applying the inverse stack to the captured document through the public API. It rejects invalid positions, oversized text, mismatched ending counts and excessive history depth. An old CodeMirror history snapshot can still open its draft and selection; its history cannot be converted through undocumented object fields.
+
+Encoding provenance is negotiated separately with the host resource authority. A text-history field cannot grant binary writes or infer a file's encoding from its name. UTF-16 saves require an explicit host capability and retain the original byte order and signature. Hosts without that capability continue to accept UTF-8 only.
