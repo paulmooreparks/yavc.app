@@ -10,6 +10,8 @@ The host reads `file-associations` through the established configuration service
 
 Native identification is independent of handler preferences. A broad `.md` override can choose Editor for a deck, but cannot reinterpret `.slides.md` as ordinary document prose. Compound suffixes use the longest match, exact filenames precede suffixes within a preference tier, and user filename preferences precede shipped routing choices. Filename matches precede MIME-only matches, including user MIME preferences. MIME is an untrusted hint; it never proves that source is decodable.
 
+The pure resolver's `stem(name)` returns the editable basename before the longest native suffix declared by this catalog, preserving the original spelling. Unknown suffixes use the final dot; extensionless names and names consisting only of a suffix remain fully selected. The host optionally exposes the same operation as async `fileResolution.stem(name)` for shared Save As dialogs. It supplies naming metadata only and does not resolve a resource, choose an application or grant access. A host without it retains final-dot selection. The picker resolves this metadata before opening with a one-second budget, retains cancellation, and falls back when metadata fails or exceeds that budget. A late result cannot change an open field's selection.
+
 ## Requests and results
 
 The request contains a display `name`, optional `mime`, `intent`, explicit `applet`/`view`, optional `verifiedText`, and the host's current `readable`/`writable` flags. The pure API additionally accepts the installed applet IDs and validated preferences. It contains no resource address or content, so it cannot transport a file between origins or confer a file grant.

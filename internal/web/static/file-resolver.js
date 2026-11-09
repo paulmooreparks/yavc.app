@@ -95,7 +95,13 @@
             if (selected && (!view || selected.format.views.includes(view))) return Object.freeze(Object.assign(base, { status: 'resolved', plan: plan(selected, view, request.applet ? 'Explicit applet choice.' : rule ? 'Matched association ' + rule.id + '.' : 'Verified text fallback.'), alternatives: alternatives }));
             return Object.freeze(Object.assign(base, { status: alternatives.length ? 'choice' : 'unsupported', preferred: applet, reason: request.applet ? 'The explicit applet or view does not support this content and intent.' : applet ? 'The preferred handler is unavailable for this content and intent.' : 'No available handler matches. Download or choose a supported handler.', alternatives: alternatives }));
         }
-        return Object.freeze({ version: 1, validatePreferences: function (value) { preferences(value); }, resolve: resolve });
+        function stem(name) {
+            if (typeof name !== 'string' || !name || name.length > 255 || /[\x00-\x1f\x7f/\\]/.test(name)) fail('A display filename is required.');
+            var suffix = winner(nativeMatches.filter(function (rule) { return !!rule.match.suffix; }), name.toLowerCase(), '', 'filename');
+            var end = suffix ? name.length - suffix.match.suffix.length : name.lastIndexOf('.');
+            return name.slice(0, end > 0 ? end : name.length);
+        }
+        return Object.freeze({ version: 1, validatePreferences: function (value) { preferences(value); }, resolve: resolve, stem: stem });
     }
     var api = Object.freeze({ create: create });
     if (typeof module === 'object' && module.exports) module.exports = api; else global.yavcFileResolver = api;

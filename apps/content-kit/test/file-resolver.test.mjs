@@ -6,6 +6,12 @@ import { readFile } from 'node:fs/promises';
 const require=createRequire(import.meta.url),{create}=require('../../../internal/web/static/file-resolver.js');
 const catalog=JSON.parse(await readFile(new URL('../../../internal/web/static/content-handlers.json',import.meta.url),'utf8'));
 const resolver=create(catalog),installed=['editor','docs','slides','diagrams'];
+
+test('suggested filename stems preserve the longest catalog suffix',()=>{
+ for(const [name,expected] of [['untitled-1.docs.md','untitled-1'],['A talk.slides.md','A talk'],['Report.v2.DOCS.MD','Report.v2'],['notes.md','notes'],['archive.tar.gz','archive.tar'],['Makefile','Makefile'],['.env','.env'],['.docs.md','.docs.md'],['résumé.docs.md','résumé']])assert.equal(resolver.stem(name),expected,name);
+ const custom=structuredClone(catalog);custom.types[0].matches.push({suffix:'.example.source'});assert.equal(create(custom).stem('test.example.source'),'test');
+ assert.throws(()=>resolver.stem('../notes.docs.md'),/filename/);
+});
 const resolve=(name,request={},options={})=>resolver.resolve({name,verifiedText:true,writable:true,...request},{installed,...options});
 const rule=(id,match,type,applet,operation,view)=>({id,match,type,applet,operation,view});
 test('native defaults and compound suffixes are independent of registration order and MIME',()=>{

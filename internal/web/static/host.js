@@ -135,7 +135,7 @@
             legacyWork: function (app, remove) {if(app!=='editor')return null;var value=JSON.parse(sessionStorage.getItem('pc-editor-work') || 'null');if(remove)sessionStorage.removeItem('pc-editor-work');return value;}
         },
         /* The host resolves handlers before invoking a distinct PUDL request verb. */
-        fileResolution: { version: 1, resolve: async function (request) {
+        fileResolution: { version: 1, stem: async function (name) { return (await fileResolver()).stem(name); }, resolve: async function (request) {
             var resolver = await fileResolver(), preferenceError = null;
             var preferences = await window.pudlHost.config.load('file-associations', { version: 1, rules: [] });
             try { resolver.validatePreferences(preferences); validAssociations = JSON.parse(JSON.stringify(preferences)); }
