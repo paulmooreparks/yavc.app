@@ -64,7 +64,12 @@ var functions = map[string]func(string) (any, error){
 	"outline-state": func(source string) (any, error) {
 		return map[string]any{"entries": outline(source), "revision": sourceRevision(source)}, nil
 	},
-	"section-move": moveSection,
+	"section-move":   moveSection,
+	"review":         reviewCatalog,
+	"review-resolve": resolveReview,
+	"review-propose": proposeReview,
+	"review-inline":  inlineReview,
+	"review-edit":    editReview,
 	"export-preview": func(request string) (any, error) {
 		var r struct{ Text, Definitions, Shared string }
 		if err := json.Unmarshal([]byte(request), &r); err != nil {

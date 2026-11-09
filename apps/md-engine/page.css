@@ -1,4 +1,9 @@
 /* Copyright 2026 Paul Parks. SPDX-License-Identifier: Apache-2.0 */
+.doc-page .critic ins,.doc-page ins.critic-body { color:inherit;background:color-mix(in srgb,var(--positive) 15%,transparent);text-decoration:underline;text-decoration-color:var(--positive); }
+.doc-page .critic del,.doc-page del.critic-body { color:inherit;background:color-mix(in srgb,var(--danger) 12%,transparent);text-decoration:line-through;text-decoration-color:var(--danger); }
+.doc-page .critic-comment { display:inline-flex;align-items:baseline;gap:var(--space-1);padding-inline:var(--space-1);border-inline-start:2px solid var(--accent);font-size:.9em;white-space:pre-wrap; }
+.doc-page .critic-marker { display:inline-flex;gap:var(--space-1);font-size:.8em;color:var(--text-muted);border:1px solid var(--border);padding-inline:var(--space-1);border-radius:var(--radius-sm); }
+.doc-page .critic-block { display:block; }
 /* The page the Markdown engine draws (apps/md-engine): the document page's
    type, the page view's parts and the shortcodes, shared by the Editor's
    preview and Visual view and by Slides. The loader links it. From Dinah

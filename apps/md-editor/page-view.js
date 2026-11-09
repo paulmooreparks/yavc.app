@@ -65,6 +65,10 @@
       return /^(#[0-9a-fA-F]{3,8}|[a-zA-Z]{3,24}|(rgb|rgba|hsl|hsla|oklch|oklab)\([0-9a-zA-Z%.,\/ -]{1,60}\))$/.test(v) ? v : 'inherit';
     }
 var schemaCache = null;
+  function criticAttrs(dom){
+    var raw=dom.getAttribute('data-critic-raw');if(!raw||raw.length>65542)return false;
+    try{var data=window.yavcMdEngine.current().inlineReview(raw);return {src:data.src,kind:data.kind,html:window.yavcHTML.clean(data.html),cellSafe:data.cellSafe};}catch(err){return false;}
+  }
   function schemaOf(PM) {
     if (schemaCache) return schemaCache;
     var table = PM.tableNodes({ tableGroup: 'block', cellContent: 'inline*', cellAttributes: {
@@ -165,6 +169,11 @@ var schemaCache = null;
           attrs: { label: { default: '' }, number: { default: -1 } },
           parseDOM: [{ tag: 'sup.doc-footnote-ref[data-footnote-ref]', priority:60, getAttrs: function (d) { return { label: d.getAttribute('data-footnote-ref'), number: Number(d.getAttribute('data-footnote-number')) || -1 }; } }],
           toDOM: function (n) { var label = n.attrs.number > 0 ? String(n.attrs.number) : '?'; return ['sup', { class: 'doc-footnote-ref', 'data-footnote-ref': n.attrs.label, 'data-footnote-number': n.attrs.number, contenteditable: 'false' }, ['a', { 'aria-label': 'Footnote ' + label }, label]]; } },
+        critic: { group:'inline',inline:true,atom:true,selectable:true,
+          attrs:{src:{default:''},kind:{default:''},html:{default:''},cellSafe:{default:false}},
+          parseDOM:[{tag:'span.critic[data-critic-raw]',priority:60,getAttrs:criticAttrs}],
+          leafText:function(node){return node.attrs.src;},
+          toDOM:function(node){return ['span',{class:'critic','data-critic-raw':node.attrs.src},node.attrs.src];} },
         text: { group: 'inline' },
         // A line break, as HTML pasted from another program can hold one.
         hard_break: { group: 'inline', inline: true, selectable: false, parseDOM: [{ tag: 'br' }], toDOM: function () { return ['br']; } },
@@ -290,11 +299,12 @@ var schemaCache = null;
           o.page.replaceChildren();
           view = new PM.EditorView(o.page, {
             state: state,
-            nodeViews: { source_block: sourceView, container: boxView, columns: boxView, shortcode: inlineView,footnote:footnoteView,footnote_ref:footnoteView },
+            nodeViews: { source_block: sourceView, container: boxView, columns: boxView, shortcode: inlineView,critic:criticView,footnote:footnoteView,footnote_ref:footnoteView },
             handlePaste: handlePaste,
             // HTML pasted from another program is made safe before the
             // editor reads it (safe-html.js).
             transformPastedHTML: function (html) { return window.yavcHTML.clean(html); },
+            transformPasted: safeReviewPaste,
             dispatchTransaction: dispatch,
             attributes: { 'aria-label': 'The Document, as Its Page' }
           });
@@ -352,6 +362,21 @@ var schemaCache = null;
       var $f = state.selection.$from;
       for (var d = $f.depth; d > 0; d--) if ($f.node(d).type.spec.tableRole) return true;
       return false;
+    }
+    function safeReviewPaste(slice){
+      var literal=false;
+      function node(value,cell){
+        cell=cell||value.type.spec.tableRole==='cell'||value.type.spec.tableRole==='header_cell';
+        if(value.type.name==='critic'){
+            var data;try{data=window.yavcMdEngine.current().inlineReview(value.attrs.src);}catch(err){data=null;}
+            if(!data||cell&&!data.cellSafe){literal=true;return view.state.schema.text(value.attrs.src,value.marks);}
+          return value.type.create({src:data.src,kind:data.kind,html:cell?data.cellHTML:data.html,cellSafe:data.cellSafe},null,value.marks);
+        }
+        if(!value.childCount)return value;var content=[];value.forEach(function(child){content.push(node(child,cell));});return value.copy(PM.Fragment.from(content));
+      }
+      var content=[];slice.content.forEach(function(value){content.push(node(value,!!view&&inCell(view.state)));});
+      if(literal)o.say('This review annotation was pasted as literal text because it cannot fit the table cell safely.',true);
+      return new PM.Slice(PM.Fragment.from(content),slice.openStart,slice.openEnd);
     }
     function blocksOnly(fragment) {
       return fragment.childCount > 1 || (fragment.childCount === 1 && !fragment.firstChild.isInline && fragment.firstChild.type.name !== 'paragraph');
@@ -1252,6 +1277,11 @@ var schemaCache = null;
        shown while the pointer or the keyboard is in it, changes its title,
        adds a column, lifts its content onto the page, or turns it back into
        Markdown (docs/page-view-design.md, decision 5). */
+    function criticView(node){
+      var current=node,dom=document.createElement('span');dom.className='pm-critic';dom.contentEditable='false';
+      function draw(){dom.replaceChildren(window.yavcHTML.fragment(current.attrs.html));if(!o.review)return;var button=document.createElement('button');button.type='button';button.className='btn btn-sm pm-critic-open';button.setAttribute('aria-label','Review '+current.attrs.kind);button.title='Review '+current.attrs.kind;button.innerHTML='<span class="glyph" style="--glyph:var(--glyph-comments)" aria-hidden="true"></span>';button.addEventListener('mousedown',function(event){event.preventDefault();});button.addEventListener('click',function(event){event.preventDefault();event.stopPropagation();o.review(current.attrs.src);});dom.appendChild(button);}
+      draw();return {dom:dom,update:function(next){if(next.type.name!=='critic')return false;current=next;draw();return true;},ignoreMutation:function(){return true;},stopEvent:function(event){return !!event.target.closest('button');}};
+    }
     var BOX_TITLED = { info: 'Title', note: 'Title', tip: 'Title', warning: 'Title', expand: 'Title', 'class': 'Class' };
     var BOX_NAMES = { info: 'Information', note: 'Note', tip: 'Tip', warning: 'Warning', expand: 'Expand', 'class': 'Style Class', 'no-export': 'Not Exported', 'draft-note': 'Note to Self', notes: 'Speaker Notes', columns: 'Columns' };
     function escText(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
@@ -1660,6 +1690,25 @@ var schemaCache = null;
         await sync();
         if(on&&sourceStale){clearTimeout(reloadTimer);await load();}
         return !!(view&&on&&!sourceStale&&!frozen&&view.editable);
+      },
+      // Map a rich selection by serializing a temporary public transaction.
+      // Removing its unique sentinels must reproduce the current source byte
+      // for byte before these offsets can authorize a source edit.
+      sourceSelection: async function(){
+        if(!view||!on||sourceStale||frozen)return null;
+        var target=view,doc=view.state.doc,selection=view.state.selection,source=o.text(),bytes=new Uint8Array(16);crypto.getRandomValues(bytes);
+        var nonce=Array.from(bytes,function(value){return value.toString(16).padStart(2,'0');}).join(''),begin='YavcReviewBegin'+nonce,end='YavcReviewEnd'+nonce;
+        if(source.includes(begin)||source.includes(end))return null;
+        function current(){return view===target&&on&&!sourceStale&&!frozen&&view.state.doc===doc&&view.state.selection.eq(selection)&&o.text()===source;}
+        try{
+          var temporary=view.state.tr.insertText(end,selection.to).insertText(begin,selection.from),marked=await o.markdownOf(temporary.doc.toJSON());
+          if(!current())return null;
+          var from=marked.indexOf(begin),to=marked.indexOf(end);
+          if(from<0||to<from+begin.length||marked.indexOf(begin,from+begin.length)>=0||marked.indexOf(end,to+end.length)>=0)return null;
+          var reconstructed=marked.slice(0,from)+marked.slice(from+begin.length,to)+marked.slice(to+end.length);
+          if(reconstructed!==source)return null;
+          return {from:from,to:to-begin.length,current:current};
+        }catch(err){return null;}
       },
       footnoteSelection: function () {
         if (!view || !on || sourceStale || frozen || !view.editable || !view.state.selection.$to.parent.isTextblock) return null;

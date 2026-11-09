@@ -20,6 +20,28 @@ func exportHTML(t *testing.T, source string) string {
 	return out.String()
 }
 
+func TestExcludedReviewMarksCannotBlockOrLeakIntoExport(t *testing.T) {
+	for _, source := range []string{
+		"{{no-export}}\n{++private draft++}\n{{/no-export}}\n\nPublic.\n",
+		"{{no-export}}\n{++private\n\ndraft++}\n{{/no-export}}\n\nPublic.\n",
+		"{{no-export}}\n{++incomplete private\n{{/no-export}}\n\nPublic.\n",
+		"Public {{no-export}}{++private draft++}{{/no-export}} text.\n",
+	} {
+		got := exportHTML(t, source)
+		if strings.Contains(got, "private") || strings.Contains(got, "critic") || !strings.Contains(got, "Public") {
+			t.Fatal(got)
+		}
+	}
+	for _, source := range []string{"Public {++change++}.", "Public {++incomplete."} {
+		if _, _, err := RenderExport(source, nil); err == nil {
+			t.Fatalf("silently exported %q", source)
+		}
+	}
+	if got := exportHTML(t, "Public `{++code example++}`."); !strings.Contains(got, "{++code example++}") {
+		t.Fatal(got)
+	}
+}
+
 func TestExcludedFootnoteReferencesDoNotExportTheirDefinitions(t *testing.T) {
 	source := "Visible[^visible] and again[^visible]. {{no-export}}SECRET_REF[^hidden]{{/no-export}}\n\n[^hidden]: SECRET_NOTE ![secret](SECRET_IMAGE.png)\n\n[^unused]: UNUSED_NOTE\n\n[^visible]: The **visible** note.\n"
 	out := exportHTML(t, source)

@@ -158,7 +158,8 @@
            wrapped, the Markdown views offered, the formatting offered, a
            site page's source to open, and the file's address on the site. */
         var wrapOn = true, viewsOffered = false, formatOffered = false, sourceOffered = false, siteUrl = null;
-        function commandsChanged() { if (destroyed) { return; } if (opts.commandsChanged) { opts.commandsChanged(); } if (tabRow) { tabRow.render(); } }
+        var reviewObservers=new Set(),reviewController=null;
+        function commandsChanged() { if (destroyed) { return; } if (opts.commandsChanged) { opts.commandsChanged(); } if (tabRow) { tabRow.render(); } reviewObservers.forEach(function(listener){listener();}); }
 
         var CM = null, sourceHistory = null, F = null, view = null, destroyed = false, startupFailed = false, unsubscribe = null, styleLifetime = new AbortController();
         var tabs = [], active = -1, untitled = 0;
@@ -763,17 +764,21 @@
         }
 
         var download = window.yavcUtil.download;
-        async function exportDocument(format) {
+        async function exportDocument(format,options) {
             var tab = current(); if (!tab || tab.lang !== 'markdown') { throw new Error('Choose a Markdown document to export.'); }
             if (pageActive()) { await visual.api.sync(); }
             if (destroyed || current() !== tab) { throw new Error('The document changed during export.'); }
             var text = view.state.doc.toString(), directory = styleDirectory(), pictures = picturesHost(); pictures.dir = function () { return directory; };
             function unchanged() { return !destroyed && current() === tab && view.state.doc.toString() === text; }
             var enginePromise = documentEngine(text), K = await loadKit(), m = await enginePromise, E = await K.exports();
+            var R=await reviewModule(),output=await R.project({text:text,engine:m,root:root,signal:styleLifetime.signal,current:unchanged,interactive:!options||options.interactive!==false,policy:options&&options.reviewPolicy});
+            if(output===null)throw new DOMException('Export cancelled.','AbortError');
+            if(!unchanged())throw new Error('The document changed during export.');
+            m=m.withMacros(output,sharedMacros);
             await K.styles();
-            var front = m.front(text), path = '';
+            var front = m.front(output), path = '';
             (front.entries || []).forEach(function (entry) { if (entry.key === 'stylesheet') { path = entry.value; } });
-            var result = await E.build(format, { text: text, engine: m, stylesheet: window.yavcStyleTools.resolve(path, directory),
+            var result = await E.build(format, { text: output, engine: m, stylesheet: window.yavcStyleTools.resolve(path, directory),
                 read: function (path) { if (!unchanged()) { throw new Error('The document changed during export.'); } return window.pudlHost.fs.readText(path); }, pictures: pictures, current: unchanged });
             result.name = (tab.path ? tab.path.split('/').pop().replace(/(?:\.docs)?\.md$/i, '') : 'document') + '.' + format;
             return result;
@@ -781,7 +786,7 @@
         async function downloadDocument(format) {
             say('Writing the ' + format.toUpperCase() + ' file…');
             try { var result = await exportDocument(format); download(result.name, result.blob); say('Downloaded ' + result.name + '. ' + result.warnings.join(' ')); }
-            catch (err) { say('The document could not be exported: ' + err.message, true); }
+            catch (err) { if(err.name!=='AbortError')say('The document could not be exported: ' + err.message, true);else say('Export cancelled.'); }
         }
 
         /* === Dialogs ====================================================== */
@@ -1227,8 +1232,10 @@
                 if (pageActive()) { await visual.api.sync(); }
                 var text = view.state.doc.toString(), K = await loadKit(), E = await K.exports(), P = await K.pages(), m = await documentEngine(text);
                 function unchanged() { return !destroyed && current() === t && view.state.doc.toString() === text; }
+                var R=await reviewModule(),output=await R.project({text:text,engine:m,root:root,signal:styleLifetime.signal,current:unchanged});if(output===null)return;
+                m=m.withMacros(output,sharedMacros);
                 if (printFrame) { printFrame.remove(); printFrame = null; }
-                await E.prepare({ text: text, engine: m, stylesheet: currentSharedStyle, pictures: picturesHost(), read: window.pudlHost.fs.readText, current: unchanged,
+                await E.prepare({ text: output, engine: m, stylesheet: currentSharedStyle, pictures: picturesHost(), read: window.pudlHost.fs.readText, current: unchanged,
                     renderPages: async function (surface, page) {
                         if (!unchanged()) { throw new Error('The document changed during print preparation.'); }
                         var d = P.surface(surface, page), flow = document.createElement('div'); flow.className = 'doc-page-flow';
@@ -1330,6 +1337,38 @@
             await mdEngine();
             await loadKit().then(function (k) { return k.pageView(); });
         }
+        async function reviewModule(){var K=await loadKit();await K.loadScript(K.here+'review-tools.js'+K.stamp);return window.yavcReviewTools;}
+        async function captureReview(selection){
+            var owner=current();if(!owner||owner.lang!=='markdown')throw new Error('Choose a Markdown document to review.');
+            if(pageActive()){if(owner.readOnly)await visual.api.sync();else await visual.api.prepareEdit();}
+            if(destroyed||current()!==owner)return null;
+            var text=view.state.doc.toString(),selected=view.state.selection,m=await mdEngine(),range=null;
+            function unchanged(){return !destroyed&&root.isConnected&&current()===owner&&view.state.doc.toString()===text&&!(pageActive()&&visual.api.pending());}
+            if(!unchanged())return null;
+            if(selection){
+                if(readsAsPreview()&&editingPane!=='text')throw new Error('Choose Text or an editable document view before proposing a change.');
+                if(pageActive()&&(viewMode!=='split'||editingPane!=='text')){range=await visual.api.sourceSelection();if(!range)throw new Error('This selection cannot be mapped safely. Use Text to propose the change.');}
+                else range={from:selected.main.from,to:selected.main.to,current:function(){return view.state.selection.eq(selected);}};
+                if(!unchanged()||!range.current())return null;
+            }
+            var author='';m.front(text).entries.forEach(function(entry){if(entry.key==='author')author=entry.value;});
+            return {text:text,engine:m,writable:!owner.readOnly,current:unchanged,from:range?range.from:0,to:range?range.to:0,selectionCurrent:range?range.current:null,author:author,
+                apply:async function(result){
+                    if(!unchanged()||owner.readOnly)throw new Error('The document changed or is no longer editable.');
+                    var changes=CM.ChangeSet.of(result.edits,text.length);if(changes.apply(view.state.doc).toString()!==result.text)throw new Error('The review result did not match its source edits.');
+                    var anchor=changes.mapPos(result.edits.length?result.edits[0].from:view.state.selection.main.head,-1);
+                    view.dispatch({changes:changes,selection:{anchor:anchor},annotations:[CM.Transaction.userEvent.of('input.review'),CM.isolateHistory.of('full')],scrollIntoView:true});
+                }};
+        }
+        async function reviewTools(){
+            if(reviewController)return reviewController;var R=await reviewModule();
+            if(!reviewController)reviewController=R.create({root:root,signal:styleLifetime.signal,capture:captureReview,say:say,watch:function(listener){reviewObservers.add(listener);return function(){reviewObservers.delete(listener);};},navigate:async function(mark){await setView('text');view.dispatch({selection:{anchor:mark.from,head:mark.to},scrollIntoView:true});view.focus();}});
+            return reviewController;
+        }
+        function reviewProposable(){var t=current();return !!(CM&&view&&t&&t.lang==='markdown'&&!t.readOnly&&(!readsAsPreview()||editingPane==='text'));}
+        function wireReview(target){
+            target.querySelectorAll('[data-critic-raw]').forEach(function(mark){if(mark.querySelector(':scope > .pm-critic-open'))return;var button=document.createElement('button');button.type='button';button.className='btn btn-sm pm-critic-open';button.setAttribute('aria-label','Review annotation');button.title='Review annotation';button.innerHTML='<span class="glyph" style="--glyph:var(--glyph-comments)" aria-hidden="true"></span>';button.addEventListener('click',function(event){event.preventDefault();event.stopPropagation();reviewTools().then(function(controller){return controller.browse(mark.getAttribute('data-critic-raw'));}).catch(function(err){say(err.message,true);});});mark.appendChild(button);});
+        }
         function pageActive() { return !!(visual.api && visual.api.active()); }
         function pageHost() {
             return {
@@ -1346,6 +1385,7 @@
                 },
                 /* A picture pressed on the page opens the picture dialog. */
                 editBlock: function (src) { return window.yavcMdEditor.editBlock(src, picturesHost()); },
+                review:function(raw){reviewTools().then(function(controller){return controller.browse(raw);}).catch(function(err){say(err.message,true);});},
                 root: root, page: el.page, scroll: el.scroll,
                 pagination: function () { return pagedView(viewMode) ? pageSettings : null; },
                 paginated: pageLayout,
@@ -1523,7 +1563,7 @@
         /* Draws preview blocks into an element with the kit's renderer
            (apps/md-editor/kit.js drawBlocks): made safe, diagrams, pictures,
            listings and applets drawn, and blocks that did not change kept. */
-        function drawBlocks(target, blocks) { window.yavcMdEditor.drawBlocks(target, blocks, { pictures: picturesHost(), applets:false }); }
+        function drawBlocks(target, blocks) { window.yavcMdEditor.drawBlocks(target, blocks, { pictures: picturesHost(), applets:false }); wireReview(target); }
         var INSERTS = window.yavcMdEditor ? window.yavcMdEditor.INSERTS : [], SHORTCODES = window.yavcMdEditor ? window.yavcMdEditor.SHORTCODES : [];
         /* Where a format or an insert goes: the page in Visual, the text
            in Text and Preview, and in Split whichever has the keyboard. */
@@ -2322,6 +2362,14 @@
                     disabled: function () { return !ready; }, run: run }, more || {});
             }
             var table = [
+                cmd('review-changes','Review Changes…','comments',async function(){return (await reviewTools()).browse();},{hidden:function(){return !tab||tab.lang!=='markdown';}}),
+                cmd('review-addition','Suggest Insertion…','plus',async function(){return (await reviewTools()).propose('addition');},{hidden:function(){return !tab||tab.lang!=='markdown';},disabled:function(){return !reviewProposable();}}),
+                cmd('review-deletion','Suggest Deletion','minus',async function(){return (await reviewTools()).propose('deletion');},{hidden:function(){return !tab||tab.lang!=='markdown';},disabled:function(){return !reviewProposable();}}),
+                cmd('review-replacement','Suggest Replacement…','pencil',async function(){return (await reviewTools()).propose('replacement');},{hidden:function(){return !tab||tab.lang!=='markdown';},disabled:function(){return !reviewProposable();}}),
+                cmd('review-comment','Add Comment…','comments',async function(){return (await reviewTools()).propose('comment');},{hidden:function(){return !tab||tab.lang!=='markdown';},disabled:function(){return !reviewProposable();}}),
+                cmd('review-highlight','Highlight for Review','quote',async function(){return (await reviewTools()).propose('highlight');},{hidden:function(){return !tab||tab.lang!=='markdown';},disabled:function(){return !reviewProposable();}}),
+                cmd('review-accept-all','Accept All Changes…','tick',async function(){return (await reviewTools()).all('accept');},{hidden:function(){return !tab||tab.lang!=='markdown';},disabled:function(){return !ready||!tab||tab.readOnly;}}),
+                cmd('review-reject-all','Reject All Changes…','close',async function(){return (await reviewTools()).all('reject');},{hidden:function(){return !tab||tab.lang!=='markdown';},disabled:function(){return !ready||!tab||tab.readOnly;}}),
                 cmd('toggle-files', 'Files', 'folder', toggleExplorer, { hidden:function () {return !explorer;}, checked: function () { return !el.explorer.hidden; } }),
                 cmd('toggle-outline', 'Outline', 'list', toggleOutline, { checked: function () { return outlineVisible; }, shortcut: key('toggle-outline', 'Mod-Alt-o') }),
                 cmd('hide-navigation', 'Hide Side Panes', 'panel', hideNavigation, { hidden: function () { return el.explorer.hidden && !outlineVisible; } }),
@@ -2467,6 +2515,7 @@
             ];
             /* Format, where there is formatting to do. */
             if (formatOffered) { titles.push({ id: 'format', label: 'Format', glyph: 'paragraph', items: ['style', '-', 'bold', 'italic', 'underline', 'strike', 'code', '-', 'highlight', 'superscript', 'subscript', '-', 'color', 'class', '-', 'bullets', 'numbers', 'quote', 'table', '-', 'document-layout','page-setup', 'document-theme', 'typography', 'header-footer', '-', 'stylesheet', 'shared-stylesheet', 'custom-shortcodes'] }); }
+            if(current()&&current().lang==='markdown')titles.push({id:'review',label:'Review',glyph:'comments',items:['review-changes','-','review-addition','review-deletion','review-replacement','review-comment','review-highlight','-','review-accept-all','review-reject-all']});
             return { titles: titles, into: { view: LAYOUT.concat(commonToolbar ? ['-', 'common-toolbar-show', 'common-toolbar-customize'] : []) } };
         }
 
@@ -2616,9 +2665,12 @@
                 return { output: { width: page.width, height: page.height, margins: page.margins } };
             },
             'export@1': async function (input) {
-                var result = await exportDocument(input.format);
+                var result = await exportDocument(input.format,{interactive:false,reviewPolicy:input.reviewPolicy});
                 return { output: { format: input.format, blocks: result.blocks, warnings: result.warnings }, artifacts: [{ key: input.format, name: result.name, mime: result.blob.type, data: new Uint8Array(await result.blob.arrayBuffer()) }] };
             },
+            'review@1':async function(){var snapshot=await captureReview(false);if(!snapshot)throw new Error('The document changed.');return {output:snapshot.engine.review(snapshot.text)};},
+            'review-resolve@1':async function(input){var snapshot=await captureReview(false);if(!snapshot||!snapshot.writable)throw new Error('Choose an editable Markdown document.');var result=snapshot.engine.resolveReview({text:snapshot.text,revision:input.revision,id:input.id,decision:input.decision});await snapshot.apply(result);return {output:{revision:result.resultRevision,modified:true}};},
+            'review-propose@1':async function(input){var snapshot=await captureReview(false);if(!snapshot||!snapshot.writable)throw new Error('Choose an editable Markdown document.');var result=snapshot.engine.proposeReview({text:snapshot.text,revision:input.revision,from:input.from,to:input.to,kind:input.kind,body:input.body||''});await snapshot.apply(result);return {output:{revision:result.resultRevision,modified:true}};},
             'outline@1': async function () {
                 docNo(); var tab = current(); if (tab.lang !== 'markdown') { throw new Error('Outline is available for Markdown files.'); }
                 if (pageActive()) { await visual.api.sync(); }

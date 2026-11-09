@@ -1,5 +1,13 @@
 # Stem-to-stern review, November 2026
 
+## Persisted review annotations, 2026-11-09
+
+Docs and Markdown in Editor now expose a Review menu for insertions, deletions, replacements, comments and highlights. A revision-checked catalog supplies every source mutation. Individual and whole-document resolution use minimal edits, preserving retained source and line endings. Rich selection proposals serialize an undispatched temporary transaction and require exact source reconstruction before inserting delimiters. Unsupported selections remain available in Text.
+
+The PUDL review found ambiguous targeting of identical annotations and a custom list that duplicated PUDL behavior. Identical inline annotations now require explicit occurrence selection before Accept or Reject. The review manager uses the documented rich single-list component. An earlier source review also caught unsafe pipe characters in pasted table annotations and review checks that ran before export exclusions. Unsafe table annotations become literal text, and the serializer refuses a structurally unsafe atom. Private annotations are pruned before export refusal checks.
+
+Native tests cover Markdown contexts, Unicode offsets, stale revisions, editable proposal bodies, multiline rendering, source retention and exclusion ordering. Chromium, Firefox and WebKit checks cover real rich and Text proposals, individual resolution, Undo, duplicate occurrences in rich and Preview views, table-cell paste, editing a proposal, Save/reload, actual accepted/original Word exports and reviewed PDF generation. The narrow rendered dialog was inspected. The source review is clean after those corrections. The first gate rejected synchronous calls to the low-level engine; those now use a documented synchronous accessor on the shared loader. The full gate then passed. Portable packaging and installed-candidate checks belong in the local installation receipt.
+
 ## Measured paragraph, list and row fragments, 2026-11-09
 
 Document view now inserts source-free gaps inside paragraphs and lists and between table rows. Two-line keep groups protect paragraph starts and ends. Print clones partial formatted ranges, preserves ordered-list numbering and suppresses repeated continuation markers and margins. Atomic source blocks and oversized table rows still produce an explicit refusal.
