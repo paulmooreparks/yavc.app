@@ -179,10 +179,11 @@
         function previewConnection(d, p) {
             layer.querySelectorAll('.dg-cv-preview').forEach(function (x) { x.remove(); });
             var req = connectionRequest(d, p), end = d.kind === 'connect' ? 'to' : d.handle;
-            var edge = d.kind === 'connect' ? { id: previewId, fromNode: d.node.id, fromSide: d.handle } : Object.assign({}, d.edge);
+            var edge = d.kind === 'connect' ? { id: previewId, fromNode: d.node.id, fromSide: d.handle } : Object.assign(Object.create(null), d.edge, {yavc:Object.assign(Object.create(null),d.edge.yavc)});
             var target = d.kind === 'connect' ? req.to : req.node, side = d.kind === 'connect' ? req.toSide : req.side;
             edge[end + 'Node'] = target || previewId;
             if (side) { edge[end + 'Side'] = side; } else { delete edge[end + 'Side']; }
+            if (edge.yavc) { delete edge.yavc[end + 'Auto']; }
             var nodes = target ? doc.nodes : doc.nodes.concat([{ id: previewId, x: req.x, y: req.y, width: 0, height: 0 }]);
             previewRoute(edge.id, J.route(edge, nodes));
             if (target) {

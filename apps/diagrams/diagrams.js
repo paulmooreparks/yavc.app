@@ -808,7 +808,7 @@
             var route = J.route(edge, t.cvDoc.nodes), point = route.points[end === 'from' ? 0 : route.points.length - 1], p = 'dg-end-' + n + '-';
             var options = [['', 'Free Point']].concat(t.cvDoc.nodes.filter(function (x) { return !J.isAnchor(x); }).map(function (x) { return [x.id, x.id]; }));
             var body = selectField(p + 'node', 'target', 'Attach To', J.isAnchor(node) ? '' : node.id, options) +
-                selectField(p + 'side', 'side', 'Anchor', edge[end + 'Side'] || '', [['', 'Automatic'], ['top', 'Top'], ['right', 'Right'], ['bottom', 'Bottom'], ['left', 'Left']]) +
+                selectField(p + 'side', 'side', 'Anchor', J.automatic(edge,end) ? '' : edge[end + 'Side'], [['', 'Automatic'], ['top', 'Top'], ['right', 'Right'], ['bottom', 'Bottom'], ['left', 'Left']]) +
                 numberField(p + 'x', 'x', 'X', String(Math.round(point[0])), null, null) +
                 numberField(p + 'y', 'y', 'Y', String(Math.round(point[1])), null, null) +
                 '<p class="form-help">Automatic chooses the nearest side as the shapes move. Free Point places the endpoint at X and Y.</p>';
@@ -883,6 +883,7 @@
                 var ext = e.item.yavc || {};
                 if (k === 'fromHead') { return ext.fromHead || e.item.fromEnd || 'none'; }
                 if (k === 'toHead') { return ext.toHead || e.item.toEnd || 'arrow'; }
+                if (e.kind === 'edge' && (k === 'fromSide' || k === 'toSide')) { return window.yavcCanvas.automatic(e.item,k.slice(0,-4)) ? '' : e.item[k]; }
                 var v = ['shape', 'line', 'lineWidth', 'route', 'textAlign', 'textVerticalAlign', 'fillColor', 'strokeColor'].indexOf(k) >= 0 ? ext[k] : e.item[k];
                 return v == null ? (k === 'lineWidth' && e.item.type === 'group' ? 1 : defaults[k] == null ? '' : defaults[k]) : v;
             }

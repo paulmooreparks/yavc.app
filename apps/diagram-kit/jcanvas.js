@@ -160,6 +160,10 @@
             if (e.yavc.route != null && ROUTES.indexOf(e.yavc.route) < 0) { return where + '\'s route must be one of ' + ROUTES.join(', ') + '.'; }
             if (e.yavc.fromHead != null && HEADS.indexOf(e.yavc.fromHead) < 0) { return where + '\'s fromHead must be one of ' + HEADS.join(', ') + '.'; }
             if (e.yavc.toHead != null && HEADS.indexOf(e.yavc.toHead) < 0) { return where + '\'s toHead must be one of ' + HEADS.join(', ') + '.'; }
+            for (var end of ['from', 'to']) {
+                var cached = e.yavc[end + 'Auto'];
+                if (cached != null && (!isObj(cached) || typeof cached.node !== 'string' || !cached.node || SIDES.indexOf(cached.side) < 0)) { return where + '\'s ' + end + 'Auto must contain a node ID and a valid side.'; }
+            }
             var lp = lineProblem(e.yavc);
             if (lp) { return where + lp; }
         }
@@ -178,7 +182,7 @@
         return e;
     }
     function ordered(obj, keys) {
-        var out = {};
+        var out = Object.create(null);
         keys.forEach(function (k) { if (obj[k] !== undefined) { out[k] = obj[k]; } });
         Object.keys(obj).forEach(function (k) { if (keys.indexOf(k) < 0 && k !== 'yavc' && obj[k] !== undefined) { out[k] = obj[k]; } });
         if (obj.yavc !== undefined) { out.yavc = obj.yavc; }
@@ -187,10 +191,28 @@
     /* The stable form: nodes, then edges, then anything else the file had;
        each object's properties in the specification's order, then the
        others as they were, then the extension; two spaces of indent. */
+    function automatic(e, end) {
+        var side = e[end + 'Side'], cached = isObj(e.yavc) && e.yavc[end + 'Auto'];
+        return side == null || !!(isObj(cached) && cached.node === e[end + 'Node'] && cached.side === side);
+    }
+    function projected(e, byId) {
+        var copy = Object.assign(Object.create(null), e), y = isObj(e.yavc) ? Object.assign(Object.create(null), e.yavc) : null;
+        var a = byId[e.fromNode], b = byId[e.toNode], sides;
+        if (a && b && [a, b].every(function (n) { return ['x','y','width','height'].every(function (key) { return Number.isFinite(n[key]); }); })) { sides = sidesFor(e, a, b); }
+        ['from','to'].forEach(function (end, i) {
+            if (automatic(e, end) && sides) {
+                y = y || Object.create(null); copy[end + 'Side'] = sides[i];
+                y[end + 'Auto'] = Object.assign(Object.create(null), isObj(y[end + 'Auto']) ? y[end + 'Auto'] : {}, {node:e[end + 'Node'],side:sides[i]});
+            } else if (y) { delete y[end + 'Auto']; }
+        });
+        if (y) { copy.yavc = y; }
+        return agree(copy);
+    }
     function write(doc) {
-        var top = {};
+        var top = Object.create(null), byId = Object.create(null);
+        (doc.nodes || []).forEach(function (n) { if (isObj(n)) { byId[n.id] = n; } });
         top.nodes = (doc.nodes || []).map(function (n) { return ordered(n, NODE_KEYS); });
-        top.edges = (doc.edges || []).map(function (e) { return ordered(agree(Object.assign({}, e)), EDGE_KEYS); });
+        top.edges = (doc.edges || []).map(function (e) { return ordered(projected(e, byId), EDGE_KEYS); });
         Object.keys(doc).forEach(function (k) { if (k !== 'nodes' && k !== 'edges' && k !== 'yavc') { top[k] = doc[k]; } });
         if (doc.yavc !== undefined) { top.yavc = doc.yavc; }
         return JSON.stringify(top, null, 2) + '\n';
@@ -211,10 +233,11 @@
     function sidesFor(e, a, b) {
         var ax = a.x + a.width / 2, ay = a.y + a.height / 2, bx = b.x + b.width / 2, by = b.y + b.height / 2;
         var dx = bx - ax, dy = by - ay, horizontal = Math.abs(dx) >= Math.abs(dy);
-        var from = e.fromSide || (horizontal ? (dx >= 0 ? 'right' : 'left') : (dy >= 0 ? 'bottom' : 'top'));
-        var to = e.toSide || (horizontal ? (dx >= 0 ? 'left' : 'right') : (dy >= 0 ? 'top' : 'bottom'));
-        var froms = e.fromSide ? [from] : [from].concat(SIDES.filter(function (s) { return s !== from; }));
-        var tos = e.toSide ? [to] : [to].concat(SIDES.filter(function (s) { return s !== to; }));
+        var fixedFrom = automatic(e, 'from') ? null : e.fromSide, fixedTo = automatic(e, 'to') ? null : e.toSide;
+        var from = fixedFrom || (horizontal ? (dx >= 0 ? 'right' : 'left') : (dy >= 0 ? 'bottom' : 'top'));
+        var to = fixedTo || (horizontal ? (dx >= 0 ? 'left' : 'right') : (dy >= 0 ? 'top' : 'bottom'));
+        var froms = fixedFrom ? [from] : [from].concat(SIDES.filter(function (s) { return s !== from; }));
+        var tos = fixedTo ? [to] : [to].concat(SIDES.filter(function (s) { return s !== to; }));
         var best = null, distance = Infinity;
         froms.forEach(function (f) { tos.forEach(function (t) {
             var p = sidePoint(a, f), q = sidePoint(b, t), d = Math.hypot(p[0] - q[0], p[1] - q[1]);
@@ -483,7 +506,7 @@
         dark: ['#ff6b6b', '#ff9f43', '#f1c40f', '#66d17a', '#3cc8d8', '#b18cff']
     });
 
-    var api = Object.freeze({ read: read, write: write, render: render, isAnchor: isAnchor, path: pathD, routes: routes, route: function (e, nodes) { return routes([e], nodes)[0].route; },
+    var api = Object.freeze({ read: read, write: write, render: render, isAnchor: isAnchor, automatic: automatic, path: pathD, routes: routes, route: function (e, nodes) { return routes([e], nodes)[0].route; },
         PRESETS: PRESETS, SHAPES: SHAPES.slice(), HEADS: HEADS.slice(), ROUTES: ROUTES.slice(), LINES: LINES.slice(), EXT_VERSION: EXT_VERSION, LIMITS: Object.freeze({ text: MAX_TEXT, items: MAX_ITEMS }) });
     if (typeof module === 'object' && module.exports) { module.exports = api; } else { root.yavcCanvas = api; }
 })(typeof window !== 'undefined' ? window : this);

@@ -6,6 +6,7 @@ const { strict: assert } = require('node:assert');
 const fs = require('node:fs');
 const path = require('node:path');
 const playwright = require('playwright');
+const J = require('../apps/diagram-kit/jcanvas.js');
 const url = process.env.CANVAS_TEST_URL || 'http://diagrams.localhost:8412/';
 if (!/^http:\/\/([a-z-]+\.)?localhost:\d+\/$/.test(url)) throw new Error('Use a disposable localhost server.');
 const evidence = process.env.CANVAS_TEST_OUTPUT || path.join(require('node:os').tmpdir(), 'yavc-c2-evidence');
@@ -313,7 +314,7 @@ async function endpoints(engine) {
         assert.equal(await page.locator('[data-kind="reconnect"]').count(), 2);
         const c = await hit('c').boundingBox();
         await dragEnd('to', { x: c.x + c.width / 2 + 3, y: c.y + c.height / 2 });
-        let d = await doc(); assert.equal(d.edges[0].toNode, 'c'); assert.equal(d.edges[0].toSide, undefined);
+        let d = await doc(); assert.equal(d.edges[0].toNode, 'c'); assert.equal(J.automatic(d.edges[0],'to'), true);
         assert.equal(d.edges[0].extra, 'keep'); assert.equal(d.edges[0].color, '4');
         const b = await hit('b').boundingBox();
         await dragEnd('to', { x: b.x + b.width / 2, y: b.y + 2 });
@@ -325,7 +326,7 @@ async function endpoints(engine) {
         // viewport offsets. Keyboard-entered coordinates are checked exactly below.
         const pointerUnit = 1 / await hit('a').evaluate(e => e.getScreenCTM().a);
         assert.ok(anchor); assert.ok(Math.abs(anchor.x - 80) <= pointerUnit); assert.ok(Math.abs(anchor.y - 200) <= pointerUnit);
-        assert.equal(d.edges[0].toNode, anchor.id); assert.equal(d.edges[0].toSide, undefined);
+        assert.equal(d.edges[0].toNode, anchor.id); assert.equal(J.automatic(d.edges[0],'to'), true);
         assert.equal(await page.locator(`.dg-cv-hit[data-id="${anchor.id}"]`).count(), 0);
         const free = await text();
         await stage.focus(); await page.keyboard.press('Control+z'); await idle(); assert.equal(await text(), pinned);
@@ -381,7 +382,7 @@ async function endpoints(engine) {
         await page.locator('dialog[open]').waitFor();
         await page.locator('dialog [data-set="target"]').selectOption('b'); await page.locator('dialog [data-set="side"]').selectOption('');
         await page.getByRole('button', { name: 'Reconnect', exact: true }).click(); await idle();
-        assert.equal((await doc()).edges[0].fromNode, 'b'); assert.equal((await doc()).edges[0].fromSide, undefined);
+        assert.equal((await doc()).edges[0].fromNode, 'b'); assert.equal(J.automatic((await doc()).edges[0],'from'), true);
         await action('canvas-edit', { op: 'reconnect', key: 'ab', end: 'from', node: null, x: -80, y: 100 }); await idle();
         assert.equal((await doc()).nodes.filter(n => n.yavc?.anchor).length, 2);
         await page.screenshot({ path: path.join(evidence, engine + '-endpoints.png') });

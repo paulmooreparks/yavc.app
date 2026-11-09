@@ -29,6 +29,7 @@
         if (properties(item, kind).indexOf(property) < 0 || ['x', 'y', 'width', 'height'].indexOf(property) >= 0) { throw new Error('That property cannot be changed on this item.'); }
         var target = ['shape', 'route', 'fromHead', 'toHead', 'line', 'lineWidth', 'textAlign', 'textVerticalAlign', 'fillColor', 'strokeColor'].indexOf(property) >= 0 ? (item.yavc || (item.yavc = {})) : item;
         if (value === null || (value === '' && property !== 'text')) { delete target[property]; } else { target[property] = value; }
+        if (kind === 'edge' && ['fromSide','toSide'].indexOf(property) >= 0 && item.yavc) { delete item.yavc[property.slice(0,-4) + 'Auto']; }
     }
     function movingIds(doc, selected) {
         var ids = new Set();
@@ -188,6 +189,7 @@
                 doc.nodes.push(point); edge[end + 'Node'] = point.id;
             }
             if (side) { edge[end + 'Side'] = side; } else { delete edge[end + 'Side']; }
+            if (edge.yavc) { delete edge.yavc[end + 'Auto']; }
         }
         if (req.op === 'move') {
             needNode();
@@ -244,7 +246,9 @@
             });
             part.edges.forEach(function (x) {
                 if (!map[x.fromNode] || !map[x.toNode]) { return; }
-                x.id = freeId('edge'); x.fromNode = map[x.fromNode]; x.toNode = map[x.toNode]; doc.edges.push(x);
+                x.id = freeId('edge');
+                ['from','to'].forEach(function (end) { var auto = J.automatic(x, end); x[end + 'Node'] = map[x[end + 'Node']]; if (auto) { delete x[end + 'Side']; } if (x.yavc) { delete x.yavc[end + 'Auto']; } });
+                doc.edges.push(x);
             });
             key = part.nodes.length ? part.nodes[0].id : '';
         } else { throw new Error('Unknown canvas operation.'); }
