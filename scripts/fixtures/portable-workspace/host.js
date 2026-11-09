@@ -14,6 +14,8 @@
   contentResources:{version:1,read:async function (request) {var record=records.get(request.resource);if(!record)throw new Error('Missing resource');return {resource:request.resource,revision:String(record.revision),text:record.text,name:record.name,writable:true};},
    write:async function (request) {var record=records.get(request.resource);if(!record || request.expectedRevision!==String(record.revision))throw new Error('Resource conflict');writes.push(request);record.text=request.text;record.revision++;return {resource:request.resource,revision:String(record.revision),name:record.name,writable:true};}}
  });
+ function fileServices(){return {files:{read:pudlHost.fs.readText}};}
+ pudlActions.capability('files.read',fileServices);pudlActions.capability('files.write',fileServices);
  document.addEventListener('pudl:applet-state',function (event) {event.detail.state='file='+encodeURIComponent(event.target.id==='source'?'memory:source.md':event.target.id==='document'?'memory:document.docs.md':'memory:deck.slides.md');});
  Promise.all(['editor','docs','slides'].map(function (app) {return pudlHostKit.install(new URL('../content/'+app+'/applet.json',location.href).href);})).catch(function (err) {document.body.textContent=err.message;});
 })();

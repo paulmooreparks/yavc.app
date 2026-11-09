@@ -35,6 +35,7 @@ const types={'.html':'text/html','.js':'text/javascript','.css':'text/css','.jso
     await p.locator('#one .dg-canvas img').waitFor();
     await p.waitForFunction(()=>document.querySelector('#two').dataset.kind==='canvas'&&document.querySelector('#two .dg-canvas').textContent.includes('Canvas'));
     assert.equal(await p.title(),'Independent Diagram Host');
+    assert.deepEqual(await p.evaluate(()=>pudlActions.problems()),[]);const actionRead=await p.evaluate(()=>pudlActions.run('yavc.diagrams/diagram@1',{index:1},{grant:'all'}));assert.equal(actionRead.text,await p.evaluate(resource=>fixture.records.get(resource).text,actionRead.path));
     assert.deepEqual(await p.evaluate(()=>[typeof pcSiteFs,typeof pcConfig,typeof pudlWindows,localStorage.length,sessionStorage.length]),['undefined','undefined','undefined',0,0]);
     const source=p.locator('#one .cm-content');await source.click();await p.keyboard.press('ControlOrMeta+End');await p.keyboard.type('\nc: Submitted');
     await p.evaluate(()=>{fixture.hold();fixture.pending=pudlCommands.run('save',null,document.querySelector('#one'));});

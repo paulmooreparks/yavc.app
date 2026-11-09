@@ -15,7 +15,7 @@
         if (!payload.snapshot && /^(open|open-file)$/.test(payload.operation)) {
             for (var pair of bindings) {
                 if (pair[0].isConnected && pair[1].application === app && pair[1].resource() === payload.input.path) {
-                    pudlWindows.raise(keyOf(pair[0])); return pair[1].accept(payload);
+                    var existing=await pair[1].accept(payload);pudlWindows.raise(keyOf(pair[0]));return existing;
                 }
             }
         }
@@ -32,6 +32,7 @@
             if (!binding) throw new Error('The document window could not start.');
             var output = payload.snapshot ? null : await binding.accept(payload);
             if (!binding.flush()) throw new Error('The new document could not be retained for recovery.');
+            if (!payload.snapshot) pudlWindows.raise(key);
             return output;
         } finally { incoming.delete(key); }
     }

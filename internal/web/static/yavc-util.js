@@ -118,5 +118,28 @@
         });
     }
 
-    window.yavcUtil = Object.freeze({ esc: esc, versioned: versioned, loadScript: loadScript, loadGlobal: loadGlobal, siteFs: siteFs, download: download, shortcut: shortcut, notice: notice, toast: toast, version: V });
+    /* Native modal dismissal can restore focus to its opener and thereby
+       raise the old application. Preserve an explicit destination selected
+       while the modal was open, without overriding subsequent focus moves. */
+    function modalFocus(dialog) {
+        var opener=document.activeElement, windows=window.pudlWindows;
+        function top(){return windows?windows.state().top:null;}
+        var origin=top();
+        return {
+            close:function(){
+                var destination=top();
+                if(dialog.open)dialog.close();
+                if(windows&&destination&&destination!==origin&&(top()===origin||top()===destination)&&windows.state().open.includes(destination))windows.raise(destination);
+            },
+            restore:function(){
+                if(document.querySelector('dialog[open]')||!opener||!opener.isConnected||!opener.focus)return;
+                var active=document.activeElement;
+                if(active&&active!==document.body&&active!==opener&&!dialog.contains(active))return;
+                if(windows&&top()!==origin)return;
+                opener.focus({preventScroll:true});
+            }
+        };
+    }
+
+    window.yavcUtil = Object.freeze({ esc: esc, versioned: versioned, loadScript: loadScript, loadGlobal: loadGlobal, siteFs: siteFs, download: download, shortcut: shortcut, notice: notice, toast: toast, modalFocus: modalFocus, version: V });
 })();

@@ -2,6 +2,8 @@
 
 Paul authorized continuous implementation and automatic local installation of verified batches on 2026-11-09. This plan replaces historical handoff entries as the working backlog. Root-checkout edits remain separate. Completed candidates are committed and installed without routine approval stops; production deployment remains outside this authorization.
 
+The continuation now implements CSS/HTML language services, source-preserving encoding-aware writes, reviewed Word/PowerPoint import copies, review annotations and explicit export projections, paragraph/list/table/container pagination and continued editable page notes. Their regression evidence and declared format/layout limits are recorded in `review.md` and the individual designs. Actual isolated Windows receiving-desktop acceptance has passed as described in `dinah-desktop-acceptance.md`; adoption into Dinah's production shell remains the receiving team's integration work. The latest focus follow-up also covers toolbar Open across all four editing applications. Historical batch paragraphs below preserve earlier milestones and do not reopen completed items. Actual Obsidian-save acceptance, other desktop operating systems and the upstream independent numeric spin increment remain separate checks.
+
 | Order | Work | Acceptance |
 | --- | --- | --- |
 | 1 | Slides deck-wide Undo/Redo and slide-setting dirty state; presenter and fullscreen review | Structural, source, rich and metadata edits have ordered Undo; saved baselines and recovery remain correct; presentation works across supported engines. |

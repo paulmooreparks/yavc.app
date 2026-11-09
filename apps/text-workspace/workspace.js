@@ -1341,7 +1341,7 @@
             await mdEngine();
             await loadKit().then(function (k) { return k.pageView(); });
         }
-        async function reviewModule(){var K=await loadKit();await K.loadScript(K.here+'review-tools.js'+K.stamp);return window.yavcReviewTools;}
+        async function reviewModule(){var K=await loadKit();if(!window.pudlListbox)await K.loadScript(new URL('pudl-listbox.js',new URL(H.pudl,document.baseURI)).href);await K.loadScript(K.here+'review-tools.js'+K.stamp);return window.yavcReviewTools;}
         async function captureReview(selection){
             var owner=current();if(!owner||owner.lang!=='markdown')throw new Error('Choose a Markdown document to review.');
             if(pageActive()){if(owner.readOnly)await visual.api.sync();else await visual.api.prepareEdit();}

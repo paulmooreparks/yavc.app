@@ -742,3 +742,9 @@ The real PPTX fixture exposed an existing local variable that shadowed the ZIP t
 
 The import fixtures and existing deck history/rich-footnote regressions pass Chromium, Firefox and WebKit. The independent 482-file package converts Word offline in all three engines without site globals or storage. The narrow dark report was visually inspected. Source review has no remaining substantive findings. Image and source-size limits, semantic layout conversion and unsupported review metadata remain explicit in the report and import design.
 
+# Document Open foreground focus, 2026-11-09
+
+The actual Editor toolbar Open flow reproduced a new document behind its originating window. The picker commits the open while its native modal remains visible; dismissal restores focus to the old toolbar and PUDL then foregrounds that window. The shared document-window adapter now raises an accepted destination after loading and recovery acknowledgement. The shared modal-focus helper retains that destination across dismissal. Generated question dialogs use the same policy and their delayed cleanup respects subsequent focus changes. Recovery splitting does not gain an explicit foreground request.
+
+The browser regression exercises toolbar Open, reopening an existing document and cancellation in Editor, Docs, Slides and Diagrams. It fails against the previous served implementation and passes with the candidate shared scripts in Chromium, Firefox and WebKit. It checks both PUDL foreground state and actual DOM focus after close-event cleanup. The initial ordinary-permission Firefox attempt could not create its first page; its approved run passed. Eleven focused Node regressions pass, including background recovery and minimal-host focus. Independent PUDL source review found no actionable focus issue. The candidate scripts were served by the test harness over the existing source server; installed-image acceptance is recorded separately.
+

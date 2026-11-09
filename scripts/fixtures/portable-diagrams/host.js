@@ -43,6 +43,8 @@
         fixture.snapshotJoins=0;
         pudlHost.snapshot={join:function(){fixture.snapshotJoins++;throw new Error('Legacy recovery must not be joined.');}};
     }
+    function fileServices(){return {files:{read:async function(resource){var record=records.get(resource);if(!record)throw new Error('Resource not found');return record.text;}}};}
+    pudlActions.capability('files.read',fileServices);pudlActions.capability('files.write',fileServices);
     document.addEventListener('pudl:applet-state',function(e){e.detail.state='file='+encodeURIComponent(options.has('creation')&&sessionStorage.getItem('fixture:selected')||e.target.dataset.resource)+'&view=split';});
     var ready=options.has('resourceRecovery')?yavcUtil.loadGlobal(new URL('../support/snapshot.js',location.href).href,'yavcSnapshot').then(function(api){
         pudlHost.snapshot={version:2,join:function(root,take,options){fixture.recovery=api.join(root,take,options);return fixture.recovery;}};

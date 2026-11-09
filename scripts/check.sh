@@ -50,6 +50,8 @@ step "Browser module tests"
 node --test 'apps/*/test/*.test.mjs'
 node --test scripts/test-document-tabs.mjs
 node --test scripts/test-document-windows.mjs
+node --test scripts/test-modal-focus.mjs
+node --test scripts/test-dinah-content-proof.mjs
 
 step "Bundled PUDL release provenance"
 node --test scripts/test-pudl-distribution.mjs

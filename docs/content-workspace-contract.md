@@ -2,6 +2,10 @@
 
 Editor and Docs are separate PUDL packages. Their entry scripts mount `apps/text-workspace/workspace.js` with a fixed `application` value. Their styles import the same workspace stylesheet. The old Editor entry contains no editing implementation. The wrappers return a synchronous lifecycle object with a readiness promise, retain the latest state received during startup and stop initialization after disposal.
 
+The receiving host registers the project-defined `files.read` and `files.write` capabilities with `pudlActions.capability` before installing these packages. PUDL refuses a complete action manifest if any declared capability is unknown. Registration describes the host's bounded services; it does not authorize an invocation or require an unconditional filename writer. A conditional-resource host can expose its `contentResources` service and bounded reads while retaining revision checks for every save. Independent-host acceptance must call the public action API as well as the toolbar commands and inspect `pudlActions.problems()`.
+
+Review Changes loads the public PUDL listbox from the host's documented PUDL base URL when it is not already present. Minimal receiving hosts need not preload the listbox for ordinary editing, but their extracted distribution must contain it.
+
 Docs accepts ordinary Markdown and `.docs.md`. It declines decks, code and Office containers before opening a writable document. Ordinary Markdown defaults to Visual, while `.docs.md` defaults to Document. Editor defaults to Text and offers read-only Split/Preview for Markdown. Its preview never starts embedded applets. Rich document actions retain migration errors in the Editor namespace; their implementations and descriptors are available in `yavc.docs`. Markdown source editing, outline operations and language assistance remain available in Editor where applicable.
 
 Page Setup and Header and Footer belong to Docs Document view. Format offers Switch to Document View from other Markdown views. Typography and stylesheet authoring remain Docs operations. Both applets retain Files as an optional outer pane, with tabs and Outline inside the document workspace.

@@ -46,7 +46,7 @@
     });
 
     function open(o) {
-        var n = ++count, dlg = document.createElement('dialog'), opener = document.activeElement;
+        var n = ++count, dlg = document.createElement('dialog'), focus = window.yavcUtil.modalFocus(dlg);
         dlg.className = 'dialog yavc-dialog' + (o.className ? ' ' + o.className : '');
         dlg.setAttribute('aria-labelledby', 'yavc-dlg-' + n + '-title');
         var buttons = (o.buttons || []).map(function (b) {
@@ -71,9 +71,9 @@
                 if (done) { return; }
                 done = true;
                 if (o.signal) { o.signal.removeEventListener('abort', abort); }
-                if (dlg.open) { dlg.close(); }
+                focus.close();
                 resolve({ value: value, body: body });
-                setTimeout(function () { dlg.remove(); if (opener && opener.isConnected && opener.focus && !document.querySelector('dialog[open]')) { try { opener.focus({ preventScroll: true }); } catch (err) { } } }, 0);
+                setTimeout(function () { focus.restore(); dlg.remove(); }, 0);
             }
             function abort() { finish(null); }
             if (o.signal) { if (o.signal.aborted) { abort(); return; } o.signal.addEventListener('abort', abort, { once: true }); }
