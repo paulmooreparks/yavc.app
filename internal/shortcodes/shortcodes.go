@@ -147,6 +147,10 @@ type Block struct {
 	BodyStart, BodyEnd int
 }
 
+// ReviewOpaque prevents stylesheet/template data from authorizing a review
+// edit. Rendered container bodies remain ordinary Markdown review contexts.
+func (n *Block) ReviewOpaque() bool { return n.Call.Name == "style" || n.Call.Name == "define" }
+
 var KindBlock = ast.NewNodeKind("ShortcodeBlock")
 
 // Closer is the {{/name}} line that ends a container. It stands in the

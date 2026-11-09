@@ -18,7 +18,7 @@
     if (window.yavcMdEngine) { return; }
     var self = (document.currentScript && document.currentScript.src) || '/applets/md-engine/loader.js';
     var base = self.split('?')[0].replace(/[^/]*$/, ''), stamp = self.indexOf('?') >= 0 ? self.slice(self.indexOf('?')) : '';
-    var ready = null;
+    var ready = null, initialized = null;
     var load = window.yavcUtil.loadScript;
     window.yavcMdEngine = function () {
         if (ready) { return ready; }
@@ -58,6 +58,7 @@
             var api = { preview: call('preview'), doc: call('doc'), markdown: call('markdown'), blocks: call('blocks'), source: call('source'), container: call('container'), inline: call('inline'), glyphs: call('glyphs'), front: call('front'), frontset: call('frontset'), styles: call('styles') };
             api.outline = call('outline'); api.outlineState = call('outline-state'); api.moveSection = call('section-move');
             api.shortcodes = call('shortcodes');
+            api.review=call('review');api.resolveReview=call('review-resolve');api.proposeReview=call('review-propose');api.inlineReview=call('review-inline');api.editReview=call('review-edit');
             api.withMacros = function (definitions, shared) {
                 var context = Object.create(api), run = call('macro-context');
                 context.exportPreview = function (text) { return call('export-preview')({ text: text, definitions: definitions || '', shared: shared || '' }); };
@@ -67,9 +68,15 @@
                 context.macros = function () { return run({ op: 'catalog', definitions: definitions || '', shared: shared || '' }); };
                 return context;
             };
+            initialized = api;
             return api;
         })();
         ready.catch(function () { ready = null; });
         return ready;
+    };
+    // Synchronous DOM parse hooks run only after the shared engine has loaded.
+    window.yavcMdEngine.current = function () {
+        if (!initialized) throw new Error('The Markdown engine is not ready.');
+        return initialized;
     };
 })();

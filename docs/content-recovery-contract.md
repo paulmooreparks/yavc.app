@@ -6,6 +6,8 @@ The resource client and the snapshot service remain separate host capabilities. 
 
 A version 2 Diagrams snapshot contains its tab state and, for each bound resource, a version 1 baseline with `resource` and `revision`. It retains draft text for dirty tabs and unbound drafts. A clean bound tab can read its current contents again. Baselines come from snapshots issued by the same resource client; the public `baseline()` helper refuses arbitrary copied objects.
 
+Encoding-aware resource authorities now produce version 2 baselines with `encoding` and `bom` alongside the resource and revision. Recovery compares that format before issuing a writable snapshot. The workspace snapshot retains its version 2 envelope and keeps the tab's format for unbound copies. This is a distinct version from the resource authority and baseline; [the encoded-resource contract](encoded-resources-contract.md) describes their roles.
+
 The helper validates identities, versions, text size and tab count before snapshot registration. A saved baseline must name its tab's resource. The payload supports at most 512 tabs, 4 MiB of text per draft and 8 MiB across draft texts. These are input bounds, not a promise of browser storage capacity. Capture validates the same bounds before writing, so the service cannot acknowledge a payload it would refuse to restore.
 
 On restore, a dirty draft can obtain an issued resource snapshot only when a fresh host read returns the original revision. Its later save still performs the host's conditional comparison. If the file changed, the draft retains its original baseline and text without obtaining a writable snapshot. A failed read also retains both, allowing another recovery attempt. An older dirty snapshot without a baseline keeps its text but cannot borrow the current file's revision. Clean tabs reread the current resource normally.
@@ -34,7 +36,7 @@ A registration seals its own record when it leaves and can no longer flush. A re
 
 The validator runs before a remembered workspace is registered. A failed durable write makes `flush()` return false even if the per-tab reload write succeeded. Editor therefore cannot claim a draft will survive window closure when only its reload copy was written. The retained original resource revisions still govern all later saves.
 
-Editor also handles unchanged legacy drafts during migration. It reads the current resource and compares the full draft after canonical line-ending normalization. If the text matches, there is no unsaved change to recover. If it differs or cannot be read, the unversioned draft remains protected and ordinary Save remains unavailable.
+Editor and Docs also handle unchanged legacy drafts during migration. They compare the recovered raw source and encoding format with the current resource. Matching visible text alone cannot establish that the bytes are unchanged. A differing signature, byte order or separator leaves the draft protected. Legacy signature-bearing source can preserve an exact copy under the decoded-body convention without acquiring a writable baseline for the original file.
 
 ## Verification
 

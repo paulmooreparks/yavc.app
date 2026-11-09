@@ -1488,7 +1488,7 @@
     {
       "ref": "yavc.slides/import-pptx@1",
       "title": "Import a PowerPoint File",
-      "description": "Read a .pptx file, given as base64, into a new unsaved deck in Slides: titles, text, lists, tables, two bodies side by side as columns, and notes. Pictures are noted by name, not kept.",
+      "description": "Read a bounded .pptx file, given as base64, into a new unsaved native deck. Supported embedded raster pictures are retained. The result reports unsupported layout, animations and omitted assets. The source file is unchanged.",
       "live": true,
       "inputSchema": {
         "type": "object",
@@ -1499,7 +1499,8 @@
         "properties": {
           "data": {
             "type": "string",
-            "description": "The file's bytes as base64."
+            "description": "The file's bytes as base64, at most 8 MiB before encoding.",
+            "maxLength": 11184812
           },
           "name": {
             "type": "string",
@@ -1525,6 +1526,13 @@
           },
           "pictures": {
             "type": "integer"
+          },
+          "omitted": {
+            "type": "integer"
+          },
+          "report": {
+            "type": "array",
+            "items": {"type":"string"}
           }
         }
       },

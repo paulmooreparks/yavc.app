@@ -1,4 +1,25 @@
 /* Copyright 2026 Paul Parks. SPDX-License-Identifier: Apache-2.0 */
+.md-review-dialog.dialog { width:min(64rem,calc(100vw - 2 * var(--space-3)));max-width:64rem; }
+.md-review-dialog .dialog-body { display:flex;flex-direction:column;gap:var(--space-3);min-height:0;max-height:65svh;overflow:auto; }
+.md-review-dialog .dialog-body > p { margin:0; }
+.md-review-layout { display:grid;grid-template-columns:minmax(12rem,2fr) minmax(0,3fr);gap:var(--space-4);min-height:0; }
+.md-review-selection,.md-review-details { min-width:0; }
+.md-review-selection > input { margin-bottom:var(--space-2); }
+.md-review-list { height:24rem;overscroll-behavior:contain; }
+.md-review-details { max-height:29rem;overflow:auto;overflow-wrap:anywhere;padding-inline-start:var(--space-4);border-inline-start:1px solid var(--border); }
+.md-review-details h4 { margin:0 0 var(--space-2);font-size:var(--text-sm); }
+.md-review-details > section { margin-block:var(--space-3); }
+.md-review-copy { white-space:pre-wrap;overflow-wrap:anywhere; }
+.md-review-tools { display:flex;flex-wrap:wrap;gap:var(--space-2);margin-top:var(--space-3); }
+.md-review-dialog [hidden] { display:none!important; }
+.pm-critic { white-space:normal; }
+.pm-critic-open { margin-inline-start:var(--space-1);vertical-align:baseline; }
+@media (max-width:640px) { .md-review-layout {grid-template-columns:minmax(0,1fr);} .md-review-list {height:10rem;} .md-review-details {max-height:16rem;border-inline-start:0;border-top:1px solid var(--border);padding:var(--space-3) 0 0;} }
+.md-import-report { width: min(48rem, calc(100vw - 2 * var(--space-3))); max-width: 48rem; }
+.md-import-report .dialog-body { max-height: 55svh; overflow: auto; overflow-wrap: anywhere; }
+.md-import-report .dialog-body > p { margin-top: 0; }
+.md-import-report .dialog-body > ul { margin-bottom: 0; padding-inline-start: var(--space-5); }
+.md-import-report li + li { margin-top: var(--space-2); }
 .md-typography-dialog.dialog { width: min(44rem, calc(100vw - 2rem)); max-width: calc(100vw - 2rem); }
 .md-typography-dialog .dialog-body { max-height: 72svh; overflow: auto; }
 .md-type-layout { display: block; }

@@ -28,6 +28,15 @@ test('legacy dirty recovery cannot borrow a current file revision',async()=>{
     assert.equal(host.reads,0);assert.equal(result.snapshot,null);assert.equal(result.text,'legacy draft');assert.equal(result.conflict,'unknown');
     const clean=await recovery.restore(client,'one',null,null);assert.equal(clean.snapshot.revision,'1');assert.equal(clean.modified,false);
 });
+test('encoding baselines bind recovered drafts and legacy signed source cannot acquire a new convention',async()=>{
+    let encoding='utf-16le',bom=true;const client=resources.create({version:2,read:async({resource})=>({resource,revision:'same',text:'body',writable:true,encoding,bom})});
+    const opened=await client.read('one'),base=recovery.capture(client,opened);assert.equal(base.version,2);assert.equal(base.encoding,'utf-16le');
+    assert.equal((await recovery.restore(client,'one',base,'draft')).conflict,null);
+    encoding='utf-16be';const changed=await recovery.restore(client,'one',base,'draft');assert.equal(changed.conflict,'encoding');assert.equal(changed.snapshot,null);assert.equal(changed.text,'draft');
+    encoding='utf-8';const legacy=await recovery.restore(client,'one',{version:1,resource:'one',revision:'same'},'\ufefflegacy');assert.equal(legacy.conflict,'encoding');assert.equal(legacy.text,'\ufefflegacy');
+    bom=false;assert.equal((await recovery.restore(client,'one',{version:1,resource:'one',revision:'same'},'legacy')).conflict,null);
+    assert.throws(()=>recovery.validate({tabs:[{path:'one',format:{encoding:'utf-16le',bom:false}}]}),/signature/);
+});
 test('unavailable resources keep dirty text and baseline for another recovery attempt',async()=>{
     const client=resources.create({version:1,read:async()=>{throw new Error('Offline');}}),baseline={version:1,resource:'one',revision:'old'};
     const result=await recovery.restore(client,'one',baseline,'draft');assert.equal(result.conflict,'unavailable');assert.deepEqual(result.baseline,baseline);assert.equal(result.text,'draft');

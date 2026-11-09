@@ -23,7 +23,11 @@ const since = args.includes('--since') ? args[args.indexOf('--since') + 1] : nul
 
 // Code that is not the project's own: vendored libraries, built output.
 const SKIP = [/^\.claude\//, /(^|\/)vendor\//, /^web\/pudl\//, /(^|\/)node_modules\//, /^\.git\//, /^data\//, /^\.local\//,
-  /^apps\/md-engine\/(yavc-md\.wasm|wasm_exec\.js)$/, /^apps\/diagram-kit\/(yavc-d2\.wasm|wasm_exec\.js)$/, /\.min\.js$/];
+  /^apps\/md-engine\/(yavc-md\.wasm|wasm_exec\.js)$/, /^apps\/diagram-kit\/(yavc-d2\.wasm|wasm_exec\.js)$/,
+  // This reproducible bundle includes third-party documentation containing
+  // example HTML/JS. Its own sources are checked below and its input/output
+  // hashes are enforced by the language-service module test.
+  /^apps\/md-editor\/language-service\/worker\.js$/, /\.min\.js$/];
 const TEXT = new Set(['.js', '.mjs', '.go', '.css', '.html', '.md', '.json', '.sh', '.yml', '.yaml', '.xfer']);
 
 function walk(dir, out = []) {

@@ -8,6 +8,7 @@ import (
 	"html"
 	"strings"
 
+	"yavc.app/internal/footnotes"
 	"yavc.app/internal/frontmatter"
 	"yavc.app/internal/preview"
 	"yavc.app/internal/shortcodes"
@@ -46,7 +47,13 @@ func ParseDocumentWithMacros(text string, units []Unit, registry *shortcodes.Mac
 	}
 	front := text[:frontmatter.End(text)]
 	doc.Attrs["front"] = front
-	b := builder{text: text, starts: lineStarts(text), registry: registry}
+	notes := map[string]int{}
+	for _, unit := range units {
+		for label, number := range unit.Footnotes {
+			notes[label] = number
+		}
+	}
+	b := builder{text: text, starts: lineStarts(text), registry: registry, notes: notes}
 	content, tail := b.sequence(units, len(front), len(text))
 	doc.Attrs["tail"] = tail
 	if len(content) == 0 {
@@ -72,6 +79,7 @@ type builder struct {
 	starts   []int
 	uid      int
 	registry *shortcodes.MacroRegistry
+	notes    map[string]int
 }
 
 func (b *builder) lineEnd(line int) int {
@@ -128,7 +136,7 @@ func (b *builder) node(u Unit, src string) *Node {
 		return b.source(u.Kind, src, u.HTML, u.Diagrams)
 	}
 	if richKinds[u.Kind] {
-		if d, err := ParseWithMacros(src, b.registry); err == nil && len(d.Content) == 1 {
+		if d, err := parseWithNotes(src, b.registry, b.notes); err == nil && len(d.Content) == 1 {
 			n := d.Content[0]
 			if n.Attrs == nil {
 				n.Attrs = map[string]any{}
@@ -138,12 +146,52 @@ func (b *builder) node(u Unit, src string) *Node {
 			return n
 		}
 	}
+	if u.Kind == "footnote" {
+		if note := b.footnote(src); note != nil {
+			return note
+		}
+	}
 	if u.Kind == "shortcode" {
 		if n := b.container(src); n != nil {
 			return n
 		}
 	}
 	return b.source(u.Kind, src, u.HTML, u.Diagrams)
+}
+
+func (b *builder) footnote(src string) *Node {
+	lines := strings.Split(src, "\n")
+	first := strings.TrimLeft(lines[0], " \t")
+	end := strings.Index(first, "]:")
+	if !strings.HasPrefix(first, "[^") || end < 2 {
+		return nil
+	}
+	label := first[2:end]
+	if !footnotes.ValidLabel(label) {
+		return nil
+	}
+	lines[0] = strings.TrimPrefix(strings.TrimPrefix(first[end+2:], " "), "\t")
+	for i := 1; i < len(lines); i++ {
+		if strings.TrimSpace(lines[i]) == "" {
+			lines[i] = ""
+			continue
+		}
+		if strings.HasPrefix(lines[i], "    ") {
+			lines[i] = lines[i][4:]
+		} else if strings.HasPrefix(lines[i], "\t") {
+			lines[i] = lines[i][1:]
+		} else {
+			return nil
+		}
+	}
+	content, tail := b.body(strings.Join(lines, "\n"))
+	node := &Node{Type: "footnote", Attrs: map[string]any{"uid": b.next(), "src": src, "label": label, "number": b.notes[label], "tail": tail}, Content: content}
+	canonical, err := footnoteText(node)
+	if err != nil {
+		return nil
+	}
+	node.Attrs["canonical"] = canonical
+	return node
 }
 
 // A container shortcode's text is its opening line, its body and its
@@ -239,7 +287,7 @@ func splitBody(body, sep string) (parts []string, none []bool, seps []string) {
 // last one. An empty body gives one empty paragraph to type into.
 func (b *builder) body(text string) ([]*Node, string) {
 	blocks, _ := preview.RenderWithMacros(text, b.registry)
-	inner := builder{text: text, starts: lineStarts(text), uid: b.uid, registry: b.registry}
+	inner := builder{text: text, starts: lineStarts(text), uid: b.uid, registry: b.registry, notes: b.notes}
 	content, tail := inner.sequence(Units(blocks), 0, len(text))
 	b.uid = inner.uid
 	if len(content) == 0 {
@@ -339,6 +387,8 @@ func blockText(n *Node) (string, error) {
 	var s string
 	var err error
 	switch n.Type {
+	case "footnote":
+		s, err = footnoteText(n)
 	case "container", "columns":
 		s, err = containerText(n)
 	default:
@@ -356,6 +406,25 @@ func blockText(n *Node) (string, error) {
 		return src, nil
 	}
 	return s, nil
+}
+
+func footnoteText(node *Node) (string, error) {
+	label := stringAttr(node, "label")
+	if !footnotes.ValidLabel(label) {
+		return "", errors.New("invalid footnote label")
+	}
+	body, err := sequenceText(node.Content, "")
+	if err != nil {
+		return "", err
+	}
+	body += stringAttr(node, "tail")
+	lines := strings.Split(body, "\n")
+	for i := 1; i < len(lines); i++ {
+		if lines[i] != "" {
+			lines[i] = "    " + lines[i]
+		}
+	}
+	return "[^" + label + "]: " + strings.Join(lines, "\n"), nil
 }
 
 // containerText writes a container: its opening line, the body's blocks

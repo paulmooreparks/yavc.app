@@ -14,6 +14,7 @@ package preview
 
 import (
 	"bytes"
+	"fmt"
 	"regexp"
 	"sort"
 	"strconv"
@@ -29,7 +30,9 @@ import (
 	"github.com/yuin/goldmark/text"
 	"github.com/yuin/goldmark/util"
 
+	"yavc.app/internal/footnotes"
 	"yavc.app/internal/frontmatter"
+	"yavc.app/internal/review"
 	"yavc.app/internal/shortcodes"
 )
 
@@ -49,9 +52,10 @@ import (
 // The kind is one of paragraph, heading, list, tasklist, table, code, quote,
 // rule, html or other.
 type Block struct {
-	Line     int       `json:"line"`
-	HTML     string    `json:"html"`
-	Diagrams []Diagram `json:"diagrams,omitempty"`
+	Line      int            `json:"line"`
+	HTML      string         `json:"html"`
+	Diagrams  []Diagram      `json:"diagrams,omitempty"`
+	Footnotes map[string]int `json:"footnotes,omitempty"`
 }
 
 // Diagram is a diagram the page draws from its source. Line is the line of
@@ -125,8 +129,12 @@ func renderDocument(markdown string, registry *shortcodes.MacroRegistry, exporti
 	if exporting {
 		shortcodeExtension = shortcodes.WithExportMacros(registry)
 	}
+	display := review.Rendering(func(body string) string { return reviewInline(body, shortcodeExtension) }, shortcodeExtension, footnotes.Extension)
+	if exporting {
+		display = review.ExportRendering(func(body string) string { return reviewInline(body, shortcodeExtension) }, shortcodeExtension, footnotes.Extension)
+	}
 	md := goldmark.New(
-		goldmark.WithExtensions(extension.GFM, shortcodeExtension),
+		goldmark.WithExtensions(extension.GFM, shortcodeExtension, footnotes.Extension, display),
 		goldmark.WithParserOptions(parser.WithAutoHeadingID()),
 		goldmark.WithRendererOptions(
 			// The document is the person's own, and inline HTML (<u>, a
@@ -140,9 +148,23 @@ func renderDocument(markdown string, registry *shortcodes.MacroRegistry, exporti
 		if err := shortcodes.PruneExport(doc); err != nil {
 			return nil, nil, err
 		}
+		if review.Unresolved(doc, src) {
+			return nil, nil, fmt.Errorf("choose an accepted or original review projection, or resolve the review marks, before exporting")
+		}
+		footnotes.PrepareExport(doc)
 	}
 
 	var problems []Problem
+	if catalog, err := review.DisplayCatalog(doc); err != nil && !exporting {
+		problems = append(problems, Problem{Line: 1, Message: err.Error()})
+	} else if !exporting {
+		for _, problem := range catalog.Problems {
+			problems = append(problems, Problem{Line: lineOf(starts, problem.From), Message: problem.Message})
+		}
+	}
+	for _, message := range footnotes.Problems(doc) {
+		problems = append(problems, Problem{Line: 1, Message: message})
+	}
 	var blocks []Block
 	for _, u := range units(doc, src, starts) {
 		d.line = u.start
@@ -163,6 +185,9 @@ func renderDocument(markdown string, registry *shortcodes.MacroRegistry, exporti
 			HTML:     `<div class="dinah-block" data-line="` + strconv.Itoa(u.start) + `">` + inner + `</div>`,
 			Diagrams: append([]Diagram(nil), d.diagrams[first:]...),
 		})
+	}
+	if len(blocks) > 0 {
+		blocks[0].Footnotes = footnotes.Context(doc)
 	}
 	return blocks, problems, nil
 }
@@ -204,7 +229,79 @@ func units(doc ast.Node, src []byte, starts []int) []unit {
 		}
 		out[i].end = end
 	}
-	return out
+	return reviewUnits(out, doc, starts)
+}
+
+// ReviewInlineHTML renders a proposal body with ordinary inline syntax only.
+// Review parsing is omitted so examples in a proposal cannot nest annotations.
+func ReviewInlineHTML(body string, registry *shortcodes.MacroRegistry) string {
+	return reviewInline(body, shortcodes.WithMacros(registry))
+}
+
+func reviewInline(body string, syntax goldmark.Extender) string {
+	source := []byte("x " + body)
+	markdown := goldmark.New(goldmark.WithExtensions(extension.GFM, syntax), goldmark.WithRendererOptions(html.WithUnsafe()))
+	doc := markdown.Parser().Parse(text.NewReader(source))
+	paragraph := doc.FirstChild()
+	if paragraph == nil || paragraph.Kind() != ast.KindParagraph || paragraph.NextSibling() != nil {
+		return shortcodes.Esc(body)
+	}
+	first, ok := paragraph.FirstChild().(*ast.Text)
+	if !ok || first.Segment.Start != 0 || first.Segment.Stop < 2 {
+		return shortcodes.Esc(body)
+	}
+	first.Segment.Start += 2
+	var out bytes.Buffer
+	for child := paragraph.FirstChild(); child != nil; child = child.NextSibling() {
+		if err := markdown.Renderer().Render(&out, source, child); err != nil {
+			return shortcodes.Esc(body)
+		}
+	}
+	return out.String()
+}
+
+// Multiline annotations share one source unit. Removed comment paragraphs
+// must not reappear as loose source gaps when the rich tree is reconstructed.
+func reviewUnits(units []unit, doc ast.Node, starts []int) []unit {
+	catalog, err := review.DisplayCatalog(doc)
+	if err != nil || len(catalog.Marks) == 0 || len(units) == 0 {
+		return units
+	}
+	type group struct{ left, right, end int }
+	groups := []group{}
+	for _, mark := range catalog.Marks {
+		if !strings.ContainsAny(mark.Raw, "\r\n") {
+			continue
+		}
+		from, to := lineOf(starts, mark.From), lineOf(starts, mark.To-1)
+		left := sort.Search(len(units), func(i int) bool { return units[i].end >= from })
+		right := sort.Search(len(units), func(i int) bool { return units[i].start > to }) - 1
+		if left >= len(units) || right < left {
+			continue
+		}
+		if len(groups) > 0 && left <= groups[len(groups)-1].right {
+			last := &groups[len(groups)-1]
+			last.right = max(last.right, right)
+			last.end = max(last.end, to)
+		} else {
+			groups = append(groups, group{left, right, to})
+		}
+	}
+	if len(groups) == 0 {
+		return units
+	}
+	result := []unit{}
+	cursor := 0
+	for _, group := range groups {
+		result = append(result, units[cursor:group.left]...)
+		merged := unit{start: units[group.left].start, end: max(units[group.right].end, group.end), kind: "review"}
+		for i := group.left; i <= group.right; i++ {
+			merged.nodes = append(merged.nodes, units[i].nodes...)
+		}
+		result = append(result, merged)
+		cursor = group.right + 1
+	}
+	return append(result, units[cursor:]...)
 }
 
 // lineStarts is the byte offset each line of src starts at, in order, so
@@ -284,6 +381,8 @@ func kindOf(n ast.Node) string {
 		return "list"
 	case *extast.Table:
 		return "table"
+	case *extast.Footnote:
+		return "footnote"
 	case *ast.FencedCodeBlock, *ast.CodeBlock:
 		return "code"
 	case *ast.Blockquote:

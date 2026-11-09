@@ -158,13 +158,15 @@
            wrapped, the Markdown views offered, the formatting offered, a
            site page's source to open, and the file's address on the site. */
         var wrapOn = true, viewsOffered = false, formatOffered = false, sourceOffered = false, siteUrl = null;
-        function commandsChanged() { if (destroyed) { return; } if (opts.commandsChanged) { opts.commandsChanged(); } if (tabRow) { tabRow.render(); } }
+        var reviewObservers=new Set(),reviewController=null;
+        function commandsChanged() { if (destroyed) { return; } if (opts.commandsChanged) { opts.commandsChanged(); } if (tabRow) { tabRow.render(); } reviewObservers.forEach(function(listener){listener();}); }
 
-        var CM = null, F = null, view = null, destroyed = false, startupFailed = false, unsubscribe = null, styleLifetime = new AbortController();
+        var CM = null, sourceHistory = null, F = null, view = null, destroyed = false, startupFailed = false, unsubscribe = null, styleLifetime = new AbortController();
         var tabs = [], active = -1, untitled = 0;
         var H = window.pudlHost || {}, resourceSession = null, resources = null, recovery = null;
         var documentWindows = H.documentWindows, documentReady = false, receivingDocument = false, unbindDocuments = null;
-        async function routeDocument(operation, input) {
+        async function routeDocument(operation, input,guard) {
+            if(guard&&!guard())throw new DOMException('Import cancelled.','AbortError');
             if (!documentWindows || documentWindows.mode(root) !== 'single' || !documentReady || receivingDocument || restoring) return null;
             if (operation === 'open-file') {
                 var checked = resources ? await resources.read(input.path) : null;
@@ -173,6 +175,7 @@
                 if (!resources && F && !F.resolve(F.home(), input.path)) throw new Error('The file could not be found.');
             }
             if (pageActive()) await visual.api.sync();
+            if(guard&&!guard())throw new DOMException('Import cancelled.','AbortError');
             var t = current();
             if (!t || (!t.path && !dirtyTab(t) && !view.state.doc.length)) return null;
             return {result: await documentWindows.open(root, app, {operation: operation, input: input})};
@@ -196,12 +199,12 @@
         /* === State ====================================================== */
 
         function current() { return tabs[active] || null; }
+        function sourceFormat(t){return window.yavcContentResources.format(t&&t.resource&&t.resource.encoding!==undefined?t.resource:t&&t.format||{});}
         function normalizedSource(text) { return text.replace(/\r\n?/g, '\n'); }
         function submittedText(t) {
-            var text = (current() === t ? view.state : t.state).doc.toString();
-            var original = t.resource ? t.resource.text : t.savedRaw;
-            return typeof original === 'string' && text === normalizedSource(original) ? original : text;
+            return sourceHistory.raw(current() === t ? view.state : t.state);
         }
+        function sourceModified(t,state){return t.saved===null||sourceHistory.raw(state||(current()===t?view.state:t.state))!==t.savedRaw;}
         function dirtyTab(t) { return !!(t && (t.modified || (t === current() && pageActive() && visual.api.pending()))); }
         function stateString() { var t = current(); return t && t.path ? 'file=' + encodeURIComponent(t.path).replace(/%2F/g, '/').replace(/%7E/g, '~') + '&view='+viewMode+(t.navigationLine > 1 ? '&line=' + t.navigationLine : '') : ''; }
         function announce(push) {
@@ -234,10 +237,11 @@
             if (/\.(md|markdown)$/i.test(p)) { return 'markdown'; }
             if (/\.(json|canvas)$/i.test(p)) { return 'json'; }
             if (/\.css$/i.test(p)) { return 'css'; }
+            if (/\.html?$/i.test(p)) { return 'html'; }
             if (/^~\/bin\/|^\/bin\/|\.sh$/i.test(p)) { return 'script'; }
             return 'text';
         }
-        var LANG_NAMES = { markdown: 'Markdown', json: 'JSON', css: 'CSS', script: 'Script', text: 'Plain Text' };
+        var LANG_NAMES = { markdown: 'Markdown', json: 'JSON', css: 'CSS', html: 'HTML', script: 'Script', text: 'Plain Text' };
         /* === Shortcodes in the text =========================================
            A {{shortcode}} is marked as one, its name and its arguments in
            their own colours; {{ offers the shortcodes' names and, inside a
@@ -327,6 +331,7 @@
             if (lang === 'markdown') { return [CM.markdown(), shortcodeExtensions()]; }
             if (lang === 'json') { return CM.json(); }
             if (lang === 'css') { return CM.css(); }
+            if (lang === 'html') { return CM.html(); }
             if (lang === 'script') { return CM.StreamLanguage.define(CM.shell); }
             return [];
         }
@@ -338,15 +343,15 @@
         }
 
         function stateFor(tab, text) {
-            return CM.EditorState.create({ doc: text, extensions: extensionsFor(tab) });
+            return CM.EditorState.create({ doc: text, extensions: extensionsFor(tab,text) });
         }
         function languageAssistance(tab) {
-            return lsp && tab.lang === 'json' ? lsp.extension(/\.canvas$/i.test(tab.path || tab.name) ? 'canvas' : 'json', !!tab.readOnly) : [];
+            return lsp && ['json','css','html'].indexOf(tab.lang) >= 0 ? lsp.extension(/\.canvas$/i.test(tab.path || tab.name) ? 'canvas' : tab.lang, !!tab.readOnly) : [];
         }
-        function extensionsFor(tab) {
+        function extensionsFor(tab,raw) {
             return [
                     CM.lineNumbers(), CM.highlightActiveLineGutter(), CM.highlightSpecialChars(),
-                    CM.history(), CM.drawSelection(), CM.dropCursor(), CM.indentOnInput(),
+                    sourceHistory.extension(raw), CM.drawSelection(), CM.dropCursor(), CM.indentOnInput(),
                     CM.bracketMatching(), CM.closeBrackets(), CM.rectangularSelection(), CM.crosshairCursor(),
                     CM.highlightActiveLine(), CM.highlightSelectionMatches(),
                     /* The Editor's own bindings come first, so they win over
@@ -355,7 +360,7 @@
                     /* CodeMirror's history keys include Ctrl+U, undo selection,
                        which would answer before the menu's Underline does. */
                     CM.keymap.of([].concat(
-                        CM.closeBracketsKeymap, CM.defaultKeymap, CM.searchKeymap, CM.historyKeymap.filter(function (b) { return b.key !== 'Mod-u'; }), CM.lintKeymap, [CM.indentWithTab])),
+                        [{key:'Mod-z',run:function(v){return sourceHistory.run('undo',v);}},{key:'Mod-y',run:function(v){return sourceHistory.run('redo',v);}},{key:'Mod-Shift-z',run:function(v){return sourceHistory.run('redo',v);}}],CM.closeBracketsKeymap, CM.defaultKeymap, CM.searchKeymap, CM.lintKeymap, [CM.indentWithTab])),
                     window.yavcMdEditor.codeSearch(CM, keepQuery),
                     makeTheme(CM),
                     wrapComp.of(wrapOn ? CM.EditorView.lineWrapping : []),
@@ -380,7 +385,7 @@
         /* === Tabs ======================================================== */
 
         function markModified(tab) {
-            var mod = !!tab.savePending || !!tab.saveFailed || view.state.doc.toString() !== tab.saved;
+            var mod = !!tab.savePending || !!tab.saveFailed || sourceModified(tab,view.state);
             if (mod !== tab.modified) { tab.modified = mod; renderTabs(); }
         }
 
@@ -469,6 +474,7 @@
             if (pageActive()) await visual.api.sync();
             if (destroyed || current() !== owner) return;
             if (visual.api) await visual.api.enable(false);
+            if (destroyed || current() !== owner) return;
             ++visual.gen;
             viewMode = 'text';
         }
@@ -510,10 +516,12 @@
             say(t.external ? 'This file was changed somewhere else since you opened it.' : '', t.external ? 'warn' : false);
         }
 
-        async function addTab(t, text) {
+        async function addTab(t, text,guard) {
             await leaveDocument(); if (destroyed) return;
+            if(guard&&!guard())return;
             if (documentWindows && documentWindows.mode(root) === 'single' && !restoring && tabs.length === 1 && !current().path && !dirtyTab(current()) && !view.state.doc.length) { tabs = []; active = -1; }
             t.savedRaw = text;
+            t.format=sourceFormat(t);
             t.modified = false;
             t.state = stateFor(t, text);
             t.saved = t.state.doc.toString();
@@ -646,12 +654,12 @@
                 await visual.api.sync();
                 if (destroyed || current() !== t) throw new Error('The document changed before saving.');
             }
-            var text = submittedText(t);
+            var text = submittedText(t),format=sourceFormat(t);
             var ticket = t.saveTicket = (t.saveTicket || 0) + 1;
             t.savePending = (t.savePending || 0) + 1;
             var pending = (t.saveQueue || Promise.resolve()).then(function () {
                 if (destroyed || tabs.indexOf(t) < 0) { throw new Error('The document was closed before its queued save could run.'); }
-                return writeSubmitted(t, path, text, ticket);
+                return writeSubmitted(t, path, text, ticket,format);
             });
             t.saveQueue = pending.catch(function () { });
             try { return await pending; }
@@ -662,19 +670,19 @@
             } finally {
                 t.savePending--;
                 if (!destroyed && tabs.indexOf(t) >= 0) {
-                    t.modified = !!t.savePending || !!t.saveFailed || (current() === t ? view.state : t.state).doc.toString() !== t.saved;
+                    t.modified = !!t.savePending || !!t.saveFailed || sourceModified(t);
                     renderTabs(); keep();
                 }
             }
         }
-        async function writeSubmitted(t, path, text, ticket) {
+        async function writeSubmitted(t, path, text, ticket,format) {
             requireNative(t.path===path ? t.name : path);
             if (current() === t) { say('Saving…'); }
             if (resources) {
                 var accepted;
-                if (t.path === path && t.resource) accepted = await resources.write(t.resource, text);
+                if (t.path === path && t.resource) {var currentFormat=sourceFormat(t);if(currentFormat.encoding!==format.encoding||currentFormat.bom!==format.bom)throw new Error('The source encoding changed before this queued save. Save again.');accepted = await resources.write(t.resource, text);}
                 else if (t.path === path && !t.fresh) throw new Error('The recovered draft has no matching revision. Use Save As to preserve a copy.');
-                else accepted = await resources.create(path, text);
+                else accepted = await resources.create(path, text,format);
                 return acceptResource(t, accepted, text, ticket);
             }
             throw new Error('This host has no revision-safe writer. Save a copy on a supported host or download the source.');
@@ -697,7 +705,9 @@
             });
             if (!res) { return false; }
             if (res.download) {
-                download(res.download, new Blob([(current() === t ? view.state : t.state).doc.toString()], { type: 'text/plain' }));
+                await loadScript(resourceAsset('text-codec.js'));
+                var format=sourceFormat(t),bytes=window.yavcTextCodec.encode((format.bom?'\ufeff':'')+submittedText(t),format.encoding);
+                download(res.download, new Blob([bytes], { type: 'text/plain;charset='+format.encoding }));
                 say('Downloaded ' + res.download + '. The tab still holds your text.');
                 return false;
             }
@@ -714,10 +724,11 @@
                 if (destroyed || !tabs.includes(t)) return false;
             }
             t.resource = accepted; t.baseline = null; t.conflict = null; t.path = accepted.resource;
+            t.format=sourceFormat(t);
             t.name = accepted.name || t.name; t.lang = languageFor(t.name); t.savedRaw = text; t.saved = normalizedSource(text);
             if(current()===t)window.yavcMdEditor.refreshReferences(root,picturesHost());
             t.readOnly = !resources.canWrite(accepted); t.saveFailed = !!syncError; t.fresh = false; t.external = false;
-            t.modified = !!syncError || (current() === t ? view.state : t.state).doc.toString() !== t.saved || ticket !== t.saveTicket;
+            t.modified = !!syncError || sourceModified(t) || ticket !== t.saveTicket;
             var effects = [langComp.reconfigure(langExtension(t.lang)), lintComp.reconfigure(lintExtension(t))];
             if (current() === t) view.dispatch({ effects: effects }); else t.state = t.state.update({ effects: effects }).state;
             await refreshAccess(t, !!syncError); if (destroyed || !tabs.includes(t)) return false;
@@ -725,35 +736,49 @@
             if (current() === t) say(syncError ? 'The submitted source was saved, but the newer rich draft could not synchronize. Copy it before leaving. ' + syncError.message : 'Saved ' + t.name + (t.modified ? '; newer edits are still unsaved.' : '.'), !!syncError);
             return true;
         }
-        async function copyResource(t) {
+        async function copyResource(t,requestedFormat) {
             if (current() === t && pageActive()) {
                 await visual.api.sync();
                 if (destroyed || current() !== t) throw new Error('The document changed before Save As.');
             }
-            var text = submittedText(t), ticket = t.saveTicket = (t.saveTicket || 0) + 1;
+            var text = submittedText(t),format=window.yavcContentResources.format(requestedFormat||sourceFormat(t)), ticket = t.saveTicket = (t.saveTicket || 0) + 1;
             t.savePending = (t.savePending || 0) + 1;
             var pending = (t.saveQueue || Promise.resolve()).then(async function () {
                 if (destroyed || tabs.indexOf(t) < 0) throw new Error('The document closed before Save As.');
-                var accepted = await resources.saveAs({ name: t.name, sourceResource: t.path }, text, { host: root, signal: styleLifetime.signal, checkName:function (name) {try{requireNative(name);return null;}catch(err){return err.message;}} });
+                var accepted = await resources.saveAs(Object.assign({ name: t.name, sourceResource: t.path },format), text, { host: root, signal: styleLifetime.signal, checkName:function (name) {try{requireNative(name);return null;}catch(err){return err.message;}} });
                 return accepted ? acceptResource(t, accepted, text, ticket) : false;
             });
             t.saveQueue = pending.catch(function () {});
             try { return await pending; } catch (err) { if (!destroyed) say(err.message, true); return false; }
-            finally { t.savePending--; if (!destroyed && tabs.includes(t)) { t.modified = !!t.savePending || !!t.saveFailed || (current() === t ? view.state : t.state).doc.toString() !== t.saved; renderTabs(); keep(); } }
+            finally { t.savePending--; if (!destroyed && tabs.includes(t)) { t.modified = !!t.savePending || !!t.saveFailed || sourceModified(t); renderTabs(); keep(); } }
+        }
+        async function encodedCopy(){
+            var t=current();if(!t||!resources||!resources.canSaveAs())return;
+            if(pageActive())await visual.api.sync();
+            if(destroyed||current()!==t)return;
+            var text=submittedText(t),formats=[['utf8','UTF-8',{encoding:'utf-8',bom:false}],['utf8bom','UTF-8 with Signature',{encoding:'utf-8',bom:true}],['utf16le','UTF-16 Little Endian',{encoding:'utf-16le',bom:true}],['utf16be','UTF-16 Big Endian',{encoding:'utf-16be',bom:true}]].filter(function(item){return resources.canFormat(item[2]);}),format=sourceFormat(t),selected=formats.find(function(item){return item[2].encoding===format.encoding&&item[2].bom===format.bom;})||formats[0];
+            if(!selected)return;
+            function unchanged(){return !destroyed&&current()===t&&submittedText(t)===text;}
+            var value=await window.yavcDialog.askText('Save Encoded Copy','Encoding',selected[0],{choices:formats.map(function(item){return [item[0],item[1]];}),okLabel:'Choose Destination…',help:'Choose the encoding for the copy. The original file stays unchanged.',signal:styleLifetime.signal,validate:function(value){return !unchanged()?'The document changed. Cancel and try again.':formats.some(function(item){return item[0]===value;})?null:'Choose an encoding.';}});
+            if(value!=null&&unchanged())return copyResource(t,formats.find(function(item){return item[0]===value;})[2]);
         }
 
         var download = window.yavcUtil.download;
-        async function exportDocument(format) {
+        async function exportDocument(format,options) {
             var tab = current(); if (!tab || tab.lang !== 'markdown') { throw new Error('Choose a Markdown document to export.'); }
             if (pageActive()) { await visual.api.sync(); }
             if (destroyed || current() !== tab) { throw new Error('The document changed during export.'); }
             var text = view.state.doc.toString(), directory = styleDirectory(), pictures = picturesHost(); pictures.dir = function () { return directory; };
             function unchanged() { return !destroyed && current() === tab && view.state.doc.toString() === text; }
             var enginePromise = documentEngine(text), K = await loadKit(), m = await enginePromise, E = await K.exports();
+            var R=await reviewModule(),output=await R.project({text:text,engine:m,root:root,signal:styleLifetime.signal,current:unchanged,interactive:!options||options.interactive!==false,policy:options&&options.reviewPolicy});
+            if(output===null)throw new DOMException('Export cancelled.','AbortError');
+            if(!unchanged())throw new Error('The document changed during export.');
+            m=m.withMacros(output,sharedMacros);
             await K.styles();
-            var front = m.front(text), path = '';
+            var front = m.front(output), path = '';
             (front.entries || []).forEach(function (entry) { if (entry.key === 'stylesheet') { path = entry.value; } });
-            var result = await E.build(format, { text: text, engine: m, stylesheet: window.yavcStyleTools.resolve(path, directory),
+            var result = await E.build(format, { text: output, engine: m, stylesheet: window.yavcStyleTools.resolve(path, directory),
                 read: function (path) { if (!unchanged()) { throw new Error('The document changed during export.'); } return window.pudlHost.fs.readText(path); }, pictures: pictures, current: unchanged });
             result.name = (tab.path ? tab.path.split('/').pop().replace(/(?:\.docs)?\.md$/i, '') : 'document') + '.' + format;
             return result;
@@ -761,7 +786,7 @@
         async function downloadDocument(format) {
             say('Writing the ' + format.toUpperCase() + ' file…');
             try { var result = await exportDocument(format); download(result.name, result.blob); say('Downloaded ' + result.name + '. ' + result.warnings.join(' ')); }
-            catch (err) { say('The document could not be exported: ' + err.message, true); }
+            catch (err) { if(err.name!=='AbortError')say('The document could not be exported: ' + err.message, true);else say('Export cancelled.'); }
         }
 
         /* === Dialogs ====================================================== */
@@ -779,8 +804,8 @@
                 requireNative(chosen.name);
                 await loadScript(resourceAsset('text-codec.js'));
                 if (destroyed) return;
-                var codec=window.yavcTextCodec, text=codec.decode(codec.encode(chosen.text,'utf-8')).text;
-                await importedDocument(chosen.name,text);
+                var codec=window.yavcTextCodec, decoded=codec.decode(codec.encode(chosen.text,'utf-8'));
+                await importedDocument(chosen.name,decoded.bom?decoded.text.slice(1):decoded.text,{encoding:decoded.encoding,bom:decoded.bom});
                 return;
             }
             var t = current(), node = t && t.path && F ? F.resolve(F.home(), t.path) : null;
@@ -788,7 +813,7 @@
             var res = await FB.pick(F, {
                 mode: 'open', title: 'Open', host: root, computer: true, signal:styleLifetime.signal,
                 start: node ? F.displayPath(F.realOf(node).parent) : '~',
-                check: function (r) { return F.isText(r) ? null : r.name + ' isn\'t a text file, so the editor can\'t open it.'; },
+                check: function (r) { return F.isText(r)||resources&&!r.children&&r.home&&!r.server ? null : r.name + ' isn\'t a text file, so the editor can\'t open it.'; },
                 /* The dialog stays open while the file is read, and says
                    there why it couldn't be. */
                 commit: function (c) { return c.file ? openFromComputer(c.file, true) : openPath(c.path, true); }
@@ -805,16 +830,34 @@
             await loadScript(resourceAsset('text-codec.js'));
             var decoded = window.yavcTextCodec.decode(new Uint8Array(await file.arrayBuffer()));
             if(destroyed)return false;
-            if(decoded.encoding !== 'utf-8')throw new Error('This encoding is not writable here. Keep the original file or convert a copy to UTF-8.');
-            var text = decoded.text;
+            var text = decoded.bom?decoded.text.slice(1):decoded.text;
             if (text.indexOf('\0') >= 0) { return fail(file.name + ' isn\'t a text file, so the editor can\'t open it.'); }
-            await importedDocument(file.name,text);
+            await importedDocument(file.name,text,{encoding:decoded.encoding,bom:decoded.bom});
         }
-        async function importedDocument(name,text) {
+        async function importWordBuffer(buffer,name) {
+            var ticket=current(),stillCurrent=function(){return !destroyed&&current()===ticket;};
+            await mdEngine();var K=await loadKit();await loadScript(K.here+'import-word.js'+K.stamp);
+            var got=await window.yavcWordImport.docx(buffer,{kit:K,signal:styleLifetime.signal,current:stillCurrent});
+            if(!stillCurrent())return false;
+            await loadScript(K.here+'office-input.js'+K.stamp);
+            var accepted=await window.yavcOfficeInput.report({title:'Word Import Report',root:root,signal:styleLifetime.signal,current:stillCurrent,
+                summary:'The new native copy contains '+got.pictures+' image(s) and '+got.notes+' note(s). The original Word file stays unchanged.',messages:got.report});
+            if(!accepted)return false;
+            return importedDocument(String(name||'Imported Word').replace(/\.docx$/i,'')+'.docs.md',got.text,undefined,stillCurrent);
+        }
+        async function importWord(){
+            var owner=current(),K=await loadKit();await loadScript(K.here+'office-input.js'+K.stamp);
+            var selected=await window.yavcOfficeInput.pick({title:'Import Word',extension:'.docx',root:root,signal:styleLifetime.signal,current:function(){return !destroyed&&current()===owner;},browser:FB,fs:F,bytes:H.contentBytes});
+            if(!selected||destroyed||current()!==owner)return false;
+            return importWordBuffer(selected.buffer,selected.name);
+        }
+        async function importedDocument(name,text,format,guard) {
             requireNative(name);
-            var routed = await routeDocument('import-source', {name: name, text: text}); if (routed) return routed.result;
-            await addTab({path:null,name:name,lang:languageFor(name),readOnly:false},text);
-            var t=current();t.saved=null;t.modified=true;renderTabs();
+            format=window.yavcContentResources.format(format||{});
+            var routed = await routeDocument('import-source', {name: name, text: text,format:format},guard); if (routed) return routed.result;
+            if(guard&&!guard())return false;
+            var t={path:null,name:name,lang:languageFor(name),readOnly:false,format:format};await addTab(t,text,guard);
+            if(!tabs.includes(t))return false;t.saved=null;t.modified=true;renderTabs();
             say('Opened '+name+'. Save As keeps a native copy through this host.');
         }
 
@@ -1132,7 +1175,7 @@
         function pagedView(mode) { return mode === 'document'; }
         function pageLayout(layout) {
             el.pages.textContent = layout.count + (layout.count === 1 ? ' page' : ' pages');
-            pageNotice(layout.oversized ? 'A block is taller than the page. Shorten it or enlarge the page before printing. Line-level pagination is not available yet.' : '');
+            pageNotice(layout.problem || (layout.oversized ? 'An indivisible block is taller than the page. Shorten it or enlarge the page before printing.' : ''));
         }
         function pageNotice(message) {
             var notice = root.querySelector('[data-role="page-problems"]');
@@ -1189,8 +1232,10 @@
                 if (pageActive()) { await visual.api.sync(); }
                 var text = view.state.doc.toString(), K = await loadKit(), E = await K.exports(), P = await K.pages(), m = await documentEngine(text);
                 function unchanged() { return !destroyed && current() === t && view.state.doc.toString() === text; }
+                var R=await reviewModule(),output=await R.project({text:text,engine:m,root:root,signal:styleLifetime.signal,current:unchanged});if(output===null)return;
+                m=m.withMacros(output,sharedMacros);
                 if (printFrame) { printFrame.remove(); printFrame = null; }
-                await E.prepare({ text: text, engine: m, stylesheet: currentSharedStyle, pictures: picturesHost(), read: window.pudlHost.fs.readText, current: unchanged,
+                await E.prepare({ text: output, engine: m, stylesheet: currentSharedStyle, pictures: picturesHost(), read: window.pudlHost.fs.readText, current: unchanged,
                     renderPages: async function (surface, page) {
                         if (!unchanged()) { throw new Error('The document changed during print preparation.'); }
                         var d = P.surface(surface, page), flow = document.createElement('div'); flow.className = 'doc-page-flow';
@@ -1198,16 +1243,22 @@
                         flow.append.apply(flow, Array.from(surface.childNodes)); surface.append(flow);
                         await document.fonts.ready;
                         var blocks = P.blocks(flow), layout = P.plan(blocks, page);
+                        if(layout.problem)throw new Error(layout.problem);
                         if (layout.oversized) { throw new Error('A block is taller than the page. Shorten it or enlarge the page before printing.'); }
                         var frame = document.createElement('iframe'); frame.className = 'ed-print-frame'; frame.title = 'Document Print'; frame.inert = true; frame.tabIndex = -1; frame.setAttribute('aria-hidden', 'true'); document.body.append(frame); printFrame = frame;
+                        var doc = frame.contentDocument;
+                        // A static standards-mode shell keeps table typography
+                        // consistent with the document used for measurement.
+                        doc.open();doc.write('<!doctype html><html><head></head><body></body></html>');doc.close();
                         frame.contentWindow.addEventListener('afterprint', function () { frame.remove(); if (printFrame === frame) { printFrame = null; } }, { once: true });
-                        var doc = frame.contentDocument; doc.title = t.name || 'Document';
+                        doc.title = t.name || 'Document';
                         document.querySelectorAll('head link[rel="stylesheet"], head style').forEach(function (node) { doc.head.append(node.cloneNode(true)); });
                         var css = doc.createElement('style'); css.textContent = '@page{size:' + page.width + 'pt ' + page.height + 'pt;margin:0}html,body{margin:0;padding:0;background:white} .doc-print-sheet{box-sizing:border-box;break-after:page;break-inside:avoid;margin:0!important;min-height:0!important;height:' + d.height + 'px!important;background-image:none!important;print-color-adjust:exact;-webkit-print-color-adjust:exact} .doc-print-sheet:last-child{break-after:auto} .doc-print-sheet .sc-page-break{display:none}'; doc.head.append(css);
-                        var at = 0, starts = [0].concat(layout.gaps.map(function (gap) { return gap.index; })).concat(blocks.length);
+                        var at = 0, starts = [0].concat(layout.gaps.map(function (gap) { return gap.index; })).concat(blocks.length);while(starts.length<layout.count+1)starts.push(blocks.length);
                         for (var i = 0; i < starts.length - 1; i++) {
                             var sheet = surface.cloneNode(false); sheet.classList.add('doc-print-sheet'); var body = doc.createElement('div'); body.className = 'doc-page-flow'; sheet.append(body);
-                            for (at = starts[i]; at < starts[i + 1]; at++) { body.append(blocks[at].node.cloneNode(true)); }
+                            body.append(window.yavcPageLines.fragment(flow, blocks, starts[i], starts[i + 1]));
+                            (layout.footnotes||[]).filter(function(note){return note.page===i+1;}).forEach(function(note){var copy=P.noteFragment(note,blocks);copy.classList.add('doc-print-footnote');copy.style.position='absolute';copy.style.marginTop='0';copy.style.top=(d.top+note.top-i*(d.height+24))+'px';copy.style.left=d.left+'px';copy.style.width=(d.width-d.left-d.right)+'px';sheet.append(copy);});
                             var layer = doc.createElement('div'); layer.className = 'doc-furniture';
                             var header = window.yavcDocumentSettings.row(page, 'header', i + 1, starts.length - 1, doc), footer = window.yavcDocumentSettings.row(page, 'footer', i + 1, starts.length - 1, doc);
                             header.style.top = (page.margins[1] / 1.5 - 8) + 'px'; footer.style.top = ((page.height - page.margins[3] / 2) / .75 - 8) + 'px'; layer.append(header, footer); sheet.append(layer);
@@ -1266,9 +1317,61 @@
                 save: function (next) { takeVisualText(next); textChangedForPage(); refreshStyles(); } }); }
             catch (err) { say(err.message, true); }
         }
+        async function insertFootnote() {
+            var t=current();if(!t||t.readOnly||t.lang!=='markdown')return;
+            var m=await mdEngine();
+            if(destroyed||current()!==t||t.readOnly)return;
+            if(pageActive()&&!await visual.api.prepareEdit())return;
+            var rich=pageActive()?visual.api.footnoteSelection():null,text=view.state.doc.toString(),selection=view.state.selection;
+            function unchanged(){return !destroyed&&current()===t&&!t.readOnly&&view.state.doc.toString()===text&&(rich?rich.current():view.state.selection.eq(selection));}
+            if(!unchanged())return;
+            if(pageActive()&&!rich){say('Place the caret in a paragraph before inserting a footnote.',true);return;}
+            var tree=m.doc(text),used=new Set();function collect(node){if(node.attrs&&node.attrs.label)used.add(node.attrs.label);(node.content||[]).forEach(collect);}collect(tree);
+            if(used.size>=256){say('A document supports at most 256 footnotes.',true);return;}
+            var value=await window.yavcDialog.askText('Insert Footnote','Footnote Text','',{multiline:true,okLabel:'Insert',signal:styleLifetime.signal,help:'The reference is inserted after the selection. You can format the note on the page.',validate:function(value){if(!unchanged())return 'The document or selection changed. Cancel and try again.';return !value.trim()?'Enter the footnote text.':value.length>16384?'Footnote text is limited to 16,384 characters.':null;}});
+            if(value==null||!unchanged())return;
+            if(rich){rich.apply(value);return;}
+            var index=1;while(used.has('note-'+index))index++;var label='note-'+index;
+            var content=value.split(/\n\s*\n/).map(function(part){var children=[];part.split('\n').forEach(function(line,i){if(i)children.push({type:'soft_break'});if(line)children.push({type:'text',text:line});});return {type:'paragraph',content:children};});
+            var definition=m.markdown({type:'doc',attrs:{tail:''},content:[{type:'footnote',attrs:{label:label,tail:''},content:content}]}),at=selection.main.to;
+            var next=text.slice(0,at)+'[^'+label+']'+text.slice(at);next+=(next.endsWith('\n\n')?'':next.endsWith('\n')?'\n':'\n\n')+definition+'\n';
+            takeVisualText(next,true);textChangedForPage();
+        }
         async function pageParts() {
             await mdEngine();
             await loadKit().then(function (k) { return k.pageView(); });
+        }
+        async function reviewModule(){var K=await loadKit();if(!window.pudlListbox)await K.loadScript(new URL('pudl-listbox.js',new URL(H.pudl,document.baseURI)).href);await K.loadScript(K.here+'review-tools.js'+K.stamp);return window.yavcReviewTools;}
+        async function captureReview(selection){
+            var owner=current();if(!owner||owner.lang!=='markdown')throw new Error('Choose a Markdown document to review.');
+            if(pageActive()){if(owner.readOnly)await visual.api.sync();else await visual.api.prepareEdit();}
+            if(destroyed||current()!==owner)return null;
+            var text=view.state.doc.toString(),selected=view.state.selection,m=await mdEngine(),range=null;
+            function unchanged(){return !destroyed&&root.isConnected&&current()===owner&&view.state.doc.toString()===text&&!(pageActive()&&visual.api.pending());}
+            if(!unchanged())return null;
+            if(selection){
+                if(readsAsPreview()&&editingPane!=='text')throw new Error('Choose Text or an editable document view before proposing a change.');
+                if(pageActive()&&(viewMode!=='split'||editingPane!=='text')){range=await visual.api.sourceSelection();if(!range)throw new Error('This selection cannot be mapped safely. Use Text to propose the change.');}
+                else range={from:selected.main.from,to:selected.main.to,current:function(){return view.state.selection.eq(selected);}};
+                if(!unchanged()||!range.current())return null;
+            }
+            var author='';m.front(text).entries.forEach(function(entry){if(entry.key==='author')author=entry.value;});
+            return {text:text,engine:m,writable:!owner.readOnly,current:unchanged,from:range?range.from:0,to:range?range.to:0,selectionCurrent:range?range.current:null,author:author,
+                apply:async function(result){
+                    if(!unchanged()||owner.readOnly)throw new Error('The document changed or is no longer editable.');
+                    var changes=CM.ChangeSet.of(result.edits,text.length);if(changes.apply(view.state.doc).toString()!==result.text)throw new Error('The review result did not match its source edits.');
+                    var anchor=changes.mapPos(result.edits.length?result.edits[0].from:view.state.selection.main.head,-1);
+                    view.dispatch({changes:changes,selection:{anchor:anchor},annotations:[CM.Transaction.userEvent.of('input.review'),CM.isolateHistory.of('full')],scrollIntoView:true});
+                }};
+        }
+        async function reviewTools(){
+            if(reviewController)return reviewController;var R=await reviewModule();
+            if(!reviewController)reviewController=R.create({root:root,signal:styleLifetime.signal,capture:captureReview,say:say,watch:function(listener){reviewObservers.add(listener);return function(){reviewObservers.delete(listener);};},navigate:async function(mark){await setView('text');view.dispatch({selection:{anchor:mark.from,head:mark.to},scrollIntoView:true});view.focus();}});
+            return reviewController;
+        }
+        function reviewProposable(){var t=current();return !!(CM&&view&&t&&t.lang==='markdown'&&!t.readOnly&&(!readsAsPreview()||editingPane==='text'));}
+        function wireReview(target){
+            target.querySelectorAll('[data-critic-raw]').forEach(function(mark){if(mark.querySelector(':scope > .pm-critic-open'))return;var button=document.createElement('button');button.type='button';button.className='btn btn-sm pm-critic-open';button.setAttribute('aria-label','Review annotation');button.title='Review annotation';button.innerHTML='<span class="glyph" style="--glyph:var(--glyph-comments)" aria-hidden="true"></span>';button.addEventListener('click',function(event){event.preventDefault();event.stopPropagation();reviewTools().then(function(controller){return controller.browse(mark.getAttribute('data-critic-raw'));}).catch(function(err){say(err.message,true);});});mark.appendChild(button);});
         }
         function pageActive() { return !!(visual.api && visual.api.active()); }
         function pageHost() {
@@ -1286,6 +1389,7 @@
                 },
                 /* A picture pressed on the page opens the picture dialog. */
                 editBlock: function (src) { return window.yavcMdEditor.editBlock(src, picturesHost()); },
+                review:function(raw){reviewTools().then(function(controller){return controller.browse(raw);}).catch(function(err){say(err.message,true);});},
                 root: root, page: el.page, scroll: el.scroll,
                 pagination: function () { return pagedView(viewMode) ? pageSettings : null; },
                 paginated: pageLayout,
@@ -1463,7 +1567,7 @@
         /* Draws preview blocks into an element with the kit's renderer
            (apps/md-editor/kit.js drawBlocks): made safe, diagrams, pictures,
            listings and applets drawn, and blocks that did not change kept. */
-        function drawBlocks(target, blocks) { window.yavcMdEditor.drawBlocks(target, blocks, { pictures: picturesHost(), applets:false }); }
+        function drawBlocks(target, blocks) { window.yavcMdEditor.drawBlocks(target, blocks, { pictures: picturesHost(), applets:false }); wireReview(target); }
         var INSERTS = window.yavcMdEditor ? window.yavcMdEditor.INSERTS : [], SHORTCODES = window.yavcMdEditor ? window.yavcMdEditor.SHORTCODES : [];
         /* Where a format or an insert goes: the page in Visual, the text
            in Text and Preview, and in Split whichever has the keyboard. */
@@ -1640,8 +1744,8 @@
         document.addEventListener('selectionchange', function () { if (readsAsPreview()) commandsChanged(); }, { signal: styleLifetime.signal });
         function formatsThePage() { return pageActive() && (viewMode === 'visual' || viewMode === 'document' || (viewMode === 'split' && editingPane !== 'text')); }
         function editing() {
-            if (!editingCommands && window.yavcMdEditor) editingCommands = window.yavcMdEditor.editing({
-                source: function () { return view; }, page: function () { return visual.api; }, rich: formatsThePage,
+            if (!editingCommands && sourceHistory && window.yavcMdEditor) editingCommands = window.yavcMdEditor.editing({
+                source: function () { return view; }, sourceHistory:sourceHistory,page: function () { return visual.api; }, rich: formatsThePage,
                 preview: function () { return readsAsPreview() && (viewMode!=='split' || editingPane!=='text') ? el.page : null; }, unified: true,
                 identity: current, alive: function () { return !destroyed && !!view && !!current(); },
                 historyReadOnly: function () { var t = current(); return !t || !!t.readOnly; },
@@ -1746,20 +1850,22 @@
            and the place in the file stay where they were. It isn't the
            reader's edit, so undo doesn't take it back. */
         function outsideChange(state, text) {
+            var raw=text;text=normalizedSource(text);
             var old = state.doc.toString(), start = 0, end = 0;
             var max = Math.min(old.length, text.length);
             while (start < max && old.charCodeAt(start) === text.charCodeAt(start)) { start++; }
             while (end < max - start && old.charCodeAt(old.length - 1 - end) === text.charCodeAt(text.length - 1 - end)) { end++; }
             return {
                 changes: { from: start, to: old.length - end, insert: text.slice(start, text.length - end) },
+                effects:sourceHistory.adopt(raw),
                 annotations: CM.Transaction.addToHistory.of(false)
             };
         }
 
         function takeOutside(t, i, text) {
-            if (i < 0 || text === t.saved) { return; }
+            if (i < 0 || text === t.savedRaw) { return; }
             if (t.submittedWrite && t.path === t.submittedWrite.path && text === t.submittedWrite.text) { return; }
-            var edited = (i === active ? view.state.doc.toString() : t.state.doc.toString()) !== t.saved;
+            var edited = sourceModified(t);
             if (!edited) {
                 t.savedRaw = text; t.saved = normalizedSource(text);
                 if (i === active) { view.dispatch(outsideChange(view.state, text)); t.modified = false; }
@@ -1895,12 +2001,12 @@
                 var st = t.state, text = st.doc.toString();
                 if (!t.path && !t.modified) { return; }
                 if (t === front) { frontAt = list.length; }
-                var json = st.toJSON({ history: CM.historyField });
+                var json = st.toJSON({ sourceHistory: sourceHistory.field });
                 list.push({
-                    path: t.path, name: t.name, lang: t.lang, mtime: t.mtime, fresh: !!t.fresh,
+                    path: t.path, name: t.name, lang: t.lang, mtime: t.mtime, fresh: !!t.fresh,format:sourceFormat(t),
                     baseline: resources ? recovery.capture(resources, t.resource, t.baseline) : undefined,
-                    draft: t.modified ? text : null, sum: t.modified ? null : fingerprint(text),
-                    selection: json.selection, history: json.history, scroll: t.scroll == null ? null : t.scroll,
+                    draft: t.modified ? text : null, sum: t.modified ? null : fingerprint(text),rawSum:t.modified?null:fingerprint(sourceHistory.raw(st)),
+                    selection: json.selection, sourceHistory:json.sourceHistory,newlines:sourceHistory.endings(st),scroll: t.scroll == null ? null : t.scroll,
                     search: searchOf(st), view: t === front ? viewMode : (t.view || 'text')
                 });
             });
@@ -1908,7 +2014,7 @@
             if (resources) out.version = 2;
             /* Undo history is the first thing let go when the whole would be
                too large for the browser to keep. */
-            if (JSON.stringify(out).length > SNAPSHOT_MAX) { list.forEach(function (k) { k.history = null; }); }
+            if (JSON.stringify(out).length > SNAPSHOT_MAX) { list.forEach(function (k) { k.sourceHistory = null; }); }
             return out;
         }
 
@@ -1918,17 +2024,19 @@
            since keeps its cursor near where it was, without its history. */
         async function applyKept(t, k) {
             var text = typeof k.draft === 'string' ? k.draft : t.saved;
-            var exact = typeof k.draft === 'string' || (k.sum != null && k.sum === fingerprint(t.saved));
+            var unchangedRevision=!resources||!k.baseline||!!t.resource&&k.baseline.revision===t.resource.revision;
+            var exact = typeof k.draft === 'string' || unchangedRevision&&(k.rawSum!=null?k.rawSum===fingerprint(t.savedRaw):k.sum!=null&&k.sum===fingerprint(t.saved));
             var state = null;
+            var raw=exact&&typeof k.newlines==='string'?window.yavcSourceHistory.restore(text,k.newlines):typeof k.draft!=='string'&&typeof t.savedRaw==='string'&&normalizedSource(t.savedRaw)===text?t.savedRaw:text;
             if (exact && k.selection) {
                 try {
                     var json = { doc: text, selection: k.selection };
-                    if (k.history) { json.history = k.history; }
-                    state = CM.EditorState.fromJSON(json, { extensions: extensionsFor(t) }, k.history ? { history: CM.historyField } : undefined);
+                    if (k.sourceHistory) { json.sourceHistory = k.sourceHistory; }
+                    state = CM.EditorState.fromJSON(json, { extensions: extensionsFor(t,raw) }, k.sourceHistory ? { sourceHistory: sourceHistory.field } : undefined);
                 } catch (err) { state = null; }
             }
             if (!state) {
-                state = stateFor(t, text);
+                state = stateFor(t, raw);
                 var head = k.selection && k.selection.ranges && k.selection.ranges[k.selection.main || 0];
                 if (head) {
                     var at = Math.min(head.head, text.length);
@@ -1942,7 +2050,7 @@
             t.scroll = k.scroll;
             t.view = supportsView(t, k.view) ? k.view : resolvedView(t, markdownDefault());
             t.openSearch = !!(k.search && k.search.open);
-            t.modified = text !== t.saved;
+            t.modified = sourceModified(t,state);
             /* The tab in front takes its new state through activate(), which
                would otherwise keep the old one. */
             var i = tabs.indexOf(t);
@@ -1973,6 +2081,7 @@
             if (!isDocs && all.some(function (k) {return k && /^(document|visual)$/.test(k.view);})) back.push('legacy document source (open saved documents in Docs for visual editing)');
             if (frontTab) { var fi = tabs.indexOf(frontTab); if (fi >= 0) { await activate(fi); } }
             var msg = back.length ? 'Your unsaved changes to ' + back.join(', ') + ' are back.' : '';
+            if(all.some(function(k){return k&&k.history&&!k.sourceHistory;}))msg+=(msg?' ':'')+'The source and selection were restored. The previous editing history cannot be migrated.';
             if (resources && tabs.some(function (t) { return !!t.conflict; })) msg += ' Some drafts no longer match their original revision. Save As preserves a copy without replacing the changed file.';
             if (waiting.length) {
                 msg += (msg ? ' ' : '') + 'Unsaved changes to ' + waiting.map(function (k) { return k.path; }).join(', ') +
@@ -1988,34 +2097,42 @@
             for (var i = 0; i < all.length; i++) {
                 var k = all[i], t = null;
                 if (!k || typeof k !== 'object') { continue; }
+                var originalKept=k;
+                if(typeof k.draft==='string'&&!k.format){
+                    var signed=k.draft[0]==='\ufeff';k=Object.assign({},k,{format:{encoding:'utf-8',bom:signed}});
+                    if(signed){k.draft=k.draft.slice(1);k.sourceHistory=null;k.history=null;if(k.selection&&Array.isArray(k.selection.ranges)&&k.selection.ranges.every(function(range){return range&&Number.isInteger(range.anchor)&&Number.isInteger(range.head);})){k.selection=Object.assign({},k.selection,{ranges:k.selection.ranges.map(function(range){return Object.assign({},range,{anchor:Math.max(0,range.anchor-1),head:Math.max(0,range.head-1)});})});}else{k.selection=null;}}
+                }
                 if (resources && k.path) {
                     var restored;
                     try { restored = await recovery.restore(resources, k.path, k.baseline, k.draft); }
                     catch (err) { waiting.push(k); continue; }
+                    if(restored.modified&&restored.snapshot&&k.format){var loadedFormat=sourceFormat({resource:restored.snapshot});if(loadedFormat.encoding!==k.format.encoding||loadedFormat.bom!==k.format.bom){restored.snapshot=null;restored.conflict='encoding';}}
                     // A legacy draft identical to the current buffer contains no unsaved edit.
                     if (restored.conflict === 'unknown') {
                         try {
                             var sameFile = await resources.read(k.path);
-                            if (normalizedSource(restored.text) === normalizedSource(sameFile.text)) {
+                            var recoveredRaw=typeof k.newlines==='string'?window.yavcSourceHistory.restore(normalizedSource(restored.text),k.newlines):restored.text;
+                            var recoveredFormat=window.yavcContentResources.format(k.format||{}),savedFormat=sourceFormat({resource:sameFile});
+                            if (recoveredRaw === sameFile.text&&recoveredFormat.encoding===savedFormat.encoding&&recoveredFormat.bom===savedFormat.bom) {
                                 restored = { snapshot: sameFile, baseline: null, text: sameFile.text, modified: false, conflict: null };
                             }
                         } catch (err) { /* Keep the original draft when its file is unavailable. */ }
                     }
                     if (destroyed) return null;
                     var name = (restored.snapshot && restored.snapshot.name) || k.name || String(k.path).split('/').pop();
-                    await addTab({ path: k.path, name: name, lang: languageFor(name), resource: restored.snapshot, baseline: restored.baseline, conflict: restored.conflict,
+                    await addTab({ path: k.path, name: name, lang: languageFor(name), resource: restored.snapshot, baseline: restored.baseline, conflict: restored.conflict,format:k.format,
                         readOnly: !!restored.snapshot && !resources.canWrite(restored.snapshot) }, restored.snapshot ? restored.snapshot.text : '');
                     t = current(); await applyKept(t, Object.assign({}, k, { draft: restored.modified ? restored.text : null }));
                     t.modified = restored.modified; t.conflict = restored.conflict;
                     if (t.modified) back.push(t.name);
-                    if (k === frontKept) frontTab = t;
+                    if (originalKept === frontKept) frontTab = t;
                     continue;
                 }
                 if (!k.path) {
                     if (typeof k.draft !== 'string') { continue; }
                     var n = /^untitled-(\d+)(\.docs\.md)?$/.exec(k.name || '');
                     if (n) { untitled = Math.max(untitled, +n[1]); }
-                    await addTab({ path: null, name: k.name || 'untitled', lang: k.lang || 'text', readOnly: false }, '');
+                    await addTab({ path: null, name: k.name || 'untitled', lang: k.lang || 'text', readOnly: false,format:k.format }, '');
                     t = current();
                 } else {
                     var node = F.resolve(F.home(), F.upgradePath(k.path));
@@ -2035,7 +2152,7 @@
                 if (!t) { continue; }
                 await applyKept(t, k);
                 if (t.modified) { back.push(t.name); }
-                if (k === frontKept) { frontTab = t; }
+                if (originalKept === frontKept) { frontTab = t; }
             }
             renderTabs();
             return frontTab;
@@ -2249,6 +2366,14 @@
                     disabled: function () { return !ready; }, run: run }, more || {});
             }
             var table = [
+                cmd('review-changes','Review Changes…','comments',async function(){return (await reviewTools()).browse();},{hidden:function(){return !tab||tab.lang!=='markdown';}}),
+                cmd('review-addition','Suggest Insertion…','plus',async function(){return (await reviewTools()).propose('addition');},{hidden:function(){return !tab||tab.lang!=='markdown';},disabled:function(){return !reviewProposable();}}),
+                cmd('review-deletion','Suggest Deletion','minus',async function(){return (await reviewTools()).propose('deletion');},{hidden:function(){return !tab||tab.lang!=='markdown';},disabled:function(){return !reviewProposable();}}),
+                cmd('review-replacement','Suggest Replacement…','pencil',async function(){return (await reviewTools()).propose('replacement');},{hidden:function(){return !tab||tab.lang!=='markdown';},disabled:function(){return !reviewProposable();}}),
+                cmd('review-comment','Add Comment…','comments',async function(){return (await reviewTools()).propose('comment');},{hidden:function(){return !tab||tab.lang!=='markdown';},disabled:function(){return !reviewProposable();}}),
+                cmd('review-highlight','Highlight for Review','quote',async function(){return (await reviewTools()).propose('highlight');},{hidden:function(){return !tab||tab.lang!=='markdown';},disabled:function(){return !reviewProposable();}}),
+                cmd('review-accept-all','Accept All Changes…','tick',async function(){return (await reviewTools()).all('accept');},{hidden:function(){return !tab||tab.lang!=='markdown';},disabled:function(){return !ready||!tab||tab.readOnly;}}),
+                cmd('review-reject-all','Reject All Changes…','close',async function(){return (await reviewTools()).all('reject');},{hidden:function(){return !tab||tab.lang!=='markdown';},disabled:function(){return !ready||!tab||tab.readOnly;}}),
                 cmd('toggle-files', 'Files', 'folder', toggleExplorer, { hidden:function () {return !explorer;}, checked: function () { return !el.explorer.hidden; } }),
                 cmd('toggle-outline', 'Outline', 'list', toggleOutline, { checked: function () { return outlineVisible; }, shortcut: key('toggle-outline', 'Mod-Alt-o') }),
                 cmd('hide-navigation', 'Hide Side Panes', 'panel', hideNavigation, { hidden: function () { return el.explorer.hidden && !outlineVisible; } }),
@@ -2270,6 +2395,8 @@
                 }),
                 cmd('save', 'Save', 'yavc-save', function () { return save(); }, { disabled: function () { var t = current(); return !ready || !t || t.readOnly || !resources || !t.path && !resources.canSaveAs() || t.fresh && !resources.canCreate() || !!(t.path && !t.resource && !t.fresh); }, reason: 'This host cannot save this draft safely, or its recovered revision no longer matches. Use a supported Save As or download the source.' }),
                 cmd('save-as', 'Save As…', 'yavc-save-as', function () { return saveAs(); }, { label: function () { var t = current(); return t && t.readOnly ? 'Save a Copy…' : 'Save As…'; }, disabled: function () { return !ready || !current() || !!(resources && !resources.canSaveAs()); } }),
+                cmd('save-encoded-copy','Save Encoded Copy…','yavc-save-as',encodedCopy,{disabled:function(){return !ready||!current()||!resources||!resources.canSaveAs();}}),
+                cmd('import-docx','Import Word…','upload',importWord,{hidden:function(){return !isDocs;},disabled:function(){return !ready;}}),
                 cmd('close-document', 'Close Document', null, function () { COMMANDS['close-document'](); }, { disabled: function () { return !ready || !current(); } }),
                 /* glyphOnly: a glyph every reader knows shows alone on the
                    menu bar's ribbon (PUDL 0.79.0), its words its tooltip. */
@@ -2278,8 +2405,8 @@
                 cmd('undo', 'Undo', 'yavc-undo', function () { return editing().history('undo'); }, { builtIn: 'Mod-z', glyphOnly: true, disabled: function () { return !editing() || !editing().canHistory('undo'); } }),
                 cmd('redo', 'Redo', 'yavc-redo', function () { return editing().history('redo'); }, { builtIn: 'Mod-y', glyphOnly: true, disabled: function () { return !editing() || !editing().canHistory('redo'); } }),
                 cmd('find', 'Find and Replace…', 'search', openFind, { builtIn: 'Mod-f' }),
-                cmd('json-format', 'Format JSON', 'code', function () { if (lsp) { lsp.format(view); } }, { shortcut: 'Shift+Alt+F', hidden: function () { return isDocs || !tab || tab.lang !== 'json'; }, disabled: function () { return !editable || !lsp; } }),
-                cmd('language-restart', 'Restart Language Assistance', 'reload', function () { if (lsp) { lsp.restart(); view.dispatch({ effects: lspComp.reconfigure(languageAssistance(current())) }); } }, { hidden: function () { return isDocs || !tab || tab.lang !== 'json'; }, disabled: function () { return !ready || !lsp; } }),
+                cmd('json-format', 'Format Source', 'code', function () { if (lsp) { lsp.format(view); } }, { shortcut: 'Shift+Alt+F', hidden: function () { return isDocs || !tab || ['json','css','html'].indexOf(tab.lang) < 0; }, disabled: function () { return !editable || !lsp; } }),
+                cmd('language-restart', 'Restart Language Assistance', 'reload', function () { if (lsp) { lsp.restart(); view.dispatch({ effects: lspComp.reconfigure(languageAssistance(current())) }); } }, { hidden: function () { return isDocs || !tab || ['json','css','html'].indexOf(tab.lang) < 0; }, disabled: function () { return !ready || !lsp; } }),
                 cmd('go-to-line', 'Go to Line…', null, goToLine, { builtIn: 'Mod-Alt-g' }),
                 cmd('toggle-wrap', 'Wrap Lines', 'yavc-wrap', function () { setWrap(!wrapOn, true); }, { checked: function () { return wrapOn; } }),
                 cmd('insert-timestamp', 'Insert Date and Time', null, COMMANDS['insert-timestamp'], { disabled: function () { return !ready || !editable; } }),
@@ -2338,6 +2465,7 @@
             table.push(cmd('print-document', 'Print…', 'yavc-print', printDocument, { hidden: unformatted, disabled: function () { return !ready || !tab || tab.lang !== 'markdown'; } }));
             table.push(cmd('stylesheet', 'Document Stylesheet…', 'code', function () { return editStyles(false); }, { shortcut: 'Mod+Shift+F', hidden: unformatted, disabled: noEdit }));
             table.push(cmd('custom-shortcodes', 'Custom Shortcodes…', 'code', editDefinitions, { hidden: unformatted, disabled: noEdit }));
+            table.push(cmd('footnote','Footnote…','comments',insertFootnote,{hidden:unformatted,disabled:noEdit}));
             table.push(cmd('shared-stylesheet', 'Edit Shared Stylesheet…', 'file', function () { return editStyles(true); }, { hidden: unformatted,
                 disabled: function () { return noEdit() || !/^~\/.+\.css$/i.test(currentSharedStyle) || !(window.pudlHost && window.pudlHost.fs && window.pudlHost.fs.writeText); },
                 reason: 'Choose a home-folder CSS file in Document Stylesheet first. This host also needs a writable file service.' }));
@@ -2385,12 +2513,13 @@
         function menus() {
             var titles = [
                 { label: isDocs ? 'Docs' : 'Editor', glyph: isDocs ? 'document' : 'code', items: H.identity(root, ['key-bindings']) },
-                { id: 'file', label: 'File', glyph: 'file', items: ['new', 'new-template', 'new-markdown', 'open', 'open-other', 'save', 'save-as', '-', 'export-docx', 'export-pdf', 'print-document', '-', 'properties', 'present', '-', 'close-document'] },
+                { id: 'file', label: 'File', glyph: 'file', items: ['new', 'new-template', 'new-markdown', 'open', 'open-other', 'import-docx', 'save', 'save-as', 'save-encoded-copy', '-', 'export-docx', 'export-pdf', 'print-document', '-', 'properties', 'present', '-', 'close-document'] },
                 { id: 'edit', label: 'Edit', glyph: 'pencil', items: ['undo', 'redo', '-', 'cut', 'copy', 'paste', '-', 'select-all', '-', 'find', 'go-to-line', 'section-up', 'section-down', '-', 'json-format', 'language-restart'] },
-                { id: 'insert', label: 'Insert', glyph: 'plus', items: ['link', 'insert', 'table', 'box', '-', 'insert-timestamp', 'insert-date', 'stamp-modified'] }
+                { id: 'insert', label: 'Insert', glyph: 'plus', items: ['link', 'insert', 'table', 'box', 'footnote', '-', 'insert-timestamp', 'insert-date', 'stamp-modified'] }
             ];
             /* Format, where there is formatting to do. */
             if (formatOffered) { titles.push({ id: 'format', label: 'Format', glyph: 'paragraph', items: ['style', '-', 'bold', 'italic', 'underline', 'strike', 'code', '-', 'highlight', 'superscript', 'subscript', '-', 'color', 'class', '-', 'bullets', 'numbers', 'quote', 'table', '-', 'document-layout','page-setup', 'document-theme', 'typography', 'header-footer', '-', 'stylesheet', 'shared-stylesheet', 'custom-shortcodes'] }); }
+            if(current()&&current().lang==='markdown')titles.push({id:'review',label:'Review',glyph:'comments',items:['review-changes','-','review-addition','review-deletion','review-replacement','review-comment','review-highlight','-','review-accept-all','review-reject-all']});
             return { titles: titles, into: { view: LAYOUT.concat(commonToolbar ? ['-', 'common-toolbar-show', 'common-toolbar-customize'] : []) } };
         }
 
@@ -2399,6 +2528,7 @@
         var boot = Promise.all([loadCodeMirror(), loadSiteFs().then(function (api) { F = api; return F ? F.load() : null; }), loadBrowser()]).then(async function (res) {
             if (destroyed) { return; }
             CM = res[0];
+            await loadScript(resourceAsset('source-history.js'));sourceHistory=window.yavcSourceHistory.create(CM);await loadScript(resourceAsset('resources.js'));
             await loadScript(resourceAsset('resource-session.js'));
             resourceSession = await window.yavcResourceSession.open(H, function (file) { return loadScript(resourceAsset(file)); });
             if (destroyed) return;
@@ -2497,7 +2627,7 @@
         function docText(i) { return i === active && view ? view.state.doc.toString() : tabs[i].state.doc.toString(); }
         function docView(i, withText) {
             var t = tabs[i];
-            var v = { index: i + 1, name: t.name, path: t.path || null, lang: t.lang, modified: !!t.modified, readOnly: !!t.readOnly };
+            var v = { index: i + 1, name: t.name, path: t.path || null, lang: t.lang, modified: dirtyTab(t), readOnly: !!t.readOnly };
             if (withText) { v.text = docText(i); }
             return v;
         }
@@ -2539,9 +2669,12 @@
                 return { output: { width: page.width, height: page.height, margins: page.margins } };
             },
             'export@1': async function (input) {
-                var result = await exportDocument(input.format);
+                var result = await exportDocument(input.format,{interactive:false,reviewPolicy:input.reviewPolicy});
                 return { output: { format: input.format, blocks: result.blocks, warnings: result.warnings }, artifacts: [{ key: input.format, name: result.name, mime: result.blob.type, data: new Uint8Array(await result.blob.arrayBuffer()) }] };
             },
+            'review@1':async function(){var snapshot=await captureReview(false);if(!snapshot)throw new Error('The document changed.');return {output:snapshot.engine.review(snapshot.text)};},
+            'review-resolve@1':async function(input){var snapshot=await captureReview(false);if(!snapshot||!snapshot.writable)throw new Error('Choose an editable Markdown document.');var result=snapshot.engine.resolveReview({text:snapshot.text,revision:input.revision,id:input.id,decision:input.decision});await snapshot.apply(result);return {output:{revision:result.resultRevision,modified:true}};},
+            'review-propose@1':async function(input){var snapshot=await captureReview(false);if(!snapshot||!snapshot.writable)throw new Error('Choose an editable Markdown document.');var result=snapshot.engine.proposeReview({text:snapshot.text,revision:input.revision,from:input.from,to:input.to,kind:input.kind,body:input.body||''});await snapshot.apply(result);return {output:{revision:result.resultRevision,modified:true}};},
             'outline@1': async function () {
                 docNo(); var tab = current(); if (tab.lang !== 'markdown') { throw new Error('Outline is available for Markdown files.'); }
                 if (pageActive()) { await visual.api.sync(); }
@@ -2574,7 +2707,7 @@
             },
             'define@1': async function () { docNo(); if (pageActive()) { await visual.api.sync(); } return { output: (await documentEngine()).macros() }; },
             'documents@1': async function () { return { output: { active: active + 1, documents: tabs.map(function (t, i) { return docView(i, false); }) } }; },
-            'document@1': async function (input) { var i = docNo(input.index); return { output: docView(i, true) }; },
+            'document@1': async function (input) { var i = docNo(input.index),t=tabs[i]; if(i===active&&pageActive())await visual.api.sync(); if(tabs[i]!==t)throw new Error('The document closed while its text was being read.'); return { output: docView(i, true) }; },
             'open-file@1': async function (input) { if(!tabs.some(function (t) {return t.path===input.path;})){var routed=await routeDocument('open-file',input);if(routed)return routed.result;} await openPath(String(input.path), true); if(input.view && supportsView(current(),input.view))await setView(input.view); return { output: docView(active, false) }; },
             'new@1': async function (input) {
                 /* A new document never takes the name of a file that exists,
@@ -2631,7 +2764,7 @@
         if (documentWindows) unbindDocuments = documentWindows.bind(root, {
             application: app, resource: function () {return current() && current().path;},
             accept: async function (request) { receivingDocument = true; try {
-                if (request.operation === 'import-source') { await importedDocument(request.input.name, request.input.text); return {output: docView(active, false)}; }
+                if (request.operation === 'import-source') { await importedDocument(request.input.name, request.input.text,request.input.format); return {output: docView(active, false)}; }
                 return await liveActions[request.operation + '@1'](request.input);
             } finally { receivingDocument = false; } }, flush: function () { return !!snap && snap.flush(); }
         });

@@ -22,9 +22,13 @@ import (
 	"html"
 	"reflect"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"unicode"
+	"yavc.app/internal/footnotes"
+	"yavc.app/internal/preview"
+	"yavc.app/internal/review"
 	"yavc.app/internal/shortcodes"
 
 	"github.com/yuin/goldmark"
@@ -53,7 +57,7 @@ type Mark struct {
 // its other text, so it is edited as source.
 var ErrNotEditable = errors.New("this part is edited as source")
 
-var md = goldmark.New(goldmark.WithExtensions(extension.GFM, shortcodes.Extension))
+var md = goldmark.New(goldmark.WithExtensions(extension.GFM, shortcodes.Extension, review.Rendering(func(body string) string { return preview.ReviewInlineHTML(body, nil) }, shortcodes.Extension)))
 
 // Parse reads one part of a document as an editor's document. A part that
 // would not be written back exactly as it is returns ErrNotEditable.
@@ -63,6 +67,10 @@ func Parse(part string) (*Node, error) {
 
 // ParseWithMacros retains custom invocations as inline atoms.
 func ParseWithMacros(part string, registry *shortcodes.MacroRegistry) (*Node, error) {
+	return parseWithNotes(part, registry, nil)
+}
+
+func parseWithNotes(part string, registry *shortcodes.MacroRegistry, notes map[string]int) (*Node, error) {
 	part = strings.TrimRight(part, "\n")
 	if strings.TrimSpace(part) == "" || strings.Contains(part, "\r") {
 		return nil, ErrNotEditable
@@ -70,12 +78,31 @@ func ParseWithMacros(part string, registry *shortcodes.MacroRegistry) (*Node, er
 	src := []byte(part)
 	engine := md
 	if registry != nil {
-		engine = goldmark.New(goldmark.WithExtensions(extension.GFM, shortcodes.WithMacros(registry)))
+		syntax := shortcodes.WithMacros(registry)
+		engine = goldmark.New(goldmark.WithExtensions(extension.GFM, syntax, review.Rendering(func(body string) string { return preview.ReviewInlineHTML(body, registry) }, syntax)))
+	}
+	if len(notes) > 0 {
+		syntax := shortcodes.WithMacros(registry)
+		extensions := []goldmark.Extender{extension.GFM, syntax, footnotes.Extension, review.Rendering(func(body string) string { return preview.ReviewInlineHTML(body, registry) }, syntax, footnotes.Extension)}
+		engine = goldmark.New(goldmark.WithExtensions(extensions...))
+		var labels []string
+		for label := range notes {
+			if footnotes.ValidLabel(label) {
+				labels = append(labels, label)
+			}
+		}
+		sort.Strings(labels)
+		for _, label := range labels {
+			src = append(src, []byte("\n\n[^"+label+"]: Note context.\n")...)
+		}
 	}
 	root := engine.Parser().Parse(text.NewReader(src))
-	p := parser{src: src, registry: registry}
+	p := parser{src: src, registry: registry, notes: notes}
 	doc := &Node{Type: "doc"}
 	for n := root.FirstChild(); n != nil; n = n.NextSibling() {
+		if _, ok := n.(*extast.Footnote); ok {
+			continue
+		}
 		block, err := p.block(n)
 		if err != nil {
 			return nil, err
@@ -177,6 +204,7 @@ func tableRow(line string) string {
 type parser struct {
 	src      []byte
 	registry *shortcodes.MacroRegistry
+	notes    map[string]int
 }
 
 func (p parser) block(n ast.Node) (*Node, error) {
@@ -200,6 +228,23 @@ func (p parser) block(n ast.Node) (*Node, error) {
 		return p.list(node)
 	case *extast.Table:
 		return p.table(node)
+	case *extast.Footnote:
+		label := string(node.Ref)
+		if !footnotes.ValidLabel(label) {
+			return nil, ErrNotEditable
+		}
+		out := &Node{Type: "footnote", Attrs: map[string]any{"label": label, "number": p.notes[label], "tail": ""}}
+		for child := node.FirstChild(); child != nil; child = child.NextSibling() {
+			block, err := p.block(child)
+			if err != nil {
+				return nil, err
+			}
+			out.Content = append(out.Content, block)
+		}
+		if len(out.Content) == 0 {
+			out.Content = []*Node{{Type: "paragraph"}}
+		}
+		return out, nil
 	case *ast.Blockquote:
 		out := &Node{Type: "blockquote"}
 		for child := node.FirstChild(); child != nil; child = child.NextSibling() {
@@ -394,6 +439,16 @@ func (p parser) walk(n ast.Node, marks []Mark, out *[]*Node) error {
 			if err := p.walk(node, withMark(marks, link), out); err != nil {
 				return err
 			}
+		case *extast.FootnoteLink:
+			if err := flush(); err != nil {
+				return err
+			}
+			value, _ := node.AttributeString("data-footnote-ref")
+			label, ok := value.(string)
+			if !ok || !footnotes.ValidLabel(label) {
+				return ErrNotEditable
+			}
+			*out = append(*out, &Node{Type: "footnote_ref", Attrs: map[string]any{"label": label, "number": p.notes[label]}, Marks: marks})
 		case *ast.RawHTML:
 			// Underlining is the one piece of inline HTML the documents use, as
 			// <u> and </u> around a run of text.
@@ -416,6 +471,11 @@ func (p parser) walk(n ast.Node, marks []Mark, out *[]*Node) error {
 			default:
 				return ErrNotEditable
 			}
+		case *review.Inline:
+			if err := flush(); err != nil {
+				return err
+			}
+			*out = append(*out, &Node{Type: "critic", Attrs: map[string]any{"src": node.Mark.Raw, "kind": string(node.Mark.Kind), "html": node.HTML, "cellSafe": review.CellSafe(node.Mark.Raw)}, Marks: append([]Mark(nil), marks...)})
 		case *shortcodes.Inline:
 			// Supported paired spans become editable marks. Other shortcodes
 			// retain their source or use their declared inline atom.
@@ -620,6 +680,8 @@ func serializeBlock(n *Node, indent string) (string, error) {
 		return serializeList(n, indent)
 	case "table":
 		return serializeTable(n)
+	case "footnote":
+		return footnoteText(n)
 	case "blockquote":
 		var blocks []string
 		for _, child := range n.Content {
@@ -931,6 +993,22 @@ func serializeInline(nodes []*Node, cell bool) (string, error) {
 			}
 		case "shortcode":
 			b.WriteString(stringAttr(n, "src"))
+		case "critic":
+			raw := stringAttr(n, "src")
+			if cell && !review.CellSafe(raw) {
+				return "", fmt.Errorf("a review mark with an unescaped pipe cannot be written in a table cell")
+			}
+			catalog, err := review.Scan(raw, 0)
+			if err != nil || strings.ContainsAny(raw, "\r\n") || len(catalog.Marks) != 1 || len(catalog.Problems) != 0 || catalog.Marks[0].From != 0 || catalog.Marks[0].To != len(raw) {
+				return "", fmt.Errorf("invalid inline review mark")
+			}
+			b.WriteString(raw)
+		case "footnote_ref":
+			label := stringAttr(n, "label")
+			if !footnotes.ValidLabel(label) {
+				return "", fmt.Errorf("invalid footnote label")
+			}
+			b.WriteString("[^" + label + "]")
 		default:
 			return "", fmt.Errorf("a %s cannot be written inline", n.Type)
 		}
@@ -1010,7 +1088,8 @@ func escapeText(s string, cell bool, before, after rune) string {
 		case '*', '`', '~':
 			b.WriteRune('\\')
 		case '{':
-			if i+1 < len(rs) && rs[i+1] == '{' || i+1 == len(rs) && after == '{' {
+			critic := i+2 < len(rs) && (rs[i+1] == '+' && rs[i+2] == '+' || rs[i+1] == '-' && rs[i+2] == '-' || rs[i+1] == '~' && rs[i+2] == '~' || rs[i+1] == '>' && rs[i+2] == '>' || rs[i+1] == '=' && rs[i+2] == '=')
+			if critic || i+1 < len(rs) && rs[i+1] == '{' || i+1 == len(rs) && strings.ContainsRune("{+-~>=", after) {
 				b.WriteRune('\\')
 			}
 		case '&':

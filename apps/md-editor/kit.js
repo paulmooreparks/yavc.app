@@ -95,12 +95,12 @@
     var cmReady = null, pvReady = null, mmReady = null;
     function libs() {
         if (window.CM && window.CM.EditorView) { return Promise.resolve(window.CM); }
-        if (!cmReady) { cmReady = loadScript(HERE + 'vendor/codemirror-6.43/codemirror.js?v=7').then(function () { return window.CM; }).catch(function (e) { cmReady = null; throw e; }); }
+        if (!cmReady) { cmReady = loadScript(HERE + 'vendor/codemirror-6.43/codemirror.js?v=9').then(function () { return window.CM; }).catch(function (e) { cmReady = null; throw e; }); }
         return cmReady;
     }
     var pagesReady = null;
     function pages() {
-        if (!pagesReady) { pagesReady = loadScript(HERE + 'paper-sizes.js' + STAMP).then(function () { return loadScript(HERE + 'pages.js' + STAMP); }).then(function () { return loadScript(HERE + 'document-settings.js' + STAMP); }).then(function () { return window.yavcDocumentPages; }).catch(function (err) { pagesReady = null; throw err; }); }
+        if (!pagesReady) { pagesReady = loadScript(HERE + 'paper-sizes.js' + STAMP).then(function () { return loadScript(HERE + 'page-lines.js' + STAMP); }).then(function () { return loadScript(HERE + 'page-footnotes.js' + STAMP); }).then(function () { return loadScript(HERE + 'pages.js' + STAMP); }).then(function () { return loadScript(HERE + 'document-settings.js' + STAMP); }).then(function () { return window.yavcDocumentPages; }).catch(function (err) { pagesReady = null; throw err; }); }
         return pagesReady;
     }
     var pageSetupReady = null;
@@ -568,7 +568,7 @@
             if (ctx.unified) {
                 if (page && page.active() && page.pending()) return name === 'undo';
             } else if (ctx.rich() && page) return page.historyAvailable(name);
-            return !!(source && window.CM && window.CM[name + 'Depth'](source.state));
+            return !!(source && (ctx.sourceHistory ? ctx.sourceHistory.can(name,source.state) : window.CM && window.CM[name + 'Depth'](source.state)));
         }
         async function history(name) {
             if (!canHistory(name)) return;
@@ -577,6 +577,7 @@
                 if (page && page.active()) await page.sync();
                 if (!ctx.alive() || (ctx.historyReadOnly ? ctx.historyReadOnly() : ctx.readOnly()) || ctx.identity() !== identity || ctx.source() !== source) return;
                 if (!ctx.unified && rich) { if (ctx.page() === page && page.active()) { page.run(name); await page.sync(); } }
+                else if(ctx.sourceHistory)ctx.sourceHistory.run(name,source);
                 else window.CM[name](source);
                 ctx.changed();
             } catch (err) { if (ctx.alive()) ctx.say(err.message || String(err), true); }
@@ -1417,6 +1418,18 @@
             window.yavcDiagramReferences.attach(target,host,function(kind,place,source){return kind==='canvas'?drawCanvas(place,source):kind==='d2'?drawD2(place,source):drawDiagram(place,source);});
         }).catch(function(error){if(target.isConnected)target.querySelectorAll('[data-diagram-body]').forEach(function(body){window.yavcUtil.notice(body,'The diagram loader could not start: '+error.message,'warn');});});
     }
+    var footnoteScopes=new WeakMap();
+    function scopeFootnotes(target,namespace){
+        namespace=namespace||footnoteScopes.get(target)||'yavc-notes-'+crypto.randomUUID();
+        if(!/^[a-z][a-z0-9_-]{1,96}$/i.test(namespace))throw new Error('Invalid footnote surface identity.');
+        footnoteScopes.set(target,namespace);
+        var definitions=Array.from(target.querySelectorAll('.doc-footnote[data-footnote-number]')),references=Array.from(target.querySelectorAll('.doc-footnote-ref[data-footnote-number]'));
+        if(target.matches&&target.matches('.doc-footnote'))definitions.unshift(target);
+        if(target.matches&&target.matches('.doc-footnote-ref'))references.unshift(target);
+        definitions.forEach(function(note){var number=Number(note.getAttribute('data-footnote-number'));if(Number.isSafeInteger(number)&&number>0)note.id=namespace+'-note-'+number;else note.removeAttribute('id');});
+        references.forEach(function(reference){var number=Number(reference.getAttribute('data-footnote-number')),link=reference.querySelector('a');if(link){if(Number.isSafeInteger(number)&&number>0)link.setAttribute('href','#'+namespace+'-note-'+number);else link.removeAttribute('href');}});
+        return namespace;
+    }
     function drawBlocks(target, blocks, opts) {
         opts = opts || {};
         var old = Array.prototype.filter.call(target.children, function (c) { return c.classList && c.classList.contains('doc-block'); });
@@ -1454,6 +1467,7 @@
             loadImages(f.el, opts.pictures);
             loadListings(f.el);
         });
+        scopeFootnotes(target);
         if(opts.diagrams!==false)refreshReferences(target,opts.pictures);
     }
 
@@ -1576,7 +1590,7 @@
         tableCommand: tableCommand, quoteState: quoteState, wordCount: wordCount, readingMinutes: readingMinutes,
         commands: commands, editing: editing, apply: apply, classesOf: classesOf, insertItem: insertItem, inserts: inserts, textFormat: textFormat, textInsert: textInsert,
         askText: askText, askFields: askFields, askChoice: askChoice, askProperties: askProperties, STOCK: STOCK, askColour: askColour, askColours: askColours, askClass: askClass,
-        askFigure: askFigure, editBlock: editBlock, drawBlocks: drawBlocks, refreshReferences:refreshReferences, drawDiagram: drawDiagram, pictureFor: pictureFor, askShortcode: askShortcode, FORMS: FORMS, boxCommand: boxCommand, BOXES: BOXES, loadImages: loadImages, parseFigure: parseFigure, buildFigure: buildFigure, parseShortcode: parseShortcode,
+        askFigure: askFigure, editBlock: editBlock, drawBlocks: drawBlocks, scopeFootnotes:scopeFootnotes, refreshReferences:refreshReferences, drawDiagram: drawDiagram, pictureFor: pictureFor, askShortcode: askShortcode, FORMS: FORMS, boxCommand: boxCommand, BOXES: BOXES, loadImages: loadImages, parseFigure: parseFigure, buildFigure: buildFigure, parseShortcode: parseShortcode,
         _page: null
     };
 })();

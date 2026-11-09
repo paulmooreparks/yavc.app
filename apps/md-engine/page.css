@@ -1,4 +1,9 @@
 /* Copyright 2026 Paul Parks. SPDX-License-Identifier: Apache-2.0 */
+.doc-page .critic ins,.doc-page ins.critic-body { color:inherit;background:color-mix(in srgb,var(--positive) 15%,transparent);text-decoration:underline;text-decoration-color:var(--positive); }
+.doc-page .critic del,.doc-page del.critic-body { color:inherit;background:color-mix(in srgb,var(--danger) 12%,transparent);text-decoration:line-through;text-decoration-color:var(--danger); }
+.doc-page .critic-comment { display:inline-flex;align-items:baseline;gap:var(--space-1);padding-inline:var(--space-1);border-inline-start:2px solid var(--accent);font-size:.9em;white-space:pre-wrap; }
+.doc-page .critic-marker { display:inline-flex;gap:var(--space-1);font-size:.8em;color:var(--text-muted);border:1px solid var(--border);padding-inline:var(--space-1);border-radius:var(--radius-sm); }
+.doc-page .critic-block { display:block; }
 /* The page the Markdown engine draws (apps/md-engine): the document page's
    type, the page view's parts and the shortcodes, shared by the Editor's
    preview and Visual view and by Slides. The loader links it. From Dinah
@@ -139,6 +144,15 @@
 .doc-page .lead { font-size: 1.2em; line-height: 1.4; }
 .doc-page .no-break { break-inside: avoid; }
 .doc-page :is(h1,h2,h3,h4,h5,h6) { break-after: avoid; break-after: avoid-page; }
+.doc-page .doc-footnote { border-top: 1px solid var(--doc-rule); margin-top: 1em; padding-top: .4em; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: .6em; font-size: .85em; }
+.doc-page .doc-footnote-label { color: var(--doc-muted); }
+.doc-page .doc-footnote-body > :first-child { margin-top: 0; }
+.doc-page .doc-footnote-body > :last-child { margin-bottom: 0; }
+.doc-page .doc-footnote-ref { font-size: .75em; line-height: 0; }
+.doc-paginated > .ProseMirror > .doc-footnote { margin-top: 0; }
+.doc-paginated .doc-footnote-paged { position: absolute; left: 0;margin-top:0; }
+.doc-paginated > .doc-page-flow { position: relative; }
+.doc-paginated > .doc-page-flow > .doc-footnote { margin-top: 0; }
 /* Document view retains a single editable flow. Page gaps are decorations. */
 .doc-page.doc-paginated {
   position: relative;
@@ -150,9 +164,19 @@
 .doc-paginated > :is(.ProseMirror, .doc-page-flow) { display: flow-root; padding: 0; margin: 0; min-height: 0; }
 .doc-paginated > :is(.ProseMirror, .doc-page-flow) > * { margin-top: 0; }
 .doc-paginated > :is(.ProseMirror, .doc-page-flow) > .doc-page-gap { display: block; padding: 0; margin: 0; border: 0; pointer-events: none; }
+.doc-paginated .doc-page-gap-inline { display: block; padding: 0; margin: 0; border: 0; line-height: 0; pointer-events: none; }
+.doc-paginated li.doc-page-gap { display: block; counter-increment: none; list-style: none; padding: 0; margin: 0; }
+.doc-paginated li.doc-list-continuation { list-style-type: none; }
+.doc-paginated .doc-fragment-open-start { margin-top: 0 !important;padding-top:0!important;border-top-width:0!important; }
+.doc-paginated .doc-fragment-open-end { margin-bottom: 0 !important;padding-bottom:0!important;border-bottom-width:0!important; }
+.doc-paginated tr.doc-page-gap > td { padding: 0; border: 0; }
+.doc-paginated .doc-table-repeated-header { margin:0;pointer-events:none; }
+.doc-paginated .doc-cell-repeated-header { display:block;box-sizing:border-box;font-weight:bold;line-height:normal;background:var(--doc-code);padding-block:.2em; }
+.doc-paginated :is(td,th) { position:relative; }
 .doc-paginated > .doc-page-flow > .doc-block { display: flow-root; }
 .doc-paginated > .doc-page-flow > .doc-block > :first-child { margin-top: 0; }
 .doc-furniture { position: absolute; inset: 0; pointer-events: none; font-size: 9pt; line-height: 1.25; color: var(--doc-muted); }
+.doc-sheet-gutter { position:absolute;left:0;right:0;height:24px;background:var(--sheet-gutter,var(--surface-alt));z-index:1; }
 .doc-header, .doc-footer { position: absolute; left: var(--sheet-left); right: var(--sheet-right); display: flex; gap: 6pt; }
 .doc-furniture-cell { flex: 1 1 0; min-width: 0; white-space: nowrap; }
 .doc-furniture a { pointer-events: auto; }

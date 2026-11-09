@@ -20,6 +20,47 @@ func exportHTML(t *testing.T, source string) string {
 	return out.String()
 }
 
+func TestExcludedReviewMarksCannotBlockOrLeakIntoExport(t *testing.T) {
+	for _, source := range []string{
+		"{{no-export}}\n{++private draft++}\n{{/no-export}}\n\nPublic.\n",
+		"{{no-export}}\n{++private\n\ndraft++}\n{{/no-export}}\n\nPublic.\n",
+		"{{no-export}}\n{++incomplete private\n{{/no-export}}\n\nPublic.\n",
+		"Public {{no-export}}{++private draft++}{{/no-export}} text.\n",
+	} {
+		got := exportHTML(t, source)
+		if strings.Contains(got, "private") || strings.Contains(got, "critic") || !strings.Contains(got, "Public") {
+			t.Fatal(got)
+		}
+	}
+	for _, source := range []string{"Public {++change++}.", "Public {++incomplete."} {
+		if _, _, err := RenderExport(source, nil); err == nil {
+			t.Fatalf("silently exported %q", source)
+		}
+	}
+	if got := exportHTML(t, "Public `{++code example++}`."); !strings.Contains(got, "{++code example++}") {
+		t.Fatal(got)
+	}
+}
+
+func TestExcludedFootnoteReferencesDoNotExportTheirDefinitions(t *testing.T) {
+	source := "Visible[^visible] and again[^visible]. {{no-export}}SECRET_REF[^hidden]{{/no-export}}\n\n[^hidden]: SECRET_NOTE ![secret](SECRET_IMAGE.png)\n\n[^unused]: UNUSED_NOTE\n\n[^visible]: The **visible** note.\n"
+	out := exportHTML(t, source)
+	if strings.Contains(out, "SECRET_") || strings.Contains(out, "UNUSED_NOTE") {
+		t.Fatal(out)
+	}
+	if strings.Count(out, `data-footnote-ref="visible"`) != 2 || !strings.Contains(out, `data-footnote-number="1"`) || !strings.Contains(out, "<strong>visible</strong>") {
+		t.Fatal(out)
+	}
+	blocks, _ := Render(source)
+	var editing strings.Builder
+	for _, block := range blocks {
+		editing.WriteString(block.HTML)
+	}
+	if !strings.Contains(editing.String(), "UNUSED_NOTE") || !strings.Contains(editing.String(), "SECRET_NOTE") {
+		t.Fatal("Export pruning changed the editing tree")
+	}
+}
+
 func TestExportExclusionsPrecedeContentsAndAssetDiscovery(t *testing.T) {
 	source := "{{toc:min=1 max=3}}\n\n# Visible\n\nBefore{{no-export}}SECRET_INLINE{{/no-export}}after.\n\n{{no-export}}\n## SECRET_HEADING\n\n![SECRET_IMAGE](secret.png)\n\n{{page-break}}\n{{/no-export}}\n\n{{draft-note}}\nSECRET_DRAFT\n{{/draft-note}}\n\nLast.\n"
 	out := exportHTML(t, source)

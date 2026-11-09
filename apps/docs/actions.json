@@ -10,8 +10,34 @@
       "title": "Set Document Theme",
       "description": "Set the current editable document theme as one undoable front-matter edit. Authored typography and styles retain their overrides.",
       "live": true,
-      "inputSchema": {"type":"object","additionalProperties":false,"required":["value"],"properties":{"value":{"enum":["plain","manuscript","report","letter"]}}},
-      "outputSchema": {"type":"object","required":["theme"],"properties":{"theme":{"type":"string"}}},
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "value"
+        ],
+        "properties": {
+          "value": {
+            "enum": [
+              "plain",
+              "manuscript",
+              "report",
+              "letter"
+            ]
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": [
+          "theme"
+        ],
+        "properties": {
+          "theme": {
+            "type": "string"
+          }
+        }
+      },
       "capabilities": [],
       "replay": "once"
     },
@@ -20,8 +46,27 @@
       "title": "New Document from Stock Template",
       "description": "Create an independent unsaved document from a bundled starter under the host's document-window policy. Custom Markdown files can be chosen through File, New from Template.",
       "live": true,
-      "inputSchema": {"type":"object","additionalProperties":false,"required":["template"],"properties":{"template":{"enum":["blank","report","letter","manuscript","meeting"]}}},
-      "outputSchema": {"type":"object"},
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "template"
+        ],
+        "properties": {
+          "template": {
+            "enum": [
+              "blank",
+              "report",
+              "letter",
+              "manuscript",
+              "meeting"
+            ]
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object"
+      },
       "capabilities": [],
       "replay": "once"
     },
@@ -81,7 +126,7 @@
     {
       "ref": "yavc.docs/export@1",
       "title": "Export Document",
-      "description": "Export the current Markdown document as editable Word DOCX or a PDF with selectable text. Exclusions and draft notes are removed before layout. Returns a file artifact without the Markdown source.",
+      "description": "Export the current Markdown document as editable Word DOCX or a PDF with selectable text. Exclusions and draft notes are removed before layout. Returns a file artifact without the Markdown source. Unresolved review annotations require an explicit reviewPolicy; the source stays unchanged.",
       "live": true,
       "inputSchema": {
         "type": "object",
@@ -94,6 +139,12 @@
             "enum": [
               "docx",
               "pdf"
+            ]
+          },
+          "reviewPolicy": {
+            "enum": [
+              "accepted",
+              "original"
             ]
           }
         }
@@ -1213,6 +1264,155 @@
       },
       "capabilities": [],
       "replay": "once"
+    },
+    {
+      "ref": "yavc.docs/review@1",
+      "title": "Read Review Annotations",
+      "description": "Read persisted Markdown review annotations and their UTF-16 source ranges. The returned revision is required to change or resolve them.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": [
+          "revision",
+          "marks",
+          "problems"
+        ],
+        "properties": {
+          "revision": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "marks": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "problems": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          }
+        }
+      },
+      "capabilities": [
+        "files.read"
+      ],
+      "replay": "pure",
+      "live": true
+    },
+    {
+      "ref": "yavc.docs/review-resolve@1",
+      "title": "Resolve Review Annotations",
+      "description": "Accept or reject one catalog annotation, or all annotations with id all, as one undoable edit. Requires the current catalog revision.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "revision",
+          "id",
+          "decision"
+        ],
+        "properties": {
+          "revision": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "id": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "decision": {
+            "enum": [
+              "accept",
+              "reject"
+            ]
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": [
+          "revision",
+          "modified"
+        ],
+        "properties": {
+          "revision": {
+            "type": "string"
+          },
+          "modified": {
+            "type": "boolean"
+          }
+        }
+      },
+      "capabilities": [],
+      "replay": "once",
+      "live": true
+    },
+    {
+      "ref": "yavc.docs/review-propose@1",
+      "title": "Propose a Reviewed Change",
+      "description": "Insert a persisted Markdown review annotation as one undoable edit. Uses UTF-16 selection offsets and the current review catalog revision. Comments on a selection also highlight that selection.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "revision",
+          "from",
+          "to",
+          "kind"
+        ],
+        "properties": {
+          "revision": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "from": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "to": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "kind": {
+            "enum": [
+              "addition",
+              "deletion",
+              "replacement",
+              "comment",
+              "highlight"
+            ]
+          },
+          "body": {
+            "type": "string",
+            "maxLength": 65536
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": [
+          "revision",
+          "modified"
+        ],
+        "properties": {
+          "revision": {
+            "type": "string"
+          },
+          "modified": {
+            "type": "boolean"
+          }
+        }
+      },
+      "capabilities": [],
+      "replay": "once",
+      "live": true
     }
   ]
 }

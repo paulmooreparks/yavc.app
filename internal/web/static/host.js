@@ -144,10 +144,16 @@
             var result = resolver.resolve(request, { installed: installed, preferences: validAssociations || { version: 1, rules: [] } });
             return Object.assign({}, result, { preferenceError: preferenceError });
         }, open: async function (request, context) {
+            function current(){if(context&&(context.signal&&context.signal.aborted||context.current&&!context.current()||context.host&&!context.host.isConnected))throw new DOMException('The file opening was cancelled.','AbortError');}
+            current();
             var F=await fs(),node=F.resolve(F.home(),request.resource);
-            if(!node || node.children || !F.isText(node))throw new Error('Choose a supported text file.');
+            current();
+            if(!node || node.children)throw new Error('Choose a supported text file.');
             var real=F.realOf(node),path=F.displayPath(real);
+            if(real.home&&!real.server&&!real.settings)await F.contentResources.read({resource:path});
+            else if(!F.isText(real))throw new Error('Choose a supported text file.');
             var result=await window.pudlHost.fileResolution.resolve({name:real.name,intent:'edit',applet:request.applet,view:request.view,verifiedText:true,readable:true,writable:!!real.home});
+            current();
             if(result.status!=='resolved')throw new Error(result.reason || 'No installed application supports this file.');
             if(!F.resolve(F.home(),path))throw new Error('The file is no longer available.');
             var plan=result.plan;
@@ -156,6 +162,7 @@
                 var opened=await window.pudlWindows.open(keys.length ? keys[keys.length-1] : plan.applet,context && context.host);
                 if(opened.status!=='opened' && opened.status!=='existing')throw opened.error || new Error('The application could not open.');
                 await window.pudlApplets.start(opened.key);
+                current();
                 if(!opened.window || !opened.window.isConnected || opened.window.querySelector('[data-applet-state="error"]'))throw new Error('The application could not start.');
                 var mount=opened.window.querySelector('[data-applet="'+plan.applet+'"]');if(!mount)throw new Error('The application mount is unavailable.');
                 var accepted=await window.pudlCommands.run(plan.dispatch.command,{resource:path,view:request.view,initialView:plan.view},mount);
@@ -170,7 +177,7 @@
             return fields.choose(request);
         } },
         /* Prepared for explicit capability adoption after the applet gates. */
-        contentResourceAdapter: { version: 1,
+        contentResourceAdapter: { version: 2,
             available: function () { return fs().then(function (F) { return !F.mounted; }); },
             read: function (request) { return resources().then(function (adapter) { return adapter.read(request); }); },
             write: function (request) { return resources().then(function (adapter) { return adapter.write(request); }); },

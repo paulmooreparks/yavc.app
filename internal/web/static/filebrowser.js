@@ -596,6 +596,7 @@
         var accept = (o.accept || []).map(function (x) { return x.toLowerCase(); });
         var fits = function (name) { return !accept.length || accept.some(function (x) { return name.toLowerCase().slice(-x.length) === x; }); };
         var dlg = document.createElement('dialog'); // check-ignore(one-shared-implementation): the file picker is a whole file browser in a dialog, not a question
+        var pickerFocus=window.yavcUtil.modalFocus(dlg);
         dlg.className = 'dialog fb-picker';
         dlg.setAttribute('aria-labelledby', id + '-title');
         dlg.innerHTML =
@@ -701,7 +702,7 @@
             var d = done;
             done = null;
             keepSize();
-            if (dlg.open) { dlg.close(); }
+            pickerFocus.close();
             if (b) { b.destroy(); }
             dlg.remove();
             d(value);

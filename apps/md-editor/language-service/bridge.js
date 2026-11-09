@@ -12,6 +12,7 @@
         var worker = null, client = null, disposed = false, generation = 0, failed = false, reports = new Map(), views = new Map(), endRequests = null;
         var prefix = 'yavc-lsp://' + crypto.randomUUID() + '/';
         var diagnosticsChanged = CM.StateEffect.define();
+        function fallback(kind) { return kind === 'json' || kind === 'canvas' ? [CM.linter(CM.jsonParseLinter()), CM.lintGutter()] : []; }
         function stop() {
             if (endRequests) { endRequests(); endRequests = null; }
             if (client) { client.disconnect(); client = null; }
@@ -24,7 +25,7 @@
             Array.from(views.entries()).forEach(function (entry) {
                 Promise.resolve().then(function () {
                     var view = entry[0], mounted = entry[1];
-                    if (!disposed && views.get(view) === mounted && mounted.scope.get(view.state) !== undefined) { view.dispatch({ effects: mounted.scope.reconfigure([CM.linter(CM.jsonParseLinter()), CM.lintGutter()]) }); }
+                    if (!disposed && views.get(view) === mounted && mounted.scope.get(view.state) !== undefined) { view.dispatch({ effects: mounted.scope.reconfigure(fallback(mounted.kind)) }); }
                 });
             });
             if (onError) { onError('Language assistance is unavailable. Your text is kept; use Restart Language Assistance to retry.', {persistent:true}); }
@@ -81,14 +82,15 @@
             } catch (err) { fail(); return null; }
         }
         function extension(kind, readOnly) {
-            if (kind !== 'json' && kind !== 'canvas') { return []; }
+            if (['json','canvas','css','html'].indexOf(kind) < 0) { return []; }
             var active = ensure();
-            if (!active) { return [CM.linter(CM.jsonParseLinter()), CM.lintGutter()]; }
+            if (!active) { return fallback(kind); }
             var scope = new CM.Compartment();
             function complete(context) {
                 if (disposed || failed || client !== active) { return null; }
                 return Promise.resolve(CM.serverCompletionSource(context)).then(function (result) {
                     if (!result) { return null; }
+                    if (kind === 'css' || kind === 'html') { return result; }
                     // LSP edits replace the whole JSON token, including a closing
                     // quote after the cursor. Match only the prefix being typed,
                     // while retaining the complete replacement range for edits.
@@ -97,18 +99,18 @@
                 }).catch(function () { return null; });
             }
             function services() {
-                var uri = prefix + 'document-' + (++generation) + (kind === 'canvas' ? '.canvas' : '.json');
-                return [active.plugin(uri, 'json'), readOnly ? [] : CM.autocompletion({ override: [complete], activateOnTyping: true }), CM.keymap.of([{ key: 'Shift-Alt-f', run: format }]),
+                var uri = prefix + 'document-' + (++generation) + '.' + kind;
+                return [active.plugin(uri, kind === 'canvas' ? 'json' : kind), readOnly ? [] : CM.autocompletion({ override: [complete], activateOnTyping: true }), CM.keymap.of([{ key: 'Shift-Alt-f', run: format }]),
                 CM.linter(function (view) {
                     var report = reports.get(uri), file = active.workspace.getFile(uri);
-                    if (!report || !file || file.version !== report.version || !view.state.doc.eq(report.doc)) { return CM.jsonParseLinter()(view); }
+                    if (!report || !file || file.version !== report.version || !view.state.doc.eq(report.doc)) { return kind === 'json' || kind === 'canvas' ? CM.jsonParseLinter()(view) : []; }
                     function offset(p) { var line = view.state.doc.line(Math.max(1, Math.min(view.state.doc.lines, p.line + 1))); return line.from + Math.max(0, Math.min(line.length, p.character)); }
                     return report.diagnostics.map(function (d) { return { from: offset(d.range.start), to: offset(d.range.end), severity: d.severity === 2 ? 'warning' : d.severity === 3 ? 'info' : d.severity === 4 ? 'hint' : 'error', message: d.message }; });
                 }, { delay: 250, needsRefresh: function (update) { return update.transactions.some(function (tr) { return tr.effects.some(function (effect) { return effect.is(diagnosticsChanged); }); }); } }),
                 CM.ViewPlugin.define(function () { return { destroy: function () { reports.delete(uri); } }; })];
             }
             return [scope.of([]), CM.ViewPlugin.define(function (view) {
-                var mounted = { scope: scope, suspended: null }; views.set(view, mounted);
+                var mounted = { scope: scope, suspended: null, kind: kind }; views.set(view, mounted);
                 function checkSize() {
                     Promise.resolve().then(function () {
                         if (disposed || failed || client !== active || views.get(view) !== mounted) { return; }

@@ -61,7 +61,7 @@
     {
       "ref": "yavc.editor/export@1",
       "title": "Export Document",
-      "description": "This action moved to yavc.docs/export@1. Editor returns migration guidance without changing content.",
+      "description": "This action moved to yavc.docs/export@1. Editor returns migration guidance without changing content. Unresolved review annotations require an explicit reviewPolicy; the source stays unchanged.",
       "live": true,
       "inputSchema": {
         "type": "object",
@@ -74,6 +74,12 @@
             "enum": [
               "docx",
               "pdf"
+            ]
+          },
+          "reviewPolicy": {
+            "enum": [
+              "accepted",
+              "original"
             ]
           }
         }
@@ -1193,6 +1199,155 @@
       },
       "capabilities": [],
       "replay": "once"
+    },
+    {
+      "ref": "yavc.editor/review@1",
+      "title": "Read Review Annotations",
+      "description": "Read persisted Markdown review annotations and their UTF-16 source ranges. The returned revision is required to change or resolve them.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": [
+          "revision",
+          "marks",
+          "problems"
+        ],
+        "properties": {
+          "revision": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "marks": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "problems": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          }
+        }
+      },
+      "capabilities": [
+        "files.read"
+      ],
+      "replay": "pure",
+      "live": true
+    },
+    {
+      "ref": "yavc.editor/review-resolve@1",
+      "title": "Resolve Review Annotations",
+      "description": "Accept or reject one catalog annotation, or all annotations with id all, as one undoable edit. Requires the current catalog revision.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "revision",
+          "id",
+          "decision"
+        ],
+        "properties": {
+          "revision": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "id": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "decision": {
+            "enum": [
+              "accept",
+              "reject"
+            ]
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": [
+          "revision",
+          "modified"
+        ],
+        "properties": {
+          "revision": {
+            "type": "string"
+          },
+          "modified": {
+            "type": "boolean"
+          }
+        }
+      },
+      "capabilities": [],
+      "replay": "once",
+      "live": true
+    },
+    {
+      "ref": "yavc.editor/review-propose@1",
+      "title": "Propose a Reviewed Change",
+      "description": "Insert a persisted Markdown review annotation as one undoable edit. Uses UTF-16 selection offsets and the current review catalog revision. Comments on a selection also highlight that selection.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "revision",
+          "from",
+          "to",
+          "kind"
+        ],
+        "properties": {
+          "revision": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "from": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "to": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "kind": {
+            "enum": [
+              "addition",
+              "deletion",
+              "replacement",
+              "comment",
+              "highlight"
+            ]
+          },
+          "body": {
+            "type": "string",
+            "maxLength": 65536
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": [
+          "revision",
+          "modified"
+        ],
+        "properties": {
+          "revision": {
+            "type": "string"
+          },
+          "modified": {
+            "type": "boolean"
+          }
+        }
+      },
+      "capabilities": [],
+      "replay": "once",
+      "live": true
     }
   ]
 }

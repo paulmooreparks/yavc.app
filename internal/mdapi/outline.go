@@ -31,8 +31,7 @@ type heading struct {
 
 func sourceRevision(source string) string { return fmt.Sprintf("%x", sha256.Sum256([]byte(source))) }
 
-func outline(source string) []heading {
-	parsed := []byte(source)
+func frontBytes(source string) int {
 	front := frontmatter.End(strings.ReplaceAll(source, "\r\n", "\n"))
 	end, normalized := 0, 0
 	for end < len(source) && normalized < front {
@@ -41,6 +40,12 @@ func outline(source string) []heading {
 		}
 		end++
 	}
+	return end
+}
+
+func outline(source string) []heading {
+	parsed := []byte(source)
+	end := frontBytes(source)
 	for i := 0; i < end; i++ {
 		if parsed[i] != '\r' && parsed[i] != '\n' {
 			parsed[i] = ' '
