@@ -51,6 +51,7 @@ node --test 'apps/*/test/*.test.mjs'
 node --test scripts/test-document-tabs.mjs
 node --test scripts/test-document-windows.mjs
 node --test scripts/test-modal-focus.mjs
+node --test scripts/test-command-state.mjs
 node --test scripts/test-obsidian-observer.mjs
 node --test scripts/test-dinah-content-proof.mjs
 

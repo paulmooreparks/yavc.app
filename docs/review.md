@@ -1,5 +1,13 @@
 # Stem-to-stern review, November 2026
 
+## Command notification and shortcode caching, 2026-11-09
+
+The workspace previously notified its host for every source edit and selection movement. Its Insert menu also regenerated shortcode contexts, metadata and command rows during repeated inspection. The shared command helper now compares resolved presentation and availability, including nested menus, before reporting a change. Checks coalesce within a task and cannot notify after disposal. Editor, Docs, Slides and Diagrams use the helper. Title/tab and review updates remain independent.
+
+The workspace retains its shortcode context for unchanged source and shared definitions, metadata is cached per immutable engine context, and the Insert array is retained while its actual inputs match. Browser regression coverage checks that typing does not report unchanged commands, that selection changes which enable Cut/Copy do report, and that view changes and renamed shortcode definitions remain visible. Unit coverage checks dynamic field receivers, nested state, callback replacement, disposal and metadata isolation.
+
+The focused command checks, document typing regression and workspace lifecycle checks pass in Chromium, Firefox and WebKit. Both independent portable hosts pass all three engines. Two earlier portable Diagrams runs lost the Firefox page during recovery navigation; the unchanged baseline and a subsequent sequential candidate run pass. The crash cause remains unproven. The test now preserves its original error if taking a failure screenshot also fails. Initial source-test failures came from an outdated ignored Markdown engine in the maintained checkout; refreshing that test asset from the verified release restored the expected API.
+
 ## Dinah release unblock and score placeholder, 2026-11-09
 
 The portable workspace no longer contains the two product-specific comments rejected by the receiving host's terminology check. The complete artifact scan found the same references in the bundled ProseMirror build description and entry comment; those descriptive references are also removed, with all licenses and copyright notices retained. A portable-source boundary rule prevents that commentary from returning. Editor and Docs retain the installed opt-in Files policy. Sight Reader's native score list now contains only actual scores, with no disabled placeholder row; the existing selection, filtering and Enter flow remains covered by the authored-dialog fixture.
