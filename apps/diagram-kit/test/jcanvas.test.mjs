@@ -131,7 +131,7 @@ test('the writer keeps the specification order, indents by two, and puts the ext
   const parsed = JSON.parse(out);
   assert.deepEqual(Object.keys(parsed), ['nodes', 'edges', 'yavc']);
   assert.deepEqual(Object.keys(parsed.nodes[0]), ['id', 'type', 'x', 'y', 'width', 'height', 'text', 'mine', 'yavc']);
-  assert.deepEqual(Object.keys(parsed.edges[0]), ['id', 'fromNode', 'toNode', 'label', 'yavc']);
+  assert.deepEqual(Object.keys(parsed.edges[0]), ['id', 'fromNode', 'fromSide', 'toNode', 'toSide', 'label', 'yavc']);
   assert.match(out, /^\{\n {2}"nodes": \[\n {4}\{\n {6}"id": "a",/);
   // Writing what was written changes nothing.
   assert.equal(jc.write(jc.read(out).doc), out);

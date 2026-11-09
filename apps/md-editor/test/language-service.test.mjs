@@ -122,3 +122,14 @@ test('Canvas assistance includes diagram settings and independent color override
     assert.ok(s.notifications.filter(n => n.method === 'textDocument/publishDiagnostics').at(-1).params.diagnostics.length >= 2);
     s.notify('textDocument/didClose', { textDocument: { uri } });
 });
+
+test('Canvas assistance describes and validates retained automatic endpoint projections',async()=>{
+    const s=server(),uri='yavc-lsp://test/automatic.canvas';await s.request('initialize',{});
+    const text='{"edges":[{"id":"e","fromNode":"a","toNode":"b","yavc":{}}]}';
+    s.notify('textDocument/didOpen',{textDocument:{uri,version:1,text}});
+    const completion=await s.request('textDocument/completion',{textDocument:{uri},position:{line:0,character:text.lastIndexOf('{}')+1}});
+    for(const key of ['fromAuto','toAuto'])assert.ok(completion.result.items.some(item=>item.label.includes(key)),key);
+    s.notify('textDocument/didChange',{textDocument:{uri,version:2},contentChanges:[{text:text.replace('"yavc":{}','"yavc":{"fromAuto":{"node":"a","side":"middle"}}')}]});
+    await new Promise(resolve=>setTimeout(resolve,220));assert.ok(s.notifications.filter(n=>n.method==='textDocument/publishDiagnostics').at(-1).params.diagnostics.length);
+    s.notify('textDocument/didClose',{textDocument:{uri}});
+});

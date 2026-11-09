@@ -8,6 +8,7 @@ const side = choice(['top', 'right', 'bottom', 'left'], 'Attachment side. Omit f
 const line = choice(['solid', 'dashed', 'dotted'], 'Outline or connector line style.');
 const lineWidth = { type: 'integer', minimum: 1, maximum: 8, description: 'Line width in pixels.' };
 const head = choice(['none', 'arrow', 'triangle', 'diamond', 'circle', 'box', 'cross', 'cf-one', 'cf-one-required', 'cf-many', 'cf-many-required'], 'Connector endpoint symbol.');
+const auto = { type:'object',required:['node','side'],description:'Retains automatic attachment while the standard node and side match this saved projection.',properties:{node:{...text('Projected endpoint node ID.'),minLength:1},side} };
 export const shapes = ['rectangle', 'rounded', 'oval', 'diamond', 'parallelogram', 'document', 'cylinder', 'queue', 'person', 'cloud', 'hexagon', 'package', 'text'];
 export const canvasSchema = {
     $id: 'yavc-schema:json-canvas',
@@ -50,7 +51,7 @@ export const canvasSchema = {
                 id: text('Unique edge ID, in a namespace separate from node IDs.'), fromNode: text('Source node ID.'), toNode: text('Target node ID.'),
                 fromSide: side, toSide: side, fromEnd: choice(['none', 'arrow'], 'Standard start arrow.'), toEnd: choice(['none', 'arrow'], 'Standard end arrow.'),
                 label: text('Connector label.'), color,
-                yavc: { type: 'object', properties: { route: choice(['elbow', 'straight', 'curve'], 'Connector route, calculated from endpoint geometry.'), fromHead: head, toHead: head, line, lineWidth } }
+                yavc: { type: 'object', properties: { route: choice(['elbow', 'straight', 'curve'], 'Connector route, calculated from endpoint geometry.'), fromHead: head, toHead: head, fromAuto:auto,toAuto:auto,line, lineWidth } }
             }
         }
     }

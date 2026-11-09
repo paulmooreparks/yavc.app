@@ -752,3 +752,11 @@ The installed `db0d2c8` candidate passes the same focus checks against actual se
 
 The first installed WebKit attempt found the test could configure Open before an asynchronously loading Docs toolbar finished adopting its preferences, then lose the test configuration on the second Open. The test now waits for toolbar readiness before setting its synthetic preferences. That failed attempt is separate from the passing corrected run; it did not fail the foreground assertion.
 
+# Canvas automatic-anchor interchange, 2026-11-09
+
+An actual offline Obsidian 1.15.0 Linux save preserved the tested unknown extension objects but materialized omitted endpoint sides. The updated writer projects explicit standard anchors with matching automatic-intent metadata. Routing and controls honor that metadata only while its node and side still match. External overrides and explicit same-side choices stay fixed; paste rebases only previously active intent. The writer and drag previews preserve their inputs. Null-prototype copies retain prototype-named JSON fields as data. The bundled language schema describes and validates the same representation.
+
+Focused tests cover movement after serialization, stale metadata, explicit pinning, copying/pasting, unknown properties and invalid metadata. The full Canvas pointer/keyboard/Undo/inspector/group/source/export suite and the new inspector regression pass Chromium, Firefox and WebKit. The actual receiving probe performs two Obsidian saves with producer text and geometry edits between them, checks every field and overlapping z-order, and proves automatic sides still change. Independent design and implementation review found no remaining issue. The full repository gate passes. Installed-image evidence belongs to the next local installation receipt.
+
+The native probe records its actual runtime, locked official installer hash, immutable test image, input/module hashes and harness hashes. Its private X display and native picker run without network or personal state. Earlier attempts are retained separately, including a wrong executable path, modal picker handling, sandboxed card-editor discovery and a mismatched image/group aspect ratio. Its result applies to the pinned Linux build with core Canvas; it does not promise behavior for other versions or plugins.
+

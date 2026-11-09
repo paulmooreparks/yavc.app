@@ -190,9 +190,9 @@ test('reattaching either endpoint preserves connector identity, styles and unkno
     const doc = base(); doc.nodes.push(n('c', 20, 240));
     doc.edges[0].color = '4'; doc.edges[0].extra = { retain: true }; doc.edges[0].yavc = { route: 'curve', toHead: 'diamond' };
     const changed = M.edit(doc, { op: 'reconnect', key: 'ab', end: 'to', node: 'c', side: 'top' }).doc;
-    assert.deepEqual(changed.edges[0], { ...doc.edges[0], toNode: 'c', toSide: 'top', toEnd: 'arrow' });
+    assert.deepEqual(changed.edges[0], { ...doc.edges[0], fromSide:'bottom', toNode: 'c', toSide: 'top', toEnd: 'arrow',yavc:{...doc.edges[0].yavc,fromAuto:{node:'a',side:'bottom'}} });
     const automatic = M.edit(changed, { op: 'reconnect', key: 'ab', end: 'from', node: 'b' }).doc;
-    assert.equal(automatic.edges[0].fromNode, 'b'); assert.equal(automatic.edges[0].fromSide, undefined);
+    assert.equal(automatic.edges[0].fromNode, 'b'); assert.equal(J.automatic(automatic.edges[0],'from'), true);
     assert.equal(doc.edges[0].toNode, 'b');
     assert.throws(() => M.edit(doc, { op: 'reconnect', key: 'ab', end: 'middle', node: 'a' }));
     assert.throws(() => M.edit(doc, { op: 'reconnect', key: 'ab', end: 'to', node: 'missing' }));
