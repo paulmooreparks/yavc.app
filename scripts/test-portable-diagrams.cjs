@@ -141,7 +141,7 @@ const types={'.html':'text/html','.js':'text/javascript','.css':'text/css','.jso
     assert.equal(await p.locator('#one .cm-content').getAttribute('contenteditable'),'false');assert.equal(await p.locator('#one .cm-content').getAttribute('aria-readonly'),'true');assert.equal(await p.locator('#one .dg-handle').count(),0);assert.equal(await p.locator('#one [data-command="save"]').isDisabled(),true);assert.equal(await p.locator('#one .dg-inspector-fields').evaluate(n=>n.disabled),true);
     assert.deepEqual(badRequests,[]);assert.deepEqual(errors,[]);
     console.log(engine+': extracted assets, conditional saves, disposal, matching/stale/legacy recovery, quota refusal and future snapshot retention passed');
-   }catch(e){await p.screenshot({path:path.join(evidence,engine+'-failure.png'),fullPage:true});throw e;}finally{await browser.close();}
+   }catch(e){console.error(engine,e);try{await p.screenshot({path:path.join(evidence,engine+'-failure.png'),fullPage:true});}catch(capture){console.error('Failure screenshot unavailable:',capture.message);}throw e;}finally{await browser.close();}
   }
  }finally{await new Promise(resolve=>server.close(resolve));}
 })().catch(e=>{console.error(e);process.exitCode=1;});
