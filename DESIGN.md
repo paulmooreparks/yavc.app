@@ -284,6 +284,8 @@ Right-clicks answer PUDL's `pudl:contextmenu` with rows from each application's 
 3. The virtual file system, terminal, files and editor, with the administrator's mounts and live page editing.
 4. The remaining packages, then slides and rss.
 
+98. **Continuation furniture stays outside document source** (2026-11-09). Repeated table headers are measured page furniture. The planner reserves their height before placing continued rows, while rich views draw inert decoration rows and print fragments clone the original header. Coordinated source-free cell boundaries split oversized rows, and measured column decorations prevent inserted furniture from changing auto column widths. Neither operation adds source rows, reference identities or Undo transactions. Ordinary stacked shortcode bodies expose their child blocks to the shared planner; authored keep rules and parallel-column structures retain their own layout constraints. Long notes use measured line/block fragments and can continue onto note-only pages. First fragments share actual space remaining after their reference blocks; temporary allocation pressure does not make a fitting unit intrinsically oversized. Browser printing retains sanitized browser layout and starts a standards-mode frame; structural Office writers keep their separate representation limits.
+
 ## Open questions
 
 1. **XferLang version.** No Go implementation exists; the repository has the C# library and a Rust port. The parkscomputing.com navigation file is in the 0.15 form, and a 1.0 reboot is under way. The Go library should implement 1.0 if its grammar is settled; confirm with the XferLang Reboot work before starting.

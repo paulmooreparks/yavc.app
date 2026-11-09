@@ -108,6 +108,7 @@
         var layer = document.createElement('div'); layer.className = 'doc-furniture'; layer.contentEditable = 'false';
         layer.setAttribute('aria-label', 'Page Headers and Footers');
         for (var i = 1; i <= count; i++) {
+            if(i<count){var gutter=document.createElement('div');gutter.className='doc-sheet-gutter';gutter.setAttribute('aria-hidden','true');gutter.style.top=(i*page.height/.75+(i-1)*24)+'px';layer.append(gutter);}
             ['header', 'footer'].forEach(function (kind) {
                 var node = row(page, kind, i, count);
                 node.style.top = ((i - 1) * (page.height / .75 + 24) + (kind === 'header' ? page.margins[1] / 1.5 - 8 : (page.height - page.margins[3] / 2) / .75 - 8)) + 'px'; layer.append(node);

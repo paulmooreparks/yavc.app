@@ -65,3 +65,25 @@ func TestFootnoteSerializationRejectsInjectedLabels(t *testing.T) {
 		}
 	}
 }
+
+func TestNestedFootnoteDefinitionRemainsRichAndRoundTrips(t *testing.T) {
+	source := "Reference[^one].\n\n> [^one]: A **nested** note.\n"
+	doc := noteDocument(t, source)
+	if len(doc.Content) != 2 || doc.Content[1].Type != "blockquote" || doc.Content[1].Content[0].Type != "footnote" {
+		t.Fatalf("%+v", doc.Content)
+	}
+	back, err := SerializeDocument(doc)
+	if err != nil || back != source {
+		t.Fatalf("%v %q", err, back)
+	}
+	note := doc.Content[1].Content[0]
+	note.Content[0].Content = append(note.Content[0].Content, &Node{Type: "text", Text: " Edited."})
+	back, err = SerializeDocument(doc)
+	if err != nil || !strings.Contains(back, "> [^one]: A **nested** note. Edited.") {
+		t.Fatalf("%v %q", err, back)
+	}
+	again := noteDocument(t, back)
+	if again.Content[1].Type != "blockquote" || again.Content[1].Content[0].Type != "footnote" {
+		t.Fatal("edited nested note lost its rich representation")
+	}
+}

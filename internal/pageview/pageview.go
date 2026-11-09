@@ -228,6 +228,23 @@ func (p parser) block(n ast.Node) (*Node, error) {
 		return p.list(node)
 	case *extast.Table:
 		return p.table(node)
+	case *extast.Footnote:
+		label := string(node.Ref)
+		if !footnotes.ValidLabel(label) {
+			return nil, ErrNotEditable
+		}
+		out := &Node{Type: "footnote", Attrs: map[string]any{"label": label, "number": p.notes[label], "tail": ""}}
+		for child := node.FirstChild(); child != nil; child = child.NextSibling() {
+			block, err := p.block(child)
+			if err != nil {
+				return nil, err
+			}
+			out.Content = append(out.Content, block)
+		}
+		if len(out.Content) == 0 {
+			out.Content = []*Node{{Type: "paragraph"}}
+		}
+		return out, nil
 	case *ast.Blockquote:
 		out := &Node{Type: "blockquote"}
 		for child := node.FirstChild(); child != nil; child = child.NextSibling() {
@@ -663,6 +680,8 @@ func serializeBlock(n *Node, indent string) (string, error) {
 		return serializeList(n, indent)
 	case "table":
 		return serializeTable(n)
+	case "footnote":
+		return footnoteText(n)
 	case "blockquote":
 		var blocks []string
 		for _, child := range n.Content {

@@ -106,11 +106,6 @@
                 if(!Number.isInteger(number)||number<1||number>256||number!==Number(node.getAttribute('data-footnote-number'))||noteNodes.has(label)||!node.querySelector(':scope > .doc-footnote-body'))throw new Error('A footnote definition is ambiguous or unsupported. Check its label in the source.');
                 noteNodes.set(label,node);trustedNotes.add(node);
             });
-            [surface].concat(Array.from(surface.querySelectorAll('*'))).forEach(function (element) {
-                var css = getComputedStyle(element);
-                if (css.display === 'none') { return; }
-                if (/^(flex|grid|inline-flex|inline-grid)$/.test(css.display) && !(trustedNotes.has(element)&&css.display==='grid') || css.float !== 'none' || css.columnCount !== 'auto' && +css.columnCount > 1 || css.columnWidth !== 'auto' || +css.opacity !== 1) { throw new Error('This document uses a layout that Office export cannot represent yet.'); }
-            });
             var images = new Map(), totalImageBytes = 0;
             for (var pair of pictures) {
                 if (options.current && !options.current()) { throw new Error('The document changed during export.'); }
@@ -133,6 +128,13 @@
                 await Promise.all(Array.from(surface.querySelectorAll('img')).map(function (node) { return node.decode(); }));
                 return await options.renderPages(surface, page);
             }
+            // Browser printing retains browser layout. Structural Office writers
+            // must refuse CSS they cannot preserve in their output model.
+            [surface].concat(Array.from(surface.querySelectorAll('*'))).forEach(function (element) {
+                var css = getComputedStyle(element);
+                if (css.display === 'none') { return; }
+                if (/^(flex|grid|inline-flex|inline-grid)$/.test(css.display) && !(trustedNotes.has(element)&&css.display==='grid') || css.float !== 'none' || css.columnCount !== 'auto' && +css.columnCount > 1 || css.columnWidth !== 'auto' || +css.opacity !== 1) { throw new Error('This document uses a layout that Office export cannot represent yet.'); }
+            });
             var blocks = [],notes=[];
             function children(parent, target) { parent.childNodes.forEach(function (node) { block(node, target); }); }
             function block(node, target) {

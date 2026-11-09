@@ -150,7 +150,7 @@
 .doc-page .doc-footnote-body > :last-child { margin-bottom: 0; }
 .doc-page .doc-footnote-ref { font-size: .75em; line-height: 0; }
 .doc-paginated > .ProseMirror > .doc-footnote { margin-top: 0; }
-.doc-paginated .doc-footnote-paged { position: absolute; left: 0; }
+.doc-paginated .doc-footnote-paged { position: absolute; left: 0;margin-top:0; }
 .doc-paginated > .doc-page-flow { position: relative; }
 .doc-paginated > .doc-page-flow > .doc-footnote { margin-top: 0; }
 /* Document view retains a single editable flow. Page gaps are decorations. */
@@ -167,12 +167,16 @@
 .doc-paginated .doc-page-gap-inline { display: block; padding: 0; margin: 0; border: 0; line-height: 0; pointer-events: none; }
 .doc-paginated li.doc-page-gap { display: block; counter-increment: none; list-style: none; padding: 0; margin: 0; }
 .doc-paginated li.doc-list-continuation { list-style-type: none; }
-.doc-paginated .doc-fragment-open-start { margin-top: 0 !important; }
-.doc-paginated .doc-fragment-open-end { margin-bottom: 0 !important; }
+.doc-paginated .doc-fragment-open-start { margin-top: 0 !important;padding-top:0!important;border-top-width:0!important; }
+.doc-paginated .doc-fragment-open-end { margin-bottom: 0 !important;padding-bottom:0!important;border-bottom-width:0!important; }
 .doc-paginated tr.doc-page-gap > td { padding: 0; border: 0; }
+.doc-paginated .doc-table-repeated-header { margin:0;pointer-events:none; }
+.doc-paginated .doc-cell-repeated-header { display:block;box-sizing:border-box;font-weight:bold;line-height:normal;background:var(--doc-code);padding-block:.2em; }
+.doc-paginated :is(td,th) { position:relative; }
 .doc-paginated > .doc-page-flow > .doc-block { display: flow-root; }
 .doc-paginated > .doc-page-flow > .doc-block > :first-child { margin-top: 0; }
 .doc-furniture { position: absolute; inset: 0; pointer-events: none; font-size: 9pt; line-height: 1.25; color: var(--doc-muted); }
+.doc-sheet-gutter { position:absolute;left:0;right:0;height:24px;background:var(--sheet-gutter,var(--surface-alt));z-index:1; }
 .doc-header, .doc-footer { position: absolute; left: var(--sheet-left); right: var(--sheet-right); display: flex; gap: 6pt; }
 .doc-furniture-cell { flex: 1 1 0; min-width: 0; white-space: nowrap; }
 .doc-furniture a { pointer-events: auto; }

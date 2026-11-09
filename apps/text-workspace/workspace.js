@@ -1246,15 +1246,19 @@
                         if(layout.problem)throw new Error(layout.problem);
                         if (layout.oversized) { throw new Error('A block is taller than the page. Shorten it or enlarge the page before printing.'); }
                         var frame = document.createElement('iframe'); frame.className = 'ed-print-frame'; frame.title = 'Document Print'; frame.inert = true; frame.tabIndex = -1; frame.setAttribute('aria-hidden', 'true'); document.body.append(frame); printFrame = frame;
+                        var doc = frame.contentDocument;
+                        // A static standards-mode shell keeps table typography
+                        // consistent with the document used for measurement.
+                        doc.open();doc.write('<!doctype html><html><head></head><body></body></html>');doc.close();
                         frame.contentWindow.addEventListener('afterprint', function () { frame.remove(); if (printFrame === frame) { printFrame = null; } }, { once: true });
-                        var doc = frame.contentDocument; doc.title = t.name || 'Document';
+                        doc.title = t.name || 'Document';
                         document.querySelectorAll('head link[rel="stylesheet"], head style').forEach(function (node) { doc.head.append(node.cloneNode(true)); });
                         var css = doc.createElement('style'); css.textContent = '@page{size:' + page.width + 'pt ' + page.height + 'pt;margin:0}html,body{margin:0;padding:0;background:white} .doc-print-sheet{box-sizing:border-box;break-after:page;break-inside:avoid;margin:0!important;min-height:0!important;height:' + d.height + 'px!important;background-image:none!important;print-color-adjust:exact;-webkit-print-color-adjust:exact} .doc-print-sheet:last-child{break-after:auto} .doc-print-sheet .sc-page-break{display:none}'; doc.head.append(css);
-                        var at = 0, starts = [0].concat(layout.gaps.map(function (gap) { return gap.index; })).concat(blocks.length);
+                        var at = 0, starts = [0].concat(layout.gaps.map(function (gap) { return gap.index; })).concat(blocks.length);while(starts.length<layout.count+1)starts.push(blocks.length);
                         for (var i = 0; i < starts.length - 1; i++) {
                             var sheet = surface.cloneNode(false); sheet.classList.add('doc-print-sheet'); var body = doc.createElement('div'); body.className = 'doc-page-flow'; sheet.append(body);
                             body.append(window.yavcPageLines.fragment(flow, blocks, starts[i], starts[i + 1]));
-                            (layout.footnotes||[]).filter(function(note){return note.page===i+1;}).forEach(function(note){var original=blocks.footnotes.find(function(item){return item.label===note.label;}).node,copy=original.cloneNode(true);copy.classList.add('doc-print-footnote');copy.style.position='absolute';copy.style.marginTop='0';copy.style.top=(d.top+note.top-i*(d.height+24))+'px';copy.style.left=d.left+'px';copy.style.width=(d.width-d.left-d.right)+'px';sheet.append(copy);});
+                            (layout.footnotes||[]).filter(function(note){return note.page===i+1;}).forEach(function(note){var copy=P.noteFragment(note,blocks);copy.classList.add('doc-print-footnote');copy.style.position='absolute';copy.style.marginTop='0';copy.style.top=(d.top+note.top-i*(d.height+24))+'px';copy.style.left=d.left+'px';copy.style.width=(d.width-d.left-d.right)+'px';sheet.append(copy);});
                             var layer = doc.createElement('div'); layer.className = 'doc-furniture';
                             var header = window.yavcDocumentSettings.row(page, 'header', i + 1, starts.length - 1, doc), footer = window.yavcDocumentSettings.row(page, 'footer', i + 1, starts.length - 1, doc);
                             header.style.top = (page.margins[1] / 1.5 - 8) + 'px'; footer.style.top = ((page.height - page.margins[3] / 2) / .75 - 8) + 'px'; layer.append(header, footer); sheet.append(layer);

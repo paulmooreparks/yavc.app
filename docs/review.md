@@ -1,5 +1,13 @@
 # Stem-to-stern review, November 2026
 
+## Table, container and footnote continuations, 2026-11-09
+
+The shared planner now splits tall plain-text table rows at coordinated cell boundaries, repeats table headers in editable and printed continuations, and measures ordinary stacked shortcode bodies. Header paint over exhausted cells stays outside source and flow height. Table width decorations preserve measured columns through inserted page furniture and reset after source or font/image changes. Rich edits and Undo retain the original table source. Print fragments preserve each cell's independent range and original column widths.
+
+Long rich footnotes continue across later pages, including note-only pages after the body ends. Multiple new notes share actual remaining space after their reference block, while later references can use remaining sheet space beyond the preferred continuation allowance. The source review caught both missing headers over exhausted columns and false overflow errors from provisional note budgets. Ordinary nested definitions now parse and serialize as rich notes; source-only unsupported note blocks remain protected and report a Document-view problem. Native tests cover exact nested round trips, edits, first-reference reservation, continuation coverage, multiple notes and the short-note-after-large-note allocation case.
+
+The three-engine fixtures cover stable live pagination, highly asymmetric cells, repeated label alignment, real cell and note edits with Undo, nested definitions, printed content uniqueness and fragment bounds. Long shortcode printing exposed Office-only CSS restrictions in the shared browser-print path. Those restrictions now run only for structural writers. Row-fragment tests then exposed the print frame's quirks-mode table font reset; the frame now starts from a static standards-mode shell. The existing two-layout-pixel print tolerance now compares rounded layout pixels so fractional paper dimensions do not fail at a 0.005px boundary. Arbitrary parallel CSS, merged cells and indivisible media remain explicitly bounded rather than silently clipped.
+
 ## Persisted review annotations, 2026-11-09
 
 Docs and Markdown in Editor now expose a Review menu for insertions, deletions, replacements, comments and highlights. A revision-checked catalog supplies every source mutation. Individual and whole-document resolution use minimal edits, preserving retained source and line endings. Rich selection proposals serialize an undispatched temporary transaction and require exact source reconstruction before inserting delimiters. Unsupported selections remain available in Text.
