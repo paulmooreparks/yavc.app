@@ -373,8 +373,12 @@ rules.push({ id: 'title-case-labels', run() {
 // The extracted workspace cannot regain the site's storage or route assumptions.
 // Optional host capabilities belong in its documented adapter instead.
 rules.push({id:'workspace-host-boundary',run(){
+  for(const f of files.filter(f=>/^apps\/(?:content-kit|text-workspace|md-editor|md-engine|diagram-kit|diagrams|editor|docs|slides)\//.test(f)&&/\.(?:js|mjs|md|json|css)$/.test(f)&&!f.includes('/test/'))){
+    each(/\bGK[ -]Companion\b/gi,text.get(f)||'',m=>report('workspace-host-boundary',f,m.index,'private host product references must stay outside the portable release'));
+  }
   for(const f of js.filter(f=>f.startsWith('apps/text-workspace/'))){
     each(/\b(?:pcSiteFs|pcConfig|pcSnapshot|pcAdmin|pcLoadWindow|localStorage|sessionStorage)\b|['"]\/(?:static|applets)\//g,text.get(f),m=>report('workspace-host-boundary',f,m.index,'a site storage/global/path dependency escaped the host adapter'));
+    each(/\bGK\s+Companion\b/g,text.get(f),m=>report('workspace-host-boundary',f,m.index,'host-specific product commentary must stay outside the portable workspace'));
   }
   for(const f of ['apps/editor/editor.js','apps/docs/docs.js']){
     each(/\b(?:EditorView|EditorState|CodeMirror|ProseMirror)\b/g,text.get(f)||'',m=>report('workspace-host-boundary',f,m.index,'editing implementation belongs in the shared workspace'));

@@ -2345,9 +2345,6 @@
            CodeMirror answers its keys in the text first, so PUDL answers a
            key only where CodeMirror did not. */
         var FORMATS = window.yavcMdEditor ? window.yavcMdEditor.FORMATS : [];
-        /* The paragraph style, as GK Companion's Editor has it: one menu that
-           shows the style of the line the cursor is in, holding Paragraph
-           (Ctrl+0) and the six heading levels (Ctrl+1 to Ctrl+6). */
         var STYLES = window.yavcMdEditor ? window.yavcMdEditor.STYLES : [];
         function blockStyle() {
             if (formatsThePage()) { return visual.api && visual.api.block ? visual.api.block() : null; }
@@ -2497,15 +2494,6 @@
             ] }];
         }
 
-        /* The menus list the same commands by id, which PUDL (0.68.1) looks
-           up in the command table. The menu bar's ribbon (PUDL 0.79.0) is
-           built from the menus, and the toolbar hides while it shows (PUDL
-           0.80.1), so the Editor's own titles hold every command the
-           toolbar has: File, Edit, Insert and Format, as GK Companion's
-           Editor has them, and Layout for the file tree, wrapping and the
-           views, which the site's View menu lists again where a reader of
-           the menus looks for them. Headings and separators start the
-           ribbon's groups. */
         var LAYOUT = ['toggle-files', 'toggle-outline', 'hide-navigation', 'toggle-wrap', '-', 'view-document', 'view-visual', 'view-text', 'view-split', 'view-preview', 'document-zoom', 'md-default', '-', 'source', 'preview'];
         function menus() {
             var titles = [

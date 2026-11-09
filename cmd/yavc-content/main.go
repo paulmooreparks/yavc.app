@@ -217,6 +217,7 @@ func main() {
 	out := flag.String("out", "", "new output directory outside the checkout")
 	md := flag.String("md", "", "prebuilt Markdown WASM directory")
 	d2 := flag.String("d2", "", "prebuilt D2 WASM directory")
+	archive := flag.String("zip", "", "new ZIP archive outside the assembled output")
 	flag.Parse()
 	if *out == "" {
 		fmt.Fprintln(os.Stderr, "-out is required")
@@ -225,5 +226,11 @@ func main() {
 	if err := assemble(*root, *out, *md, *d2); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
+	}
+	if *archive != "" {
+		if err := writeReleaseArchive(*out, *archive); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
 	}
 }
