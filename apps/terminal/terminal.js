@@ -127,7 +127,6 @@
     function realOf(n) { return F.realOf(n); }
     function validName(n) { return F.validName(n); }
     function attached(n) { return F.attached(n); }
-    function readHome(n) { return F.readHome(n); }
     function homeSave() { return F.save(); }
     function homeSync() { return F.sync(); }
     function homeDir() { return F.home(); }
@@ -489,7 +488,7 @@
     command('help', {
         summary: 'list the commands',
         help: 'help\n\nLists every command with a one-line summary. "man <command>" says more about one.',
-        run: function (args, io) {
+        run: async function (args, io) {
             io.out(paint('bold', 'This is yavc.app in terminal mode.') + ' The site\'s pages are in /site, and ~ is your own.\n');
             /* A script is listed by the name it runs by, without its .sh or
                .lua, and every name gets a column as wide as the longest. */
@@ -502,11 +501,11 @@
             Object.keys(COMMANDS).sort().forEach(function (k) {
                 io.out('  ' + paint('green', k.padEnd(width)) + COMMANDS[k].summary + '\n');
             });
-            sections.forEach(function (sec) {
-                if (!sec.kids.length) { return; }
+            for (var sec of sections) {
+                if (!sec.kids.length) { continue; }
                 io.out('\n' + paint('bold', sec.title) + '\n');
-                sec.kids.forEach(function (n) { io.out('  ' + paint('green', runName(n).padEnd(width)) + scriptSummary(n.name, scriptSource(n)) + '\n'); });
-            });
+                for (var n of sec.kids) { io.out('  ' + paint('green', runName(n).padEnd(width)) + scriptSummary(n.name, await scriptSource(n)) + '\n'); }
+            }
             io.out('\n' + wrap('Anything ls marks with * runs by its name, or by its path: the applets, and scripts. Your home directory, ~, holds files you can edit, and a script you put in ~/bin runs like the site\'s; everything else is read-only. Tab completes, the arrow keys recall earlier commands, "|" pipes one command into another, "> file" saves a command\'s output, "< file" feeds one in, and ;, && and || join commands. export sets variables, which $NAME expands to. A script is a file of these commands, or a POSIX shell script ending in .sh, or Lua 5.4 ending in .lua ("man sh", "man lua"), and ~/.profile runs as a terminal starts. "guide" reads the full guide.', io.cols - 1) + '\n');
         }
     });
@@ -515,13 +514,13 @@
         summary: 'explain a command',
         help: 'man <command>\n\nShows the help for a command.',
         complete: 'command',
-        run: function (args, io) {
+        run: async function (args, io) {
             if (!args.length) { io.err('man: which command? Try "help".'); return 1; }
             var c = COMMANDS[args[0]];
             if (!c) {
                 var s = io.findScript(args[0]);
                 if (!s) { io.err('man: no entry for ' + args[0]); return 1; }
-                var h = scriptHelp(scriptSource(s));
+                var h = scriptHelp(await scriptSource(s));
                 io.out(paint('bold', s.name) + ' - a script in ' + displayPath(realOf(s).parent) + '\n\n' + wrap(h || 'It has no comments to explain it. "cat ' + displayPath(realOf(s)) + '" shows what it does.', io.cols - 1) + '\n');
                 return;
             }

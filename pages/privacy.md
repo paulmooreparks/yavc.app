@@ -16,7 +16,7 @@ Nothing in the cookie identifies you. It is a random value, and the site uses it
 
 ## Files you make
 
-Files you make in the editor, in the terminal or through an application's saves are kept in your own browser's local storage, and they are never sent to the site. Because local storage belongs to the address where a file was made, a file saved on the desktop is not seen at an application's subdomain, and the other way round. Clearing your browser's site data removes these files.
+Guest files you make in the editor, in the terminal or through an application's saves are kept in your own browser's IndexedDB database. Saving a guest file does not create a server copy. Browser storage belongs to the address where a file was made, so a file saved on the desktop is not seen at an application's subdomain, and the other way round. Clearing your browser's site data removes these files.
 
 ## What the server sees
 
