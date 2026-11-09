@@ -1,5 +1,9 @@
 # Stem-to-stern review, November 2026
 
+## Sight Reader score list, 2026-11-09
+
+Sight Reader's score picker marked its native multi-row select for PUDL listbox enhancement, which inserts radio markers for single-selection rows. The picker now retains the PUDL-styled native list without that enhancement. Labels, grouped scores, filtering, selected values, Enter to open and device import keep their existing behavior. This is a host-installed Sight Reader package patch at 1.4.1; it does not change the bundled PUDL distribution. The authored-dialog fixture accepts an optional validated application filter and checks that this picker has a visible native list and no radio controls, alongside its existing layout and keyboard checks.
+
 ## Opt-in Files panes, 2026-11-09
 
 Editor and Docs no longer open Files automatically on a wide screen. Only an explicit boolean preference enables the pane; clearing the preference also restores the hidden default immediately. Their existing Files command retains opt-in and opt-out across reload. Slides and Diagrams already have no Files pane. `scripts/test-file-pane-defaults.cjs` checks fresh wide-screen startup for all four applications and preference persistence/reset in the two shared workspaces. This changes navigation defaults only; startup document templates and recovery remain unchanged.
