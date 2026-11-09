@@ -164,7 +164,8 @@
         var tabs = [], active = -1, untitled = 0;
         var H = window.pudlHost || {}, resourceSession = null, resources = null, recovery = null;
         var documentWindows = H.documentWindows, documentReady = false, receivingDocument = false, unbindDocuments = null;
-        async function routeDocument(operation, input) {
+        async function routeDocument(operation, input,guard) {
+            if(guard&&!guard())throw new DOMException('Import cancelled.','AbortError');
             if (!documentWindows || documentWindows.mode(root) !== 'single' || !documentReady || receivingDocument || restoring) return null;
             if (operation === 'open-file') {
                 var checked = resources ? await resources.read(input.path) : null;
@@ -173,6 +174,7 @@
                 if (!resources && F && !F.resolve(F.home(), input.path)) throw new Error('The file could not be found.');
             }
             if (pageActive()) await visual.api.sync();
+            if(guard&&!guard())throw new DOMException('Import cancelled.','AbortError');
             var t = current();
             if (!t || (!t.path && !dirtyTab(t) && !view.state.doc.length)) return null;
             return {result: await documentWindows.open(root, app, {operation: operation, input: input})};
@@ -471,6 +473,7 @@
             if (pageActive()) await visual.api.sync();
             if (destroyed || current() !== owner) return;
             if (visual.api) await visual.api.enable(false);
+            if (destroyed || current() !== owner) return;
             ++visual.gen;
             viewMode = 'text';
         }
@@ -512,8 +515,9 @@
             say(t.external ? 'This file was changed somewhere else since you opened it.' : '', t.external ? 'warn' : false);
         }
 
-        async function addTab(t, text) {
+        async function addTab(t, text,guard) {
             await leaveDocument(); if (destroyed) return;
+            if(guard&&!guard())return;
             if (documentWindows && documentWindows.mode(root) === 'single' && !restoring && tabs.length === 1 && !current().path && !dirtyTab(current()) && !view.state.doc.length) { tabs = []; active = -1; }
             t.savedRaw = text;
             t.format=sourceFormat(t);
@@ -825,12 +829,30 @@
             if (text.indexOf('\0') >= 0) { return fail(file.name + ' isn\'t a text file, so the editor can\'t open it.'); }
             await importedDocument(file.name,text,{encoding:decoded.encoding,bom:decoded.bom});
         }
-        async function importedDocument(name,text,format) {
+        async function importWordBuffer(buffer,name) {
+            var ticket=current(),stillCurrent=function(){return !destroyed&&current()===ticket;};
+            await mdEngine();var K=await loadKit();await loadScript(K.here+'import-word.js'+K.stamp);
+            var got=await window.yavcWordImport.docx(buffer,{kit:K,signal:styleLifetime.signal,current:stillCurrent});
+            if(!stillCurrent())return false;
+            await loadScript(K.here+'office-input.js'+K.stamp);
+            var accepted=await window.yavcOfficeInput.report({title:'Word Import Report',root:root,signal:styleLifetime.signal,current:stillCurrent,
+                summary:'The new native copy contains '+got.pictures+' image(s) and '+got.notes+' note(s). The original Word file stays unchanged.',messages:got.report});
+            if(!accepted)return false;
+            return importedDocument(String(name||'Imported Word').replace(/\.docx$/i,'')+'.docs.md',got.text,undefined,stillCurrent);
+        }
+        async function importWord(){
+            var owner=current(),K=await loadKit();await loadScript(K.here+'office-input.js'+K.stamp);
+            var selected=await window.yavcOfficeInput.pick({title:'Import Word',extension:'.docx',root:root,signal:styleLifetime.signal,current:function(){return !destroyed&&current()===owner;},browser:FB,fs:F,bytes:H.contentBytes});
+            if(!selected||destroyed||current()!==owner)return false;
+            return importWordBuffer(selected.buffer,selected.name);
+        }
+        async function importedDocument(name,text,format,guard) {
             requireNative(name);
             format=window.yavcContentResources.format(format||{});
-            var routed = await routeDocument('import-source', {name: name, text: text,format:format}); if (routed) return routed.result;
-            await addTab({path:null,name:name,lang:languageFor(name),readOnly:false,format:format},text);
-            var t=current();t.saved=null;t.modified=true;renderTabs();
+            var routed = await routeDocument('import-source', {name: name, text: text,format:format},guard); if (routed) return routed.result;
+            if(guard&&!guard())return false;
+            var t={path:null,name:name,lang:languageFor(name),readOnly:false,format:format};await addTab(t,text,guard);
+            if(!tabs.includes(t))return false;t.saved=null;t.modified=true;renderTabs();
             say('Opened '+name+'. Save As keeps a native copy through this host.');
         }
 
@@ -2322,6 +2344,7 @@
                 cmd('save', 'Save', 'yavc-save', function () { return save(); }, { disabled: function () { var t = current(); return !ready || !t || t.readOnly || !resources || !t.path && !resources.canSaveAs() || t.fresh && !resources.canCreate() || !!(t.path && !t.resource && !t.fresh); }, reason: 'This host cannot save this draft safely, or its recovered revision no longer matches. Use a supported Save As or download the source.' }),
                 cmd('save-as', 'Save As…', 'yavc-save-as', function () { return saveAs(); }, { label: function () { var t = current(); return t && t.readOnly ? 'Save a Copy…' : 'Save As…'; }, disabled: function () { return !ready || !current() || !!(resources && !resources.canSaveAs()); } }),
                 cmd('save-encoded-copy','Save Encoded Copy…','yavc-save-as',encodedCopy,{disabled:function(){return !ready||!current()||!resources||!resources.canSaveAs();}}),
+                cmd('import-docx','Import Word…','upload',importWord,{hidden:function(){return !isDocs;},disabled:function(){return !ready;}}),
                 cmd('close-document', 'Close Document', null, function () { COMMANDS['close-document'](); }, { disabled: function () { return !ready || !current(); } }),
                 /* glyphOnly: a glyph every reader knows shows alone on the
                    menu bar's ribbon (PUDL 0.79.0), its words its tooltip. */
@@ -2438,7 +2461,7 @@
         function menus() {
             var titles = [
                 { label: isDocs ? 'Docs' : 'Editor', glyph: isDocs ? 'document' : 'code', items: H.identity(root, ['key-bindings']) },
-                { id: 'file', label: 'File', glyph: 'file', items: ['new', 'new-template', 'new-markdown', 'open', 'open-other', 'save', 'save-as', 'save-encoded-copy', '-', 'export-docx', 'export-pdf', 'print-document', '-', 'properties', 'present', '-', 'close-document'] },
+                { id: 'file', label: 'File', glyph: 'file', items: ['new', 'new-template', 'new-markdown', 'open', 'open-other', 'import-docx', 'save', 'save-as', 'save-encoded-copy', '-', 'export-docx', 'export-pdf', 'print-document', '-', 'properties', 'present', '-', 'close-document'] },
                 { id: 'edit', label: 'Edit', glyph: 'pencil', items: ['undo', 'redo', '-', 'cut', 'copy', 'paste', '-', 'select-all', '-', 'find', 'go-to-line', 'section-up', 'section-down', '-', 'json-format', 'language-restart'] },
                 { id: 'insert', label: 'Insert', glyph: 'plus', items: ['link', 'insert', 'table', 'box', 'footnote', '-', 'insert-timestamp', 'insert-date', 'stamp-modified'] }
             ];

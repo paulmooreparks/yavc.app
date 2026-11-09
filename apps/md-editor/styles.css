@@ -1,4 +1,9 @@
 /* Copyright 2026 Paul Parks. SPDX-License-Identifier: Apache-2.0 */
+.md-import-report { width: min(48rem, calc(100vw - 2 * var(--space-3))); max-width: 48rem; }
+.md-import-report .dialog-body { max-height: 55svh; overflow: auto; overflow-wrap: anywhere; }
+.md-import-report .dialog-body > p { margin-top: 0; }
+.md-import-report .dialog-body > ul { margin-bottom: 0; padding-inline-start: var(--space-5); }
+.md-import-report li + li { margin-top: var(--space-2); }
 .md-typography-dialog.dialog { width: min(44rem, calc(100vw - 2rem)); max-width: calc(100vw - 2rem); }
 .md-typography-dialog .dialog-body { max-height: 72svh; overflow: auto; }
 .md-type-layout { display: block; }

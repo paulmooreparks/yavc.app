@@ -186,13 +186,16 @@
 
     function init(root, opts) {
         var documentWindows = (window.pudlHost || {}).documentWindows, documentReady = false, receivingDocument = false, unbindDocuments = null;
-        async function routeDocument(operation, input) {
+        async function routeDocument(operation, input,guard) {
+            if(guard&&!guard())throw new DOMException('Import cancelled.','AbortError');
             if (!documentWindows || documentWindows.mode(root) !== 'single' || !documentReady || receivingDocument || restoring) return null;
             if (/^(open|open-file)$/.test(operation)) {
                 if (resources) await resources.read(input.path);
                 else if (!H.fs || await H.fs.readText(input.path) == null) throw new Error('The file could not be found.');
             }
-            if (pageActive()) await page.sync(); stash();
+            if (pageActive()) await page.sync();
+            if(guard&&!guard())throw new DOMException('Import cancelled.','AbortError');
+            stash();
             if (!tab() || untouched(tab())) return null;
             return {result: await documentWindows.open(root, 'slides', {operation: operation, input: input})};
         }
@@ -640,18 +643,21 @@
             if (b) { goTo(+b.getAttribute('data-slide')); }
         });
         async function goTo(i, fromSearch) {
+            var owner=tab(),sourceDeck=deck;function currentOwner(){return !destroyed&&tab()===owner&&deck===sourceDeck;}
             var h = deckHistory(); if(h && i!==at)h.boundary();
             if (Math.max(0, Math.min(deck.slides.length - 1, i)) !== at) abortOwnedDialogs(true);
             i = Math.max(0, Math.min(deck.slides.length - 1, i));
             if (pageActive()) { await page.enable(false); }
+            if(!currentOwner())return false;
             at = i;
             if (slideSearch) slideSearch.changed(!fromSearch);
             el.film.querySelectorAll('[data-slide]').forEach(function (b) { b.setAttribute('aria-selected', String(+b.getAttribute('data-slide') === at)); });
             if (cm) { setCM(current().text); }
             applySlideSettings(el.slide, current());
             if (mode !== 'text') {
-                if (page && !readOnly()) { try { await page.enable(true); } catch (err) { drawSlide(); } } else { drawSlide(); }
+                if (page && !readOnly()) { try { await page.enable(true); } catch (err) { if(currentOwner())drawSlide(); } } else { drawSlide(); }
             }
+            if(!currentOwner())return false;
             drawNotes();
             updateLocation();
             announce();
@@ -659,6 +665,7 @@
             var b = el.film.querySelector('[data-slide="' + at + '"]');
             if (b && b.scrollIntoView) { b.scrollIntoView({ block: 'nearest' }); }
             await installStyle();
+            if(!currentOwner())return false;
             recordHistory('navigation');
             if(channel && !presenterRole && !presenting)channel.postMessage({type:'at',slide:at,step:0});
         }
@@ -940,13 +947,15 @@
             close: function (i) { return closeTab(i); }
         }) : null;
         function tabRow() { if (tabRowApi) { tabRowApi.render(); } }
-        async function activateTab(i) {
+        async function activateTab(i,guard) {
             if (!tabs[i]) { return; }
             if (i === active) { tabRow(); return; }
-            if (pageActive()) { await page.sync(); await page.enable(false); }
+            if (pageActive()) { await page.sync();if(guard&&!guard())return false;await page.enable(false); }
+            if(guard&&!guard())return false;
             abortOwnedDialogs(false); if (slideSearch) slideSearch.reset();
             stash();
             if (presenting) { await leave(); }
+            if(guard&&!guard())return false;
             active = i;
             var t = tabs[i];
             deck = t.deck; path = t.path; modified = t.modified; at = 0;
@@ -956,6 +965,7 @@
             if (channel) { channel.close(); channel = null; }
             drawFilm();
             await goTo(t.at || 0);
+            if(destroyed||tab()!==t)return false;
             if (cm) { setCM(current().text); }
             listenForPresenter();
             fit();
@@ -965,11 +975,12 @@
         function untouched(t) { return !t.path && !dirtyTab(t); }
         /* A deck opens in a tab of its own, unless the front tab is a new
            deck nobody has touched, which it replaces. */
-        async function openInTab(text, newPath, slide) {
+        async function openInTab(text, newPath, slide,guard) {
+            if(guard&&!guard())return null;
             stash();
-            if (active >= 0 && tabs[active] && untouched(tabs[active])) { await load(text, newPath, slide); return; }
-            tabs.push({ deck: parseDeck(text), path: newPath || null, modified: false, at: Math.max(0, (slide || 1) - 1) });
-            await activateTab(tabs.length - 1);
+            if (active >= 0 && tabs[active] && untouched(tabs[active])) { return load(text, newPath, slide,guard); }
+            var added={ deck: parseDeck(text), path: newPath || null, modified: false, at: Math.max(0, (slide || 1) - 1) };tabs.push(added);
+            await activateTab(tabs.length - 1,guard);return added;
         }
         async function closeTab(i) {
             var t = tabs[i];
@@ -989,8 +1000,9 @@
             keep();
         }
 
-        async function load(text, newPath, slide) {
+        async function load(text, newPath, slide,guard) {
             if(pageActive())await page.enable(false);
+            if(guard&&!guard())return null;
             abortOwnedDialogs(false); if (slideSearch) slideSearch.reset();
             deck = parseDeck(text);
             path = newPath || null;
@@ -998,15 +1010,18 @@
             at = 0;
             if (active < 0) { tabs.push({ deck: deck, path: path, modified: false, at: at }); active = tabs.length - 1; }
             else { tab().deck=deck;tab().path=path;tab().modified=false;tab().history=null; }
+            var loaded=tab(),loadedDeck=deck;
             deckHistory();
             installStyle();
             drawFilm();
             await goTo(Math.max(0, Math.min(deck.slides.length - 1, (slide || 1) - 1)));
+            if(destroyed||tab()!==loaded||deck!==loadedDeck)return loaded;
             if (cm) { setCM(current().text); }
             fit();
             stash();
             tabRow();
             deckHistory();
+            return loaded;
         }
         async function openPath(p, slide) {
             if (!tabs.some(function (t) { return t.path === p; })) { var routed = await routeDocument('open-file', {path: p, slide: slide}); if (routed) return true; }
@@ -1400,29 +1415,29 @@
                 download(fileStem() + '.pdf', new Blob([bytes], { type: 'application/pdf' }));
             } catch (err) { say('The PDF could not be written: ' + err.message, true); }
         }
-        async function importPPTXBuffer(buffer, name) {
+        async function importPPTXBuffer(buffer, name,showReport) {
+            var owner=tab(),stillCurrent=function(){return !destroyed&&tab()===owner;};
             await loadScript(HERE + 'import-pptx.js' + STAMP);
             var got = await window.yavcSlidesImport.pptx(buffer, officeContext());
-            var routed = await routeDocument('load', {text: got.text}); if (routed) return got;
-            await openInTab(got.text, null);
-            modified = true;
-            stash();
-            if(tab())tab().savedText=null;
+            if(!stillCurrent())return false;
+            await loadScript(window.yavcMdEditor.here+'office-input.js'+window.yavcMdEditor.stamp);
+            if(!stillCurrent())return false;
+            if(showReport!==false&&!await window.yavcOfficeInput.report({title:'PowerPoint Import Report',root:root,signal:styleLifetime.signal,current:stillCurrent,summary:'The native copy contains '+got.slides+' slide(s) and '+got.pictures+' image(s). The original PowerPoint file stays unchanged.',messages:got.report}))return false;
+            var routed = await routeDocument('load', {text: got.text},stillCurrent); if (routed) return got;
+            if(!stillCurrent())return false;
+            var imported=await openInTab(got.text,null,undefined,stillCurrent);if(!imported)return false;
+            imported.modified=true;imported.savedText=null;
+            if(tab()===imported){modified=true;stash();}
             commandsChanged();
             announce();
-            say('Imported ' + (name || 'the file') + ': ' + got.slides + ' slide' + (got.slides === 1 ? '' : 's') + (got.pictures ? ', with ' + got.pictures + ' picture' + (got.pictures === 1 ? '' : 's') + ' noted but not kept' : '') + '. Save it to keep it.');
+            say('Imported ' + (name || 'the file') + ': ' + got.slides + ' slide(s) and '+got.pictures+' embedded image(s). Save As keeps the native copy.');
             return got;
         }
-        function importPPTX() {
-            var input = document.createElement('input');
-            input.type = 'file';
-            input.accept = '.pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation';
-            input.addEventListener('change', function () {
-                var f = input.files && input.files[0];
-                if (!f) { return; }
-                f.arrayBuffer().then(function (buf) { return importPPTXBuffer(buf, f.name); }).catch(function (err) { say('The file could not be imported: ' + err.message, true); });
-            });
-            input.click();
+        async function importPPTX() {
+            var owner=tab(),K=window.yavcMdEditor;await loadScript(K.here+'office-input.js'+K.stamp);
+            var site=H.fs&&H.fs.site?await H.fs.site():null;
+            var chosen=await window.yavcOfficeInput.pick({title:'Import PowerPoint',extension:'.pptx',root:root,signal:styleLifetime.signal,current:function(){return !destroyed&&tab()===owner;},browser:site&&site.FB,fs:site&&site.F,bytes:H.contentBytes});
+            if(chosen)return importPPTXBuffer(chosen.buffer,chosen.name);
         }
         async function printDeck() {
             var unchanged;
@@ -1967,10 +1982,12 @@
             },
             'import-pptx@1': async function (input) {
                 await booted;
+                if(typeof input.data!=='string'||input.data.length>11184812)throw new Error('The encoded PowerPoint file exceeds the 8 MiB import limit.');
                 var bin = atob(String(input.data)), bytes = new Uint8Array(bin.length);
                 for (var i = 0; i < bin.length; i++) { bytes[i] = bin.charCodeAt(i); }
-                var got = await importPPTXBuffer(bytes.buffer, input.name);
-                return { output: { index: active + 1, title: got.title, slides: got.slides, pictures: got.pictures } };
+                var got = await importPPTXBuffer(bytes.buffer, input.name,false);
+                if(!got)throw new Error('The presentation changed before import completed.');
+                return { output: { index: active + 1, title: got.title, slides: got.slides, pictures: got.pictures,report:got.report,omitted:got.omitted } };
             }
         };
         ['table', 'format', 'set-text', 'insert', 'add', 'duplicate', 'delete', 'move', 'set-slide', 'set-deck'].forEach(function (name) {

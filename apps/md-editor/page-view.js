@@ -163,7 +163,7 @@ var schemaCache = null;
             ['span', { class: 'doc-footnote-label', contenteditable: 'false' }, n.attrs.number > 0 ? String(n.attrs.number) : n.attrs.label], ['div', { class: 'doc-footnote-body' }, 0]]; } },
         footnote_ref: { group: 'inline', inline: true, atom: true, selectable: true,
           attrs: { label: { default: '' }, number: { default: -1 } },
-          parseDOM: [{ tag: 'sup.doc-footnote-ref[data-footnote-ref]', getAttrs: function (d) { return { label: d.getAttribute('data-footnote-ref'), number: Number(d.getAttribute('data-footnote-number')) || -1 }; } }],
+          parseDOM: [{ tag: 'sup.doc-footnote-ref[data-footnote-ref]', priority:60, getAttrs: function (d) { return { label: d.getAttribute('data-footnote-ref'), number: Number(d.getAttribute('data-footnote-number')) || -1 }; } }],
           toDOM: function (n) { var label = n.attrs.number > 0 ? String(n.attrs.number) : '?'; return ['sup', { class: 'doc-footnote-ref', 'data-footnote-ref': n.attrs.label, 'data-footnote-number': n.attrs.number, contenteditable: 'false' }, ['a', { 'aria-label': 'Footnote ' + label }, label]]; } },
         text: { group: 'inline' },
         // A line break, as HTML pasted from another program can hold one.
@@ -1758,5 +1758,12 @@ var schemaCache = null;
     };
   }
 
-  window.yavcPageView = { attach: attach, load: loadProseMirror, insert: insertOf, inserts: INSERTS, placeholder: PLACEHOLDER };
+  // Importers provide cleaned inert HTML; the shared schema supplies the
+  // same paste semantics without creating or mutating an editor view.
+  async function fromHTML(html) {
+    var PM=await loadProseMirror(),template=document.createElement('template');
+    template.innerHTML=window.yavcHTML.clean(html);
+    return PM.DOMParser.fromSchema(schemaOf(PM)).parse(template.content).toJSON();
+  }
+  window.yavcPageView = { attach: attach, load: loadProseMirror, fromHTML:fromHTML, insert: insertOf, inserts: INSERTS, placeholder: PLACEHOLDER };
 })();

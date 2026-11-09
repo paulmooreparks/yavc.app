@@ -718,3 +718,11 @@ Chromium, Firefox and WebKit pass exact-byte saves for unsigned and signed UTF-8
 
 The existing VFS/upload and source-history regressions pass all three engines. The 447-file portable package also passes the independent offline host fixture in all three engines. The repository gate passes. Narrow Save Encoded Copy layout uses the existing select dialog and was visually inspected. Actual desktop-webview acceptance remains separate work.
 
+# Reviewed Office import copies, 2026-11-09
+
+Docs imports Word through a bounded disposable worker, pinned Mammoth and a locked XML parser. HTML passes through the shared cleaner and page schema. Native notes, ordinary tables and supported images survive conversion. Complex tables and inline image paragraphs retain sanitized HTML source. A shared host-picker helper supplies computer uploads, bounded resource bytes, cancellation and initiating-document checks. A loss report precedes each interactive native copy, while the existing PowerPoint action returns its report without waiting on a dialog.
+
+The real PPTX fixture exposed an existing local variable that shadowed the ZIP text-reading function and prevented import. Source review also found active Markdown in literal Office text, doubled table-pipe escapes, partial inferred-title unescaping, a multi-image Word paragraph losing its second image, and ownership gaps after asynchronous work. Each correction has a focused regression. Literal HTML/entities/slide separators remain text, original Office packages remain unchanged, and a delayed agent import cannot replace a newer deck. Browser tests cover malformed XML, DTD refusal, expanded-size limits, native chooser cancellation and stale reads, Word note and table conversion, multiple images, and accepted/cancelled reports.
+
+The import fixtures and existing deck history/rich-footnote regressions pass Chromium, Firefox and WebKit. The independent 482-file package converts Word offline in all three engines without site globals or storage. The narrow dark report was visually inspected. Source review has no remaining substantive findings. Image and source-size limits, semantic layout conversion and unsupported review metadata remain explicit in the report and import design.
+
