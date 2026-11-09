@@ -2,7 +2,7 @@
 
 ## Dinah release unblock and score placeholder, 2026-11-09
 
-The portable workspace no longer contains the two product-specific comments rejected by the receiving host's terminology check. A workspace-boundary rule prevents that commentary from returning. Editor and Docs retain the installed opt-in Files policy. Sight Reader's native score list now contains only actual scores, with no disabled placeholder row; the existing selection, filtering and Enter flow remains covered by the authored-dialog fixture.
+The portable workspace no longer contains the two product-specific comments rejected by the receiving host's terminology check. The complete artifact scan found the same references in the bundled ProseMirror build description and entry comment; those descriptive references are also removed, with all licenses and copyright notices retained. A portable-source boundary rule prevents that commentary from returning. Editor and Docs retain the installed opt-in Files policy. Sight Reader's native score list now contains only actual scores, with no disabled placeholder row; the existing selection, filtering and Enter flow remains covered by the authored-dialog fixture.
 
 The portable builder can also produce a manifest-verified, reproducible ZIP. Tests cover exact contents, repeatability, existing-output refusal, corrupt assets, escaping paths and cleanup of invalid archives. A tagged-release workflow publishes the ZIP, manifest and checksums as immutable GitHub downloads. `content-release-downloads.md` defines the receiving build's verification and rollback requirements.
 

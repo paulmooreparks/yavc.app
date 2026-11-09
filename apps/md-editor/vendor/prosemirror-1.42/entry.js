@@ -1,4 +1,4 @@
-// The ProseMirror exports GK Companion's Page view uses, as the global PM.
+// The ProseMirror exports the Page view uses, as the global PM.
 export { Schema, Node, Mark, Fragment, Slice, DOMParser, DOMSerializer } from "prosemirror-model";
 export { EditorState, TextSelection, NodeSelection, AllSelection, Plugin, PluginKey } from "prosemirror-state";
 export { EditorView, Decoration, DecorationSet } from "prosemirror-view";
