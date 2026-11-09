@@ -1,0 +1,40 @@
+name: content release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  content:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Require a release tag
+        run: test "$GITHUB_REF_TYPE" = tag
+      - name: Checks
+        run: bash scripts/check.sh
+      - name: Assemble verified content archive
+        run: |
+          mkdir "$RUNNER_TEMP/release-assets"
+          go run ./cmd/yavc-content -out "$RUNNER_TEMP/content-release" -zip "$RUNNER_TEMP/release-assets/yavc-content-$GITHUB_REF_NAME.zip"
+          cp "$RUNNER_TEMP/content-release/manifest.json" "$RUNNER_TEMP/release-assets/yavc-content-$GITHUB_REF_NAME.manifest.json"
+          cd "$RUNNER_TEMP/release-assets"
+          sha256sum "yavc-content-$GITHUB_REF_NAME.zip" "yavc-content-$GITHUB_REF_NAME.manifest.json" > "yavc-content-$GITHUB_REF_NAME.sha256"
+      - name: Publish immutable download assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 || gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --verify-tag --title "$GITHUB_REF_NAME" --generate-notes
+          gh release upload "$GITHUB_REF_NAME" "$RUNNER_TEMP/release-assets/"* --repo "$GITHUB_REPOSITORY"

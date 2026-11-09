@@ -294,6 +294,8 @@ Right-clicks answer PUDL's `pudl:contextmenu` with rows from each application's 
 
 102. **Save As selects the catalog-defined filename stem** (2026-11-09). Filename selection uses the longest native suffix in the shared content catalog, so `.docs.md` and `.slides.md` stay intact without app-specific picker rules. The resolver supplies this pure naming operation through the optional host `fileResolution.stem` method. The picker obtains metadata before opening, preserves cancellation and uses ordinary final-dot selection if that metadata is unavailable. Naming never changes routing or file authority. `docs/file-resolution-contract.md` specifies the operation.
 
+103. **Portable releases have immutable download assets** (2026-11-09). Tagged releases publish the complete portable content set as a ZIP with its manifest and checksums. Packaging verifies the manifest before adding each file, rejects unsafe paths and symlinks, fixes entry metadata and refuses existing archives. Receiving builds pin the source revision, archive hash and manifest digest instead of copying an unversioned output tree. Download publication remains separate from native-host acceptance and production adoption. `docs/content-release-downloads.md` defines the contract.
+
 ## Open questions
 
 1. **XferLang version.** No Go implementation exists; the repository has the C# library and a Rust port. The parkscomputing.com navigation file is in the 0.15 form, and a 1.0 reboot is under way. The Go library should implement 1.0 if its grammar is settled; confirm with the XferLang Reboot work before starting.

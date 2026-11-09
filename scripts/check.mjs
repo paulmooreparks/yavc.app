@@ -375,6 +375,7 @@ rules.push({ id: 'title-case-labels', run() {
 rules.push({id:'workspace-host-boundary',run(){
   for(const f of js.filter(f=>f.startsWith('apps/text-workspace/'))){
     each(/\b(?:pcSiteFs|pcConfig|pcSnapshot|pcAdmin|pcLoadWindow|localStorage|sessionStorage)\b|['"]\/(?:static|applets)\//g,text.get(f),m=>report('workspace-host-boundary',f,m.index,'a site storage/global/path dependency escaped the host adapter'));
+    each(/\bGK\s+Companion\b/g,text.get(f),m=>report('workspace-host-boundary',f,m.index,'host-specific product commentary must stay outside the portable workspace'));
   }
   for(const f of ['apps/editor/editor.js','apps/docs/docs.js']){
     each(/\b(?:EditorView|EditorState|CodeMirror|ProseMirror)\b/g,text.get(f)||'',m=>report('workspace-host-boundary',f,m.index,'editing implementation belongs in the shared workspace'));

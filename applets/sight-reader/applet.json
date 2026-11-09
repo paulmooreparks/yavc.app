@@ -1,7 +1,7 @@
 {
   "name": "sight-reader",
   "title": "Sight Reader",
-  "version": "1.4.1",
+  "version": "1.4.2",
   "description": "Practise reading music: name each note of a score as a cursor reaches it.",
   "license": "Apache-2.0",
   "src": "sight-reader.js",

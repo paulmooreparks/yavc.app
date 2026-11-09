@@ -1,5 +1,11 @@
 # Stem-to-stern review, November 2026
 
+## Dinah release unblock and score placeholder, 2026-11-09
+
+The portable workspace no longer contains the two product-specific comments rejected by the receiving host's terminology check. A workspace-boundary rule prevents that commentary from returning. Editor and Docs retain the installed opt-in Files policy. Sight Reader's native score list now contains only actual scores, with no disabled placeholder row; the existing selection, filtering and Enter flow remains covered by the authored-dialog fixture.
+
+The portable builder can also produce a manifest-verified, reproducible ZIP. Tests cover exact contents, repeatability, existing-output refusal, corrupt assets, escaping paths and cleanup of invalid archives. A tagged-release workflow publishes the ZIP, manifest and checksums as immutable GitHub downloads. `content-release-downloads.md` defines the receiving build's verification and rollback requirements.
+
 ## Save As compound suffixes, 2026-11-09
 
 The shared picker selected a suggested name up to its final dot, including the format marker in `.docs.md` and `.slides.md`. It now obtains the stem from the file catalog's longest native suffix before opening. Dotted basenames and original casing remain intact; ordinary extensions retain final-dot behavior when no catalog suffix matches. Optional naming metadata cannot prevent saving, and an aborted request cannot open a delayed dialog. The pure resolver test covers compound and ordinary suffixes, dotfiles, extensionless names, Unicode and a catalog-added suffix.
