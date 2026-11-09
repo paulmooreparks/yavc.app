@@ -1226,14 +1226,14 @@
                 var groups = (index.groups || []).filter(function (g) { return g.scores && g.scores.length; });
                 if(!groups.length){el.chooserBody.innerHTML='<p class="sr-muted">No sample scores were found. Open a file from this device instead.</p>';return;}
                 var queryId='sr-score-query-'+uid,listId='sr-score-list-'+uid;
-                el.chooserBody.innerHTML='<div class="form-group"><label class="form-label" for="'+queryId+'">Find a Score</label><input type="search" class="form-input" id="'+queryId+'" data-score-query></div><div class="form-group"><label class="form-label" for="'+listId+'">Score</label><select class="form-select" id="'+listId+'" size="10" data-listbox data-score-list></select><p class="form-help sr-score-caption" data-score-caption aria-live="polite"></p></div>';
+                el.chooserBody.innerHTML='<div class="form-group"><label class="form-label" for="'+queryId+'">Find a Score</label><input type="search" class="form-input" id="'+queryId+'" data-score-query></div><div class="form-group"><label class="form-label" for="'+listId+'">Score</label><select class="form-select" id="'+listId+'" size="10" data-score-list></select><p class="form-help sr-score-caption" data-score-caption aria-live="polite"></p></div>';
                 var list=el.chooserBody.querySelector('[data-score-list]'),query=el.chooserBody.querySelector('[data-score-query]'),selected=score && score.rel || '';
                 function changed(){var option=list.selectedOptions[0];selected=list.value;root.querySelector('[data-sr="choose-open"]').disabled=!selected;el.chooserBody.querySelector('[data-score-caption]').textContent=selected&&option?option.textContent:'Choose a score, then Open.';}
                 function filter(){var wanted=query.value.trim().toLowerCase(),html='<option value="" disabled>Select a score</option>';
                     groups.forEach(function (group) {var choices=group.scores.filter(function (item) {return (group.name+' '+item.title).toLowerCase().includes(wanted);});if(!choices.length)return;
                         html+='<optgroup label="'+esc(group.name || 'Scores')+'">'+choices.map(function (item) {return '<option value="'+esc(item.file)+'" data-score-title="'+esc(item.title)+'"'+(item.file===selected?' selected':'')+'>'+esc(item.title)+'</option>';}).join('')+'</optgroup>';});
                     list.innerHTML=html;if(!Array.from(list.options).some(function (option) {return option.value===selected;}))selected='';list.value=selected;
-                    if(window.pudlListbox){window.pudlListbox.enhance(el.chooserBody);window.pudlListbox.refresh(list);}changed();}
+                    changed();}
                 query.addEventListener('input',filter);list.addEventListener('change',changed);filter();query.focus();
             });
         }
