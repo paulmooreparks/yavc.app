@@ -1,5 +1,13 @@
 # Stem-to-stern review, November 2026
 
+## Opt-in Files panes, 2026-11-09
+
+Editor and Docs no longer open Files automatically on a wide screen. Only an explicit boolean preference enables the pane; clearing the preference also restores the hidden default immediately. Their existing Files command retains opt-in and opt-out across reload. Slides and Diagrams already have no Files pane. `scripts/test-file-pane-defaults.cjs` checks fresh wide-screen startup for all four applications and preference persistence/reset in the two shared workspaces. This changes navigation defaults only; startup document templates and recovery remain unchanged.
+
+The first three-engine run passed Chromium and Firefox but reloaded WebKit Docs before its rich surface finished loading, producing aborted WASM access errors. The test now waits for the rich surface before reloading; the corrected WebKit run passes. This changes test readiness rather than weakening its error assertions. The original failed log remains separate from the corrected run.
+
+The first installed WebKit run then caught the test treating cached preference values as a completed save. The configuration service updates its cache before the filesystem write finishes. Reload checks now await its public change notification after the write acknowledgement. The failed log is retained; production pane logic did not change in this test correction.
+
 ## Table, container and footnote continuations, 2026-11-09
 
 The shared planner now splits tall plain-text table rows at coordinated cell boundaries, repeats table headers in editable and printed continuations, and measures ordinary stacked shortcode bodies. Header paint over exhausted cells stays outside source and flow height. Table width decorations preserve measured columns through inserted page furniture and reset after source or font/image changes. Rich edits and Undo retain the original table source. Print fragments preserve each cell's independent range and original column widths.

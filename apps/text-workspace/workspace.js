@@ -22,9 +22,7 @@
     function loadCodeMirror() { return loadKit().then(function (k) { return k.libs(); }); }
 
 
-    /* Whether the Explorer pane shows, kept per browser; with no choice
-       made, it shows on a wide screen, unless the page has a file tree of
-       its own at the side (the admin desktop says so in a meta tag). */
+    /* Files is opt-in. Only an explicit saved choice opens the pane. */
     /* The Editor's settings are its own toolbar's Wrap lines and Explorer
        controls, which remember themselves in ~/.config/editor.json
        (js/config.js), so they follow the reader wherever ~ does. */
@@ -70,9 +68,7 @@
     var keyLabel = window.yavcUtil.shortcut;
 
     function explorerWanted(s) {
-        if (s && typeof s.explorer === 'boolean') { return s.explorer; }
-        if (document.querySelector('meta[name="pc-file-sidebar"]')) { return false; }
-        return window.matchMedia('(min-width: 900px)').matches;
+        return !!(s && s.explorer === true);
     }
 
     var esc = window.yavcUtil.esc;
@@ -1059,7 +1055,8 @@
             Object.keys(pendingSettings).forEach(function (key) { settings[key] = pendingSettings[key].value;storedSettings[key]=pendingSettings[key].value; });
             documentZoom = /^(width|page)$/.test(String(settings.documentZoom)) || Number(settings.documentZoom) >= 25 && Number(settings.documentZoom) <= 400 ? String(settings.documentZoom) : '100'; applyDocumentZoom();
             if (wrapOn !== !!settings.wrap) { setWrap(!!settings.wrap, false); }
-            if (explorer && typeof settings.explorer === 'boolean' && el.explorer.hidden === settings.explorer) { showExplorer(settings.explorer); }
+            var showFiles = explorerWanted(settings);
+            if (explorer && el.explorer.hidden === showFiles) { showExplorer(showFiles); }
             if (explorerSplit) { explorerSplit.set(typeof settings.explorerWidth === 'number' ? settings.explorerWidth : null); }
             if(outlineSplit)outlineSplit.set(typeof settings.outlineWidth==='number'?settings.outlineWidth:null);
             if(el.outline.firstChild)showOutline(typeof settings.outline==='boolean'?settings.outline:settings.navigation==='outline');
