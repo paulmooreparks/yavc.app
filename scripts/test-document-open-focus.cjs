@@ -13,12 +13,16 @@ const action=(p,app,name,input)=>p.evaluate(({app,name,input})=>pudlActions.run(
                 await route.fulfill({contentType:'text/javascript',body:await fs.readFile(path.join(__dirname,'../internal/web/static',name))});
             });
             await p.goto(`http://localhost:${port}/?open=${app}`);await p.locator(`[data-applet="${app}"][data-applet-state="running"]`).waitFor();
-            await p.evaluate(async app=>{await pudlHost.config.set('command-toolbars',{[app]:{version:1,visible:true,inRibbon:true,items:['open','save']}});},app);
+            async function toolbar(){
+                await p.waitForFunction(()=>Array.from(document.querySelectorAll('.win [data-command="common-toolbar-customize"]')).every(button=>!button.disabled));
+                await p.evaluate(async app=>{await pudlHost.config.set('command-toolbars',{[app]:{version:1,visible:true,inRibbon:true,items:['open','save']}});},app);
+            }
             const canvas=JSON.stringify({nodes:[{id:'one',type:'text',x:0,y:0,width:160,height:80,text:'Focus Target'}],edges:[]});
             await action(p,app,app==='slides'?'load':'new',app==='diagrams'?{kind:'canvas',text:canvas}:{text:'# Original window\n\nRetained draft.\n'});
             const file='~/Focus Target'+(app==='diagrams'?'.canvas':app==='slides'?'.slides.md':app==='docs'?'.docs.md':'.md');
             await p.evaluate(async({file,text})=>{const F=await yavcUtil.siteFs();await F.write(F.home(),file,text,false);},{file,text:app==='diagrams'?canvas:'# Focus Target\n\nOpened document.\n'});
             async function pick(){
+                await toolbar();
                 await p.locator(`.win[data-win="${app}"] .yavc-command-toolbar [data-command="open"]`).click();
                 const picker=p.locator('.fb-picker[open]');await picker.getByLabel('Path',{exact:true}).fill(file);await picker.locator('[data-pick="ok"]').click();await picker.waitFor({state:'hidden'});
             }
@@ -30,7 +34,7 @@ const action=(p,app,name,input)=>p.evaluate(({app,name,input})=>pudlActions.run(
             await p.evaluate(app=>pudlWindows.raise(app),app);await pick();
             await p.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
             assert.equal(await p.evaluate(()=>pudlWindows.state().top),app+'-2');assert.equal(await p.locator(`[data-applet="${app}"]`).count(),2);
-            await p.evaluate(app=>pudlWindows.raise(app),app);await p.locator(`.win[data-win="${app}"] .yavc-command-toolbar [data-command="open"]`).click();
+            await p.evaluate(app=>pudlWindows.raise(app),app);await toolbar();await p.locator(`.win[data-win="${app}"] .yavc-command-toolbar [data-command="open"]`).click();
             await p.locator('.fb-picker[open] [data-pick="cancel"]').click();assert.equal(await p.evaluate(()=>pudlWindows.state().top),app);
             await p.locator(`.win[data-win="${app}"] .yavc-command-toolbar [data-command="open"]`).click();
             const invalid=p.locator('.fb-picker[open]');await invalid.getByLabel('Path',{exact:true}).fill('~/Missing Focus Document.md');await invalid.locator('[data-pick="ok"]').click();await invalid.locator('[data-pick="error"]').filter({hasText:/./}).waitFor();assert.equal(await p.evaluate(()=>pudlWindows.state().top),app);await invalid.locator('[data-pick="cancel"]').click();
