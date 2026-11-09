@@ -1,5 +1,9 @@
 # Stem-to-stern review, November 2026
 
+## Save As compound suffixes, 2026-11-09
+
+The shared picker selected a suggested name up to its final dot, including the format marker in `.docs.md` and `.slides.md`. It now obtains the stem from the file catalog's longest native suffix before opening. Dotted basenames and original casing remain intact; ordinary extensions retain final-dot behavior when no catalog suffix matches. Optional naming metadata cannot prevent saving, and an aborted request cannot open a delayed dialog. The pure resolver test covers compound and ordinary suffixes, dotfiles, extensionless names, Unicode and a catalog-added suffix.
+
 ## Sight Reader score list, 2026-11-09
 
 Sight Reader's score picker marked its native multi-row select for PUDL listbox enhancement, which inserts radio markers for single-selection rows. The picker now retains the PUDL-styled native list without that enhancement. Labels, grouped scores, filtering, selected values, Enter to open and device import keep their existing behavior. This is a host-installed Sight Reader package patch at 1.4.1; it does not change the bundled PUDL distribution. The authored-dialog fixture accepts an optional validated application filter and checks that this picker has a visible native list and no radio controls, alongside its existing layout and keyboard checks.

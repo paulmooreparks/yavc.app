@@ -589,9 +589,16 @@
        corner, and keeps the size it was last given in this browser. */
     var pickCount = 0;
     var PICK_SIZE_KEY = 'pc-picker-size';
-    function pick(F, o) {
+    async function pick(F, o) {
         o = o || {};
         if (o.signal && o.signal.aborted) return Promise.resolve(null);
+        var selectedStem = null, naming = (window.pudlHost || {}).fileResolution, namingTimer;
+        if (o.mode === 'save' && naming && typeof naming.stem === 'function') {
+            try { selectedStem = await Promise.race([Promise.resolve().then(function () { return naming.stem(realName(o.name || '')); }), new Promise(function (resolve) { namingTimer = setTimeout(function () { resolve(null); }, 1000); })]); }
+            catch (err) { /* Naming metadata cannot prevent saving. */ }
+            finally { clearTimeout(namingTimer); }
+            if (o.signal && o.signal.aborted) return null;
+        }
         var save = o.mode === 'save', folder = o.mode === 'folder', id = 'fb-pick-' + (++pickCount);
         var accept = (o.accept || []).map(function (x) { return x.toLowerCase(); });
         var fits = function (name) { return !accept.length || accept.some(function (x) { return name.toLowerCase().slice(-x.length) === x; }); };
@@ -885,7 +892,7 @@
             dlg.showModal();
             sizeAtOpen = dlg.offsetWidth + 'x' + dlg.offsetHeight;
             folderState();
-            if (save && !readOnlyHere) { input.focus(); var dot = input.value.lastIndexOf('.'); input.setSelectionRange(0, dot > 0 ? dot : input.value.length); }
+            if (save && !readOnlyHere) { input.focus(); var dot = input.value.lastIndexOf('.'), end = typeof selectedStem === 'string' && selectedStem && input.value.startsWith(selectedStem) ? selectedStem.length : dot > 0 ? dot : input.value.length; input.setSelectionRange(0, end); }
             else { b.focusList(); }
         });
     }
