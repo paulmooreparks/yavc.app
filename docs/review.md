@@ -774,6 +774,12 @@ The installed `db0d2c8` candidate passes the same focus checks against actual se
 
 The first installed WebKit attempt found the test could configure Open before an asynchronously loading Docs toolbar finished adopting its preferences, then lose the test configuration on the second Open. The test now waits for toolbar readiness before setting its synthetic preferences. That failed attempt is separate from the passing corrected run; it did not fail the foreground assertion.
 
+# Document typing stability, 2026-11-09
+
+Typing before the explicit break in the Document Furniture sample exposed a collapsed-layout frame after every edit. A headless Chromium DOM debugger traced spacer removal to the pagination plugin's empty-decoration transaction. The unpaused baseline measured a 788.125 pixel jump and nine frames with no page gap during nine typed characters. Existing decorations now remain mapped until the measured replacement is ready. Stable widget identities and cached header/footer layers avoid rebuilding unchanged furniture.
+
+The same unpaused Chromium probe measured zero movement and zero missing-gap frames after the change. Layout count fell from 47 to 29 and style recalculation count fell from 99 to 63 in this local sample. These counts describe that run rather than a general performance guarantee. The regression passes Chromium, Firefox and WebKit, including unchanged furniture identity and exact source restoration with Undo. Paragraph/list/table fragmentation, long footnote continuations, heading keeps, first-reference note placement and browser printing also pass all three engines. Initial sandboxed Firefox launches failed before creating a page; the isolated runs with browser-launch access completed successfully.
+
 # Canvas automatic-anchor interchange, 2026-11-09
 
 An actual offline Obsidian 1.15.0 Linux save preserved the tested unknown extension objects but materialized omitted endpoint sides. The updated writer projects explicit standard anchors with matching automatic-intent metadata. Routing and controls honor that metadata only while its node and side still match. External overrides and explicit same-side choices stay fixed; paste rebases only previously active intent. The writer and drag previews preserve their inputs. Null-prototype copies retain prototype-named JSON fields as data. The bundled language schema describes and validates the same representation.
