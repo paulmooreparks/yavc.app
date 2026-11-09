@@ -8,10 +8,10 @@ const command=(page,id)=>page.evaluate(id=>pudlCommands.run(id,null,document.que
  const p=await b.newPage({viewport:{width:1500,height:1000}}),errors=[];p.on('pageerror',err=>errors.push(err.message));p.setDefaultTimeout(20000);let phase='boot';try{
   await p.goto(`http://${app}.localhost:${port}/`);await p.locator('.cm-content').waitFor({state:'attached'});assert.match(await p.title(),app==='docs'?/Docs/:/Editor/);
   phase='fixed identity and native creation';await action(p,app,'new',{path:'~/split.md',text:'# Shared workspace\n\nAn **editable** document.\n\n## Section\n\nText.'});
-  await p.waitForFunction(app=>document.querySelector('[data-command="view-'+(app==='docs'?'visual':'text')+'"]')?.getAttribute('aria-pressed')==='true',app);
-  const views=await p.locator('[data-command-choice="ed-view"] button').allTextContents();assert.deepEqual(views,app==='docs'?['Document','Visual','Text','Split','Preview']:['Text','Split','Preview']);
+  await p.waitForFunction(app=>document.querySelector('[data-command="view-'+'visual'+'"]')?.getAttribute('aria-pressed')==='true',app);
+  const views=await p.locator('[data-command-choice="ed-view"] button').allTextContents();assert.deepEqual(views,app==='docs'?['Document','Visual','Text','Split','Preview']:['Visual','Text','Split','Preview']);
   assert.equal(await p.locator('[data-applet="'+app+'"]').count(),1);
-  phase='read-only source preview';await action(p,app,'view',{mode:'split'});await p.locator('.doc-page').waitFor({state:'visible'});assert.equal(await p.locator('.doc-page [contenteditable="true"]').count(),app==='docs'?1:0);await action(p,app,'view',{mode:'text'});
+  phase='editable Markdown split';await action(p,app,'view',{mode:'split'});await p.locator('.doc-page [contenteditable="true"]').waitFor({state:'visible'});assert.equal(await p.locator('.doc-page [contenteditable="true"]').count(),1);await action(p,app,'view',{mode:'text'});
   if(app==='editor'){
    await assert.rejects(()=>action(p,app,'view',{mode:'document'}),/unavailable/);await assert.rejects(()=>action(p,app,'page-setup',{page:'a4'}),/moved/);
    await action(p,app,'new',{path:'~/code.go',text:'package main\n'});await p.waitForFunction(()=>document.querySelector('[data-command="view-text"]')?.getAttribute('aria-pressed')==='true');

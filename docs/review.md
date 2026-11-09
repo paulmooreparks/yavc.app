@@ -820,3 +820,9 @@ Actual 9 MiB source editing and saving, an 11 MiB stored/downloadable file beyon
 
 The account-storage proposal records current primary-source prices, the documented 2 GB/50 GB deployment, free and paid quota proposals, provisional expansion costs and the unmeasured capacity boundary. It introduces no account service or production infrastructure change.
 
+## Editor Markdown Visual restoration (2026-11-10)
+
+Editor again edits Markdown in Visual and Split, with Visual as the unconfigured default. Other source formats stay in Text. The existing Open Markdown As command retains explicit preferences independently from each resource's restored view. Docs retains physical Document layout and page furniture. The shared formatting context now checks format capability rather than applet identity. The public action descriptions match the restored behavior, and typography requires write authority in both applets.
+
+The view regression checks rich typing, source synchronization, IndexedDB save/reload, each configurable default, persisted Text choice, compound document names and rejection of Visual for code. Plain-source startup blocks the Markdown runtime to prove it remains lazy. The existing split and toolbar suites pass Chromium, Firefox and WebKit. Command-notification tests remain green across all consumers. Portable-host tests and host-resolved image/suggestion tests pass all three engines. Their source-editing fixture now explicitly chooses Text instead of depending on the former default. The Save/Close regression avoids Editor's flushing document-read action before Save and verifies the actual persisted draft. PUDL source review found no remaining issues after capability and lazy-loading corrections.
+
