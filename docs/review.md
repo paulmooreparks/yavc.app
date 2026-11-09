@@ -796,3 +796,15 @@ Focused tests cover movement after serialization, stale metadata, explicit pinni
 
 The native probe records its actual runtime, locked official installer hash, immutable test image, input/module hashes and harness hashes. Its private X display and native picker run without network or personal state. Earlier attempts are retained separately, including a wrong executable path, modal picker handling, sandboxed card-editor discovery and a mismatched image/group aspect ratio. Its result applies to the pinned Linux build with core Canvas; it does not promise behavior for other versions or plugins.
 
+# Host document assets and proposal overlays, 2026-11-09
+
+The optional workspace resolver now maps document-relative pictures to bounded same-origin host URLs without rewriting their source. Relative HTML pictures become inert before insertion and use the same resolver. Docs can fetch host-served raster pictures for export with a timeout, redirect refusal, byte limits and the existing decoded-image limit. Save As and resource changes invalidate image ownership. Editor preview, Docs drawn modes and Slides use the captured document resource.
+
+Host suggestions occupy transient CodeMirror and ProseMirror decorations. The host owns records and decisions, while the applet maps local placements, marks overlapping edits stale, and sends decisions with their captured source, revision and range. Raw UTF-16 boundaries preserve CRLF and surrogate pairs. Neither decisions nor decorations modify source, recovery or persisted review syntax. Rich cards show the exact removal and replacement beside highlighted blocks. They retain keyboard focus and host colors, and authored styles cannot cross their scope boundary.
+
+The dedicated extracted-host proof passes Chromium, Firefox and WebKit. It covers image modes and raster export, unsafe resolver results, local mapping, edited replacements, host refresh, late decisions, duplicate requests, resource ownership, disposal, narrow layouts, both themes and typing before a page break with a proposal present. It also verifies that changed removal wording repaints an existing widget. Independent PUDL review has no remaining findings. Document styles, pagination, typing stability, command state and the portable workspace suites pass all three engines. Portable Diagrams passes each engine as well.
+
+Sandboxed Firefox attempts crashed or failed to create a page, and a released-baseline comparison stalled during browser startup. Browser stderr reported denied subprocess creation. The approved headless run outside the sandbox passes the complete Diagrams recovery proof. That establishes a passing candidate run without claiming a root cause for the earlier historical Firefox crash. The sandbox also denied a temporary Go helper used by the archive test; the complete repository check passes outside it.
+
+The adapter contract and Dinah handoff describe resource resolution, subscription lifetime, decision reconciliation and remaining native wiring. Synthetic host proof does not establish production Dinah endpoint or proposal-store integration.
+

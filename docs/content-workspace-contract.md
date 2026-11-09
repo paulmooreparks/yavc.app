@@ -27,6 +27,8 @@ The resource, creation and recovery contracts remain in `content-resource-contra
 | Service | Contract |
 | --- | --- |
 | `directory(resource)` | Returns a dependency base understood by that host's file resolver, or null. The workspace does not derive a base from opaque IDs. |
+| `resources.resolve(request, context)` | Resolves document-relative image references through the owning host. Same-origin display URLs leave authored source intact. See `document-host-overlays-contract.md`. |
+| `suggestions.subscribe(resource, callback, context)` and `suggestions.decide(request, context)` | Supply non-persisted, revision-bound source and rich-view decorations. The host owns records and decisions. See `document-host-overlays-contract.md`. |
 | `shortcodes(context)` | Returns extra accepted shortcode metadata as `{shortcodes:[]}`. Optional context carries the workspace lifetime `signal` and `current()` predicate. Existing no-argument providers remain compatible. Built-ins always come from the bundled engine and cannot be replaced. A missing, failed or malformed extra catalog leaves built-ins available. |
 | `openPage(href)` | Handles an explicit public-page navigation request and returns whether it was handled. Absence uses the ordinary safe external-page link. |
 | `split.of(handle, changed)` | Adapts documented PUDL split events and width preferences. Absence retains the workspace's default layout. |
