@@ -11,6 +11,7 @@
    State: file=<path>&view=<text|preview|split>. */
 (function () {
     'use strict';
+    function sourceFormat(t){return window.yavcContentResources.format(t.resource&&t.resource.encoding!==undefined?t.resource:t.format||t.recoveryBaseline||{});}
 
     var esc = window.yavcUtil.esc, loadScript = window.yavcUtil.loadScript, versioned = window.yavcUtil.versioned;
     var packageBase = new URL('.', document.currentScript.src);
@@ -1835,9 +1836,9 @@
             if (!t) return;
             if (resources) {
                 if (!resources.canSaveAs()) return;
-                var captured = t.text;
+                var captured = t.text,format=sourceFormat(t);
                 return queueSave(t, async function (ticket) {
-                    var accepted = await resources.saveAs({ name: tabTitle(t), sourceResource: t.path }, captured, { host: root, signal: lifetime.signal, checkName:function(name){
+                    var accepted = await resources.saveAs(Object.assign({ name: tabTitle(t), sourceResource: t.path },format), captured, { host: root, signal: lifetime.signal, checkName:function(name){
                         var suffix=/\.(d2|mmd|mermaid|canvas)$/i.exec(String(name||'')), kind=suffix && (suffix[1].toLowerCase()==='mmd'||suffix[1].toLowerCase()==='mermaid'?'mermaid':suffix[1].toLowerCase());
                         return kind===t.kind?null:'Keep the '+EXT[t.kind]+' extension. Use Convert to create a different diagram format.';
                     } });
@@ -1849,7 +1850,7 @@
         function savedAs(t, path, submitted, ticket, accepted) {
             if (!saved(t, path, submitted, ticket, true)) return;
             t.name = accepted && accepted.name || null;
-            if (accepted) { t.resource = accepted; t.recoveryBaseline = null; t.recoveryConflict = null; }
+            if (accepted) { t.resource = accepted;t.format=sourceFormat(t); t.recoveryBaseline = null; t.recoveryConflict = null; }
             refreshAccess(t); renderInspector();
             var kind = kindOf(accepted && accepted.name || path, t.text);
             if (kind !== t.kind) {
@@ -2040,7 +2041,7 @@
             if (!recoveryReady) return recoveryKept;
             var value = { version: 2, tabs: tabs.map(function (t) {
                 return { path: t.path, name: t.resource && t.resource.name || t.name || null, kind: t.kind, text: t.modified || !t.path ? t.text : null, view: t.view || null,
-                    baseline: t.path ? recovery.capture(resources, t.resource, t.recoveryBaseline) : null };
+                    format:sourceFormat(t),baseline: t.path ? recovery.capture(resources, t.resource, t.recoveryBaseline) : null };
             }), active: active };
             recovery.validate(value);
             return value;
@@ -2216,6 +2217,7 @@
                     if (destroyed) return;
                     if (text == null) { continue; }
                     var t = makeTab(text, k.path || null, Object.hasOwn(EXT, k.kind) ? k.kind : null, k.view);
+                    t.format=k.format;
                     if (restored) { t.resource = restored.snapshot; t.recoveryBaseline = restored.baseline; t.recoveryConflict = restored.conflict; if (k.name) t.name = k.name; }
                     if (!k.path && k.name && /^untitled-\d+\.(d2|mmd|canvas)$/.test(k.name)) { t.name = k.name; untitled = Math.max(untitled, +/\d+/.exec(k.name)[0]); }
                     t.modified = k.text != null;
@@ -2294,12 +2296,12 @@
                 await booted;
                 var t = await front(input.index);
                 if (!resources && (!t.path || input.path && input.path !== t.path)) throw new Error('This host cannot create a destination. Download the source to keep a copy.');
-                var submitted = t.text;
+                var submitted = t.text,format=resources?sourceFormat(t):null;
                 return queueSave(t, async function (ticket) {
                     var destination = input.path ? String(input.path) : t.path;
                     if (resources && destination !== t.path) {
                         if (!destination) throw new Error('Give an explicit destination for the new resource.');
-                        var created = await resources.create(destination, submitted);
+                        var created = await resources.create(destination, submitted,format);
                         if (destroyed || tabs.indexOf(t) < 0) throw new Error('The resource was created after its diagram was closed.');
                         savedAs(t, created.resource, submitted, ticket, created);
                         return { output: summary(t, tabs.indexOf(t)) };

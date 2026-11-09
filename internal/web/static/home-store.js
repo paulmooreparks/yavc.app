@@ -107,12 +107,14 @@
         });
     }
     function read() { return transaction('readonly', function (record) { return validate(record); }); }
-    function update(change) {
-        return transaction('readwrite', function (record, store) {
+    function update(change, addition) {
+        if(addition){if(typeof addition.id!=='string'||!addition.id||addition.id.length>255||!(addition.bytes instanceof Uint8Array)||addition.bytes.byteLength>8*1024*1024)throw new Error('The atomic source bytes are invalid.');addition={id:addition.id,bytes:new Uint8Array(addition.bytes)};}
+        return transaction('readwrite', function (record, store, blobs) {
             validate(record);
             var raw = change(record);
             if (typeof raw !== 'string') throw new Error('A guest file transaction must return serialized content.');
             raw = normalize(raw, record.raw);
+            if(addition){if(!Object.values(parse(raw).files).some(function(entry){return entry.t==='b'&&entry.id===addition.id&&entry.s===addition.bytes.byteLength;}))throw new Error('Atomic source bytes require a matching file record.');blobs.add(addition.bytes.buffer,addition.id);}
             if (raw === record.raw) return record;
             if (record.generation === Number.MAX_SAFE_INTEGER) throw new Error('The guest file generation limit was reached.');
             var next = Object.assign({}, record, { raw: raw, generation: record.generation + 1 });

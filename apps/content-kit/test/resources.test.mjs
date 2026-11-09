@@ -27,7 +27,7 @@ test('snapshots cannot cross client authority or be forged', async () => {
     await assert.rejects(one.write({...a},'forged'),/cannot be saved/);
 });
 test('missing or read-only capabilities refuse writes', async () => {
-    assert.throws(()=>create({version:2,read(){}}),/version 1/);
+    assert.throws(()=>create({version:3,read(){}}),/version 1/);
     const client=create({version:1,read:async ({resource})=>({resource,revision:'r1',text:'read only',writable:false})});
     const snapshot=await client.read('one'); assert.equal(client.canWrite(snapshot),false);
     await assert.rejects(client.write(snapshot,'changed'),/cannot be saved/);
@@ -64,4 +64,19 @@ test('Save As cancellation leaves its source baseline intact and successful copi
 test('a display name survives ordinary saves when the host omits unchanged metadata',async()=>{
     const client=create({...host(),read:async({resource})=>({resource,revision:'1',text:'original',writable:true,name:'Drawing.d2'})});
     const saved=await client.write(await client.read('opaque:id'),'changed');assert.equal(saved.name,'Drawing.d2');
+});
+test('version 2 snapshots negotiate encoding and retain it across writes and copies',async()=>{
+    const requests=[],authority={version:2,read:async({resource})=>({resource,revision:'1',text:'body',writable:true,encoding:'utf-16be',bom:true}),write:async request=>{requests.push(request);return {resource:request.resource,revision:'2',writable:true,encoding:request.encoding,bom:request.bom};},create:async request=>{requests.push(request);return {resource:request.resource,revision:'copy',writable:true,encoding:request.encoding,bom:request.bom};}};
+    const client=create(authority),opened=await client.read('source');assert.equal(opened.encoding,'utf-16be');assert.equal(opened.bom,true);
+    const saved=await client.write(opened,'edited');assert.equal(saved.encoding,'utf-16be');assert.equal(requests[0].encoding,'utf-16be');assert.equal(requests[0].bom,true);
+    assert.deepEqual(client.baseline(saved),{resource:'source',revision:'2',encoding:'utf-16be',bom:true});
+    const copied=await client.create('copy','copy',{encoding:'utf-16le',bom:true});assert.equal(copied.encoding,'utf-16le');
+    assert.equal(create(host()).canFormat({encoding:'utf-16le',bom:true}),false);
+    await assert.rejects(create({...host(),create:async()=>{throw new Error('must not run');}}).create('lossy','body',{encoding:'utf-16be',bom:true}),/cannot preserve/);
+});
+test('encoding acknowledgements fail closed and unsigned UTF-16 is never inferred',async()=>{
+    const base={version:2,read:async({resource})=>({resource,revision:'1',text:'body',writable:true,encoding:'utf-16le',bom:true})};
+    const missing=create({...base,read:async({resource})=>({resource,revision:'1',text:'body',writable:true})});await assert.rejects(missing.read('one'),/acknowledge/);
+    const wrong=create({...base,write:async({resource})=>({resource,revision:'2',writable:true,encoding:'utf-8',bom:false})});await assert.rejects(wrong.write(await wrong.read('one'),'body'),/changed.*encoding/);
+    const client=create({...base,create:async()=>{throw new Error('must not run');}});await assert.rejects(client.create('one','body',{encoding:'utf-16le',bom:false}),/signature/);
 });

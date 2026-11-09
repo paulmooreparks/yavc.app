@@ -14,6 +14,7 @@
    presents it (present=1), or opens the presenter view (presenter=1). */
 (function () {
     'use strict';
+    function sourceFormat(t){return window.yavcContentResources.format(t.resource&&t.resource.encoding!==undefined?t.resource:t.format||t.baseline||{});}
 
     var SELF_SRC = document.currentScript && document.currentScript.src;
     var HERE = (SELF_SRC || '/applets/slides/slides.js').split('?')[0].replace(/slides\.js$/, '');
@@ -1085,14 +1086,14 @@
                 if (destroyed || tab() !== t) throw new Error('The deck changed before saving.');
             }
             stash();
-            var submitted = serializeDeck(t.deck);
+            var submitted = serializeDeck(t.deck),format=sourceFormat(t);
             var pending = (t.saveQueue || Promise.resolve()).then(async function () {
                 if (destroyed || !tabs.includes(t)) throw new Error('The deck closed before its save could run.');
                 var accepted;
-                if (destination == null) accepted = await resources.saveAs({ name: t.name || tabTitle(t) + '.slides.md', sourceResource: t.path }, submitted, { host: root, signal: styleLifetime.signal });
+                if (destination == null) accepted = await resources.saveAs(Object.assign({ name: t.name || tabTitle(t) + '.slides.md', sourceResource: t.path },format), submitted, { host: root, signal: styleLifetime.signal });
                 else if (destination === t.path && t.resource) accepted = await resources.write(t.resource, submitted);
                 else if (destination === t.path && !t.fresh) throw new Error('The recovered deck has no matching revision. Use Save As to preserve a copy.');
-                else accepted = await resources.create(destination, submitted);
+                else accepted = await resources.create(destination, submitted,format);
                 if (!accepted || destroyed || !tabs.includes(t)) return false;
                 var syncError = null;
                 if (tab() === t && pageActive()) {
@@ -1100,7 +1101,7 @@
                     catch (err) { syncError = err; if (!resources.canWrite(accepted)) page.freeze(); }
                     if (destroyed || !tabs.includes(t)) return false;
                 }
-                t.resource = accepted; t.baseline = null; t.conflict = null; t.path = accepted.resource; t.name = accepted.name || t.name;
+                t.resource = accepted;t.format=sourceFormat(t); t.baseline = null; t.conflict = null; t.path = accepted.resource; t.name = accepted.name || t.name;
                 t.modified = !!syncError || serializeDeck(t.deck) !== submitted; t.fresh = false;
                 t.savedText = submitted; t.saveFailed = !!syncError;
                 if (tab() === t) {
@@ -1459,7 +1460,7 @@
         function takeSnapshot() {
             if (restoring) return recoveryKept;
             stash();
-            return { version: resources ? 2 : undefined, tabs: tabs.map(function (t) { return { path: t.path, name: t.name, text: t.modified ? serializeDeck(t.deck) : null, baseline: resources ? recovery.capture(resources, t.resource, t.baseline) : undefined, slide: t.at || 0 }; }), active: active, mode: mode };
+            return { version: resources ? 2 : undefined, tabs: tabs.map(function (t) { return { path: t.path, name: t.name, text: t.modified ? serializeDeck(t.deck) : null,format:resources?sourceFormat(t):undefined,baseline: resources ? recovery.capture(resources, t.resource, t.baseline) : undefined, slide: t.at || 0 }; }), active: active, mode: mode };
         }
         function keep() { if (snap) { snap.changed(); } }
 
@@ -1725,12 +1726,12 @@
                         var restored = await recovery.restore(resources, kt.path, kt.baseline, ktext);
                         if (destroyed) return;
                         tabs.push({ deck: parseDeck(restored.text), path: kt.path, name: (restored.snapshot && restored.snapshot.name) || kt.name,
-                            resource: restored.snapshot, baseline: restored.baseline, conflict: restored.conflict, modified: restored.modified, at: kt.slide || 0 });
+                            resource: restored.snapshot, baseline: restored.baseline,format:kt.format,conflict: restored.conflict, modified: restored.modified, at: kt.slide || 0 });
                         continue;
                     }
                     if (ktext == null && kt.path && H.fs && H.fs.readText) { ktext = await H.fs.readText(kt.path).catch(function () { return null; }); }
                     if (ktext == null) { continue; }
-                    tabs.push({ deck: parseDeck(ktext), path: kt.path || null, modified: kt.text != null, at: kt.slide || 0 });
+                    tabs.push({ deck: parseDeck(ktext), path: kt.path || null,format:kt.format,modified: kt.text != null, at: kt.slide || 0 });
                 }
                 if (tabs.length) { await activateTab(Math.max(0, Math.min(kept.active || 0, tabs.length - 1))); }
             }

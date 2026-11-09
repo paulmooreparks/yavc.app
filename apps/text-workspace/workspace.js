@@ -196,6 +196,7 @@
         /* === State ====================================================== */
 
         function current() { return tabs[active] || null; }
+        function sourceFormat(t){return window.yavcContentResources.format(t&&t.resource&&t.resource.encoding!==undefined?t.resource:t&&t.format||{});}
         function normalizedSource(text) { return text.replace(/\r\n?/g, '\n'); }
         function submittedText(t) {
             return sourceHistory.raw(current() === t ? view.state : t.state);
@@ -515,6 +516,7 @@
             await leaveDocument(); if (destroyed) return;
             if (documentWindows && documentWindows.mode(root) === 'single' && !restoring && tabs.length === 1 && !current().path && !dirtyTab(current()) && !view.state.doc.length) { tabs = []; active = -1; }
             t.savedRaw = text;
+            t.format=sourceFormat(t);
             t.modified = false;
             t.state = stateFor(t, text);
             t.saved = t.state.doc.toString();
@@ -647,12 +649,12 @@
                 await visual.api.sync();
                 if (destroyed || current() !== t) throw new Error('The document changed before saving.');
             }
-            var text = submittedText(t);
+            var text = submittedText(t),format=sourceFormat(t);
             var ticket = t.saveTicket = (t.saveTicket || 0) + 1;
             t.savePending = (t.savePending || 0) + 1;
             var pending = (t.saveQueue || Promise.resolve()).then(function () {
                 if (destroyed || tabs.indexOf(t) < 0) { throw new Error('The document was closed before its queued save could run.'); }
-                return writeSubmitted(t, path, text, ticket);
+                return writeSubmitted(t, path, text, ticket,format);
             });
             t.saveQueue = pending.catch(function () { });
             try { return await pending; }
@@ -668,14 +670,14 @@
                 }
             }
         }
-        async function writeSubmitted(t, path, text, ticket) {
+        async function writeSubmitted(t, path, text, ticket,format) {
             requireNative(t.path===path ? t.name : path);
             if (current() === t) { say('Saving…'); }
             if (resources) {
                 var accepted;
-                if (t.path === path && t.resource) accepted = await resources.write(t.resource, text);
+                if (t.path === path && t.resource) {var currentFormat=sourceFormat(t);if(currentFormat.encoding!==format.encoding||currentFormat.bom!==format.bom)throw new Error('The source encoding changed before this queued save. Save again.');accepted = await resources.write(t.resource, text);}
                 else if (t.path === path && !t.fresh) throw new Error('The recovered draft has no matching revision. Use Save As to preserve a copy.');
-                else accepted = await resources.create(path, text);
+                else accepted = await resources.create(path, text,format);
                 return acceptResource(t, accepted, text, ticket);
             }
             throw new Error('This host has no revision-safe writer. Save a copy on a supported host or download the source.');
@@ -698,7 +700,9 @@
             });
             if (!res) { return false; }
             if (res.download) {
-                download(res.download, new Blob([(current() === t ? view.state : t.state).doc.toString()], { type: 'text/plain' }));
+                await loadScript(resourceAsset('text-codec.js'));
+                var format=sourceFormat(t),bytes=window.yavcTextCodec.encode((format.bom?'\ufeff':'')+submittedText(t),format.encoding);
+                download(res.download, new Blob([bytes], { type: 'text/plain;charset='+format.encoding }));
                 say('Downloaded ' + res.download + '. The tab still holds your text.');
                 return false;
             }
@@ -715,6 +719,7 @@
                 if (destroyed || !tabs.includes(t)) return false;
             }
             t.resource = accepted; t.baseline = null; t.conflict = null; t.path = accepted.resource;
+            t.format=sourceFormat(t);
             t.name = accepted.name || t.name; t.lang = languageFor(t.name); t.savedRaw = text; t.saved = normalizedSource(text);
             if(current()===t)window.yavcMdEditor.refreshReferences(root,picturesHost());
             t.readOnly = !resources.canWrite(accepted); t.saveFailed = !!syncError; t.fresh = false; t.external = false;
@@ -726,21 +731,31 @@
             if (current() === t) say(syncError ? 'The submitted source was saved, but the newer rich draft could not synchronize. Copy it before leaving. ' + syncError.message : 'Saved ' + t.name + (t.modified ? '; newer edits are still unsaved.' : '.'), !!syncError);
             return true;
         }
-        async function copyResource(t) {
+        async function copyResource(t,requestedFormat) {
             if (current() === t && pageActive()) {
                 await visual.api.sync();
                 if (destroyed || current() !== t) throw new Error('The document changed before Save As.');
             }
-            var text = submittedText(t), ticket = t.saveTicket = (t.saveTicket || 0) + 1;
+            var text = submittedText(t),format=window.yavcContentResources.format(requestedFormat||sourceFormat(t)), ticket = t.saveTicket = (t.saveTicket || 0) + 1;
             t.savePending = (t.savePending || 0) + 1;
             var pending = (t.saveQueue || Promise.resolve()).then(async function () {
                 if (destroyed || tabs.indexOf(t) < 0) throw new Error('The document closed before Save As.');
-                var accepted = await resources.saveAs({ name: t.name, sourceResource: t.path }, text, { host: root, signal: styleLifetime.signal, checkName:function (name) {try{requireNative(name);return null;}catch(err){return err.message;}} });
+                var accepted = await resources.saveAs(Object.assign({ name: t.name, sourceResource: t.path },format), text, { host: root, signal: styleLifetime.signal, checkName:function (name) {try{requireNative(name);return null;}catch(err){return err.message;}} });
                 return accepted ? acceptResource(t, accepted, text, ticket) : false;
             });
             t.saveQueue = pending.catch(function () {});
             try { return await pending; } catch (err) { if (!destroyed) say(err.message, true); return false; }
             finally { t.savePending--; if (!destroyed && tabs.includes(t)) { t.modified = !!t.savePending || !!t.saveFailed || sourceModified(t); renderTabs(); keep(); } }
+        }
+        async function encodedCopy(){
+            var t=current();if(!t||!resources||!resources.canSaveAs())return;
+            if(pageActive())await visual.api.sync();
+            if(destroyed||current()!==t)return;
+            var text=submittedText(t),formats=[['utf8','UTF-8',{encoding:'utf-8',bom:false}],['utf8bom','UTF-8 with Signature',{encoding:'utf-8',bom:true}],['utf16le','UTF-16 Little Endian',{encoding:'utf-16le',bom:true}],['utf16be','UTF-16 Big Endian',{encoding:'utf-16be',bom:true}]].filter(function(item){return resources.canFormat(item[2]);}),format=sourceFormat(t),selected=formats.find(function(item){return item[2].encoding===format.encoding&&item[2].bom===format.bom;})||formats[0];
+            if(!selected)return;
+            function unchanged(){return !destroyed&&current()===t&&submittedText(t)===text;}
+            var value=await window.yavcDialog.askText('Save Encoded Copy','Encoding',selected[0],{choices:formats.map(function(item){return [item[0],item[1]];}),okLabel:'Choose Destination…',help:'Choose the encoding for the copy. The original file stays unchanged.',signal:styleLifetime.signal,validate:function(value){return !unchanged()?'The document changed. Cancel and try again.':formats.some(function(item){return item[0]===value;})?null:'Choose an encoding.';}});
+            if(value!=null&&unchanged())return copyResource(t,formats.find(function(item){return item[0]===value;})[2]);
         }
 
         var download = window.yavcUtil.download;
@@ -780,8 +795,8 @@
                 requireNative(chosen.name);
                 await loadScript(resourceAsset('text-codec.js'));
                 if (destroyed) return;
-                var codec=window.yavcTextCodec, text=codec.decode(codec.encode(chosen.text,'utf-8')).text;
-                await importedDocument(chosen.name,text);
+                var codec=window.yavcTextCodec, decoded=codec.decode(codec.encode(chosen.text,'utf-8'));
+                await importedDocument(chosen.name,decoded.bom?decoded.text.slice(1):decoded.text,{encoding:decoded.encoding,bom:decoded.bom});
                 return;
             }
             var t = current(), node = t && t.path && F ? F.resolve(F.home(), t.path) : null;
@@ -789,7 +804,7 @@
             var res = await FB.pick(F, {
                 mode: 'open', title: 'Open', host: root, computer: true, signal:styleLifetime.signal,
                 start: node ? F.displayPath(F.realOf(node).parent) : '~',
-                check: function (r) { return F.isText(r) ? null : r.name + ' isn\'t a text file, so the editor can\'t open it.'; },
+                check: function (r) { return F.isText(r)||resources&&!r.children&&r.home&&!r.server ? null : r.name + ' isn\'t a text file, so the editor can\'t open it.'; },
                 /* The dialog stays open while the file is read, and says
                    there why it couldn't be. */
                 commit: function (c) { return c.file ? openFromComputer(c.file, true) : openPath(c.path, true); }
@@ -806,15 +821,15 @@
             await loadScript(resourceAsset('text-codec.js'));
             var decoded = window.yavcTextCodec.decode(new Uint8Array(await file.arrayBuffer()));
             if(destroyed)return false;
-            if(decoded.encoding !== 'utf-8')throw new Error('This encoding is not writable here. Keep the original file or convert a copy to UTF-8.');
-            var text = decoded.text;
+            var text = decoded.bom?decoded.text.slice(1):decoded.text;
             if (text.indexOf('\0') >= 0) { return fail(file.name + ' isn\'t a text file, so the editor can\'t open it.'); }
-            await importedDocument(file.name,text);
+            await importedDocument(file.name,text,{encoding:decoded.encoding,bom:decoded.bom});
         }
-        async function importedDocument(name,text) {
+        async function importedDocument(name,text,format) {
             requireNative(name);
-            var routed = await routeDocument('import-source', {name: name, text: text}); if (routed) return routed.result;
-            await addTab({path:null,name:name,lang:languageFor(name),readOnly:false},text);
+            format=window.yavcContentResources.format(format||{});
+            var routed = await routeDocument('import-source', {name: name, text: text,format:format}); if (routed) return routed.result;
+            await addTab({path:null,name:name,lang:languageFor(name),readOnly:false,format:format},text);
             var t=current();t.saved=null;t.modified=true;renderTabs();
             say('Opened '+name+'. Save As keeps a native copy through this host.');
         }
@@ -1922,7 +1937,7 @@
                 if (t === front) { frontAt = list.length; }
                 var json = st.toJSON({ sourceHistory: sourceHistory.field });
                 list.push({
-                    path: t.path, name: t.name, lang: t.lang, mtime: t.mtime, fresh: !!t.fresh,
+                    path: t.path, name: t.name, lang: t.lang, mtime: t.mtime, fresh: !!t.fresh,format:sourceFormat(t),
                     baseline: resources ? recovery.capture(resources, t.resource, t.baseline) : undefined,
                     draft: t.modified ? text : null, sum: t.modified ? null : fingerprint(text),rawSum:t.modified?null:fingerprint(sourceHistory.raw(st)),
                     selection: json.selection, sourceHistory:json.sourceHistory,newlines:sourceHistory.endings(st),scroll: t.scroll == null ? null : t.scroll,
@@ -2016,35 +2031,42 @@
             for (var i = 0; i < all.length; i++) {
                 var k = all[i], t = null;
                 if (!k || typeof k !== 'object') { continue; }
+                var originalKept=k;
+                if(typeof k.draft==='string'&&!k.format){
+                    var signed=k.draft[0]==='\ufeff';k=Object.assign({},k,{format:{encoding:'utf-8',bom:signed}});
+                    if(signed){k.draft=k.draft.slice(1);k.sourceHistory=null;k.history=null;if(k.selection&&Array.isArray(k.selection.ranges)&&k.selection.ranges.every(function(range){return range&&Number.isInteger(range.anchor)&&Number.isInteger(range.head);})){k.selection=Object.assign({},k.selection,{ranges:k.selection.ranges.map(function(range){return Object.assign({},range,{anchor:Math.max(0,range.anchor-1),head:Math.max(0,range.head-1)});})});}else{k.selection=null;}}
+                }
                 if (resources && k.path) {
                     var restored;
                     try { restored = await recovery.restore(resources, k.path, k.baseline, k.draft); }
                     catch (err) { waiting.push(k); continue; }
+                    if(restored.modified&&restored.snapshot&&k.format){var loadedFormat=sourceFormat({resource:restored.snapshot});if(loadedFormat.encoding!==k.format.encoding||loadedFormat.bom!==k.format.bom){restored.snapshot=null;restored.conflict='encoding';}}
                     // A legacy draft identical to the current buffer contains no unsaved edit.
                     if (restored.conflict === 'unknown') {
                         try {
                             var sameFile = await resources.read(k.path);
                             var recoveredRaw=typeof k.newlines==='string'?window.yavcSourceHistory.restore(normalizedSource(restored.text),k.newlines):restored.text;
-                            if (recoveredRaw === sameFile.text) {
+                            var recoveredFormat=window.yavcContentResources.format(k.format||{}),savedFormat=sourceFormat({resource:sameFile});
+                            if (recoveredRaw === sameFile.text&&recoveredFormat.encoding===savedFormat.encoding&&recoveredFormat.bom===savedFormat.bom) {
                                 restored = { snapshot: sameFile, baseline: null, text: sameFile.text, modified: false, conflict: null };
                             }
                         } catch (err) { /* Keep the original draft when its file is unavailable. */ }
                     }
                     if (destroyed) return null;
                     var name = (restored.snapshot && restored.snapshot.name) || k.name || String(k.path).split('/').pop();
-                    await addTab({ path: k.path, name: name, lang: languageFor(name), resource: restored.snapshot, baseline: restored.baseline, conflict: restored.conflict,
+                    await addTab({ path: k.path, name: name, lang: languageFor(name), resource: restored.snapshot, baseline: restored.baseline, conflict: restored.conflict,format:k.format,
                         readOnly: !!restored.snapshot && !resources.canWrite(restored.snapshot) }, restored.snapshot ? restored.snapshot.text : '');
                     t = current(); await applyKept(t, Object.assign({}, k, { draft: restored.modified ? restored.text : null }));
                     t.modified = restored.modified; t.conflict = restored.conflict;
                     if (t.modified) back.push(t.name);
-                    if (k === frontKept) frontTab = t;
+                    if (originalKept === frontKept) frontTab = t;
                     continue;
                 }
                 if (!k.path) {
                     if (typeof k.draft !== 'string') { continue; }
                     var n = /^untitled-(\d+)(\.docs\.md)?$/.exec(k.name || '');
                     if (n) { untitled = Math.max(untitled, +n[1]); }
-                    await addTab({ path: null, name: k.name || 'untitled', lang: k.lang || 'text', readOnly: false }, '');
+                    await addTab({ path: null, name: k.name || 'untitled', lang: k.lang || 'text', readOnly: false,format:k.format }, '');
                     t = current();
                 } else {
                     var node = F.resolve(F.home(), F.upgradePath(k.path));
@@ -2064,7 +2086,7 @@
                 if (!t) { continue; }
                 await applyKept(t, k);
                 if (t.modified) { back.push(t.name); }
-                if (k === frontKept) { frontTab = t; }
+                if (originalKept === frontKept) { frontTab = t; }
             }
             renderTabs();
             return frontTab;
@@ -2299,6 +2321,7 @@
                 }),
                 cmd('save', 'Save', 'yavc-save', function () { return save(); }, { disabled: function () { var t = current(); return !ready || !t || t.readOnly || !resources || !t.path && !resources.canSaveAs() || t.fresh && !resources.canCreate() || !!(t.path && !t.resource && !t.fresh); }, reason: 'This host cannot save this draft safely, or its recovered revision no longer matches. Use a supported Save As or download the source.' }),
                 cmd('save-as', 'Save As…', 'yavc-save-as', function () { return saveAs(); }, { label: function () { var t = current(); return t && t.readOnly ? 'Save a Copy…' : 'Save As…'; }, disabled: function () { return !ready || !current() || !!(resources && !resources.canSaveAs()); } }),
+                cmd('save-encoded-copy','Save Encoded Copy…','yavc-save-as',encodedCopy,{disabled:function(){return !ready||!current()||!resources||!resources.canSaveAs();}}),
                 cmd('close-document', 'Close Document', null, function () { COMMANDS['close-document'](); }, { disabled: function () { return !ready || !current(); } }),
                 /* glyphOnly: a glyph every reader knows shows alone on the
                    menu bar's ribbon (PUDL 0.79.0), its words its tooltip. */
@@ -2415,7 +2438,7 @@
         function menus() {
             var titles = [
                 { label: isDocs ? 'Docs' : 'Editor', glyph: isDocs ? 'document' : 'code', items: H.identity(root, ['key-bindings']) },
-                { id: 'file', label: 'File', glyph: 'file', items: ['new', 'new-template', 'new-markdown', 'open', 'open-other', 'save', 'save-as', '-', 'export-docx', 'export-pdf', 'print-document', '-', 'properties', 'present', '-', 'close-document'] },
+                { id: 'file', label: 'File', glyph: 'file', items: ['new', 'new-template', 'new-markdown', 'open', 'open-other', 'save', 'save-as', 'save-encoded-copy', '-', 'export-docx', 'export-pdf', 'print-document', '-', 'properties', 'present', '-', 'close-document'] },
                 { id: 'edit', label: 'Edit', glyph: 'pencil', items: ['undo', 'redo', '-', 'cut', 'copy', 'paste', '-', 'select-all', '-', 'find', 'go-to-line', 'section-up', 'section-down', '-', 'json-format', 'language-restart'] },
                 { id: 'insert', label: 'Insert', glyph: 'plus', items: ['link', 'insert', 'table', 'box', 'footnote', '-', 'insert-timestamp', 'insert-date', 'stamp-modified'] }
             ];
@@ -2429,7 +2452,7 @@
         var boot = Promise.all([loadCodeMirror(), loadSiteFs().then(function (api) { F = api; return F ? F.load() : null; }), loadBrowser()]).then(async function (res) {
             if (destroyed) { return; }
             CM = res[0];
-            await loadScript(resourceAsset('source-history.js'));sourceHistory=window.yavcSourceHistory.create(CM);
+            await loadScript(resourceAsset('source-history.js'));sourceHistory=window.yavcSourceHistory.create(CM);await loadScript(resourceAsset('resources.js'));
             await loadScript(resourceAsset('resource-session.js'));
             resourceSession = await window.yavcResourceSession.open(H, function (file) { return loadScript(resourceAsset(file)); });
             if (destroyed) return;
@@ -2662,7 +2685,7 @@
         if (documentWindows) unbindDocuments = documentWindows.bind(root, {
             application: app, resource: function () {return current() && current().path;},
             accept: async function (request) { receivingDocument = true; try {
-                if (request.operation === 'import-source') { await importedDocument(request.input.name, request.input.text); return {output: docView(active, false)}; }
+                if (request.operation === 'import-source') { await importedDocument(request.input.name, request.input.text,request.input.format); return {output: docView(active, false)}; }
                 return await liveActions[request.operation + '@1'](request.input);
             } finally { receivingDocument = false; } }, flush: function () { return !!snap && snap.flush(); }
         });

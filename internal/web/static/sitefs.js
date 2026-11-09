@@ -1213,55 +1213,61 @@
             return {resource:resource,revision:entry.revision,bytes:value instanceof ArrayBuffer ? value.slice(0) : value.buffer.slice(value.byteOffset,value.byteOffset+value.byteLength),name:path.slice(path.lastIndexOf('/')+1),mediaType:entry.t==='b' ? entry.y || '' : ''};
         });
     }});
+    function textFormat(request){
+        var encoding=request.encoding===undefined?'utf-8':request.encoding,bom=request.bom===undefined?false:request.bom;
+        if(!['utf-8','utf-16le','utf-16be'].includes(encoding)||typeof bom!=='boolean'||encoding!=='utf-8'&&!bom)throw new Error('Choose UTF-8 or signed UTF-16LE/BE source.');
+        return {encoding:encoding,bom:bom};
+    }
+    function encodedSource(request){
+        if(typeof request.text!=='string'||request.text.length>FILE_MAX)throw new Error('The resource exceeds the 256 KB text limit.');
+        var format=textFormat(request),raw=(format.bom?'\ufeff':'')+request.text,bytes=textCodec.encode(raw,format.encoding,{maxBytes:BLOB_MAX,maxText:FILE_MAX+1}),decoded=textCodec.decode(bytes,{maxBytes:BLOB_MAX,maxText:FILE_MAX+1});
+        if(decoded.encoding!==format.encoding||decoded.bom!==format.bom||(decoded.bom?decoded.text.slice(1):decoded.text)!==request.text)throw new Error('The selected encoding cannot retain this leading signature as source. Save an encoded copy with a signature.');
+        return {format:format,raw:raw,bytes:bytes};
+    }
+    async function decodedEntry(entry){
+        if(!entry||!['f','b'].includes(entry.t))throw new Error('The text resource does not exist.');
+        if(entry.t==='b'&&entry.s>BLOB_MAX)throw new Error('The source bytes exceed the read limit.');
+        var bytes=entry.t==='b'?new Uint8Array(await blobGet(entry.id)):textCodec.encode(entry.c,'utf-8',{maxBytes:BLOB_MAX,maxText:FILE_MAX+1});
+        if(entry.t==='b'&&bytes.byteLength!==entry.s)throw new Error('The saved source bytes are incomplete.');
+        var decoded=textCodec.decode(bytes,{maxBytes:BLOB_MAX,maxText:FILE_MAX+1}),body=decoded.bom?decoded.text.slice(1):decoded.text;
+        if(body.length>FILE_MAX)throw new Error('The resource exceeds the 256 KB text limit.');
+        return {text:body,encoding:decoded.encoding,bom:decoded.bom};
+    }
+    async function saveEncoded(request,context,creating){
+        var resource=request.resource,path=resourcePath(resource),source=encodedSource(request),id=source.format.encoding==='utf-8'?null:newBlobId(),previous=null;
+        if(!creating&&(typeof request.expectedRevision!=='string'||!request.expectedRevision||request.expectedRevision.length>4096))throw new Error('A baseline revision is required.');
+        var record=await store.update(function(current){
+            if(!operationCurrent(context))throw new DOMException('The save was cancelled.','AbortError');
+            var data=store.parse(current.raw),entry=data.files[path],parent=path.slice(0,path.lastIndexOf('/'));
+            if(creating){if(entry)throw new Error('The destination already exists. Choose it again before replacing it.');if(parent&&(!data.files[parent]||data.files[parent].t!=='d')&&!Object.keys(data.files).some(function(key){return key.startsWith(parent+'/');}))throw new Error('The destination folder no longer exists.');}
+            else if(!entry||!['f','b'].includes(entry.t)||entry.revision!==request.expectedRevision)throw new Error('The file changed or was deleted. Your text was not saved.');
+            if(entry&&entry.t==='b')previous=entry.id;
+            if(!id&&entry&&entry.t==='f'&&entry.c===source.raw)return current.raw;
+            data.files[path]=id?{t:'b',id:id,s:source.bytes.byteLength,y:'text/plain;charset='+source.format.encoding,m:Date.now()}:{t:'f',c:source.raw,m:Date.now()};
+            return JSON.stringify(data);
+        },id?{id:id,bytes:source.bytes}:undefined);
+        homeLoad(record);publishHome();emit('home');if(previous&&previous!==id)blobDel(previous);
+        return Object.assign({resource:resource,revision:store.parse(record.raw).files[path].revision,writable:true,name:path.slice(path.lastIndexOf('/')+1)},source.format);
+    }
     var contentResources = Object.freeze({
-        version: 1,
+        version: 2,
         read: function (request) {
             request = { resource: request.resource };
             return queued(async function () {
                 var path = resourcePath(request.resource), record = await store.read(), entry = store.parse(record.raw).files[path];
-                if (!entry || entry.t !== 'f') throw new Error('The text resource does not exist.');
-                return { resource: request.resource, revision: entry.revision, text: entry.c, writable: true, name: path.slice(path.lastIndexOf('/') + 1) };
+                var decoded=await decodedEntry(entry);
+                return Object.assign({ resource: request.resource, revision: entry.revision, writable: true, name: path.slice(path.lastIndexOf('/') + 1) },decoded);
             });
         },
         create: function (request, context) {
-            request = { resource: request.resource, text: request.text };
-            return queued(async function () {
-                var path = resourcePath(request.resource);
-                if (typeof request.text !== 'string' || request.text.length > FILE_MAX) throw new Error('The resource exceeds the 256 KB text limit.');
-                textCodec.encode(request.text,'utf-8',{maxText:FILE_MAX});
-                var record = await store.update(function (current) {
-                    if (context && context.signal && context.signal.aborted) throw new DOMException('The save was cancelled.', 'AbortError');
-                    var data = store.parse(current.raw), parent = path.slice(0, path.lastIndexOf('/'));
-                    if (data.files[path]) throw new Error('The destination already exists. Choose it again before replacing it.');
-                    if (parent && (!data.files[parent] || data.files[parent].t !== 'd') && !Object.keys(data.files).some(function (key) { return key.startsWith(parent + '/'); })) throw new Error('The destination folder no longer exists.');
-                    data.files[path] = { t: 'f', c: request.text, m: Date.now() };
-                    return JSON.stringify(data);
-                });
-                homeLoad(record); publishHome(); emit('home');
-                return { resource: request.resource, revision: store.parse(record.raw).files[path].revision, writable: true, name: path.slice(path.lastIndexOf('/') + 1) };
-            });
+            var captured={resource:request.resource,text:request.text,encoding:request.encoding,bom:request.bom};
+            return queued(function(){return saveEncoded(captured,context,true);});
         },
-        write: function (request, context) {
-            request = { resource: request.resource, expectedRevision: request.expectedRevision, text: request.text };
-            return queued(async function () {
-                var path = resourcePath(request.resource);
-                if (typeof request.text !== 'string' || request.text.length > FILE_MAX) throw new Error('The resource exceeds the 256 KB text limit.');
-                textCodec.encode(request.text,'utf-8',{maxText:FILE_MAX});
-                if (typeof request.expectedRevision !== 'string' || !request.expectedRevision || request.expectedRevision.length > 4096) throw new Error('A baseline revision is required.');
-                var record = await store.update(function (current) {
-                    if (context && context.signal && context.signal.aborted) throw new DOMException('The save was cancelled.', 'AbortError');
-                    var data = store.parse(current.raw), entry = data.files[path];
-                    if (!entry || entry.t !== 'f' || entry.revision !== request.expectedRevision) throw new Error('The file changed or was deleted. Your text was not saved.');
-                    if (entry.c === request.text) return current.raw;
-                    entry.c = request.text; entry.m = Date.now();
-                    return JSON.stringify(data);
-                });
-                homeLoad(record); publishHome(); emit('home');
-                return { resource: request.resource, revision: store.parse(record.raw).files[path].revision, writable: true, name: path.slice(path.lastIndexOf('/') + 1) };
-            });
+        write:function(request,context){
+            var captured={resource:request.resource,expectedRevision:request.expectedRevision,text:request.text,encoding:request.encoding,bom:request.bom};
+            return queued(function(){return saveEncoded(captured,context,false);});
         }
     });
-
     window.pcSiteFs = {
         load: load,
         root: function () { return root; },

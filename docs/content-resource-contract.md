@@ -1,5 +1,7 @@
 # Experimental content resource host contract, version 1
 
+Version 2 now adds negotiated encoding and signature metadata, as defined in [the encoded-resource contract](encoded-resources-contract.md). The shared client accepts both versions. The operations below retain their version 1 request and acknowledgement shapes when the host advertises version 1.
+
 This contract is a yavc-owned, versioned host extension used by the initial Diagrams portability proof. It is not a claim that the current PUDL host kit or yavc.app storage already provides conditional writes. The host kit's documented `host(given)` preserves additional capabilities, so a proof host may supply `pudlHost.contentResources`. Adoption into any shared package contract requires a separate coordinated change. The legacy `fs.readText`/`writeText` path remains unchanged when this extension is absent.
 
 ## Host operations

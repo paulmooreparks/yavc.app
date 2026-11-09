@@ -157,8 +157,8 @@
                     label: function () { var s = sel(); return !s.c ? 'Open' : s.kind === 'dir' ? 'Open Folder' : s.kind === 'app' ? 'Launch' : s.kind === 'link' ? 'Open Link in a New Tab' : (s.kind === 'file' || s.kind === 'script') && s.editable ? 'Open in the Editor' : 'Open'; },
                     hidden: function () { return !sel().c; } }),
                 cmd('edit', 'Edit', 'pencil', {
-                    label: function () { var s = sel(); return s.r && !s.r.home ? 'View in the Editor' : 'Edit'; },
-                    hidden: function () { var s = sel(); return !(s.c && s.kind !== 'dir' && s.kind !== 'link' && s.kind !== 'app' && s.editable); } }),
+                    label: function () { var s = sel(); return s.r&&s.r.bin?'Open as Text…':s.r && !s.r.home ? 'View in the Editor' : 'Edit'; },
+                    hidden: function () { var s = sel(); return !(s.c && s.kind !== 'dir' && s.kind !== 'link' && s.kind !== 'app' && (s.editable||s.r.home&&!s.r.server&&s.r.bin&&canOpen('open',s.kind))); } }),
                 cmd('run', 'Run in the Terminal', 'terminal', { hidden: function () { var s = sel(); return !(s.c && (s.kind === 'script' || s.kind === 'app') && canOpen('shell')); } }),
                 cmd('download', 'Download', 'download', { hidden: function () { var s = sel(); return !(s.c && s.kind !== 'dir'); } }),
                 cmd('copy', 'Copy to ~', 'copy', { hidden: function () { var s = sel(); return !(s.c && !s.r.home && s.kind === 'page'); } }),
@@ -194,7 +194,7 @@
         function request(verb, req) { return window.pudlApplets.request(verb, req, root); }
 
         function openInEditor(node, applet) {
-            if(window.pudlHost && window.pudlHost.fileResolution && window.pudlHost.fileResolution.open){window.pudlHost.fileResolution.open({resource:F.displayPath(F.realOf(node)),applet:applet},{host:root}).catch(function (error) {say(error.message,true);});return;}
+            if(window.pudlHost && window.pudlHost.fileResolution && window.pudlHost.fileResolution.open){return window.pudlHost.fileResolution.open({resource:F.displayPath(F.realOf(node)),applet:applet},{host:root,signal:lifetime.signal}).catch(function (error) {if(!destroyed)say(error.message,true);});}
             /* A deck (a file named .slides.md) opens in Slides, where the site has it. */
             if (/\.slides\.md$/i.test(node.name) && window.pudlApplets.can && window.pudlApplets.can('present') && request('present', { path: F.displayPath(F.realOf(node)) })) { return; }
             /* A diagram (.d2, .mmd, .mermaid or .canvas) opens in Diagrams, where the site has it (docs/diagrams-design.md, decision 1). */
@@ -202,7 +202,8 @@
             if (!request('open', { path: F.displayPath(F.realOf(node)), kind: F.kindOf(node) })) { say('Nothing on this site opens ' + node.name + '.', true); }
         }
 
-        function openEntry(c) {
+        async function openEntry(c) {
+            if(destroyed)return;
             var r = F.realOf(c), kind = F.kindOf(c);
             if (kind === 'dir') { b.go(c); b.focusList(); return; }
             if (kind === 'link') { window.open(r.url, '_blank', 'noopener'); return; }
@@ -213,6 +214,7 @@
                the home folder opens in a tab of its own; anything else
                downloads. */
             if ((kind === 'file' || kind === 'script') && !F.isText(r)) {
+                if(r.home&&!r.server&&window.pudlHost&&window.pudlHost.fileResolution&&window.pudlHost.fileResolution.open){try{await window.pudlHost.fileResolution.open({resource:F.displayPath(r)},{host:root,signal:lifetime.signal});return;}catch(error){if(destroyed)return;/* Binary viewing remains available when strict text decoding or handler selection refuses. */}}
                 var seen = F.publicUrl(r);
                 if (seen) { window.open(seen, '_blank', 'noopener'); }
                 /* Only a picture the browser cannot run script in opens in a tab: a blob
@@ -248,7 +250,7 @@
             switch (action) {
                 case 'up': b.up(); return;
                 case 'home': b.go(F.home()); return;
-                case 'open': if (c) { openEntry(c); } return;
+                case 'open': if (c) { return openEntry(c); } return;
                 case 'edit': if (c) { openInEditor(c, 'editor'); } return;
                 case 'run': if (c) { openTerminal(c.name); } return;
                 case 'terminal': openTerminal(null); return;
@@ -428,7 +430,7 @@
                 addressOf: addressOf,
                 draggable: true,
                 onUpload: uploadFiles,
-                onOpen: openEntry,
+                onOpen:function(c){openEntry(c).catch(function(error){if(!destroyed)say(error.message,true);});},
                 onSelect: function () { renderDetail(); commandsChanged(); },
                 onNavigate: announce,
                 onRender: afterRender,

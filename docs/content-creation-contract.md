@@ -2,6 +2,8 @@
 
 The experimental resource capability keeps its version 1 read/write operations and adds optional `create` and `saveAs` operations. Hosts without either operation remain usable for existing resources. Applets inspect capability availability before offering the corresponding commands. These operations remain a yavc-owned extension pending shared-host coordination.
 
+An authority advertising version 2 also carries captured encoding and signature metadata through creation and Save As. [The encoded-resource contract](encoded-resources-contract.md) defines those fields and preserves the version 1 interface for older receiving hosts.
+
 ## Explicit creation
 
 `create({resource, text})` creates a resource at a destination understood by that host. It must atomically require that the destination does not exist. It never replaces an existing file, including when a competing writer creates it after the request starts. The host rechecks destination scope and creation permission at execution. A successful acknowledgement contains the same resource identity, a revision and writable status; it can also supply a display `name`. The acknowledgement represents the exact submitted text.

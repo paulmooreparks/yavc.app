@@ -710,3 +710,11 @@ Editor and Docs now retain raw separators in their source history. Public CodeMi
 
 Node tests cover repeated identical lines, mixed CRLF/LF/CR, Unicode offsets, disjoint changes, grouping, malformed recovery and external-source adoption. Real Docs and Editor edits, Save, Undo, Redo and recovered Undo pass in Chromium, Firefox and WebKit. The existing cross-browser conditional-save/recovery suite and rich footnote insertion/body-edit Undo checks also pass. The first browser run exposed command initialization before the source-history service was ready; command construction now waits for that service.
 
+# Encoding-aware resource saves, 2026-11-09
+
+The version 2 resource authority keeps encoding and signature metadata outside the decoded source body. UTF-16 bytes and their revision-bearing VFS record commit in one IndexedDB transaction. Existing version 1 host requests remain unchanged. Save Encoded Copy uses the standard dialog and host-owned destination picker. Malformed bytes are refused without replacement characters or an implicit conversion.
+
+Chromium, Firefox and WebKit pass exact-byte saves for unsigned and signed UTF-8, UTF-16LE and UTF-16BE, edited recovery, source Undo/Redo, explicit conversion copies, computer uploads, malformed input and protected legacy drafts. Slides and Diagrams preserve encoded Save As and recovery, and Files resolves signed UTF-16 Markdown into Docs. Storage tests cover transaction rollback and copying a nonzero-offset byte view whose slice method aliases its backing buffer. Source review found and resolved that aliasing hazard and a legacy same-body signature mismatch that could otherwise acquire a writable baseline. Malformed legacy selections are discarded while the draft survives.
+
+The existing VFS/upload and source-history regressions pass all three engines. The 447-file portable package also passes the independent offline host fixture in all three engines. The repository gate passes. Narrow Save Encoded Copy layout uses the existing select dialog and was visually inspected. Actual desktop-webview acceptance remains separate work.
+
