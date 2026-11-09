@@ -134,11 +134,12 @@
             "view"
           ],
           "views": [
+            "visual",
             "text",
             "split",
             "preview"
           ],
-          "defaultView": "text"
+          "defaultView": "visual"
         },
         {
           "type": "document",
@@ -147,11 +148,12 @@
             "view"
           ],
           "views": [
+            "visual",
             "text",
             "split",
             "preview"
           ],
-          "defaultView": "text"
+          "defaultView": "visual"
         },
         {
           "type": "slides",

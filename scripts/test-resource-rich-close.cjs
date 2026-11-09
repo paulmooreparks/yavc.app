@@ -10,11 +10,14 @@ const action=(p,app,name,input={})=>p.evaluate(({app,name,input})=>pudlActions.r
   await action(p,app,app==='editor'?'open-file':'open',{path:'~/close.md'});await action(p,app,'view',{mode:'split'});
   const rich=win.locator('.ProseMirror[contenteditable="true"]');await rich.waitFor();await rich.click();await p.keyboard.press('ControlOrMeta+End');await p.keyboard.type('Pending close');
   await p.evaluate(app=>pudlWindows.close(app),app);const dialog=p.locator('dialog[open]');await dialog.waitFor();
-  assert.doesNotMatch((await action(p,app,app==='editor'?'document':'text')).text,/Pending close/,'This test must reach the close prompt before rich autosync.');
+  if(app==='slides')assert.doesNotMatch((await action(p,app,'text')).text,/Pending close/,'This test must reach the close prompt before rich autosync.');
+  // Editor's document action flushes rich edits before returning its text.
+  // Verify the actual close/save result below without using that flushing read.
+  assert.doesNotMatch(await p.evaluate(()=>pcSiteFs.readHome(pcSiteFs.resolve(pcSiteFs.home(),'close.md'))),/Pending close/);
   await dialog.getByRole('button',{name:'Save',exact:true}).click();await win.waitFor({state:'detached'});
   assert.match(await p.evaluate(()=>pcSiteFs.readHome(pcSiteFs.resolve(pcSiteFs.home(),'close.md'))),/Pending close/);
   await p.evaluate(app=>pudlWindows.open(app),app);await win.waitFor();await action(p,app,app==='editor'?'open-file':'open',{path:'~/close.md'});await action(p,app,'view',{mode:'split'});await rich.waitFor();await rich.click();await p.keyboard.press('ControlOrMeta+End');await p.keyboard.type('Pending tab');
-  await p.evaluate(app=>{window.pendingClose=pudlActions.run('yavc.'+app+'/close@1',{}, {grant:'all'});},app);await dialog.waitFor();assert.doesNotMatch((await action(p,app,app==='editor'?'document':'text')).text,/Pending tab/);await dialog.getByRole('button',{name:'Save',exact:true}).click();await p.evaluate(()=>pendingClose);assert.match(await p.evaluate(()=>pcSiteFs.readHome(pcSiteFs.resolve(pcSiteFs.home(),'close.md'))),/Pending tab/);
+  await p.evaluate(app=>{window.pendingClose=pudlActions.run('yavc.'+app+'/close@1',{}, {grant:'all'});},app);await dialog.waitFor();if(app==='slides')assert.doesNotMatch((await action(p,app,'text')).text,/Pending tab/);await dialog.getByRole('button',{name:'Save',exact:true}).click();await p.evaluate(()=>pendingClose);assert.match(await p.evaluate(()=>pcSiteFs.readHome(pcSiteFs.resolve(pcSiteFs.home(),'close.md'))),/Pending tab/);
   console.log(engine+' '+app+': window/tab Save includes a draft pending only in the rich surface');
  }finally{await browser.close();}
 }})().catch(err=>{console.error(err);process.exitCode=1;});

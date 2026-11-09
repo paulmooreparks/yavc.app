@@ -88,12 +88,12 @@
         function loadSiteFs() { return hostServices.browser ? hostServices.browser().then(function (x) { return x.F; }) : Promise.resolve(null); }
         function loadBrowser() { return hostServices.browser ? hostServices.browser().then(function (x) { return x.FB; }) : Promise.resolve(null); }
         function loadConfig() { return Promise.resolve((window.pudlHost || {}).config || null); }
-    var SETTINGS = { wrap: true, explorer: null, explorerWidth: null, outline: null, outlineWidth: null, keys: null, markdownView: isDocs ? 'visual' : 'text', documentView: 'document', documentZoom: '100', navigation: 'files' };
-    var MARKDOWN_VIEWS = isDocs ? [['document', 'Document'], ['visual', 'Visual'], ['text', 'Text'], ['split', 'Split'], ['preview', 'Preview']] : [['text', 'Text'], ['split', 'Split'], ['preview', 'Preview']];
+    var SETTINGS = { wrap: true, explorer: null, explorerWidth: null, outline: null, outlineWidth: null, keys: null, markdownView: 'visual', documentView: 'document', documentZoom: '100', navigation: 'files' };
+    var MARKDOWN_VIEWS = (isDocs ? [['document', 'Document']] : []).concat([['visual', 'Visual'], ['text', 'Text'], ['split', 'Split'], ['preview', 'Preview']]);
     function supportsView(tab, mode) { return !!tab && (mode === 'text' || (tab.lang === 'markdown' && MARKDOWN_VIEWS.some(function (entry) { return entry[0] === mode; }))); }
     function resolvedView(tab, preferred) {
         if (supportsView(tab, preferred)) { return preferred; }
-        return (isDocs ? ['document', 'visual', 'text'] : ['text']).find(function (mode) { return supportsView(tab, mode); }) || 'text';
+        return (isDocs ? ['document', 'visual', 'text'] : ['visual', 'text']).find(function (mode) { return supportsView(tab, mode); }) || 'text';
     }
 
         var n = ++uid;
@@ -1142,10 +1142,10 @@
            kept with the settings when the reader changes it. */
         /* A saved preference overrides capability defaults. Document files
            and the Docs host share the document-view preference. */
-        function viewKey() { var t = current(); return t && /\.docs\.md$/i.test(t.path || t.name || '') ? 'documentView' : 'markdownView'; }
-        function initialMode(tab, proposed) {var key=/\.docs\.md$/i.test(tab.name)?'documentView':'markdownView';return supportsView(tab,storedSettings[key]) ? null : proposed;}
+        function viewKey() { var t = current(); return isDocs && t && /\.docs\.md$/i.test(t.path || t.name || '') ? 'documentView' : 'markdownView'; }
+        function initialMode(tab, proposed) {var key=isDocs && /\.docs\.md$/i.test(tab.name)?'documentView':'markdownView';return supportsView(tab,storedSettings[key]) ? null : proposed;}
         function markdownDefault() {
-            return MARKDOWN_VIEWS.some(function (v) { return v[0] === settings[viewKey()]; }) ? settings[viewKey()] : (isDocs ? 'document' : 'text');
+            return MARKDOWN_VIEWS.some(function (v) { return v[0] === settings[viewKey()]; }) ? settings[viewKey()] : 'visual';
         }
         function setMarkdownDefault(v) {
             var change = {};
@@ -1193,7 +1193,7 @@
             if (!/^(width|page)$/.test(String(value)) && (!Number.isFinite(Number(value)) || Number(value) < 25 || Number(value) > 400)) { throw new Error('Zoom must be 25 to 400 percent, Fit Width or Fit Page.'); }
             documentZoom = String(value); saveSetting({ documentZoom: documentZoom }); applyDocumentZoom(); commandsChanged();
         }
-        function readsAsPreview() { var t = current(); return viewMode === 'preview' || (!isDocs && viewMode !== 'text') || !!(t && t.readOnly && viewMode !== 'text'); }
+        function readsAsPreview() { var t = current(); return viewMode === 'preview' || !!(t && t.readOnly && viewMode !== 'text'); }
         function pagedView(mode) { return mode === 'document'; }
         function pageLayout(layout) {
             el.pages.textContent = layout.count + (layout.count === 1 ? ' page' : ' pages');
@@ -1601,7 +1601,7 @@
                 styleScope: function () { return el.page.getAttribute('data-md-style') || ''; },
                 page: function () { return visual.api; }, text: function () { return view; },
                 onPage: function () { return formatsThePage(); },
-                readOnly: function () { var t = current(); return !isDocs || !t || !!t.readOnly; },
+                readOnly: function () { var t = current(); return !t || t.lang !== 'markdown' || !!t.readOnly; },
                 blockStyle: blockStyle, classes: function () { return documentStyles ? documentStyles.state().classes : []; }, say: say, pictures: picturesHost
             };
         }
@@ -1752,7 +1752,6 @@
         function showFormat(mode) {
             var t = current();
             var on = !!(mode === 'visual' || mode === 'split' || (t && t.lang === 'markdown' && !t.readOnly));
-            on = isDocs && on;
             if (on !== formatOffered) { formatOffered = on; commandsChanged(); if (window.pudlMenubar) { window.pudlMenubar.refresh(); } }
         }
         /* The formatting goes to the page in Visual, to the text in Text and
@@ -1914,7 +1913,7 @@
             var f = fileFrom(s);
             if (!f || !CM) { return; }
             var ticket=++stateRequest,params=new URLSearchParams(s || ''),existed=tabs.some(function (t) {return t.path===f;});function currentRequest(){return !destroyed && ticket===stateRequest;}
-            return openPath(f,false,currentRequest,params.get('view')).then(async function (opened) {if(!currentRequest())return;if (!opened) {if(F && !F.resolve(F.home(), f))await newNamed(f);else return;} var requested=params.get('view') || (!existed && initialMode(current(),params.get('initial-view')));if(requested){if(!supportsView(current(),requested))throw new Error('This view is unavailable here. Open the saved document in Docs for visual editing.');await setView(requested);}if(currentRequest())await restoreLine(Number(new URLSearchParams(s || '').get('line')) || 1); }).catch(function (err) {if(currentRequest())say(err.message,true);});
+            return openPath(f,false,currentRequest,params.get('view')).then(async function (opened) {if(!currentRequest())return;if (!opened) {if(F && !F.resolve(F.home(), f))await newNamed(f);else return;} var requested=params.get('view') || (!existed && initialMode(current(),params.get('initial-view')));if(requested){if(!supportsView(current(),requested))throw new Error('This view is unavailable for this file. Choose a supported view from the toolbar.');await setView(requested);}if(currentRequest())await restoreLine(Number(new URLSearchParams(s || '').get('line')) || 1); }).catch(function (err) {if(currentRequest())say(err.message,true);});
         }
         async function restoreLine(number) {
             var tab = current(); if (!view || !tab) { return; }
@@ -2108,7 +2107,7 @@
             var back = [], all = (kept.waiting || []).concat(kept.tabs), frontTab = null;
             restoring = true;
             try { frontTab = await reopen(all, back, kept.tabs[kept.front] || null); } finally { restoring = false; }
-            if (!isDocs && all.some(function (k) {return k && /^(document|visual)$/.test(k.view);})) back.push('legacy document source (open saved documents in Docs for visual editing)');
+            if (!isDocs && all.some(function (k) {return k && k.view === 'document';})) back.push('legacy page layout (open saved documents in Docs for Document view)');
             if (frontTab) { var fi = tabs.indexOf(frontTab); if (fi >= 0) { await activate(fi); } }
             var msg = back.length ? 'Your unsaved changes to ' + back.join(', ') + ' are back.' : '';
             if(all.some(function(k){return k&&k.history&&!k.sourceHistory;}))msg+=(msg?' ':'')+'The source and selection were restored. The previous editing history cannot be migrated.';
@@ -2479,8 +2478,8 @@
             table.push(cmd('properties', 'Properties…', 'tag', editProperties, {
                 hidden: function () { var t = current(); return !isDocs || !(t && t.lang === 'markdown'); },
                 disabled: function () { var t = current(); return !ready || !t || !!t.readOnly; } }));
-            var noPageLayout=function () {return unformatted() || viewMode!=='document';};
-            table.push(cmd('document-layout','Switch to Document View','document',function () {current().view='document';return setView('document');},{hidden:function () {return unformatted() || viewMode==='document';}}));
+            var noPageLayout=function () {return !isDocs || unformatted() || viewMode!=='document';};
+            table.push(cmd('document-layout','Switch to Document View','document',function () {current().view='document';return setView('document');},{hidden:function () {return !isDocs || unformatted() || viewMode==='document';}}));
             table.push(cmd('page-setup', 'Page Setup…', 'file', editPageSetup, { hidden: noPageLayout, disabled: noEdit }));
             table.push(cmd('header-footer', 'Header and Footer…', 'file', function () { return editDocumentOptions('furniture'); }, { hidden: noPageLayout, disabled: noEdit }));
             table.push(cmd('typography', 'Typography…', 'paragraph', function () { return editDocumentOptions('typography'); }, { hidden: unformatted, disabled: noEdit }));
@@ -2628,7 +2627,7 @@
             if (startFile && startLine > 1) { await setView(viewMode); await restoreLine(startLine); }
             var initialParams=new URLSearchParams(opts.state || (opts.ownsUrl ? location.search : ''));
             var requestedView = initialParams.get('view') || (!startExisted && current() && initialMode(current(),initialParams.get('initial-view')));
-            if(requestedView){if(supportsView(current(),requestedView))await setView(requestedView);else say('This view is unavailable here. Open the saved document in Docs for visual editing.',true);}
+            if(requestedView){if(supportsView(current(),requestedView))await setView(requestedView);else say('This view is unavailable for this file. Choose a supported view from the toolbar.',true);}
             /* The keyboard goes back where it was: into the text, unless the
                search panel had it, which opening it did. */
             if (snap && snap.focused) { if (!view.dom.contains(document.activeElement)) { view.focus(); } }
@@ -2735,6 +2734,7 @@
             },
             'format@1': async function (input) {
                 docNo(); if (current().readOnly) { throw new Error('The document is read-only.'); }
+                if (current().lang !== 'markdown') { throw new Error('Choose a Markdown document before applying document formatting.'); }
                 if (formatsThePage()) { if (!visual.api.run(input.op)) { throw new Error('This format is unavailable for the selection.'); } await visual.api.sync(); }
                 else { window.yavcMdEditor.textFormat(view, input.op, editCtx()); }
                 return { output: { formatted: true } };
@@ -2793,7 +2793,7 @@
                 return { output: { line: line } };
             }
         };
-        if (!isDocs) ['theme@1','new-template@1','page-setup@1','typography@1','header-footer@1','export@1','print@1','document-zoom@1','table@1','format@1','define@1'].forEach(function (id) {if(liveActions[id])liveActions[id]=async function () {throw new Error('This document action moved to yavc.docs/'+id+'. Open the saved document in Docs.');};});
+        if (!isDocs) ['new-template@1','page-setup@1','header-footer@1','export@1','document-zoom@1'].forEach(function (id) {if(liveActions[id])liveActions[id]=async function () {throw new Error('This document action moved to yavc.docs/'+id+'. Open the saved document in Docs.');};});
         Object.keys(liveActions).forEach(function (id) {var handler=liveActions[id];liveActions[id]=async function (input) {await boot;if(destroyed || startupFailed || !view)throw new Error('This workspace is no longer available.');return handler(input);};});
         if (documentWindows) unbindDocuments = documentWindows.bind(root, {
             application: app, resource: function () {return current() && current().path;},
