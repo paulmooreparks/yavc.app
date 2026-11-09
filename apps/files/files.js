@@ -106,7 +106,7 @@
             commandsChanged();
         }
 
-        function renderDetail() {
+        async function renderDetail() {
             var c = b.selected(), dir = cwd();
             if (!c) {
                 var count = (dir.children || []).length;
@@ -119,7 +119,8 @@
             if (date) { bits.push(FB.fmtDate(date)); }
             if (F.size(c) != null) { bits.push(FB.fmtSize(F.size(c))); }
             if (kind === 'dir') { bits.push((r.children || []).length + ' items'); }
-            var desc = kind === 'script' ? F.scriptSummary(c.name, F.scriptSource(c)) : r.description;
+            var desc = kind === 'script' ? F.scriptSummary(c.name, await F.scriptSource(c).catch(function(){return '';})) : r.description;
+            if(b.selected()!==c||!root.isConnected)return;
             if (kind === 'link') { desc = (desc ? desc + ' · ' : '') + r.url; }
             el.detail.innerHTML =
                 '<span class="fm-d-title">' + FB.glyph(kind) + esc(r.title && !r.home ? r.title : c.name) + '</span>' +

@@ -13,7 +13,7 @@ const action=(p,app,name,input)=>p.evaluate(({app,name,input})=>pudlActions.run(
    await p.waitForFunction(()=>document.querySelector('.xterm-rows')?.textContent.includes('~'));
    const terminal=await action(p,'terminal','run',{command:'touch ~/probe.txt; touch ~/probe.txt; echo queued > ~/probe.txt; cat ~/probe.txt'});
    assert.equal(terminal.status,0);assert.match(terminal.output,/queued/);assert.doesNotMatch(terminal.output,/Promise|touch:/);
-   assert.equal(await p.evaluate(()=>pcSiteFs.readHome(pcSiteFs.resolve(pcSiteFs.home(),'probe.txt'))),'queued\n');
+   assert.equal(await p.evaluate(()=>pcSiteFs.read(pcSiteFs.resolve(pcSiteFs.home(),'probe.txt'))),'queued\n');
    await action(p,'terminal','run',{command:'mkdir ~/working; cd ~/working'});
    const other=await context.newPage();await other.goto(`http://terminal.localhost:${port}/`);await other.evaluate(()=>yavcUtil.siteFs());
    await other.evaluate(async()=>{const F=pcSiteFs;await F.remove(F.resolve(F.home(),'working'),true);await F.write(F.home(),'working','replacement',false);});
@@ -27,9 +27,9 @@ const action=(p,app,name,input)=>p.evaluate(({app,name,input})=>pudlActions.run(
     if(app==='diagrams'){await action(p,app,'new',{kind:'canvas',text:'{"nodes":[],"edges":[]}'});await action(p,app,'save',{path:'~/consumer.canvas'});}
     const name=app==='editor'?'consumer.md':app==='slides'?'consumer.slides.md':'consumer.canvas';
     if(app==='editor'||app==='slides'){await p.waitForFunction(()=>typeof yavcMdEngine==='function');await p.evaluate(()=>yavcMdEngine());}
-    const saved=await p.evaluate(name=>pcSiteFs.readHome(pcSiteFs.resolve(pcSiteFs.home(),name)),name);assert.ok(saved);
+    const saved=await p.evaluate(name=>pcSiteFs.read(pcSiteFs.resolve(pcSiteFs.home(),name)),name);assert.ok(saved);
     await p.reload();await p.waitForFunction(()=>{const save=document.querySelector('.yavc-command-toolbar [data-command="save"]');return save&&!save.disabled;});
-    assert.equal(await p.evaluate(name=>pcSiteFs.readHome(pcSiteFs.resolve(pcSiteFs.home(),name)),name),saved);
+    assert.equal(await p.evaluate(name=>pcSiteFs.read(pcSiteFs.resolve(pcSiteFs.home(),name)),name),saved);
    }
    await p.evaluate(()=>localStorage.setItem('pc-terminal-home',JSON.stringify({files:{'/legacy.md':{t:'f',c:'retained older copy'}}})));
    await p.reload();await p.locator('.site-header .notice.warn').waitFor();

@@ -33,23 +33,14 @@
     if (window.pcSiteFs) { return; }
 
     var HOME_KEY = 'pc-terminal-home';
-    var FILE_MAX = 256 * 1024;
-    var HOME_MAX = 2 * 1024 * 1024;
+    var FILE_MAX = 100 * 1024 * 1024;
+    var HOME_MAX = 1024 * 1024 * 1024;
+    var TEXT_MAX = 10 * 1024 * 1024;
     var SERVER_MAX = 10 * 1024 * 1024;
-    /* A file that is not text, such as a picture, is kept as bytes in the
-       browser's database under an id the home record points to, so the
-       record's 2 MB is not spent on it (DESIGN.md, decision 14). */
-    var BLOB_MAX = 8 * 1024 * 1024, store = null;
-    function blobGet(id) { return store.blobGet(id).then(function (bytes) { if (!bytes) throw new Error('The saved picture is unavailable.'); return bytes; }); }
-    function blobPut(id, bytes) { return store.blobPut(id, bytes); }
-    function blobDel(id) { return store.blobDelete(id).catch(function () { }); }
+    /* Every file's bytes are stored individually; the tree contains metadata. */
+    var BLOB_MAX = FILE_MAX, store = null;
+    function blobGet(id) { return store.blobGet(id).then(function (bytes) { if (!bytes) throw new Error('The saved file contents are unavailable.'); return bytes; }); }
     function newBlobId() { return 'b' + crypto.randomUUID(); }
-    /* The blobs under a node, a file's own or a directory's throughout. */
-    function blobsUnder(n, out) {
-        out = out || [];
-        if (n.children) { n.children.forEach(function (c) { blobsUnder(c, out); }); } else if (n.bin && n.blob) { out.push(n.blob); }
-        return out;
-    }
 
     function meta(name) { var m = document.querySelector('meta[name="' + name + '"]'); return m ? m.getAttribute('content') || '' : ''; }
     /* The admin mount's API, on the edit origin only. */
@@ -71,7 +62,8 @@
                     textCodec = await window.yavcUtil.loadGlobal(window.yavcUtil.versioned('/applets/content-kit/text-codec.js'), 'yavcTextCodec');
                     if (!MOUNT) {
                         store = await window.yavcUtil.loadGlobal(window.yavcUtil.versioned('/static/home-store.js'), 'yavcHomeStore');
-                        home.record = await store.initialize();
+                        home.record = await store.initialize(window.pudlHost && window.pudlHost.guestStorage);
+                        var policy = store.limits(); FILE_MAX=policy.file; BLOB_MAX=policy.file; HOME_MAX=policy.home; TEXT_MAX=policy.text;
                     }
                     root = buildFs(data);
                     if (MOUNT) return mountServer(root);
@@ -227,23 +219,24 @@
        through saves untouched until it has moved to the session. */
     var home = { dir: null, raw: undefined, settingsDir: null, legacy: {}, record: null };
     var mutationQueue = Promise.resolve(), mutationActive = false, refreshPending = false, mutationContext = null;
-    var homeChannel = typeof BroadcastChannel === 'function' ? new BroadcastChannel('yavc-home') : null;
+    var homeChannel = typeof BroadcastChannel === 'function' ? new BroadcastChannel('yavc-vfs') : null;
+    var legacyChannel = typeof BroadcastChannel === 'function' ? new BroadcastChannel('yavc-home') : null;
     function publishHome() {
         if (homeChannel) homeChannel.postMessage('changed');
-        try { localStorage.setItem('yavc-home-change', crypto.randomUUID()); } catch (err) { }
+        try { localStorage.setItem('yavc-vfs-change', crypto.randomUUID()); } catch (err) { }
     }
-    function warnLegacyFork() {
+    async function warnLegacyFork() {
         if (!store || !home.record) return;
         var status;
-        try { status = store.legacyStatus(home.record); } catch (err) { return; }
+        try { status = await store.legacyStatus(home.record); } catch (err) { return; }
         if (status.changed && !document.querySelector('[data-home-fork]')) {
             var ref = document.createElement('div'); ref.setAttribute('data-home-fork', ''); (document.querySelector('.site-header') || document.body).appendChild(ref);
             var notice = window.yavcUtil.notice(ref, 'An older tab changed a separate copy of your files. Close older tabs to prevent further divergence. Both file records are retained in this browser.', 'warn');
             var download = document.createElement('button'); download.type = 'button'; download.className = 'btn'; download.textContent = 'Download File Records';
             download.addEventListener('click', async function () {
                 try {
-                    var record = await store.read(), legacy = store.legacyStatus(record);
-                    window.yavcUtil.download('yavc-file-records.json', new Blob([JSON.stringify({ current: store.parse(record.raw), migrationSource: legacy.original, olderTab: legacy.current })], { type: 'application/json' }));
+                    var record = await store.read(), legacy = await store.legacyStatus(record);
+                    window.yavcUtil.download('yavc-file-records.json', new Blob([JSON.stringify({ current: record.data, migrationSource: legacy.original, olderTab: legacy.current, olderDatabase: legacy.olderDatabase })], { type: 'application/json' }));
                 } catch (err) { window.yavcUtil.notice(ref, err.message, true); }
             });
             if (notice) { var actions = document.createElement('div'); actions.className = 'notice-actions'; actions.appendChild(download); notice.querySelector('.notice-content').appendChild(actions); }
@@ -276,8 +269,9 @@
         return seeding;
     }
     async function applySeed(files) {
-        var record = await store.update(function (current) {
-        var data = store.parse(current.raw);
+        var record = await store.update(async function (current) {
+        var data = store.parse(current.data);
+        await Promise.all(Object.keys(files).concat(['/README']).map(async function(path){var entry=data.files[path];if(entry&&entry.t==='f')entry.c=await store.text(await store.file(path));}));
         var done = data.seeds && typeof data.seeds === 'object' ? data.seeds : {}, changed = false;
         var old = data.files['/README'];
         if (old && old.t === 'f' && String(old.c || '').indexOf('Welcome to your home directory.') === 0) { delete data.files['/README']; changed = true; }
@@ -299,7 +293,9 @@
             }
         });
         data.seeds = done;
-        return changed ? JSON.stringify(data) : current.raw;
+        if(!changed)return current.data;
+        Object.keys(data.files).forEach(function(path){var entry=data.files[path],prior=current.data.files[path];if(entry.t==='f'&&entry.id&&prior&&entry.id===prior.id&&typeof entry.c==='string'&&(!files[path]||entry.c!==files[path].c))delete entry.c;});
+        return data;
         });
         homeLoad(record);
         emit('home');
@@ -336,13 +332,13 @@
         if (childNamed(d, name)) { return; }
         if (e.t === 'd') { mkDirNode(d, name, e.m).revision = e.revision; return; }
         if (e.t === 'b') { d.children.push({ name: name, kind: 'file', home: true, revision: e.revision, bin: true, blob: String(e.id || ''), size: e.s || 0, type: String(e.y || ''), mtime: new Date(e.m || Date.now()), parent: d }); return; }
-        d.children.push({ name: name, kind: 'file', home: true, revision: e.revision, content: String(e.c || ''), mtime: new Date(e.m || Date.now()), parent: d });
+        d.children.push({ name: name, kind: 'file', home: true, revision: e.revision, blob:e.id, size:e.s, mtime: new Date(e.m || Date.now()), parent: d });
     }
 
     function homeLoad(record) {
         if (record && home.record && record.generation < home.record.generation) return;
         home.record = record || home.record;
-        home.raw = home.record.raw;
+        home.raw = home.record.data;
         var data = store.parse(home.raw);
         /* The record of what the site seeded is kept in memory, so a save
            need not read the whole stored record back to keep it
@@ -367,25 +363,25 @@
                 if (c.settings) { return; }
                 if (c.children) { files[p] = { t: 'd', m: +c.mtime }; walk(c, p); }
                 else if (c.bin) { files[p] = { t: 'b', id: c.blob, s: c.size, y: c.type, m: +c.mtime }; }
-                else { files[p] = { t: 'f', c: c.content, m: +c.mtime }; }
+                else { files[p] = { t: 'f', id:c.blob, s:c.size, m: +c.mtime }; if(c.content!==undefined&&(!c.blob||c.content!==c.loadedContent))files[p].c=c.content; }
             });
         })(home.dir, '');
         Object.keys(home.legacy).forEach(function (p) { files[p] = home.legacy[p]; });
-        return JSON.stringify({ seeds: home.seeds || {}, files: files });
+        return { seeds: home.seeds || {}, files: files };
     }
 
     /* Saves the home directory; on failure the stored copy is reloaded so
        what every applet shows matches what the browser kept. */
-    async function homeSave() {
+    async function homeSave(addition) {
         if (MOUNT) { return null; }
-        return persistHome(homeSerialize(), home.record.generation, false, mutationContext);
+        return persistHome(homeSerialize(), home.record.generation, false, mutationContext,addition);
     }
-    async function persistHome(s, generation, rebuild, context) {
+    async function persistHome(s, generation, rebuild, context,addition) {
         try {
-            home.record = await store.commit(generation, s, function () { return operationCurrent(context); }); home.raw = home.record.raw;
+            home.record = await store.commit(generation, s, function () { return operationCurrent(context); },addition); home.raw = home.record.data;
             if (rebuild) homeLoad(home.record);
             var entries = store.parse(home.raw).files;
-            (function revisions(d, prefix) { d.children.forEach(function (n) { if (n.settings) return; var p = prefix + '/' + n.name; n.revision = entries[p].revision; if (n.children) revisions(n, p); }); })(home.dir, '');
+            (function revisions(d, prefix) { d.children.forEach(function (n) { if (n.settings) return; var p = prefix + '/' + n.name,e=entries[p];n.revision=e.revision;if(!n.children){n.blob=e.id;n.size=e.s;if(!n.bin){delete n.content;delete n.loadedContent;}}if (n.children) revisions(n, p); }); })(home.dir, '');
             publishHome(); emit('home'); return null;
         } catch (err) {
             try { homeLoad(await store.read()); } catch (readError) { homeLoad(); }
@@ -408,10 +404,11 @@
     /* A change in another tab reaches this one through the storage event. */
     window.addEventListener('storage', function (e) {
         if (MOUNT) { return; }
-        if (e.key === HOME_KEY || e.key === null) warnLegacyFork();
-        if (e.key === 'yavc-home-change' || e.key === null) homeSync().catch(function () { });
+        if (e.key === HOME_KEY || e.key === 'yavc-home-change' || e.key === null) warnLegacyFork();
+        if (e.key === 'yavc-vfs-change' || e.key === null) homeSync().catch(function () { });
     });
     if (homeChannel) homeChannel.onmessage = function () { homeSync().catch(function () { }); };
+    if (legacyChannel) legacyChannel.onmessage = function () { warnLegacyFork(); };
 
     /* === Settings, ~/.config ==============================================
        An applet's settings are kept by the engine under the reader's
@@ -518,6 +515,7 @@
     async function migrateSettings(have) {
         var paths = Object.keys(home.legacy);
         if (!have || !paths.length) { return; }
+        await Promise.all(paths.map(async function(path){var entry=home.legacy[path];if(entry.t==='f')entry.c=await store.text(await store.file(path));}));
         var keep = {}, old = {}, sent = false;
         for (var i = 0; i < paths.length; i++) {
             var p = paths[i], e = home.legacy[p], rest = p.slice('/.config'.length);
@@ -536,9 +534,9 @@
         }
         var legacy = home.legacy;
         var record = await store.update(function (current) {
-            var data = store.parse(current.raw);
+            var data = store.parse(current.data);
             paths.forEach(function (p) {
-                if (JSON.stringify(data.files[p]) !== JSON.stringify(legacy[p]) || keep[p]) return;
+                if (!data.files[p] || data.files[p].revision !== legacy[p].revision || keep[p]) return;
                 var destination = '/.config-old' + p.slice('/.config'.length);
                 if (old[destination]) {
                     if (data.files[destination]) return;
@@ -546,7 +544,7 @@
                 }
                 delete data.files[p];
             });
-            return JSON.stringify(data);
+            return data;
         });
         homeLoad(record);
         if (sent || Object.keys(old).length) { emit('home'); }
@@ -737,12 +735,12 @@
        text, or a server file's once it has been read. read() fetches it. */
     function readHome(n) {
         if (n.server) { return n.content != null ? n.content : ''; }
-        return n.bin ? '' : n.content;
+        if(n.bin)return '';if(n.content===undefined)throw new Error('Read this file asynchronously through the VFS.');return n.content;
     }
 
     function isServerRoot(n) { return !!n.server && n.rel === ''; }
     function limitFor(n) { return n && n.server ? SERVER_MAX : FILE_MAX; }
-    function limitText(n) { return n && n.server ? '10 MB' : '256 KB'; }
+    function limitText(n) { return n && n.server ? '10 MB' : '100 MiB'; }
 
     /* Writes a file, creating it if need be. Resolves to { error } or { node }. */
     async function touch(base, path) {
@@ -770,17 +768,16 @@
             if (!validName(name)) { return { error: name + ' is not a valid file name' }; }
         }
         if (append && n && n.bin) return {error:path+': cannot append text to a binary file'};
-        var full = append && n ? (n.server ? await serverRead(n) : readHome(n)) + content : content;
+        var full = append && n ? (await read(n)) + content : content;
         if (d.settings) { return settingsPut(d, name, full, path); }
         if (d.server) {
             var bytes = new TextEncoder().encode(full);
             if (bytes.length > SERVER_MAX) { return { error: path + ': too large (the limit is 10 MB)' }; }
             return serverPut(d, name, bytes, path, full);
         }
-        if (full.length > FILE_MAX) { return { error: path + ': too large (the limit is 256 KB)' }; }
+        if (full.length > FILE_MAX) { return { error: path + ': exceeds the text storage limit' }; }
         try { textCodec.encode(full, 'utf-8', {maxBytes:BLOB_MAX,maxText:FILE_MAX}); }
         catch (err) { return {error:path+': '+err.message}; }
-        var was = n && n.bin ? n.blob : null;
         if (n) {
             if (n.bin) { delete n.bin; delete n.blob; delete n.size; delete n.type; }
             n.content = full;
@@ -791,7 +788,6 @@
             sortKids(d);
         }
         var err = await homeSave();
-        if (!err && was) blobDel(was);
         return err ? { error: err } : { node: n };
     }
 
@@ -819,11 +815,9 @@
             if (bytes.byteLength > SERVER_MAX) { return { error: path + ': too large (the limit is 10 MB)' }; }
             return serverPut(d, name, bytes, path, null);
         }
-        if (bytes.byteLength > BLOB_MAX) { return { error: path + ': too large (the limit for a picture is 8 MB)' }; }
+        if (bytes.byteLength > BLOB_MAX) { return { error: path + ': exceeds the file storage limit' }; }
         var id = newBlobId();
-        try { await blobPut(id, bytes); } catch (err) { return { error: path + ': ' + (err && err.message || 'the browser would not store it') }; }
-        if (!operationCurrent(context)) { blobDel(id);return {error:'The import was cancelled before saving.'}; }
-        var was = n && n.bin ? n.blob : null;
+        if (!operationCurrent(context)) { return {error:'The import was cancelled before saving.'}; }
         if (n) {
             delete n.content;
             n.bin = true; n.blob = id; n.size = bytes.byteLength; n.type = type || ''; n.mtime = new Date();
@@ -832,9 +826,8 @@
             d.children.push(n);
             sortKids(d);
         }
-        var err = await homeSave();
-        if (err) { blobDel(id); return { error: err }; }
-        if (was) { blobDel(was); }
+        var err = await homeSave({id:id,bytes:bytes});
+        if (err) { return { error: err }; }
         return { node: n };
     }
 
@@ -854,7 +847,7 @@
             return serverPut(dir, file.name, file, file.name, null);
         }
         var binary = /^(image|audio|video|font)\//.test(file.type) || /^application\/(pdf|zip|octet-stream)/.test(file.type);
-        if (file.size > BLOB_MAX) return {error:file.name+' is larger than the 8 MB upload limit.'};
+        if (file.size > BLOB_MAX) return {error:file.name+' exceeds the file storage limit.'};
         if (!binary && file.size <= FILE_MAX) {
             var raw = await file.arrayBuffer(), decoded;
             if(!operationCurrent(context))return {error:'The import was cancelled before saving.'};
@@ -872,7 +865,7 @@
         if (context && (context.signal && context.signal.aborted || context.current && !context.current())) return { error: 'The document changed before Import. Choose the file again.' };
         if (!dir.home || !dir.children || dir.server || dir.settings) return { error: 'Import into your browser home (~). This destination does not support conditional creation.' };
         if (childNamed(dir, file.name)) return { error: file.name + ' already exists. Choose a different name.' };
-        if(file.size>BLOB_MAX)return {error:file.name+' is larger than the 8 MB import limit.'};
+        if(file.size>BLOB_MAX)return {error:file.name+' exceeds the file storage limit.'};
         return upload(dir, file,context);
     }
 
@@ -947,10 +940,8 @@
             changed(n.server);
             return null;
         }
-        var gone = blobsUnder(n);
         n.parent.children.splice(n.parent.children.indexOf(n), 1);
         var saved = await homeSave();
-        if (!saved) { gone.forEach(blobDel); }
         return saved;
     }
 
@@ -1006,7 +997,7 @@
         }
         if (n.server || parent.server) {
             if (n.children) { return label + ': a directory can\'t be moved between ~ and /wwwroot; move its files one at a time'; }
-            var body = n.server ? await serverBytes(n) : n.bin ? (await blobGet(n.blob) || new ArrayBuffer(0)) : new TextEncoder().encode(readHome(n));
+            var body = n.server ? await serverBytes(n) : n.bin ? (await blobGet(n.blob) || new ArrayBuffer(0)) : new TextEncoder().encode(await read(n));
             var put = parent.server
                 ? await serverPut(parent, name, body, label, null)
                 : (n.bin || !isText(n))
@@ -1052,7 +1043,13 @@
         var r = realOf(n);
         if (r.bin) { return Promise.reject(new Error(r.name + ' is not a text file')); }
         if (r.server) { return serverRead(r); }
-        if (r.home) { return Promise.resolve(readHome(r)); }
+        if (r.home) {
+            if(r.settings)return Promise.resolve(readHome(r));
+            return store.file(displayPath(r).slice(1)).then(async function(snapshot){
+                if(snapshot.entry.t!=='f')throw new Error(r.name+' is not a text file');
+                return store.text(snapshot);
+            });
+        }
         if (r.kind === 'script' || r.kind === 'command') { return Promise.resolve(r.source || ''); }
         if (r.kind === 'link') {
             return Promise.resolve(r.title + '\n' + r.url + '\n' + (r.description ? '\n' + r.description + '\n' : ''));
@@ -1077,7 +1074,7 @@
     /* Something that runs by name: an applet or a script. */
     function isRunnable(n) { return !!n && !n.children && (realOf(n).kind === 'app' || isScript(n)); }
 
-    function scriptSource(n) { var r = realOf(n); return r.home ? readHome(r) : (r.source || ''); }
+    function scriptSource(n) { return read(n); }
 
     /* The summary is the first comment line, # in the terminal's own scripts
        and the shell's, -- in Lua's, less a leading "name:", where the name
@@ -1113,7 +1110,7 @@
         if (r.children) { return null; }
         if (r.server) { return r.size; }
         if (r.bin) { return r.size; }
-        return r.home ? readHome(r).length : null;
+        return r.home ? (r.size===undefined?new Blob([r.content||'']).size:r.size) : null;
     }
 
     /* Where a node can be seen on the public site: a page at its own
@@ -1195,67 +1192,45 @@
         if (MOUNT) throw new Error('The server mount does not support conditional resource saves.');
         return resource.slice(1);
     }
-    var contentBytes = Object.freeze({version:1,read:function (request, context) {
-        var resource = request.resource, maximum = request.maxBytes;
-        if (!Number.isSafeInteger(maximum) || maximum < 1 || maximum > BLOB_MAX) return Promise.reject(new Error('Invalid byte read limit.'));
-        return queued(async function () {
-            if (!operationCurrent(context)) throw new Error('The byte read was cancelled.');
-            var path = resourcePath(resource), record = await store.read(), entry = store.parse(record.raw).files[path];
-            if (!entry || !['f','b'].includes(entry.t)) throw new Error('The byte resource does not exist.');
-            var value;
-            if (entry.t === 'b') {
-                if (entry.s > maximum) throw new Error('The byte resource exceeds the read limit.');
-                value = await blobGet(entry.id);
-                if (value.byteLength !== entry.s) throw new Error('The saved bytes are incomplete.');
-            } else value = textCodec.encode(entry.c, 'utf-8', {maxBytes:maximum,maxText:FILE_MAX});
-            if (!operationCurrent(context)) throw new Error('The byte read was cancelled.');
-            if (value.byteLength > maximum) throw new Error('The byte resource exceeds the read limit.');
-            return {resource:resource,revision:entry.revision,bytes:value instanceof ArrayBuffer ? value.slice(0) : value.buffer.slice(value.byteOffset,value.byteOffset+value.byteLength),name:path.slice(path.lastIndexOf('/')+1),mediaType:entry.t==='b' ? entry.y || '' : ''};
+    var contentBytes=Object.freeze({version:1,read:function(request,context){
+        var resource=request.resource,maximum=request.maxBytes;
+        if(!Number.isSafeInteger(maximum)||maximum<1||maximum>BLOB_MAX)return Promise.reject(new Error('Invalid byte read limit.'));
+        return queued(async function(){
+            if(!operationCurrent(context))throw new Error('The byte read was cancelled.');
+            var snapshot=await store.file(resourcePath(resource));if(snapshot.entry.s>maximum)throw new Error('The byte resource exceeds the read limit.');
+            var bytes=await snapshot.blob.arrayBuffer();if(!operationCurrent(context))throw new Error('The byte read was cancelled.');
+            return {resource:resource,revision:snapshot.entry.revision,bytes:bytes,name:resource.slice(resource.lastIndexOf('/')+1),mediaType:snapshot.entry.y||''};
         });
     }});
     function textFormat(request){
         var encoding=request.encoding===undefined?'utf-8':request.encoding,bom=request.bom===undefined?false:request.bom;
-        if(!['utf-8','utf-16le','utf-16be'].includes(encoding)||typeof bom!=='boolean'||encoding!=='utf-8'&&!bom)throw new Error('Choose UTF-8 or signed UTF-16LE/BE source.');
-        return {encoding:encoding,bom:bom};
+        if(!['utf-8','utf-16le','utf-16be'].includes(encoding)||typeof bom!=='boolean'||encoding!=='utf-8'&&!bom)throw new Error('Choose UTF-8 or signed UTF-16LE/BE source.');return {encoding:encoding,bom:bom};
     }
+    function editable(text){if(text.length>TEXT_MAX||new Blob([text]).size>TEXT_MAX)throw new Error('The source exceeds the '+Math.floor(TEXT_MAX/1048576)+' MiB editing limit. It can still be stored and downloaded.');}
     function encodedSource(request){
-        if(typeof request.text!=='string'||request.text.length>FILE_MAX)throw new Error('The resource exceeds the 256 KB text limit.');
-        var format=textFormat(request),raw=(format.bom?'\ufeff':'')+request.text,bytes=textCodec.encode(raw,format.encoding,{maxBytes:BLOB_MAX,maxText:FILE_MAX+1}),decoded=textCodec.decode(bytes,{maxBytes:BLOB_MAX,maxText:FILE_MAX+1});
-        if(decoded.encoding!==format.encoding||decoded.bom!==format.bom||(decoded.bom?decoded.text.slice(1):decoded.text)!==request.text)throw new Error('The selected encoding cannot retain this leading signature as source. Save an encoded copy with a signature.');
-        return {format:format,raw:raw,bytes:bytes};
+        if(typeof request.text!=='string')throw new Error('Invalid source text.');editable(request.text);
+        var format=textFormat(request),raw=(format.bom?'\ufeff':'')+request.text,bytes=textCodec.encode(raw,format.encoding,{maxBytes:BLOB_MAX,maxText:TEXT_MAX+1}),decoded=textCodec.decode(bytes,{maxBytes:BLOB_MAX,maxText:TEXT_MAX+1});
+        if(decoded.encoding!==format.encoding||decoded.bom!==format.bom||(decoded.bom?decoded.text.slice(1):decoded.text)!==request.text)throw new Error('The selected encoding cannot retain this leading signature as source. Save an encoded copy with a signature.');return {format:format,bytes:bytes};
     }
-    async function decodedEntry(entry){
-        if(!entry||!['f','b'].includes(entry.t))throw new Error('The text resource does not exist.');
-        if(entry.t==='b'&&entry.s>BLOB_MAX)throw new Error('The source bytes exceed the read limit.');
-        var bytes=entry.t==='b'?new Uint8Array(await blobGet(entry.id)):textCodec.encode(entry.c,'utf-8',{maxBytes:BLOB_MAX,maxText:FILE_MAX+1});
-        if(entry.t==='b'&&bytes.byteLength!==entry.s)throw new Error('The saved source bytes are incomplete.');
-        var decoded=textCodec.decode(bytes,{maxBytes:BLOB_MAX,maxText:FILE_MAX+1}),body=decoded.bom?decoded.text.slice(1):decoded.text;
-        if(body.length>FILE_MAX)throw new Error('The resource exceeds the 256 KB text limit.');
-        return {text:body,encoding:decoded.encoding,bom:decoded.bom};
+    async function decodedEntry(snapshot){
+        if(snapshot.entry.s>Math.min(BLOB_MAX,TEXT_MAX*2+2))throw new Error('The source exceeds the editing limit. It can still be stored and downloaded.');
+        var decoded;try{decoded=textCodec.decode(await snapshot.blob.arrayBuffer(),{maxBytes:BLOB_MAX,maxText:TEXT_MAX+1});}catch(error){if(/limit/.test(error.message))throw new Error('The source exceeds the editing limit. It can still be stored and downloaded.');throw error;}
+        var body=decoded.bom?decoded.text.slice(1):decoded.text;editable(body);return {text:body,encoding:decoded.encoding,bom:decoded.bom};
     }
     async function saveEncoded(request,context,creating){
-        var resource=request.resource,path=resourcePath(resource),source=encodedSource(request),id=source.format.encoding==='utf-8'?null:newBlobId(),previous=null;
+        var resource=request.resource,path=resourcePath(resource),source=encodedSource(request);
         if(!creating&&(typeof request.expectedRevision!=='string'||!request.expectedRevision||request.expectedRevision.length>4096))throw new Error('A baseline revision is required.');
-        var record=await store.update(function(current){
-            if(!operationCurrent(context))throw new DOMException('The save was cancelled.','AbortError');
-            var data=store.parse(current.raw),entry=data.files[path],parent=path.slice(0,path.lastIndexOf('/'));
-            if(creating){if(entry)throw new Error('The destination already exists. Choose it again before replacing it.');if(parent&&(!data.files[parent]||data.files[parent].t!=='d')&&!Object.keys(data.files).some(function(key){return key.startsWith(parent+'/');}))throw new Error('The destination folder no longer exists.');}
-            else if(!entry||!['f','b'].includes(entry.t)||entry.revision!==request.expectedRevision)throw new Error('The file changed or was deleted. Your text was not saved.');
-            if(entry&&entry.t==='b')previous=entry.id;
-            if(!id&&entry&&entry.t==='f'&&entry.c===source.raw)return current.raw;
-            data.files[path]=id?{t:'b',id:id,s:source.bytes.byteLength,y:'text/plain;charset='+source.format.encoding,m:Date.now()}:{t:'f',c:source.raw,m:Date.now()};
-            return JSON.stringify(data);
-        },id?{id:id,bytes:source.bytes}:undefined);
-        homeLoad(record);publishHome();emit('home');if(previous&&previous!==id)blobDel(previous);
-        return Object.assign({resource:resource,revision:store.parse(record.raw).files[path].revision,writable:true,name:path.slice(path.lastIndexOf('/')+1)},source.format);
+        var type=source.format.encoding==='utf-8'?{t:'f'}:{t:'b',y:'text/plain;charset='+source.format.encoding};
+        var record=await store.put(path,new Blob([source.bytes]),type,creating?null:request.expectedRevision,function(){return operationCurrent(context);});
+        homeLoad(record);publishHome();emit('home');return Object.assign({resource:resource,revision:record.data.files[path].revision,writable:true,name:path.slice(path.lastIndexOf('/')+1)},source.format);
     }
     var contentResources = Object.freeze({
         version: 2,
         read: function (request) {
             request = { resource: request.resource };
             return queued(async function () {
-                var path = resourcePath(request.resource), record = await store.read(), entry = store.parse(record.raw).files[path];
-                var decoded=await decodedEntry(entry);
+                var path = resourcePath(request.resource), snapshot = await store.file(path), entry=snapshot.entry;
+                var decoded=await decodedEntry(snapshot);
                 return Object.assign({ resource: request.resource, revision: entry.revision, writable: true, name: path.slice(path.lastIndexOf('/') + 1) },decoded);
             });
         },
@@ -1283,7 +1258,7 @@
         kindOf: kindOf,
         size: size,
         read: read,
-        readHome: readHome,
+        readHome: read,
         write: mutation(write, [0], true),
         touch: mutation(touch, [0], false),
         writeBytes: mutation(writeBytes, [0], true),
@@ -1311,7 +1286,7 @@
         publicUrl: publicUrl,
         sourceOf: sourceOf,
         isText: isText,
-        readBytes: function (n) { var r = realOf(n); return r.server ? serverBytes(r) : r.bin ? blobGet(r.blob).then(function (b) { return b || new ArrayBuffer(0); }) : Promise.resolve(new TextEncoder().encode(readHome(r)).buffer); },
+        readBytes: function (n) { var r=realOf(n);return r.server?serverBytes(r):r.settings?Promise.resolve(new TextEncoder().encode(readHome(r)).buffer):store.file(displayPath(r).slice(1)).then(function(snapshot){return snapshot.blob.arrayBuffer();}); },
         /* The media type a file was uploaded with, for a picture. */
         typeOf: function (n) { var r = realOf(n); return r.bin ? r.type || '' : ''; },
         limitFor: limitFor,
@@ -1323,7 +1298,8 @@
         scriptSummary: scriptSummary,
         defineCommands: defineCommands,
         upgradePath: upgradePath,
-        limits: { file: FILE_MAX, home: HOME_MAX, blob: BLOB_MAX },
+        get limits() { return {file:FILE_MAX,home:HOME_MAX,blob:BLOB_MAX,text:TEXT_MAX}; },
+        usage: function(){if(!store)return Promise.reject(new Error('Storage usage is unavailable for this mount.'));return store.read().then(function(record){return {used:record.used,limit:HOME_MAX};});},
         onChange: function (fn) {
             var h = function (e) { fn(e.detail || {}); };
             document.addEventListener('pc:fs-change', h);

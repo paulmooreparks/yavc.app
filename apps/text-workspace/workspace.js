@@ -189,7 +189,7 @@
             if (current() === t) { view.dispatch({ effects: effects }); if (!preserveRich && viewMode !== 'text') return setView(viewMode); }
             else t.state = t.state.update({ effects: effects }).state;
         }
-        var wrapComp = null, langComp = null, lintComp = null, roComp = null, keyComp = null, lspComp = null, lsp = null;
+        var wrapComp = null, longLineField = null, wrapQueued = false, langComp = null, lintComp = null, roComp = null, keyComp = null, lspComp = null, lsp = null;
         var startFile = fileFrom(opts.state) || (opts.ownsUrl ? fileFrom(location.search) : null);
         var startLine = Number(new URLSearchParams(opts.state || (opts.ownsUrl ? location.search : '')).get('line')) || 1;
 
@@ -358,10 +358,17 @@
         function languageAssistance(tab) {
             return lsp && ['json','css','html'].indexOf(tab.lang) >= 0 ? lsp.extension(/\.canvas$/i.test(tab.path || tab.name) ? 'canvas' : tab.lang, !!tab.readOnly) : [];
         }
+        var WRAP_LINE_LIMIT=65536;
+        function rawLongLine(text){var count=0;for(var i=0;i<text.length;i++){if(text[i]==='\r'||text[i]==='\n')count=0;else if(++count>WRAP_LINE_LIMIT)return true;}return false;}
+        function docLongLine(doc){var lines=doc.iterLines();while(!lines.next().done)if(lines.value.length>WRAP_LINE_LIMIT)return true;return false;}
+        function longLinesActive(){return !!(view&&longLineField&&view.state.field(longLineField,false));}
+        function refreshWrap(){
+            if(wrapQueued)return;wrapQueued=true;Promise.resolve().then(function(){wrapQueued=false;if(destroyed||!view)return;view.dispatch({effects:wrapComp.reconfigure(wrapOn&&!longLinesActive()?CM.EditorView.lineWrapping:[])});commandsChanged();});
+        }
         function extensionsFor(tab,raw) {
             return [
                     CM.lineNumbers(), CM.highlightActiveLineGutter(), CM.highlightSpecialChars(),
-                    sourceHistory.extension(raw), CM.drawSelection(), CM.dropCursor(), CM.indentOnInput(),
+                    sourceHistory.extension(raw), longLineField, CM.drawSelection(), CM.dropCursor(), CM.indentOnInput(),
                     hostSuggestions?hostSuggestions.extension:[],
                     CM.bracketMatching(), CM.closeBrackets(), CM.rectangularSelection(), CM.crosshairCursor(),
                     CM.highlightActiveLine(), CM.highlightSelectionMatches(),
@@ -374,7 +381,7 @@
                         [{key:'Mod-z',run:function(v){return sourceHistory.run('undo',v);}},{key:'Mod-y',run:function(v){return sourceHistory.run('redo',v);}},{key:'Mod-Shift-z',run:function(v){return sourceHistory.run('redo',v);}}],CM.closeBracketsKeymap, CM.defaultKeymap, CM.searchKeymap, CM.lintKeymap, [CM.indentWithTab])),
                     window.yavcMdEditor.codeSearch(CM, keepQuery),
                     makeTheme(CM),
-                    wrapComp.of(wrapOn ? CM.EditorView.lineWrapping : []),
+                    wrapComp.of(wrapOn&&!rawLongLine(raw) ? CM.EditorView.lineWrapping : []),
                     langComp.of(langExtension(tab.lang)),
                     lintComp.of(lintExtension(tab)),
                     lspComp.of(languageAssistance(tab)),
@@ -382,6 +389,7 @@
                     CM.EditorState.transactionFilter.of(function (tr) { return tr.docChanged && tab.readOnly ? [] : tr; }),
                     CM.EditorView.contentAttributes.of({ 'aria-label': 'Text of ' + tab.name }),
                     CM.EditorView.updateListener.of(function (u) {
+                        if(u.docChanged&&u.startState.field(longLineField)!==u.state.field(longLineField))refreshWrap();
                         if(hostSuggestions&&tabs[active]===tab)hostSuggestions.update(u);
                         if (u.docChanged && tabs[active] === tab) { markModified(tab); scheduleStyles(); scheduleOutline(); }
                         /* In Split, the page follows the text. */
@@ -1146,8 +1154,9 @@
             commandsChanged();
         }
         function setWrap(on, keepIt) {
+            if(keepIt&&longLinesActive()){say('Line wrapping is unavailable while a line exceeds 65,536 characters.',true);return;}
             wrapOn = !!on;
-            if (view) { view.dispatch({ effects: wrapComp.reconfigure(wrapOn ? CM.EditorView.lineWrapping : []) }); }
+            if (view) { view.dispatch({ effects: wrapComp.reconfigure(wrapOn&&!longLinesActive() ? CM.EditorView.lineWrapping : []) }); }
             if (keepIt) { saveSetting({ wrap: wrapOn }); }
             commandsChanged();
         }
@@ -1860,7 +1869,8 @@
                     F.read(r).then(function (text) { t.mtime = +r.mtime; takeOutside(t, tabs.indexOf(t), text); renderTabs(); }).catch(function () { });
                     return;
                 }
-                takeOutside(t, i, F.readHome(r));
+                var revision=r.revision;
+                F.read(r).then(function(text){var current=F.resolve(F.home(),t.path);if(tabs.indexOf(t)<0||!current||current.revision!==revision)return;takeOutside(t,tabs.indexOf(t),text);renderTabs();}).catch(function(){});
             });
             renderTabs();
         }
@@ -2427,7 +2437,7 @@
                 cmd('json-format', 'Format Source', 'code', function () { if (lsp) { lsp.format(view); } }, { shortcut: 'Shift+Alt+F', hidden: function () { return isDocs || !tab || ['json','css','html'].indexOf(tab.lang) < 0; }, disabled: function () { return !editable || !lsp; } }),
                 cmd('language-restart', 'Restart Language Assistance', 'reload', function () { if (lsp) { lsp.restart(); view.dispatch({ effects: lspComp.reconfigure(languageAssistance(current())) }); } }, { hidden: function () { return isDocs || !tab || ['json','css','html'].indexOf(tab.lang) < 0; }, disabled: function () { return !ready || !lsp; } }),
                 cmd('go-to-line', 'Go to Line…', null, goToLine, { builtIn: 'Mod-Alt-g' }),
-                cmd('toggle-wrap', 'Wrap Lines', 'yavc-wrap', function () { setWrap(!wrapOn, true); }, { checked: function () { return wrapOn; } }),
+                cmd('toggle-wrap', 'Wrap Lines', 'yavc-wrap', function () { setWrap(!wrapOn, true); }, { checked: function () { return wrapOn&&!longLinesActive(); },disabled:function(){return !ready||longLinesActive();},reason:'Line wrapping is unavailable while a line exceeds 65,536 characters.' }),
                 cmd('insert-timestamp', 'Insert Date and Time', null, COMMANDS['insert-timestamp'], { disabled: function () { return !ready || !editable; } }),
                 cmd('insert-date', 'Insert Date', null, COMMANDS['insert-date'], { disabled: function () { return !ready || !editable; } }),
                 cmd('stamp-modified', 'Update Last-Modified', null, stampModified, { disabled: function () { return !ready || !editable; } }),
@@ -2593,6 +2603,9 @@
             setupExplorer();
             setupExplorerSplit();
             wrapComp = new CM.Compartment(); langComp = new CM.Compartment(); lintComp = new CM.Compartment(); roComp = new CM.Compartment();
+            longLineField=CM.StateField.define({create:function(state){return docLongLine(state.doc);},update:function(value,tr){
+                if(!tr.docChanged)return value;var found=false;tr.changes.iterChangedRanges(function(a,b,from,to){for(var at=from;at<=to;){var line=tr.newDoc.lineAt(at);if(line.length>WRAP_LINE_LIMIT){found=true;break;}if(line.to>=to)break;at=line.to+1;}});return found||value&&docLongLine(tr.newDoc);
+            }});
             keyComp = new CM.Compartment();
             view = new CM.EditorView({ parent: el.surface });
             view.scrollDOM.addEventListener('scroll', keep, { passive: true });

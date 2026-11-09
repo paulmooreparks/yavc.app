@@ -808,3 +808,15 @@ Sandboxed Firefox attempts crashed or failed to create a page, and a released-ba
 
 The adapter contract and Dinah handoff describe resource resolution, subscription lifetime, decision reconciliation and remaining native wiring. Synthetic host proof does not establish production Dinah endpoint or proposal-store integration.
 
+# Per-file guest storage, 2026-11-10
+
+The guest VFS now stores directory metadata separately from each file's immutable bytes. Text no longer occupies a whole-home JSON document. Directory loading does not fetch file contents. A normal conditional save writes one file entry, one replacement content record and the compact usage header. Retained migration source is an immutable separate state record, so normal saves do not rewrite it. New-authority notifications also avoid rereading the old whole-home authority. Tree edits still compare their captured generation.
+
+Defaults allow 100 MiB per stored file, 1 GiB of live contents and 10 MiB of editable source. Quotas measure bytes, including binary contents. Smaller synthetic policies verify multibyte and total-cap boundaries. Real IndexedDB tests cover both migration sources, exact Unicode/BOM/newlines, unchanged unrelated content identifiers, competing writes, create collisions, cancellation, old-source divergence, cleanup and an injected disk-quota failure that preserves the previous file and counters. The old databases and localStorage remain unchanged. Browser quota and retained migration copies remain separate physical-storage constraints.
+
+The direct Blob representation initially failed in the owned Windows WebKit runtime with an explicit serialization error. All engines now use documented ArrayBuffer records with a Blob read facade; no runtime-specific format branch remains. A WebKit navigation timeout during an earlier consumer attempt did not recur in the passing refreshed-server suite. The ordinary applet save/reload and source-byte proofs pass Chromium, Firefox and WebKit.
+
+Actual 9 MiB source editing and saving, an 11 MiB stored/downloadable file beyond the editing budget, UTF-16 preservation and metadata-only loading pass all three engines. A pathological 9 MiB single line initially stalled WebKit with soft wrapping. Source lines over 65,536 code units now disable wrapping in every engine without changing the saved preference. The regression verifies large-line typing/save, deletion, Undo and wrapping restoration for an ordinary document. Command-notification regressions remain green. Source-only PUDL review found no remaining issue in Files' asynchronous script summary or the limit messages. The full repository gate remains required before commit.
+
+The account-storage proposal records current primary-source prices, the documented 2 GB/50 GB deployment, free and paid quota proposals, provisional expansion costs and the unmeasured capacity boundary. It introduces no account service or production infrastructure change.
+

@@ -19,6 +19,6 @@ test('legacy Editor drafts and waiting records receive the same recovery limits'
  assert.throws(()=>session.validate({tabs:[null]}),/invalid/);
  assert.throws(()=>session.validate({tabs:[],waiting:{}}),/invalid/);
  assert.throws(()=>session.validate({version:3,tabs:[]}),/unsupported/);
- assert.throws(()=>session.validate({tabs:[],waiting:[{path:'~/a',draft:'x'.repeat(4*1024*1024+1)}]}),/limit/);
+ assert.throws(()=>session.validate({tabs:[],waiting:[{path:'~/a',draft:'x'.repeat(10*1024*1024+1)}]}),/limit/);
  assert.throws(()=>session.validate({version:2,tabs:[{path:'~/a',baseline:{version:1,resource:'~/b',revision:'old'}}]}),/another resource/);
 });

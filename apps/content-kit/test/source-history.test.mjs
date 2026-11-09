@@ -62,8 +62,8 @@ test('canonical-equal edits retain changed raw endings, while an identical repla
 });
 test('live history trims its aggregate memory while retaining current provenance',()=>{
     const {h,view}=fixture('x\n'.repeat(131072));
-    for(let i=0;i<40;i++)view.dispatch({changes:{from:0,insert:String(i%10)},annotations:CM.isolateHistory.of('full')});
-    assert.ok(h.retainedBytes(view.state)<=h.budget);assert.ok(view.state.field(h.field).done.length<40);
+    for(let i=0;i<80;i++)view.dispatch({changes:{from:0,insert:String(i%10)},annotations:CM.isolateHistory.of('full')});
+    assert.ok(h.retainedBytes(view.state)<=h.budget);assert.ok(view.state.field(h.field).done.length<80);
     assert.equal(h.endings(view.state),'L'.repeat(131072));const raw=h.raw(view.state),json=view.state.toJSON({sourceHistory:h.field});
     view.state=CM.EditorState.fromJSON(JSON.parse(JSON.stringify(json)),{extensions:h.extension('')},{sourceHistory:h.field});assert.equal(h.raw(view.state),raw);
 });

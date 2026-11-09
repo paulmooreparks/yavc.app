@@ -41,10 +41,16 @@ async function run(engine, base) {
         assert.deepEqual(await a.evaluate(async()=>Array.from(new Uint8Array(await pcSiteFs.readBytes(pcSiteFs.resolve(pcSiteFs.home(),'picture.png'))))),[1,2,3]);
         const read = p=>p.evaluate(()=>pcSiteFs.contentResources.read({resource:'~/note.md'}));
         const first=await read(a), stale=await read(b);
+        const isolated=await a.evaluate(async()=>{
+            const F=pcSiteFs,created=await F.contentResources.create({resource:'~/metadata-proof',text:'a'}),methods={},writes=[],contentReads=[];
+            for(const method of ['put','add','delete','get','getAll']){methods[method]=IDBObjectStore.prototype[method];IDBObjectStore.prototype[method]=function(){if(['put','add','delete'].includes(method))writes.push([this.transaction.db.name,this.name,method,arguments[1]===undefined?arguments[0]:arguments[1]]);if(this.name==='contents'&&['get','getAll'].includes(method))contentReads.push([method,arguments[0]]);return methods[method].apply(this,arguments);};}
+            try{await F.contentResources.write({resource:'~/metadata-proof',expectedRevision:created.revision,text:'b'});}finally{for(const method of Object.keys(methods))IDBObjectStore.prototype[method]=methods[method];}
+            return {entries:writes.filter(row=>row[1]==='entries').map(row=>row[3]),contents:writes.filter(row=>row[1]==='contents'&&row[2]==='add').length,oldAccess:writes.some(row=>row[0]!=='yavc-vfs'),contentReads};
+        });assert.deepEqual(isolated.entries,['/metadata-proof']);assert.equal(isolated.contents,1);assert.equal(isolated.oldAccess,false);assert.equal(isolated.contentReads.length,1);assert.equal(isolated.contentReads[0][0],'get');
         const before=await a.evaluate(()=>yavcHomeStore.read());
         const commits=await Promise.all([a,b].map((p,i)=>p.evaluate(async({before,i})=>{
-            const data=JSON.parse(before.raw);data.files['/transaction-'+i]={t:'f',c:String(i),m:1};
-            try{await yavcHomeStore.commit(before.generation,JSON.stringify(data));return 'saved';}catch(e){return e.message;}
+            const data=structuredClone(before.data);data.files['/transaction-'+i]={t:'f',c:String(i),m:1};
+            try{await yavcHomeStore.commit(before.generation,data);return 'saved';}catch(e){return e.message;}
         },{before,i})));
         assert.equal(commits.filter(r=>r==='saved').length,1);
         assert.equal(commits.filter(r=>/changed/.test(r)).length,1);
@@ -60,7 +66,7 @@ async function run(engine, base) {
         assert.match(await a.evaluate(async()=>{try{await pcSiteFs.contentResources.create({resource:'~/absent/new.md',text:'lost'});}catch(e){return e.message;}}),/folder/);
         const results=await Promise.all([a.evaluate(()=>pcSiteFs.write(pcSiteFs.home(),'a.md','A',false)),b.evaluate(()=>pcSiteFs.write(pcSiteFs.home(),'b.md','B',false))]);
         // Conflicts can be returned, but acknowledged writes must survive.
-        const texts=await a.evaluate(async()=>{await pcSiteFs.sync();return ['a.md','b.md'].map(p=>{const n=pcSiteFs.resolve(pcSiteFs.home(),p);return n&&pcSiteFs.readHome(n);});});
+        const texts=await a.evaluate(async()=>{await pcSiteFs.sync();return Promise.all(['a.md','b.md'].map(p=>{const n=pcSiteFs.resolve(pcSiteFs.home(),p);return n&&pcSiteFs.read(n);}));});
         results.forEach((r,i)=>{if(!r.error)assert.equal(texts[i],i?'B':'A');});
         assert.ok(results.some(r=>!r.error));
         assert.equal((await read(a)).text,'accepted');
@@ -72,7 +78,7 @@ async function run(engine, base) {
         assert.match(await a.evaluate(async()=>{try{await pcSiteFs.contentResources.read({resource:'~/../escape'});}catch(e){return e.message;}}),/canonical/);
         const queued=await a.evaluate(async()=>{
             const F=pcSiteFs;
-            return Promise.all([F.write(F.home(),'queue-one','1',false),F.write(F.home(),'queue-two','2',false)]).then(rs=>rs.map(r=>r.error||F.readHome(r.node)));
+            return Promise.all([F.write(F.home(),'queue-one','1',false),F.write(F.home(),'queue-two','2',false)]).then(rs=>Promise.all(rs.map(r=>r.error||F.readHome(r.node))));
         }); assert.deepEqual(queued,['1','2']);
         assert.equal(await a.evaluate(()=>pcSiteFs.touch(pcSiteFs.home(),'queue-one')),null);
         const tree=await a.evaluate(async()=>{
@@ -80,17 +86,17 @@ async function run(engine, base) {
             const n=F.resolve(F.home(),'folder/nested');errors.push((await F.write(n,'one','one',false)).error||null);
             errors.push((await F.copy(n,F.resolve(n,'one'),'two')).error||null);
             errors.push(await F.move(n,F.resolve(n,'two'),'three'));
-            const text=F.readHome(F.resolve(n,'three'));errors.push(await F.remove(F.resolve(F.home(),'folder'),true));
+            const text=await F.read(F.resolve(n,'three'));errors.push(await F.remove(F.resolve(F.home(),'folder'),true));
             return {errors,text};
         });assert.deepEqual(tree,{errors:[null,null,null,null,null],text:'one'});
         assert.equal(await a.evaluate(async()=>{
             const F=pcSiteFs,n=F.resolve(F.home(),'queue-one');n.content='captured tree';
             const saved=F.save();n.content='later tree';const error=await saved;
-            if(error)throw new Error(error);return F.readHome(F.resolve(F.home(),'queue-one'));
+            if(error)throw new Error(error);return F.read(F.resolve(F.home(),'queue-one'));
         }),'captured tree');
-        assert.match((await a.evaluate(()=>pcSiteFs.write(pcSiteFs.home(),'large.md','x'.repeat(262145),false))).error,/too large/);
+        assert.equal((await a.evaluate(()=>pcSiteFs.write(pcSiteFs.home(),'large.md','x'.repeat(262145),false))).error,undefined);
         assert.equal(await a.evaluate(()=>pcSiteFs.remove(pcSiteFs.resolve(pcSiteFs.home(),'picture.png'),false)),null);
-        assert.deepEqual(await a.evaluate(async()=>Array.from(new Uint8Array(await yavcHomeStore.blobGet('original-picture')))),[1,2,3]);
+        assert.equal(await a.evaluate(()=>yavcHomeStore.blobGet('original-picture')),undefined);
         await a.evaluate(async()=>{
             const F=pcSiteFs; await F.writeBytes(F.home(),'new-picture',new Uint8Array([4,5]).buffer,'image/png');
             window.deletedBlob=F.resolve(F.home(),'new-picture').blob;
@@ -102,7 +108,7 @@ async function run(engine, base) {
         assert.equal((await read(a)).text,'accepted');
         await a.reload(); await a.evaluate(()=>pcSiteFs.load());
         assert.equal((await read(a)).text,'accepted');
-        assert.equal(await a.evaluate(()=>pcSiteFs.readHome(pcSiteFs.resolve(pcSiteFs.home(),'seed.md'))),'seed');
+        assert.equal(await a.evaluate(()=>pcSiteFs.read(pcSiteFs.resolve(pcSiteFs.home(),'seed.md'))),'seed');
         assert.deepEqual(errors,[]);
         // A malformed source is retained, and cannot become an empty home.
         const bad=await browser.newContext(), p=await bad.newPage(); await p.goto(base);await p.waitForFunction(()=>!!window.pcSiteFs);
@@ -122,15 +128,43 @@ async function run(engine, base) {
         });
         await q.evaluate(()=>pcSiteFs.load());
         assert.equal(await q.evaluate(()=>localStorage.getItem('pc-terminal-home').length),2097151);
-        const rejected=await q.evaluate(async()=>{
-            const before=await yavcHomeStore.read();
-            try{await yavcHomeStore.update(r=>{const d=JSON.parse(r.raw);d.files['/extra']={t:'f',c:'extra'};return JSON.stringify(d);});}catch(e){return {message:e.message,unchanged:(await yavcHomeStore.read()).raw===before.raw};}
-        });assert.match(rejected.message,/full/);assert.equal(rejected.unchanged,true);
+        await q.evaluate(()=>yavcHomeStore.update(r=>{const d=structuredClone(r.data);d.files['/extra']={t:'f',c:'extra'};return d;}));
+        assert.equal(await q.evaluate(()=>pcSiteFs.contentResources.read({resource:'~/extra'}).then(r=>r.text)),'extra');
+        const layout=await q.evaluate(async()=>{
+            const db=await new Promise((resolve,reject)=>{const r=indexedDB.open('yavc-vfs');r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});
+            return new Promise((resolve,reject)=>{const tx=db.transaction(['state','entries','contents'],'readonly'),s=tx.objectStore('state').get('home'),e=tx.objectStore('entries').get('/extra'),c=tx.objectStore('contents').getAll();tx.oncomplete=()=>{db.close();resolve({raw:s.result.raw,migrationSource:s.result.migrationSource,rootFiles:s.result.files,entry:e.result,allBlobs:c.result.every(b=>b instanceof ArrayBuffer)});};tx.onabort=()=>reject(tx.error);});
+        });assert.equal(layout.raw,undefined);assert.equal(layout.migrationSource,undefined);assert.equal(layout.rootFiles,undefined);assert.equal(layout.entry.c,undefined);assert.equal(layout.entry.s,5);assert.equal(layout.allBlobs,true);
         await full.close();
+        const quota=await browser.newContext();await quota.addInitScript(()=>{window.pudlHost={guestStorage:{file:32,home:60,text:16}};});
+        const small=await quota.newPage();await small.goto(base);await small.evaluate(()=>pcSiteFs.load());
+        const bounded=await small.evaluate(async()=>{
+            const F=pcSiteFs;await F.write(F.home(),'one','a'.repeat(20),false);await F.writeBytes(F.home(),'two',new Uint8Array(20).buffer,'application/octet-stream');
+            const before=await yavcHomeStore.read(),full=await F.write(F.home(),'three','b'.repeat(20),false),file=await F.write(F.home(),'unicode','€'.repeat(11),false);
+            let edit;try{await F.contentResources.create({resource:'~/edit',text:'€'.repeat(6)});}catch(error){edit=error.message;}
+            const after=await yavcHomeStore.read();return {full:full.error,file:file.error,edit,used:after.used,unchanged:after.generation===before.generation};
+        });assert.match(bounded.full,/full/);assert.match(bounded.file,/limit/);assert.match(bounded.edit,/editing limit/);assert.equal(bounded.used,44);assert.equal(bounded.unchanged,true);await quota.close();
+        const failure=await a.evaluate(async()=>{
+            const F=pcSiteFs,baseline=await F.contentResources.read({resource:'~/note.md'}),before=await yavcHomeStore.read(),put=IDBObjectStore.prototype.put;
+            IDBObjectStore.prototype.put=function(){if(this.name==='state')throw new DOMException('Synthetic disk quota','QuotaExceededError');return put.apply(this,arguments);};
+            let message;try{await F.contentResources.write({resource:'~/note.md',expectedRevision:baseline.revision,text:'must not commit'});}catch(error){message=error.message;}finally{IDBObjectStore.prototype.put=put;}
+            const after=await yavcHomeStore.read(),saved=await F.contentResources.read({resource:'~/note.md'});return {message,text:saved.text,revision:saved.revision,original:baseline.revision,unchanged:JSON.stringify(before.data)===JSON.stringify(after.data)};
+        });assert.match(failure.message,/quota/);assert.equal(failure.text,'accepted');assert.equal(failure.revision,failure.original);assert.equal(failure.unchanged,true);
+        const old=await browser.newContext(),oldPage=await old.newPage();await oldPage.goto(base);
+        const oldRecord=await oldPage.evaluate(async()=>{
+            const raw=JSON.stringify({files:{'/from-v1':{t:'f',c:'\ufeffSaved 😀\r\n',m:1},'/v1.bin':{t:'b',id:'v1-bytes',s:2,m:1}}}),record={version:1,generation:9,raw,migrationSource:null};
+            await new Promise((resolve,reject)=>{const r=indexedDB.open('yavc-home',1);r.onupgradeneeded=()=>{r.result.createObjectStore('state');r.result.createObjectStore('blobs');};r.onsuccess=()=>{const db=r.result,tx=db.transaction(['state','blobs'],'readwrite');tx.objectStore('state').put(record,'home');tx.objectStore('blobs').put(new Uint8Array([7,8]).buffer,'v1-bytes');tx.oncomplete=()=>{db.close();resolve();};tx.onabort=()=>reject(tx.error);};});return record;
+        });await oldPage.evaluate(()=>pcSiteFs.load());
+        assert.equal(await oldPage.evaluate(()=>pcSiteFs.read(pcSiteFs.resolve(pcSiteFs.home(),'from-v1'))),'\ufeffSaved 😀\r\n');
+        assert.deepEqual(await oldPage.evaluate(async()=>Array.from(new Uint8Array(await pcSiteFs.readBytes(pcSiteFs.resolve(pcSiteFs.home(),'v1.bin'))))),[7,8]);
+        assert.deepEqual(await oldPage.evaluate(async()=>{const db=await new Promise(resolve=>{const r=indexedDB.open('yavc-home',1);r.onsuccess=()=>resolve(r.result);});return new Promise(resolve=>{const tx=db.transaction('state','readonly'),r=tx.objectStore('state').get('home');tx.oncomplete=()=>{db.close();resolve(r.result);};});}),oldRecord);
+        await oldPage.evaluate(async()=>{const db=await new Promise(resolve=>{const r=indexedDB.open('yavc-home',1);r.onsuccess=()=>resolve(r.result);});await new Promise(resolve=>{const tx=db.transaction('state','readwrite'),r=tx.objectStore('state').get('home');r.onsuccess=()=>{const record=r.result;record.generation++;tx.objectStore('state').put(record,'home');};tx.oncomplete=()=>{db.close();resolve();};});});
+        await oldPage.reload();await oldPage.evaluate(()=>pcSiteFs.load());await oldPage.locator('.notice.warn').filter({hasText:'older tab'}).waitFor();
+        assert.equal(await oldPage.evaluate(()=>pcSiteFs.read(pcSiteFs.resolve(pcSiteFs.home(),'from-v1'))),'\ufeffSaved 😀\r\n');
+        await old.close();
         const cancelled=await a.evaluate(async()=>{
             const before=await yavcHomeStore.read();let current=true;
-            const pending=yavcHomeStore.commit(before.generation,before.raw,()=>current);current=false;
-            try{await pending;return {accepted:true};}catch(error){return {message:error.message,unchanged:(await yavcHomeStore.read()).raw===before.raw};}
+            const pending=yavcHomeStore.commit(before.generation,before.data,()=>current);current=false;
+            try{await pending;return {accepted:true};}catch(error){return {message:error.message,unchanged:JSON.stringify((await yavcHomeStore.read()).data)===JSON.stringify(before.data)};}
         });assert.match(cancelled.message,/cancelled/);assert.equal(cancelled.unchanged,true);
         console.log(engine+': migration, quota, revisions, concurrent writers, cancellation at commit, touch, pictures, legacy fork and reload passed');
     } finally { await context.close(); await browser.close(); }
