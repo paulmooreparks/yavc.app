@@ -1,5 +1,21 @@
 # Host shortcode integration handoff
 
+## v0.2.62: a slide show in a window of the host's own
+
+[v0.2.62](https://github.com/paulmooreparks/yavc.app/releases/tag/v0.2.62), tagged at `58685da6d632926b03819c4cec4c0aef223be132` ([PR #89](https://github.com/paulmooreparks/yavc.app/pull/89)), adds version 2 of the presentation capability, which Paul approved on 10 November. A host may offer `presentation.openShow`, and Slides then leaves the editing window as it is and drives a show the host runs elsewhere, on a page mounted with `show=1`. The whole contract is [presentation-contract.md](presentation-contract.md), and DESIGN.md decision 121 records the reasons. A host at version 1, or one with no other display, presents as before.
+
+| Item | Value |
+| --- | --- |
+| Tag | `v0.2.62` |
+| Tagged commit | `58685da` |
+| Archive | yavc-content-v0.2.62.zip |
+| Archive SHA256 | `19c98f562367c2260e1cb3c9de998f1aa00721ce48711fa17ec6a4e672b41889` |
+| Manifest SHA256 | `74203b5b8eaba8402ddce26181b09da17375ad97233d40e896f4427e747f42ba` |
+| Content digest | `95e490ac334d657b3a332a04c3c6416b0962b638b2c09d67405c7fe635b61fb2` |
+| Files | 484 |
+
+The content digest is the one the suites ran against before the tag. The receiving host verifies what the applets' test cannot: its relay between the two windows, the display the show opens on, keyboard focus there, and pictures, diagram files and host shortcodes drawn in the show's page.
+
 ## v0.2.61: bracketed text, Save without a location, and a host's cell colour shortcode
 
 [v0.2.61](https://github.com/paulmooreparks/yavc.app/releases/tag/v0.2.61), tagged at `aef3ddd2344784394b7e0539479e6989019ff913` ([PR #87](https://github.com/paulmooreparks/yavc.app/pull/87)), has two fixes and two seams. DESIGN.md decisions 118 to 120 record them. Pin this release in place of v0.2.60.
