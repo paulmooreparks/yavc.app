@@ -1,5 +1,21 @@
 # Host shortcode integration handoff
 
+## v0.2.57: the page scrolls to the kept place
+
+The receiving product's check of v0.2.56 found that Text to Visual selected the right block but left the page's scroller at the top. [v0.2.57](https://github.com/paulmooreparks/yavc.app/releases/tag/v0.2.57), tagged at `3b4c6cf165670d6cc447d73d99d67a75ec5cf8b2` ([PR #79](https://github.com/paulmooreparks/yavc.app/pull/79)), brings the selection into view once the page is shown. Nothing else changed; pin this release in place of v0.2.56.
+
+| Item | Value |
+| --- | --- |
+| Tag | `v0.2.57` |
+| Tagged commit | `3b4c6cf` |
+| Archive | yavc-content-v0.2.57.zip |
+| Archive SHA256 | `6da6cadfebc22826104566ef4c1ebc8dfe41d6b90f2927d41850922c9e7d6989` |
+| Manifest SHA256 | `47d09e4d0f72211ea24f8a78062e31185d771650542ae475f37b50300ad0daaf` |
+| Content digest | `6982b5fb844d5f4a99bc76af9cda8c1445f606f659bc4b732b6346b90328fc3c` |
+| Files | 484 |
+
+The content digest is the one the three-engine suites ran against before the tag.
+
 ## v0.2.56: HTML tables, the reader's place and the contents list
 
 Paul's three requests of 10 November are in [v0.2.56](https://github.com/paulmooreparks/yavc.app/releases/tag/v0.2.56), tagged at `82bcb7f0af1820051736fcd9a39073b8868e0d62` ([PR #77](https://github.com/paulmooreparks/yavc.app/pull/77)). DESIGN.md decisions 112 to 114 and docs/review.md record them. A receiving product that has pinned v0.2.55 moves to this release the same way; the shortcode contract of v0.2.55 is unchanged, with one addition.
