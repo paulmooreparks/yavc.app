@@ -168,7 +168,9 @@
                 });
             } finally { layer.remove(); }
             if (options.renderPages) {
-                images.forEach(function (picture, node) { node.src = picture.data; node.style.width = picture.width / .75 + 'px'; node.style.height = picture.height / .75 + 'px'; });
+                // Keep authored sizing and responsive column constraints. Fixed
+                // Office dimensions would pin height while CSS narrows width.
+                images.forEach(function (picture, node) { node.src = picture.data; });
                 await Promise.all(Array.from(surface.querySelectorAll('img')).map(function (node) { return node.decode(); }));
                 return await options.renderPages(surface, page);
             }
