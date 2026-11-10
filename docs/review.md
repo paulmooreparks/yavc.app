@@ -838,3 +838,7 @@ The user's copy of Editor.md includes a Mermaid fence absent from the bundled sa
 
 The resource-backed Save As adapter disabled the download choice even though the legacy picker supported it. The adapter now handles a validated download as a host-owned export of the captured submission. It retains encoding and BOM, writes no VFS file and issues no resource acknowledgement. The browser regression covers Editor, Docs, Slides and Diagrams, later edits while the picker is open, preserved original resources and bindings, UTF-16 output and a 9 MiB UTF-16 capture beyond the codec's default limits. PUDL review identified those implicit codec limits; explicit VFS policy bounds now apply.
 
+## Printed image proportions inside columns (2026-11-10)
+
+Browser print preparation imposed the Office writer's full-page pixel width and height on embedded images. The sample's column constrained width through CSS while the inline height remained fixed, stretching the image vertically. Browser print now retains authored sizing and the same responsive image rules used by Document view. Office dimensions and image safety limits remain unchanged. The sample regression compares rendered and natural aspect ratios and checks column bounds in both screen and print media, light and dark themes, Editor and Docs. PUDL source review found no remaining issue.
+

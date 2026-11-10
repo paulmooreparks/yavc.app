@@ -22,6 +22,12 @@ function contrast(a,b){function luminance(rgb){const c=rgb.match(/[\d.]+/g).slic
    const printed=await p.locator('.ed-print-frame').evaluate(f=>({text:f.contentDocument.body.textContent,interactive:f.contentDocument.querySelectorAll('details,summary,button,textarea').length,images:f.contentDocument.images.length,diagrams:f.contentDocument.querySelectorAll('.doc-print-diagram svg').length,unsafe:f.contentDocument.querySelectorAll('script,svg [onload],svg a[href^="javascript:"]').length}));
    assert.match(printed.text,/Front matter/);assert.match(printed.text,/The lines between the two rows/);assert.equal(printed.interactive,0);assert.ok(printed.images>0,JSON.stringify(printed));
    assert.equal(printed.diagrams,1);assert.equal(printed.unsafe,0);assert.match(printed.text,/A/);assert.match(printed.text,/B/);
+   for(const media of ['screen','print']){
+    await p.emulateMedia({media});
+    const pictures=await p.locator('.ed-print-frame').evaluate(f=>Array.from(f.contentDocument.images).map(img=>{const r=img.getBoundingClientRect(),column=img.closest('.sc-column');return {width:r.width,height:r.height,natural:img.naturalWidth/img.naturalHeight,column:column&&column.getBoundingClientRect().width};}));
+    for(const picture of pictures){assert.ok(Math.abs(picture.width/picture.height/picture.natural-1)<.01,app+' '+theme+' '+media+' distorted image '+JSON.stringify(picture));if(picture.column)assert.ok(picture.width<=picture.column+1);}
+   }
+   await p.emulateMedia({media:'screen'});
    assert.equal((await action(p,app,'document')).text,before);
    await p.screenshot({path:path.join(out,engine+'-'+app+'-'+theme+'.png')});
   }
