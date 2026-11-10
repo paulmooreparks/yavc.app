@@ -1,5 +1,19 @@
 # Stem-to-stern review, November 2026
 
+## A canvas drawn as a screen looks, 2026-11-11
+
+Paul asked what Diagrams needs to recreate a point-of-sale screen faithfully, and an agent's attempt in the receiving product showed the gaps (DESIGN.md, decision 122). The Canvas extension gained picture nodes with a fit and a tint, a colour, size, weight, font and padding for text, a corner radius and a choice of outlined sides, and named styles. `docs/canvas-extension.md` was written first and the reader, writer, drawing, inspector and `canvas-edit` action follow it.
+
+A picture is the new untrusted input. Its path is checked as a path, the host resolves it, and the applet fetches only an address on its own origin, refuses a redirect, and stops at 1 MiB a picture, 64 pictures and 8 MiB a canvas, with ten seconds for all of them. The bytes must be the kind of picture the name says. The drawing accepts only base64 image data of five kinds from its caller, so a caller's mistake cannot put an address or markup into it, and the unit tests give it addresses, script URLs, HTML data and an attribute break to prove that. A font family is limited to letters, digits, spaces, commas, hyphens and underscores, so it cannot end the attribute it is written in.
+
+`scripts/test-canvas-pictures.cjs` runs a built package in Chromium, Firefox and WebKit with a fixture host that serves stand-in pictures. It checks what the host is asked, that a wrong kind, a missing file, an oversized file and an address on another origin are each drawn as the named box with a notice, the text's computed face, the exported SVG drawn to a bitmap with the tinted symbol white and the plain one black, edits from the inspector and from an agent, the Add Picture dialog, that pictures are not read again for each edit, and a canvas in a document, both saved beside it and written in it.
+
+Two limits are known and stated in the extension document. An exported PNG and a canvas shown in a document are pictures the browser draws by itself, so they use the fonts installed on the reader's machine and not a font only the host's page loaded. A document redraws a saved canvas when the canvas changes and does not watch the canvas's pictures.
+
+The format is listed in two places, the reader and the schema the source pane completes and documents from. The schema source has the new properties and its worker was rebuilt from the pinned inputs, and a unit test now holds the two lists together.
+
+The test also found that a command hidden for canvases, Move to the Top, threw while its state was worked out with a canvas node selected, because it read a D2 selection that was not there. It now checks for one.
+
 ## A slide show in a window of the host's own, 2026-11-10
 
 Paul could not keep the presenter view on one display and the show on another in a desktop host, because the show was full screen in the host's one window. Slides now takes version 2 of the presentation capability (DESIGN.md, decision 121; `docs/presentation-contract.md`). With a port from the host's `openShow`, the editing window stays as it is and drives a show page the host mounts with `show=1`. The show page reuses the show's own builder and key handling, so it draws what the in-window show draws. The site's own host stays at version 1, and a host with no other display resolves to null, so both present as before.

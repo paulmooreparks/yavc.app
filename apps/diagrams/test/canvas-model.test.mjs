@@ -239,3 +239,33 @@ test('interior drops are automatic and only a nearby side-centre pins the side',
     assert.deepEqual(M.attachment(d, { x: 302, y: 30 }, 1), { node: 'b', side: null });
     assert.deepEqual(M.attachment(d, { x: -20.1, y: 99.3 }, 12), { node: null, x: -20, y: 99 });
 });
+
+// The properties a screen design needs (docs/canvas-extension.md; DESIGN.md, decision 122).
+test('a picture node, the text and outline properties, and named styles are edits like any other', () => {
+    const made = M.edit(base(), { op: 'create', type: 'file', file: 'icons/home.svg', x: 10, y: 20 });
+    const picture = made.doc.nodes.find(x => x.id === made.key);
+    assert.deepEqual([picture.type, picture.file, picture.width, picture.height], ['file', 'icons/home.svg', 48, 48]);
+    assert.deepEqual(M.edit(base(), { op: 'create', type: 'file', file: 'a.png', width: 24, height: 16 }).doc.nodes.at(-1).width, 24);
+    for (const file of ['notes.md', 'https://example.com/a.png', '//example.com/a.png', 'a\\b.png', undefined]) { assert.throws(() => M.edit(base(), { op: 'create', type: 'file', file }), /picture/, String(file)); }
+    assert.ok(M.properties(picture, 'node').includes('tint') && M.properties(picture, 'node').includes('fit') && !M.properties(picture, 'node').includes('fontSize'));
+    assert.ok(!M.properties({ id: 'f', type: 'file', file: 'plan.md' }, 'node').includes('tint'));
+    let doc = M.edit(made.doc, { op: 'set', key: made.key, kind: 'node', property: 'tint', value: '#ffffff' }).doc;
+    assert.equal(doc.nodes.at(-1).yavc.tint, '#ffffff');
+    const sets = [['textColor', '#ffffff'], ['fontSize', 22], ['fontWeight', 500], ['fontFamily', 'Roboto, Arial'], ['padding', 0], ['radius', 6], ['outlineSides', []]];
+    for (const [property, value] of sets) { doc = M.edit(doc, { op: 'set', key: 'a', kind: 'node', property, value }).doc; }
+    assert.deepEqual(doc.nodes[0].yavc, { textColor: '#ffffff', fontSize: 22, fontWeight: 500, fontFamily: 'Roboto, Arial', padding: 0, radius: 6, outlineSides: [] });
+    doc = M.edit(doc, { op: 'set', key: 'a', kind: 'node', property: 'fontSize', value: null }).doc;
+    assert.ok(!('fontSize' in doc.nodes[0].yavc));
+    assert.throws(() => M.edit(doc, { op: 'set', key: 'a', kind: 'node', property: 'fontSize', value: 500 }), /fontSize/);
+    assert.throws(() => M.edit(doc, { op: 'set', key: 'a', kind: 'node', property: 'tint', value: '#ffffff' }), /cannot be changed/);
+    const oval = M.edit(doc, { op: 'set', key: 'b', kind: 'node', property: 'shape', value: 'oval' }).doc;
+    assert.throws(() => M.edit(oval, { op: 'set', key: 'b', kind: 'node', property: 'radius', value: 4 }), /cannot be changed/);
+    assert.throws(() => M.edit(doc, { op: 'set', key: 'b', kind: 'node', property: 'style', value: 'key' }), /not one of the canvas's styles/);
+    doc = M.edit(doc, { op: 'document', property: 'styles', value: { key: { fillColor: '#00a0e6', textColor: '#ffffff' } } }).doc;
+    doc = M.edit(doc, { op: 'document', property: 'font', value: 'Roboto' }).doc;
+    doc = M.edit(doc, { op: 'set', items: [{ id: 'a', kind: 'node' }, { id: 'b', kind: 'node' }], property: 'style', value: 'key' }).doc;
+    assert.deepEqual([doc.yavc.font, doc.nodes[1].yavc.style, J.extension(doc, doc.nodes[1]).fillColor], ['Roboto', 'key', '#00a0e6']);
+    assert.throws(() => M.edit(doc, { op: 'document', property: 'styles', value: null }), /not one of the canvas's styles/);
+    assert.throws(() => M.edit(doc, { op: 'document', property: 'font', value: 'a"b' }), /font/);
+    assert.deepEqual(doc.custom, { keep: true });
+});

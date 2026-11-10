@@ -254,3 +254,82 @@ test('point anchors validate, draw only their connectors, and retain endpoint ge
   const plain = JSON.parse(file(d)); delete plain.nodes[1].yavc.anchor;
   assert.ok(jc.read(file(plain)).doc);
 });
+
+// The properties a screen design needs (docs/canvas-extension.md; DESIGN.md, decision 122).
+const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+const picture = (id, x, y, extra) => Object.assign({ id, type: 'file', x, y, width: 48, height: 48, file: 'icons/' + id + '.svg' }, extra);
+
+test('text takes a colour, a size, a weight, a font and a padding, and a hard break is a new line', () => {
+  const doc = jc.read(file({ nodes: [node('a', 0, 0, { text: 'Total\\\n12.50', yavc: { textColor: '#ffffff', fillColor: '#00a0e6', fontSize: 22, fontWeight: 500, fontFamily: 'Roboto, Arial', padding: 2, textAlign: 'right' } }), node('b', 0, 100, { text: 'One\n\nTwo', height: 120 })], yavc: { version: 1, font: 'Noto Sans' } })).doc;
+  const out = jc.render(doc, { palette: PALETTE, font: 'Inter, sans-serif' });
+  assert.match(out.svg, /<svg[^>]* font-family="Noto Sans, Inter, sans-serif"/);
+  assert.match(out.svg, /<text x="122\.0"[^>]* font-size="22" font-weight="500" font-family="Roboto, Arial, Noto Sans, Inter, sans-serif" fill="#ffffff" text-anchor="end">/);
+  const a = /<g data-text="a">(.*?)<\/g>/.exec(out.svg)[1], b = /<g data-text="b">(.*?)<\/g>/.exec(out.svg)[1];
+  assert.deepEqual([...a.matchAll(/<tspan[^>]*>([^<]*)</g)].map(m => m[1]), ['Total', '12.50'], 'a hard break has no empty line between');
+  assert.deepEqual([...b.matchAll(/<tspan[^>]*>([^<]*)</g)].map(m => m[1]), ['One', ' ', 'Two'], 'a paragraph keeps its gap');
+  const box = out.boxes[0].text;
+  assert.deepEqual([box.color, box.size, box.weight, box.family, box.pad], ['#ffffff', 22, 500, 'Roboto, Arial, Noto Sans, Inter, sans-serif', 2]);
+  assert.deepEqual([out.boxes[1].text.size, out.boxes[1].text.weight, out.boxes[1].text.family, out.boxes[1].text.pad], [14, null, null, null]);
+});
+
+test('text properties of the wrong kind are refused, and a font cannot bring markup or a quote', () => {
+  const bad = [{ textColor: 'red' }, { fontSize: 5 }, { fontSize: 201 }, { fontSize: '12' }, { fontWeight: 450 }, { fontWeight: 1000 }, { fontFamily: 'A"><script>' }, { fontFamily: "A'B" }, { fontFamily: 'url(x)' }, { fontFamily: '' }, { padding: -1 }, { padding: 65 }, { padding: 1.5 },
+    { radius: -1 }, { radius: 1001 }, { outlineSides: 'top' }, { outlineSides: ['top', 'top'] }, { outlineSides: ['middle'] }, { tint: 'blue' }, { fit: 'tile' }, { style: 'missing' }, { style: 'a b' }];
+  for (const yavc of bad) { assert.equal(jc.read(file({ nodes: [node('a', 0, 0, { yavc })] })).doc, null, JSON.stringify(yavc)); }
+  assert.equal(jc.read(file({ nodes: [], yavc: { font: 'A;B' } })).doc, null);
+});
+
+test('a rectangle takes a radius and draws only the sides it is given', () => {
+  const doc = jc.read(file({ nodes: [node('a', 0, 0, { yavc: { radius: 500 } }), node('b', 0, 100, { yavc: { radius: 0, outlineSides: [] } }), node('c', 0, 200, { yavc: { outlineSides: ['bottom'], strokeColor: '#ff0000' } }),
+    node('d', 0, 300, { yavc: { shape: 'rounded', radius: 3 } }), node('e', 0, 400, { yavc: { shape: 'oval', radius: 3, outlineSides: [] } })] })).doc;
+  const svg = jc.render(doc, { palette: PALETTE }).svg, of = id => new RegExp('<g data-node="' + id + '">(.*?)<g data-text').exec(svg)[1];
+  assert.match(of('a'), /rx="30"/, 'a radius is no larger than half the shorter side');
+  assert.match(of('b'), /^<rect[^>]* rx="0"[^>]* stroke="none"[^>]*\/>$/);
+  assert.match(of('c'), /stroke="none"[^>]*\/><path d="M 124\.0 284\.0 L 24\.0 284\.0" fill="none" stroke="#ff0000"/);
+  assert.match(of('d'), /rx="3"/);
+  assert.match(of('e'), /^<ellipse[^>]* stroke="#333333"/, 'a shape that is not a rectangle keeps its outline');
+});
+
+test('a picture is drawn as image data, tinted through a filter, and framed only when asked', () => {
+  const doc = jc.read(file({ nodes: [picture('home', 0, 0, { yavc: { tint: '#ffffff', fit: 'cover' } }), picture('back', 100, 0, { yavc: { tint: '#ffffff' } }), picture('logo', 200, 0, { color: '1', yavc: { fillColor: '#eeeeee', fit: 'stretch' } }),
+    picture('gone', 300, 0), { id: 'doc', type: 'file', x: 400, y: 0, width: 100, height: 60, file: 'notes/plan.md' }] })).doc;
+  const pictures = { 'icons/home.svg': PNG, 'icons/back.svg': PNG, 'icons/logo.svg': PNG, 'notes/plan.md': PNG };
+  const out = jc.render(doc, { palette: PALETTE, pictures }), of = id => new RegExp('<g data-node="' + id + '">(.*?)</g>').exec(out.svg)[1];
+  const filters = [...out.svg.matchAll(/<filter id="(yc\d+t\d+)"[^>]*><feFlood flood-color="#ffffff"\/><feComposite in2="SourceAlpha" operator="in"\/><\/filter>/g)];
+  assert.equal(filters.length, 1, 'one filter for one colour');
+  assert.equal(of('home'), '<image x="24" y="24" width="48" height="48" preserveAspectRatio="xMidYMid slice" href="' + PNG + '" filter="url(#' + filters[0][1] + ')"/>');
+  assert.ok(of('back').includes('preserveAspectRatio="xMidYMid meet"') && of('back').includes('filter="url(#' + filters[0][1] + ')"'));
+  assert.match(of('logo'), /^<rect[^>]* fill="#eeeeee" stroke="#cc0000"[^>]*\/><image[^>]* preserveAspectRatio="none"[^>]*\/>$/);
+  assert.ok(!of('logo').includes('filter='));
+  assert.match(of('gone'), /^<rect[^>]* stroke="#333333"[^>]*\/><text[^>]*><tspan[^>]*>gone</, 'a picture that was not read is the named box');
+  assert.ok(!of('doc').includes('<image'), 'a file that is not a picture is never drawn as one');
+  assert.deepEqual(out.boxes.map(b => !!b.picture), [true, true, true, false, false]);
+  const again = jc.render(doc, { palette: PALETTE, pictures });
+  assert.notEqual(/<filter id="([^"]+)"/.exec(again.svg)[1], filters[0][1], 'two drawings in one page do not share a filter');
+});
+
+test('only checked image data reaches the drawing', () => {
+  const doc = jc.read(file({ nodes: [picture('a', 0, 0)] })).doc;
+  for (const href of ['https://example.com/a.svg', 'javascript:alert(1)', 'data:text/html;base64,PGI+', 'data:image/svg+xml,<svg onload="x"/>', 'data:image/png;base64,AAAA" onload="x', { toString() { return PNG; } }, null]) {
+    const svg = jc.render(doc, { palette: PALETTE, pictures: { 'icons/a.svg': href } }).svg;
+    assert.ok(!svg.includes('<image') && !svg.includes('href='), String(href));
+  }
+  const proto = jc.render(doc, { palette: PALETTE, pictures: Object.create({ 'icons/a.svg': PNG }) }).svg;
+  assert.ok(!proto.includes('<image'));
+});
+
+test('a node takes its style\'s properties, with its own over them, and the file survives a round trip', () => {
+  const original = { nodes: [node('a', 0, 0, { yavc: { style: 'key' } }), node('b', 0, 100, { yavc: { style: 'key', fillColor: '#222222', textColor: '#ffff00' } }), node('c', 0, 200)], edges: [],
+    yavc: { version: 1, styles: { key: { shape: 'rectangle', radius: 6, fillColor: '#00a0e6', outlineSides: [], textColor: '#ffffff', fontSize: 13, fontWeight: 500, textAlign: 'center', textVerticalAlign: 'middle' } } } };
+  const text = jc.write(original), doc = jc.read(text).doc, out = jc.render(doc, { palette: PALETTE });
+  assert.deepEqual(JSON.parse(text), original);
+  assert.deepEqual(jc.extension(doc, doc.nodes[1]).fillColor, '#222222');
+  assert.deepEqual([out.boxes[0].colors.fill, out.boxes[0].text.color, out.boxes[0].text.size, out.boxes[0].text.align, out.boxes[0].text.vertical], ['#00a0e6', '#ffffff', 13, 'center', 'middle']);
+  assert.deepEqual([out.boxes[1].colors.fill, out.boxes[1].text.color, out.boxes[1].text.size], ['#222222', '#ffff00', 13]);
+  assert.deepEqual([out.boxes[2].colors.fill, out.boxes[2].text.size, out.boxes[2].text.align], ['#ffffff', 14, 'left']);
+  assert.match(out.svg, /<g data-node="a"><rect[^>]* rx="6" fill="#00a0e6" stroke="none"/);
+  for (const styles of [[], { 'a b': {} }, { key: [] }, { key: { anchor: true } }, { key: { style: 'key' } }, { key: { fontSize: 1 } }, Object.fromEntries(Array.from({ length: 201 }, (_, i) => ['s' + i, {}]))]) {
+    assert.equal(jc.read(file({ nodes: [], yavc: { styles } })).doc, null, JSON.stringify(styles).slice(0, 60));
+  }
+  assert.ok(jc.read(file({ nodes: [{ id: 'g', type: 'group', x: 0, y: 0, width: 10, height: 10, yavc: { style: 'key' } }], yavc: { styles: original.yavc.styles } })).doc, 'a style\'s text alignment is ignored on a node it does not apply to');
+});
