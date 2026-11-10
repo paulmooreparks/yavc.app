@@ -1,5 +1,21 @@
 # Host shortcode integration handoff
 
+## v0.2.59: speaker notes have no presence on the slide
+
+Paul rejected the collapsed notes bar of v0.2.58. In [v0.2.59](https://github.com/paulmooreparks/yavc.app/releases/tag/v0.2.59), tagged at `046a925a5afb365004cc91fda18a81c55728f702` ([PR #83](https://github.com/paulmooreparks/yavc.app/pull/83)), a deck's speaker notes are not on the slide in any form, and they appear only in the pane at the bottom of the window. They are written and changed in Text view. Nothing else changed; pin this release in place of v0.2.58.
+
+| Item | Value |
+| --- | --- |
+| Tag | `v0.2.59` |
+| Tagged commit | `046a925` |
+| Archive | yavc-content-v0.2.59.zip |
+| Archive SHA256 | `1186de484e92d5b5a0f00672631f4bf8867efe73d64a4f9e587b00d347276b75` |
+| Manifest SHA256 | `8b57afd0ba97feec71bc5b7fe0868f24ab17a7518752419081ffe4a3cffdd66c` |
+| Content digest | `d955562596eb459eb3e239fe7fcfdffa503a5f20ce4d01c69c29597d101acce9` |
+| Files | 484 |
+
+The content digest is the one the three-engine suites ran against before the tag.
+
 ## v0.2.58: a cell colour's host attribute and collapsed speaker notes
 
 [v0.2.58](https://github.com/paulmooreparks/yavc.app/releases/tag/v0.2.58), tagged at `df817fab80849ba7953c35a89a8deaa07a48e846` ([PR #81](https://github.com/paulmooreparks/yavc.app/pull/81)), adds one catalog field and one change to Slides. A literal entry may say `colorAttribute`, the name of the attribute the host keeps equal to a cell's colour beside its style; in that container's tables Cell Color writes, changes and removes it with the colour and reads it as the current colour (DESIGN.md decision 115, docs/host-shortcodes-contract.md). A deck's speaker notes are no longer drawn on the slide, since the window's notes pane shows them; on an editable canvas the notes box is collapsed to its bar, a disclosure button that opens it for editing (decision 116). Pin this release in place of v0.2.57.
