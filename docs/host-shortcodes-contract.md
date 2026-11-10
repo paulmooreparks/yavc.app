@@ -19,7 +19,7 @@ Catalog entries use the existing name, title, description, kind, example and par
 
 An inline entry can declare a one-character `prefix` from `@#~!$%&+=?^`. For example, a person shortcode with prefix `@` can read `{{@alex}}`. A `managed: true` entry is drawn but excluded from Insert. Managed paired content stays opaque to rich editing, and the applet refuses its page-edit form. Direct source editing remains available.
 
-`render` receives `{name, kind, args, source}` and resolves to `{html}` or no drawing. For editable containers and spans, `source` is the opening shortcode, and the body belongs to the applet. The returned frame must have exactly one `<slot name="content"></slot>`. Inline and block occurrences include their complete source. Managed block containers include their opaque source.
+`render` receives `{name, kind, args, source}` and resolves to `{html}` or no drawing. For containers and spans, including managed occurrences, `source` is the opening shortcode, and the body stays with the applet. The returned frame must have exactly one `<slot name="content"></slot>`. Inline and standalone block occurrences include their complete source. This service does not pass a separate `content` value. A host that needs to replace a managed body's contents must use its own resource-editing mechanism.
 
 The applet sanitizes returned HTML with the shared sanitizer and removes delegated action and host-marker attributes. It never executes scripts from a drawing. A rich span keeps editable words inside plain span wrappers derived from the slot's ancestors. Hosts should put span styling on those ancestors. Surrounding frame text and unrelated siblings are not rich-span content.
 
