@@ -36,6 +36,10 @@ type HostShortcode struct {
 	// table (a wiki's data-highlight-colour). The page writes, changes
 	// and removes it with the colour; the engine only carries it.
 	ColorAttribute string `json:"colorAttribute,omitempty"`
+	// ColorClassPrefix is the beginning of the class names the host uses
+	// for a cell's colour in such a table (a wiki's highlight-grey). The
+	// page removes those classes when the colour is changed or removed.
+	ColorClassPrefix string `json:"colorClassPrefix,omitempty"`
 }
 
 const (

@@ -1761,6 +1761,13 @@ var schemaCache = null;
       var name = m && o.colourAttribute ? o.colourAttribute(m[1]) : '';
       return typeof name === 'string' && /^[a-z][a-z0-9:_-]{0,63}$/.test(name) && name !== 'style' && name !== 'colspan' && name !== 'rowspan' ? name : '';
     }
+    /* The beginning of the class names a host uses for a cell's colour in
+       a table of its own literal container, or '' (decision 117). */
+    function colourClassPrefix(table) {
+      var raw = table && table.attrs.raw, m = raw && /^\{\{([a-z][a-z0-9-]*)/.exec(raw.open || '');
+      var prefix = m && o.colourClassPrefix ? o.colourClassPrefix(m[1]) : '';
+      return typeof prefix === 'string' && /^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(prefix) ? prefix : '';
+    }
     /* Colours the selected cells, or the cell the cursor is in, with the
        colour the page asked for (pendingColour), as a background colour in
        the cell's style; an empty colour takes it away. */
@@ -1781,10 +1788,19 @@ var schemaCache = null;
       /* The host may give an attribute of its own that records a cell's
          colour beside the style (a wiki's data-highlight-colour): it is
          written, changed and removed with the colour. */
-      var found = PM.findTable(state.selection.$from), attribute = found ? colourAttribute(found.node) : '';
+      var found = PM.findTable(state.selection.$from), attribute = found ? colourAttribute(found.node) : '', prefix = found ? colourClassPrefix(found.node) : '';
       var tr = state.tr;
       cells.forEach(function (c) {
         var keep = (c.node.attrs.xattrs || []).filter(function (a) { return a[0] !== 'style' && a[0] !== attribute; });
+        /* The host's classes that stand for a colour (a wiki's
+           highlight-grey) go when the colour is changed or removed, and
+           the class attribute goes when none of its classes is left.
+           Nothing is added. */
+        if (prefix) keep = keep.map(function (a) {
+          if (a[0] !== 'class') return a;
+          var left = a[1].split(/\s+/).filter(function (token) { return token && token.indexOf(prefix) !== 0; });
+          return left.length ? ['class', left.join(' ')] : null;
+        }).filter(Boolean);
         var style = (c.node.attrs.xattrs || []).find(function (a) { return a[0] === 'style'; });
         var rest = style ? style[1].split(';').map(function (s) { return s.trim(); }).filter(function (s) { return s && !/^background(-color)?\s*:/i.test(s); }).join('; ') : '';
         if (pendingColour) {

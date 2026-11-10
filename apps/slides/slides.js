@@ -403,7 +403,7 @@
                 site: function () { return H.fs && H.fs.site ? H.fs.site() : Promise.reject(new Error('there is no file service here')); },
                 root: root, say: say,
                 macroContext: currentMacroEngine,
-                read: function (path) {if(!H.fs || !H.fs.readText)throw new Error('This host cannot read dependencies.');return H.fs.readText(path);},
+                read: function (path, options) {if(!H.fs || !H.fs.readText)throw new Error('This application has not given documents a way to read other files (fs.readText).');return H.fs.readText(path, options);},
                 watch: H.fs && H.fs.onChange ? function(fn){return H.fs.onChange(fn);} : null,
                 signal: styleLifetime.signal, identity: function () { return deck; }, text: fullText,
                 dir: styleDirectory

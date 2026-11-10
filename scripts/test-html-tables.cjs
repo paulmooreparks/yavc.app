@@ -74,6 +74,19 @@ const types={'.html':'text/html','.js':'text/javascript','.css':'text/css','.jso
    await colour.getByLabel('Background Color',{exact:true}).fill('');await colour.getByRole('button',{name:'Apply',exact:true}).click();await colour.waitFor({state:'hidden'});
    now=await text('docs');assert.ok(now.includes('<tr><td>1</td><td>Press'),now);
    for(let i=0;i<3&&(await text('docs'))!==source;i++){await command('#document','undo');await settled('#document');}assert.equal(await text('docs'),source);
+   // The host's colour classes go when a cell's colour is changed or cleared; other classes and untouched cells stay.
+   const inCell=word=>p.waitForFunction(word=>{const s=window.getSelection(),n=s&&s.anchorNode,td=n&&(n.nodeType===1?n:n.parentElement).closest('#document td');return !!td&&td.textContent===word;},word);
+   await doc.locator('table.pm-raw-table td',{hasText:/^grey$/}).first().click();await inCell('grey');await settled('#document');
+   await ready('#document','table-cell-colour');await command('#document','table-cell-colour');await colour.waitFor();
+   await colour.getByLabel('Background Color',{exact:true}).fill('#FFEBE6');await colour.getByRole('button',{name:'Apply',exact:true}).click();await colour.waitFor({state:'hidden'});
+   now=await text('docs');
+   assert.ok(now.includes('<tr><td class="kept" data-highlight-colour="#FFEBE6" style="background-color: #FFEBE6;">grey</td><td class="highlight-blue">blue</td></tr>'),now);
+   await doc.locator('table.pm-raw-table td',{hasText:/^blue$/}).first().click();await inCell('blue');
+   await settled('#document');await ready('#document','table-cell-colour');await command('#document','table-cell-colour');await colour.waitFor();
+   await colour.getByLabel('Background Color',{exact:true}).fill('');await colour.getByRole('button',{name:'Apply',exact:true}).click();await colour.waitFor({state:'hidden'});
+   now=await text('docs');
+   assert.ok(now.includes('style="background-color: #FFEBE6;">grey</td><td>blue</td></tr>'),now);
+   for(let i=0;i<4&&(await text('docs'))!==source;i++){await command('#document','undo');await settled('#document');}assert.equal(await text('docs'),source);
    // A deck's speaker notes have no presence on the slide at all, not a box nor a bar; the notes pane shows them.
    await action('slides','view',{mode:'visual'});await p.locator('#deck .deck-slide .ProseMirror').waitFor();
    await p.locator('#deck [data-role="notes-view"]:not([hidden])').waitFor();assert.match(await p.locator('#deck [data-role="notes-view"]').innerText(),/Say this quietly/);
