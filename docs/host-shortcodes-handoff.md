@@ -1,5 +1,22 @@
 # Host shortcode integration handoff
 
+## v0.2.66: PUDL 0.106.2 in the package
+
+Paul asked for stacked taskbar buttons in GK Companion, and a receiving host cannot take a new PUDL until the content package bundles the same one. [v0.2.66](https://github.com/paulmooreparks/yavc.app/releases/tag/v0.2.66), tagged at `88220c83e6ef247bcda2de8534a311ed1ad6f914` ([PR #98](https://github.com/paulmooreparks/yavc.app/pull/98)), replaces the package's `pudl/` whole with the verified PUDL v0.106.2 distribution. No applet changed, so the applet versions are those of v0.2.65. A host takes this release together with PUDL 0.106.2 and does nothing else for it; `docs/pudl-upgrade-0.106.2.md` has the evidence.
+
+| Item | Value |
+| --- | --- |
+| Tag | `v0.2.66` |
+| Tagged commit | `88220c8` |
+| Archive | yavc-content-v0.2.66.zip |
+| Archive SHA256 | `56bcd780a6a8b8ab1e67a323d5318c1c6a3fc4e7ce3a97a226570aa4c0d22426` |
+| Manifest SHA256 | `39bccc4e2d7783aaf135df3dd946c61ec111ef857cfc544c1feb4676ed78b357` |
+| Content digest | `88c6f0c20eb9bf4b6efb055f27c53c5130a1470d70cf1901edd55e80c5fbf8db` |
+| Files | 488 |
+| PUDL | 0.106.2, tag commit `a6e0d43` |
+
+The content digest is the one the suites ran against before the tag.
+
 ## v0.2.65: a canvas drawn as a screen looks
 
 Paul wants a point-of-sale screen recreated in Diagrams down to its buttons, fonts, colours and symbols. [v0.2.65](https://github.com/paulmooreparks/yavc.app/releases/tag/v0.2.65), tagged at `f6d4b61ab4fff1f76cc8bf39c8389e44873d643e` ([PR #95](https://github.com/paulmooreparks/yavc.app/pull/95)), adds picture nodes with a fit and a tint, a colour, size, weight, font and padding for text, a corner radius and a choice of outlined sides, and named styles. `docs/canvas-extension.md` defines them and DESIGN.md decision 122 gives the reasons.
