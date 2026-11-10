@@ -99,6 +99,16 @@
         if ((rendered.problems || []).length) { throw new Error('Fix the document warnings before exporting.'); }
         // The HTML cleaner uses an inert template, so omitted assets have not loaded.
         fragment.querySelectorAll('[data-export="omit"],.sc-draft-note').forEach(function (node) { node.remove(); });
+        // Browser printing includes every disclosure body without its controls.
+        // Office conversion retains its separate structural representation gate.
+        if (options.renderPages) {
+            Array.from(fragment.querySelectorAll('details.sc-expand')).reverse().forEach(function (details) {
+                var section = document.createElement('section'); section.className = 'sc-expand';
+                var summary = details.querySelector(':scope > summary');
+                if (summary) { var title = document.createElement('p'); title.className = 'sc-expand-print-title'; title.append.apply(title, Array.from(summary.childNodes)); summary.replaceWith(title); }
+                section.append.apply(section, Array.from(details.childNodes)); details.replaceWith(section);
+            });
+        }
         if (fragment.querySelector('.sc-problem,.sc-glyph,.dinah-diagram-placeholder,[data-diagram-src],[data-applet],iframe,video,audio,svg,canvas,math,details,code[data-code-src]')) { throw new Error('This document contains an invalid shortcode, diagram, glyph, embedded app, SVG, interactive element or external code listing that this export cannot represent yet.'); }
         var pictures = new Map();
         fragment.querySelectorAll('img').forEach(function (img) { pictures.set(img, { source: img.getAttribute('src'), path: img.dataset.attachment }); img.removeAttribute('src'); img.removeAttribute('srcset'); img.removeAttribute('loading'); });
@@ -125,9 +135,9 @@
             var images = new Map(), totalImageBytes = 0;
             for (var pair of pictures) {
                 if (options.current && !options.current()) { throw new Error('The document changed during export.'); }
-                var spec = pair[1], local = spec.path || (spec.source && !/^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(spec.source) ? spec.source : null), src = local ? await K.pictureFor(local, options.pictures) : spec.source;
+                var spec = pair[1], siteImage = spec.source && /^\/(?!\/)/.test(spec.source), local = spec.path || (spec.source && !siteImage && !/^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(spec.source) ? spec.source : null), src = local ? await K.pictureFor(local, options.pictures) : spec.source;
                 var owned=null,picture;
-                try{if(local&&/^https?:/i.test(src||'')){owned=await hostRaster(src,options);src=owned;}
+                try{if(siteImage || local&&/^https?:/i.test(src||'')){owned=await hostRaster(src,options);src=owned;}
                     picture=await image(src||'',(page.width-page.margins[0]-page.margins[2])/.75,(page.height-page.margins[1]-page.margins[3]-12)/.75);
                 }finally{if(owned)URL.revokeObjectURL(owned);}
                 totalImageBytes += picture.data.length;

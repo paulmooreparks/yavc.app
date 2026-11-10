@@ -97,6 +97,7 @@
 .page-slash { max-height: 50vh; overflow-y: auto; }
 .page-slash .menu-action[aria-selected="true"] { background: var(--surface-alt); }
 .page-source { display: block; width: 100%; min-height: 3em; font: var(--text-sm)/1.5 var(--mono); resize: none; overflow: hidden; }
+.doc-page .page-source { color: var(--doc-ink); background: var(--doc-code); caret-color: var(--doc-ink); border-color: var(--doc-rule); }
 
 /* === Shortcodes on the page (internal/shortcodes, from parkscomputing.com) ===
    Notices and status badges are PUDL's own; these place them on the page
@@ -108,6 +109,7 @@
 .doc-page .sc-figure figcaption { margin-top: var(--space-2); color: var(--dinah-muted-ink); font-size: var(--text-xs); }
 .doc-page .sc-expand { margin: 0 0 1.1em; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0 var(--space-4); }
 .doc-page .sc-expand > summary { margin: var(--space-2) 0; list-style: none; }
+.doc-page .sc-expand-print-title { font-weight: 600; }
 .doc-page .sc-expand > summary::-webkit-details-marker { display: none; }
 .doc-page .sc-expand[open] > summary { margin-bottom: var(--space-3); }
 .doc-page .sc-toc { margin: 0 0 1.1em; padding: var(--space-3) var(--space-4); border-inline-start: 3px solid var(--border); }
