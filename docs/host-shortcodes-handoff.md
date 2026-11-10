@@ -1,5 +1,21 @@
 # Host shortcode integration handoff
 
+## v0.2.58: a cell colour's host attribute and collapsed speaker notes
+
+[v0.2.58](https://github.com/paulmooreparks/yavc.app/releases/tag/v0.2.58), tagged at `df817fab80849ba7953c35a89a8deaa07a48e846` ([PR #81](https://github.com/paulmooreparks/yavc.app/pull/81)), adds one catalog field and one change to Slides. A literal entry may say `colorAttribute`, the name of the attribute the host keeps equal to a cell's colour beside its style; in that container's tables Cell Color writes, changes and removes it with the colour and reads it as the current colour (DESIGN.md decision 115, docs/host-shortcodes-contract.md). A deck's speaker notes are no longer drawn on the slide, since the window's notes pane shows them; on an editable canvas the notes box is collapsed to its bar, a disclosure button that opens it for editing (decision 116). Pin this release in place of v0.2.57.
+
+| Item | Value |
+| --- | --- |
+| Tag | `v0.2.58` |
+| Tagged commit | `df817fa` |
+| Archive | yavc-content-v0.2.58.zip |
+| Archive SHA256 | `88c7f183e2a703ff15db13e7bebbf37cccc1ddda51ccf69c89a7eeac63a13925` |
+| Manifest SHA256 | `de9ccd6f6f7c1b6f87b4bf8b785c7d8be945c839457664f142f12e6d44d054d8` |
+| Content digest | `552c8ba7d38deaa2ace2e86fda608ac1112d0b230b70dc2e5299079c6cc68d32` |
+| Files | 484 |
+
+The content digest is the one the three-engine suites ran against before the tag. The receiving product should set `colorAttribute: "data-highlight-colour"` on its literal entry and check a pulled coloured cell recoloured and cleared in Docs against the wiki's own record of the colour.
+
 ## v0.2.57: the page scrolls to the kept place
 
 The receiving product's check of v0.2.56 found that Text to Visual selected the right block but left the page's scroller at the top. [v0.2.57](https://github.com/paulmooreparks/yavc.app/releases/tag/v0.2.57), tagged at `3b4c6cf165670d6cc447d73d99d67a75ec5cf8b2` ([PR #79](https://github.com/paulmooreparks/yavc.app/pull/79)), brings the selection into view once the page is shown. Nothing else changed; pin this release in place of v0.2.56.
