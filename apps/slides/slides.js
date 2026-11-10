@@ -415,8 +415,8 @@
                 root: root, page: el.body, scroll: el.stagebox,
                 customName: function (name) { return window.yavcMacroTools && window.yavcMacroTools.metadata(currentMacroEngine()).some(function (item) { return item.name === name; }); },
                 /* The speaker notes are shown in the window's notes pane, so
-                   their box on the canvas is collapsed to its bar (decision 116). */
-                collapsed: function (name) { return name === 'notes'; },
+                   they have no presence on the canvas at all (decision 116). */
+                hiddenBox: function (name) { return name === 'notes'; },
                 text: function () { return current().text; },
                 setText: function (text) { fromPage = true; try { takeText(text, 'page'); } finally { fromPage = false; } },
                 docOf: function (text) { return deckEngine().then(function (m) { return m.doc(text); }); },
