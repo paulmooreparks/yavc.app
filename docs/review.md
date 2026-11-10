@@ -1,5 +1,13 @@
 # Stem-to-stern review, November 2026
 
+## A slide show in a window of the host's own, 2026-11-10
+
+Paul could not keep the presenter view on one display and the show on another in a desktop host, because the show was full screen in the host's one window. Slides now takes version 2 of the presentation capability (DESIGN.md, decision 121; `docs/presentation-contract.md`). With a port from the host's `openShow`, the editing window stays as it is and drives a show page the host mounts with `show=1`. The show page reuses the show's own builder and key handling, so it draws what the in-window show draws. The site's own host stays at version 1, and a host with no other display resolves to null, so both present as before.
+
+`scripts/test-detached-show.cjs` runs the two pages in one browser with a fixture host and checks the request, the first state, navigation from each side, an edit reaching the show, the end from each side, a window closed some other way, and the fall back with one display. It does not exercise a real host's relay, window placement or focus, which are the receiving host's to verify. The test also showed that Present pressed while a deck is still being restored after a reload does nothing and says nothing, because the show's start gives up when the tab it began with is replaced. That was so before this change. The test repeats the press, and the silent drop is left as a known gap.
+
+The in-window show shares its start with the new path, so `scripts/test-slides-presentation.cjs` was run against a disposable server and passes Chromium, Firefox and WebKit with the real presenter popup and native full screen. The older `scripts/test-slides-presenter.cjs` times out waiting for the presenter page, on this change and on unchanged main alike; it predates the presenter page moving to the host's capability and wants repair or removal.
+
 ## Bracketed text, Save without a location, and a host's cell colour shortcode, 2026-11-10
 
 Paul reported that a block with text such as `[S2]` dropped to Markdown in Visual view, and came back when he wrote `(S2)`. The writer escapes an opening bracket in case the document defines a reference of that name, so the block never came back as it was read. The engine now decides once for the document: with no line that could define a reference, bracketed text is rich text and is written plainly where that reads the same (DESIGN.md, decision 118). The tests in `internal/pageview/brackets_test.go` cover the paragraph, list and table cases, the document with a definition, and the typed text whose escape must stay. One existing gap was seen and left: a typed `[ ]` at the start of a list item was never escaped by the writer.
