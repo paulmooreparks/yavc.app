@@ -1,5 +1,11 @@
 # Stem-to-stern review, November 2026
 
+## A cell's colour classes and the reader for referenced files, 2026-11-10
+
+Cell Color left a wiki's colour class, such as `highlight-grey`, on a cell whose colour it changed or cleared. A literal catalog entry may now say `colorClassPrefix`, and the classes that begin with it go with the old colour (DESIGN.md, decision 117). The three-engine suite recolours a cell with a colour class and another class, and clears one with only a colour class, and checks the first keeps its other class, the second loses its class attribute, and a neighbouring cell is untouched until it is itself changed.
+
+Paul embedded a saved Canvas in a slide in a receiving product and got "This host cannot read dependencies." The applets were right to refuse: that host gives them no `pudlHost.fs.readText`, and they never fetch a referenced file themselves. The defect was that the requirement was written only in `diagram-conversion-embedding.md` and not in the host contract's table, and that the message did not say what was missing. The table in `content-workspace-contract.md` now lists the reader, its arguments and the optional change subscription; the notice says the application has given documents no way to read other files; and the reader is passed the `signal` and `maxBytes` the loader always supplied, which Editor, Docs and Slides had dropped. The host's own fix is the receiving product's.
+
 ## A cell colour's host attribute and collapsed speaker notes, 2026-11-10
 
 Two more from the same day. The receiving product pointed out that a wiki records a custom cell colour twice, in the cell's style and in an attribute of its own, so a pulled cell recoloured or cleared in Docs kept a stale attribute. A literal container's catalog entry may now say which attribute that is (`colorAttribute`), and Cell Color writes, changes and removes it with the style's colour and reads it as the current colour (DESIGN.md, decision 115). A bare HTML table keeps the style alone. Paul also asked that a deck's speaker notes stop being drawn on the slide, since the window's notes pane shows them. The canvas hides them in every mode, and on an editable canvas the notes box is collapsed to its bar, with Show and Hide for editing in place (decision 116).
