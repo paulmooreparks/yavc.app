@@ -133,3 +133,15 @@ test('Canvas assistance describes and validates retained automatic endpoint proj
     await new Promise(resolve=>setTimeout(resolve,220));assert.ok(s.notifications.filter(n=>n.method==='textDocument/publishDiagnostics').at(-1).params.diagnostics.length);
     s.notify('textDocument/didClose',{textDocument:{uri}});
 });
+
+// The schema and the reader are two lists of one format (docs/canvas-extension.md), so each property the
+// reader checks is in the schema, for a node, for a named style and for the file.
+test('the canvas schema has the screen-design properties the reader accepts', () => {
+    const look=['line','lineWidth','fillColor','strokeColor','textAlign','textVerticalAlign','textColor','fontSize','fontWeight','fontFamily','padding','radius','outlineSides','tint','fit','shape'];
+    const node=canvasSchema.definitions.node.properties.yavc.properties,file=canvasSchema.properties.yavc.properties,style=file.styles.additionalProperties.properties;
+    for(const key of look.concat('style','anchor'))assert.ok(node[key],'node '+key);
+    for(const key of look)assert.ok(style[key],'style '+key);
+    assert.ok(!style.anchor&&!style.style);
+    for(const key of ['font','styles','background','grid','snap','version'])assert.ok(file[key],'file '+key);
+    assert.deepEqual([node.fontSize.minimum,node.fontSize.maximum,node.padding.maximum,node.radius.maximum,file.styles.maxProperties],[6,200,64,1000,200]);
+});

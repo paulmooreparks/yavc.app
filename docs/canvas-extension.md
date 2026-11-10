@@ -21,7 +21,7 @@ A reader that sees no `yavc` property, or one it cannot read, draws the file by 
 
 `version` is the version of this extension the file was written with. A reader that meets a larger number draws what it understands and says that the file was written by a newer Diagrams.
 
-The file's `yavc` object also accepts `background` (a hex color or preset, omitted for the theme default), `grid` (a boolean, default false) and `snap` (a boolean, default true). Background applies to the drawing and exports. Grid and snapping affect editing only. The grid and snap spacing is eight file pixels; a zoomed-out grid may show a coarser subset of those points. These are additive version 1 properties, and another reader can ignore them without changing document content or geometry.
+The file's `yavc` object also accepts `font` and `styles`, which the sections on text and on named styles below define. It accepts `background` (a hex color or preset, omitted for the theme default), `grid` (a boolean, default false) and `snap` (a boolean, default true). Background applies to the drawing and exports. Grid and snapping affect editing only. The grid and snap spacing is eight file pixels; a zoomed-out grid may show a coarser subset of those points. These are additive version 1 properties, and another reader can ignore them without changing document content or geometry.
 
 ## On a node
 
@@ -36,6 +36,53 @@ The file's `yavc` object also accepts `background` (a hex color or preset, omitt
 - `textAlign` controls horizontal alignment on a text node: `left`, `center` or `right`. When absent, rectangle, rounded, text, document and package shapes use left alignment; the other shapes use centre alignment.
 - `textVerticalAlign` controls vertical alignment on a text node: `top`, `middle` or `bottom`. When absent, rectangle, rounded, text, document and package shapes use top alignment; the other shapes use middle alignment. Both alignment properties apply within the shape's usable text inset and are additive version 1 properties. Another reader may ignore them without losing the text or geometry.
 - `anchor` is an optional boolean. When true, the node represents a free connector endpoint and must be a text node with empty `text`, zero `width` and `height`, integer coordinates and `shape` set to `text`. Diagrams draws no node or node-selection control for it. The connector still uses its standard node ID and coordinates. The editor removes such a node only when no connector refers to it; a normal empty text node is never removed this way. A reader ignoring this property can draw the empty text node and its connector normally. This is an additive version 1 property.
+
+### Text on a node
+
+These properties were added on 2026-11-11 so that a screen design can be drawn as it looks (DESIGN.md, decision 122). They are additive version 1 properties. Another reader may ignore them and still has the text, in its own font and colour.
+
+- `textColor` is the colour of the node's text, as a hex colour or preset. When absent, Diagrams chooses a colour that can be read on the node's fill.
+- `fontSize` is the size of the text in file pixels, a number from 6 to 200. The default is 14. Headings in a text node's Markdown keep their proportion to it.
+- `fontWeight` is a whole number of hundreds from 100 to 900. The default is the font's normal weight, with bold where the Markdown asks for it.
+- `fontFamily` is a list of font family names separated by commas, such as `Roboto, Arial`. It may contain letters, digits, spaces, commas, hyphens and underscores only, and at most 200 characters. Diagrams adds its own font after the list, so a family the reader's machine does not have falls back to it.
+- `padding` is the space between the node's box and its text, a whole number of file pixels from 0 to 64. The default is 8 at the sides, and 6 above and below on the screen.
+
+The file's `yavc` object accepts `font`, with the same rule as `fontFamily`. It is the font for every text in the canvas that has no `fontFamily` of its own.
+
+A canvas file never contains a font, and Diagrams never fetches one. A family is drawn when the page or the reader's machine already has it. A host that wants a brand font drawn supplies it to its own pages. An exported SVG picture contains the family's name. An exported PNG, and a canvas shown in a document or on a slide, is a picture the browser draws by itself, so it has the fonts installed on the reader's machine and none that only the page loaded.
+
+A line that ends in a backslash, or in two spaces, breaks there without the gap a new paragraph has. That is Markdown's own hard line break, and the SVG text of an export now honours it as the screen does.
+
+### The outline of a rectangle
+
+- `radius` is the corner radius in file pixels, a number from 0 to 1000, on a node drawn as a rectangle: a text node whose shape is `rectangle` or `rounded`, and a file, link or group node. It is drawn no larger than half the node's shorter side. When absent, each of those keeps its own radius.
+- `outlineSides` is a list of the sides whose outline is drawn, from `top`, `right`, `bottom` and `left`, on the same nodes. An empty list draws the fill with no outline. When absent, the whole outline is drawn. A side that is drawn alone is a straight line, whatever the radius.
+
+Both are additive version 1 properties. A reader that ignores them draws the whole outline with its own corners.
+
+### Pictures
+
+A file node whose `file` ends in `.png`, `.jpg`, `.jpeg`, `.gif`, `.webp` or `.svg` is a picture, and Diagrams draws the picture in the node's box. The path is relative to the folder the canvas file is in, or it is an absolute virtual path that begins with `/` or `~/`. JSON Canvas itself says only that `file` is a path within the system, and Obsidian reads it from the vault's root, so a canvas meant for both keeps its pictures where both rules find them.
+
+- `fit` is how the picture fills the box: `contain` (the default) shows all of it, `cover` fills the box and crops, and `stretch` fills the box without keeping the picture's proportions.
+- `tint` is a hex colour or preset. Every pixel of the picture is drawn in that colour, with the picture's own transparency. It is for a symbol drawn in one colour, which can then take the colour of the button it sits on.
+- A picture has no outline and no fill unless the node says so: `color`, `strokeColor`, `line` or `lineWidth` gives it an outline, and `fillColor` gives it a fill behind the picture.
+
+The host reads the picture, by the rules of `docs/document-host-overlays-contract.md`. Diagrams accepts PNG, JPEG, GIF, WebP and SVG, checks that the bytes are of the kind the name says, and draws at most 64 different pictures in a canvas, of at most 1 MiB each and 8 MiB together. A picture goes into the drawing as image data inside an SVG `image` element and never as markup of the drawing's own, so an SVG picture's scripts and outside references do not run or load. A picture that cannot be read is drawn as the box with the file's name that every other file node has, and Diagrams says which picture and why.
+
+These are additive version 1 properties. Another reader draws the file node its own way.
+
+### Named styles
+
+The file's `yavc` object accepts `styles`, an object whose keys are style names and whose values are objects of the node properties on this page, other than `anchor`. A name has from 1 to 64 letters, digits, hyphens and underscores, and a file has at most 200 styles.
+
+```json
+"yavc": { "version": 1, "styles": { "key": { "shape": "rectangle", "radius": 6, "fillColor": "#00a0e6", "outlineSides": [], "textColor": "#ffffff", "fontSize": 13, "fontWeight": 500, "textAlign": "center", "textVerticalAlign": "middle" } } }
+```
+
+A node's `yavc.style` is the name of one of them. The node is drawn with the style's properties, and a property the node has itself wins over the style's. A reader refuses a node whose style is not in the file. A property in a style that does not apply to a node's type is ignored on that node.
+
+Styles are additive version 1 properties. A reader that ignores them draws each node by its own properties and the specification's.
 
 ## On an edge
 

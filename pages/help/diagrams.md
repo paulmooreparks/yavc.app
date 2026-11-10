@@ -116,7 +116,19 @@ Select a connector to show a raised handle at each tip. Drag either tip to anoth
 
 The wheel pans, and Ctrl or Command with the wheel zooms at the pointer. Space with a drag pans too. View, Pan (H) selects a pan tool, and the View menu also has pan and zoom commands. Alt with arrow keys pans, plus and minus zoom, 0 fits the contents, and 1 shows actual size. The view is kept while you edit. Neither its position nor its zoom changes the file or an exported picture.
 
-Diagrams refuses a canvas over 2 MB or with more than 5,000 nodes and connectors, and one that has two nodes with the same id or a connector to a node that is not there; the notice says what is wrong, and the place is marked in the text. A link node shows its address as text and is not followed, and a file node shows the file's name. A link written in a text node's Markdown is shown as its words, without the link, since the drawing is a picture.
+Diagrams refuses a canvas over 2 MB or with more than 5,000 nodes and connectors, and one that has two nodes with the same id or a connector to a node that is not there; the notice says what is wrong, and the place is marked in the text. A link node shows its address as text and is not followed, and a file node shows the file's name unless the file is a picture. A link written in a text node's Markdown is shown as its words, without the link, since the drawing is a picture.
+
+### Drawing a screen design
+
+A canvas can be drawn as a screen looks, with its buttons, fonts, colours and symbols.
+
+Shape, Add Picture asks for the path of a PNG, JPEG, GIF, WebP or SVG file and draws it in a node of its own. The path is from the folder the canvas is saved in, or it begins with `/` or `~/`. With a picture selected, the inspector has Tint, which draws a one-colour symbol in the colour you choose, and Picture Fit. A picture has no outline unless you give it a colour or a line. A picture that cannot be read is drawn as a box with the file's name, and a notice says why. A canvas draws at most 64 different pictures, of at most 1 MB each.
+
+With a text node selected, the inspector has Text Color, Font Size, Font Weight, Font and Text Padding. With nothing selected it has the font of the whole canvas. A canvas gives a font by its family name, and Diagrams downloads no font. The font is drawn when the application or your machine has it, and Diagrams' own font is used otherwise. A line that ends in a backslash breaks there without the gap a new paragraph has.
+
+A rectangle has a Corner Radius and Outlined Sides, so a box can have square or round corners, no outline, or a line along some of its sides. Default leaves a choice to the node's style.
+
+A canvas can keep named styles in its `yavc` property, each a set of these properties, and a node takes one with `style`. The inspector's Style list chooses among the styles a canvas has. Styles are written in the text or by an agent, and [the canvas extension](https://github.com/paulmooreparks/yavc.app/blob/main/docs/canvas-extension.md) defines them.
 
 ## Colours
 
