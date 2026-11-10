@@ -44,12 +44,20 @@
                     if (folder && folder.children && !folder.settings && !folder.server) start = parent;
                 }
                 var selected = await FB.pick(F, { mode: 'save', title: 'Save As', name: request.name, start: start, host: context && context.host,
-                    conditional: true, computer: false, signal: context && context.signal,
+                    conditional: true, computer: true, signal: context && context.signal,
                     canSaveIn: function (dir) { return dir && dir.home && !dir.server && !dir.settings ? null : 'Choose a folder in your guest home directory.'; },
                     commit: async function (choice) {
                         if (context && context.signal && context.signal.aborted) return false;
-                        var invalid=context && context.checkName && context.checkName(choice.name || F.splitPath(choice.path).base);
+                        var name = choice.download || choice.name || F.splitPath(choice.path).base;
+                        var invalid=context && context.checkName && context.checkName(name);
                         if(invalid)throw new Error(invalid);
+                        if (choice.download) {
+                            var codec = await window.yavcUtil.loadGlobal(window.yavcUtil.versioned('/applets/content-kit/text-codec.js'), 'yavcTextCodec');
+                            if (context && context.signal && context.signal.aborted) return false;
+                            var encoding = request.encoding || 'utf-8', bytes = codec.encode((request.bom ? '\ufeff' : '') + request.text, encoding, { maxBytes: F.limits.file, maxText: F.limits.text + 1 });
+                            window.yavcUtil.download(name, new Blob([bytes], { type: 'text/plain;charset=' + encoding }));
+                            return true;
+                        }
                         var change = { resource: choice.path, text: request.text, expectedRevision: choice.expectedRevision,encoding:request.encoding,bom:request.bom };
                         pending = choice.expectedRevision === null ? F.contentResources.create(change, context) : F.contentResources.write(change, context);
                         try { accepted = await pending; } finally { pending = null; }

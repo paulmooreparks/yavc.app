@@ -1368,7 +1368,7 @@
         function settled() { clearTimeout(cue); if (loading) { loading.remove(); loading = null; } }
         return Promise.all([mermaid(), safeHTML()]).then(function () {
             window.mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', suppressErrorRendering: true,
-                theme: !place.closest('[data-ed-page]') && document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'default' });
+                theme: !opts.paper && !place.closest('[data-ed-page]') && document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'default' });
             return window.mermaid.render(id, source);
         }).then(function (out) {
             settled();

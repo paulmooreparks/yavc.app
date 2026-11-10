@@ -109,6 +109,16 @@
                 section.append.apply(section, Array.from(details.childNodes)); details.replaceWith(section);
             });
         }
+        var printDiagrams = [];
+        if (options.renderPages) {
+            rendered.blocks.forEach(function (block) { (block.diagrams || []).forEach(function (diagram) {
+                if (diagram.language !== 'mermaid') { return; }
+                var matches = fragment.querySelectorAll('[data-preview-diagram="' + CSS.escape(diagram.id) + '"]'); // check-ignore(one-shared-implementation): Validate export metadata before awaiting the shared Mermaid renderer; no local rendering implementation.
+                if (matches.length !== 1) { throw new Error('A print diagram has an ambiguous source reference.'); }
+                var place = matches[0]; place.classList.remove('dinah-diagram-placeholder'); place.classList.add('doc-print-diagram');
+                printDiagrams.push({ place: place, source: diagram.source });
+            }); });
+        }
         if (fragment.querySelector('.sc-problem,.sc-glyph,.dinah-diagram-placeholder,[data-diagram-src],[data-applet],iframe,video,audio,svg,canvas,math,details,code[data-code-src]')) { throw new Error('This document contains an invalid shortcode, diagram, glyph, embedded app, SVG, interactive element or external code listing that this export cannot represent yet.'); }
         var pictures = new Map();
         fragment.querySelectorAll('img').forEach(function (img) { pictures.set(img, { source: img.getAttribute('src'), path: img.dataset.attachment }); img.removeAttribute('src'); img.removeAttribute('srcset'); img.removeAttribute('loading'); });
@@ -126,6 +136,11 @@
             await controller.update({ identity: source, inline: engine.styles(source).map(function (b) { return b.css; }), stylesheet: options.stylesheet || '' });
             if (controller.state().problems.length) { throw new Error(controller.state().problems.join(' ')); }
             page.background = rgb(getComputedStyle(surface).backgroundColor);
+            for (var diagram of printDiagrams) {
+                if (options.current && !options.current()) { throw new Error('The document changed during print preparation.'); }
+                var drawn = await K.drawMermaid(diagram.place, diagram.source, { paper: true, report: false });
+                if (drawn.problem || !diagram.place.querySelector('svg')) { throw new Error('The Mermaid diagram could not be printed: ' + (drawn.problem || 'No drawing was produced.')); }
+            }
             var noteContext=rendered.blocks.reduce(function(notes,block){return Object.assign(notes,block.footnotes||{});},Object.create(null)),noteNodes=new Map(),trustedNotes=new WeakSet();
             surface.querySelectorAll('aside.doc-footnote[data-footnote]').forEach(function(node){
                 var label=node.getAttribute('data-footnote'),number=noteContext[label];
