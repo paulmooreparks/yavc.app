@@ -74,13 +74,16 @@ const types={'.html':'text/html','.js':'text/javascript','.css':'text/css','.jso
    await colour.getByLabel('Background Color',{exact:true}).fill('');await colour.getByRole('button',{name:'Apply',exact:true}).click();await colour.waitFor({state:'hidden'});
    now=await text('docs');assert.ok(now.includes('<tr><td>1</td><td>Press'),now);
    for(let i=0;i<3&&(await text('docs'))!==source;i++){await command('#document','undo');await settled('#document');}assert.equal(await text('docs'),source);
-   // A deck's speaker notes are not drawn on the slide; the notes pane shows them, and Show opens the box for editing.
+   // A deck's speaker notes have no presence on the slide at all, not a box nor a bar; the notes pane shows them.
    await action('slides','view',{mode:'visual'});await p.locator('#deck .deck-slide .ProseMirror').waitFor();
    await p.locator('#deck [data-role="notes-view"]:not([hidden])').waitFor();assert.match(await p.locator('#deck [data-role="notes-view"]').innerText(),/Say this quietly/);
    assert.equal(await p.locator('#deck .deck-slide .sc-notes:visible').count(),0);
-   const showNotes=p.locator('#deck .deck-slide .pm-box-collapsible [data-box="toggle"]');await showNotes.waitFor();assert.equal(await showNotes.getAttribute('aria-expanded'),'false');assert.match(await showNotes.innerText(),/Speaker Notes/);
-   await showNotes.click();assert.equal(await p.locator('#deck .deck-slide .sc-notes:visible').count(),1);assert.equal(await showNotes.getAttribute('aria-expanded'),'true');
-   await showNotes.click();assert.equal(await p.locator('#deck .deck-slide .sc-notes:visible').count(),0);
+   assert.equal(await p.locator('#deck .deck-slide .pm-box[data-name="notes"]').count(),1);
+   assert.equal(await p.locator('#deck .deck-slide .pm-box[data-name="notes"]:visible, #deck .deck-slide .pm-box[data-name="notes"] :visible').count(),0);
+   assert.ok(!/Speaker Notes|Say this quietly|Remove the Box|Edit as Markdown/i.test(await p.locator('#deck .deck-slide:has(.ProseMirror)').innerText()));
+   // Typing on the slide goes into the slide, and the hidden notes are written back as they were.
+   await p.locator('#deck .deck-slide .ProseMirror p',{hasText:'First.'}).click();await p.keyboard.press('End');await p.keyboard.type(' More');
+   await p.waitForFunction(()=>pudlActions.run('yavc.slides/text@1',{},{grant:'all'}).then(r=>r.text.includes('First. More')));
    assert.ok((await action('slides','text')).text.includes('{{notes}}\nSay this quietly.\n{{/notes}}'));
    // Leaving the page for Text keeps the place: the caret lands on the
    // block it was in, and coming back lands on the same block.
@@ -97,7 +100,7 @@ const types={'.html':'text/html','.js':'text/javascript','.css':'text/css','.jso
    await p.waitForFunction(()=>{const sc=document.querySelector('#source .ed-scroll'),s=window.getSelection(),node=s&&s.anchorNode,par=node&&(node.nodeType===1?node:node.parentElement).closest('#source .ProseMirror p');if(!sc||!par)return false;const r=par.getBoundingClientRect(),b=sc.getBoundingClientRect();return sc.scrollTop>0&&r.top>=b.top&&r.bottom<=b.bottom;});
 
    await action('editor','view',{mode:'preview'});await p.locator('#source [data-line]').first().waitFor();
-   assert.deepEqual(errors,[]);console.log(engine+': HTML tables, literal bodies, contents list, table reshaping, cell colour and its host attribute, collapsed speaker notes and place keeping passed');
+   assert.deepEqual(errors,[]);console.log(engine+': HTML tables, literal bodies, contents list, table reshaping, cell colour and its host attribute, speaker notes kept off the slide and place keeping passed');
   }catch(e){console.error(engine,(await p.locator('body').innerText()).slice(-3000),errors);throw e;}finally{await browser.close();}
  }}finally{await new Promise(resolve=>server.close(resolve));}
 })().catch(e=>{console.error(e);process.exitCode=1;});

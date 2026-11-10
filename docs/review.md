@@ -6,6 +6,8 @@ Two more from the same day. The receiving product pointed out that a wiki record
 
 The three-engine suite in `scripts/test-html-tables.cjs` now colours a cell of the host's table and checks both the attribute and the style are written, that an existing attribute on another cell is untouched, that the dialog opens with the attribute's value, and that clearing removes both; and it opens a deck with notes, checks nothing of the notes is visible on the slide while the notes pane shows them, and that Show and Hide draw and hide the box without changing the deck's text. The host-shortcode and portable-workspace suites pass against the same package.
 
+Paul rejected the collapsed bar when he saw it in v0.2.58: he wants no presence for the notes on the slide at all. The bar and its disclosure button are gone. The notes box is kept in the page's document and hidden, and the suite now asserts that nothing of it is visible on the slide, that none of its words or buttons are in the slide's text, and that typing on the slide leaves the notes as they were.
+
 ## HTML tables, the reader's place and the contents list, 2026-11-10
 
 Paul reported three things from a day's use of a product built on the content applets. A wiki's table, which pipe tables cannot write, arrived as an HTML block that Visual view drew in a box nobody could type in. Changing between Visual and Text put him at the top of the document every time. And a contents list inside a container drew nothing. DESIGN.md decisions 112 to 114 record the shapes chosen.
