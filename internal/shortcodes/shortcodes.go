@@ -195,6 +195,9 @@ func IsShortcodeParagraph(n ast.Node) bool {
 			if _, _, isSpan := Span(in); isSpan {
 				continue
 			}
+			if _, hosted := HostSpan(in); hosted {
+				continue
+			}
 			if IsInlineAtom(in) {
 				continue
 			}
@@ -211,6 +214,9 @@ func IsInlineAtom(n *Inline) bool {
 	if d, ok := n.registry.definition(n.Call.Name); ok {
 		return d.Inline && !n.Closing
 	}
+	if h, ok := n.registry.hostOnly(n.Call.Name); ok {
+		return h.Kind == "inline" && !n.Closing && n.Raw != ""
+	}
 	d := table[n.Call.Name]
 	return d != nil && d.kind == inline && !n.Closing && n.Raw != ""
 }
@@ -223,11 +229,10 @@ func InlineHTML(raw string) string {
 
 // InlineHTMLWithMacros draws a custom atom using its document's registry.
 func InlineHTMLWithMacros(raw string, registry *MacroRegistry) string {
-	m := tagRe.FindStringSubmatch(raw)
-	if m == nil || m[0] != raw || m[1] != "" {
+	c, closing, read, ok := readTag([]byte(raw), registry)
+	if !ok || read != raw || closing {
 		return `<code class="sc-problem">` + Esc(raw) + `</code>`
 	}
-	c := NewCall(m[2], m[3])
 	if _, ok := registry.definition(c.Name); ok {
 		out, err := registry.render(c, "", true, &MacroBudget{})
 		if err != nil {
@@ -235,12 +240,21 @@ func InlineHTMLWithMacros(raw string, registry *MacroRegistry) string {
 		}
 		return out
 	}
+	h, hosted := registry.host(c.Name)
+	hosted = hosted && h.Kind == "inline"
 	d := table[c.Name]
+	if d == nil && hosted {
+		return hostInline(h, c, raw)
+	}
 	if d == nil || d.kind != inline {
 		return problemHTML(c, "There is no shortcode called "+c.Name+" that goes in a line of text.")
 	}
 	out, err := d.render(c, nil, nil)
 	if err != nil {
+		// The host may read the name in a way the built-in does not.
+		if hosted {
+			return hostInline(h, c, raw)
+		}
 		return problemHTML(c, err.Error())
 	}
 	return out
@@ -276,14 +290,13 @@ func (p *inlineParser) Trigger() []byte { return []byte{'{'} }
 
 func (p *inlineParser) Parse(parent ast.Node, block text.Reader, pc parser.Context) ast.Node {
 	line, seg := block.PeekLine()
-	m := tagRe.FindSubmatch(line)
-	if m == nil {
+	call, closing, raw, ok := readTag(line, p.registry)
+	if !ok {
 		return nil
 	}
-	node := &Inline{Call: NewCall(string(m[2]), string(m[3])), Closing: len(m[1]) > 0, Raw: string(m[0]), registry: p.registry}
+	node := &Inline{Call: call, Closing: closing, Raw: raw, registry: p.registry}
 	node.SetPos(seg.Start)
-	block.Advance(len(m[0]))
-	_ = seg
+	block.Advance(len(raw))
 	return node
 }
 
@@ -337,7 +350,11 @@ func (p *blockParser) Open(parent ast.Node, reader text.Reader, pc parser.Contex
 	}
 	macro, custom := p.registry.definition(string(m[1]))
 	declaration := string(m[1]) == "define"
-	if !declaration && (!custom || !macro.Container) && (def == nil || def.kind != container) {
+	hosted := false
+	if h, ok := p.registry.hostOnly(string(m[1])); ok {
+		hosted = h.Kind == "container"
+	}
+	if !declaration && !hosted && (!custom || !macro.Container) && (def == nil || def.kind != container) {
 		return nil, parser.NoChildren
 	}
 	takeLine(reader, line)
@@ -1174,6 +1191,8 @@ func matchSpans(p ast.Node) {
 					}
 				} else if isSpan(d) {
 					open = append(open, in)
+				} else if h, ok := in.registry.hostOnly(in.Call.Name); ok && hostPairs(h) {
+					open = append(open, in)
 				}
 				continue
 			}
@@ -1199,6 +1218,34 @@ func (r *htmlRenderer) inline(w util.BufWriter, src []byte, node ast.Node, enter
 		}
 	}
 	d := table[n.Call.Name]
+	h, hosted := r.registry.host(n.Call.Name)
+	if hosted && d == nil {
+		if hostPairs(h) || n.Closing {
+			for b := node.Parent(); b != nil; b = b.Parent() {
+				if b.Type() == ast.TypeBlock {
+					matchSpans(b)
+					break
+				}
+			}
+		}
+		switch {
+		case n.Closing && n.Matched:
+			_, _ = w.WriteString(hostSpanClose)
+		case n.Closing:
+			_, _ = w.WriteString(problemSource(n.Raw, "This closes "+n.Call.Name+", which is not open."))
+		case h.Kind == "inline":
+			_, _ = w.WriteString(hostInline(h, n.Call, n.Raw))
+		case h.Kind == "block":
+			_, _ = w.WriteString(problemSource(n.Raw, n.Call.Name+" goes on a line of its own."))
+		case n.Matched:
+			_, _ = w.WriteString(hostSpanOpen(h, n.Call, n.Raw))
+		case h.Kind == "span":
+			_, _ = w.WriteString(problemSource(n.Raw, n.Call.Name+" needs {{/"+n.Call.Name+"}} after the words it wraps, in the same paragraph."))
+		default:
+			_, _ = w.WriteString(problemSource(n.Raw, n.Call.Name+" opens on a line of its own and closes with {{/"+n.Call.Name+"}}."))
+		}
+		return ast.WalkContinue, nil
+	}
 	if isSpan(d) || n.Closing {
 		// Spans pair within the block they sit in, whatever it is: a
 		// paragraph, a heading, a table cell, a list item.
@@ -1243,6 +1290,10 @@ func (r *htmlRenderer) inline(w util.BufWriter, src []byte, node ast.Node, enter
 		out, err := d.render(n.Call, node.OwnerDocument(), src)
 		if err != nil {
 			out = problemHTML(n.Call, err.Error())
+			// The host may read the name in a way the built-in does not.
+			if hosted && h.Kind == "inline" && d.kind == inline {
+				out = hostInline(h, n.Call, n.Raw)
+			}
 		}
 		_, _ = w.WriteString(out)
 	}
@@ -1279,6 +1330,22 @@ func (r *htmlRenderer) block(w util.BufWriter, src []byte, node ast.Node, enteri
 		}
 	}
 	d := table[n.Call.Name]
+	h, hosted := r.registry.host(n.Call.Name)
+	hosted = hosted && h.Kind == "container"
+	hostDraws := func() (ast.WalkStatus, error) {
+		if entering {
+			_, _ = w.WriteString(hostContainerOpen(h, n.Call) + "\n")
+			if !n.Closed {
+				_, _ = w.WriteString(`<p>` + problemHTML(n.Call, n.Call.Name+" runs to the end of the page: it needs {{/"+n.Call.Name+"}} on a line of its own.") + `</p>` + "\n")
+			}
+		} else {
+			_, _ = w.WriteString(hostContainerClose + "\n")
+		}
+		return ast.WalkContinue, nil
+	}
+	if d == nil && hosted {
+		return hostDraws()
+	}
 	if d == nil || d.wrap == nil {
 		if entering {
 			_, _ = w.WriteString(`<p>` + problemHTML(n.Call, "There is no shortcode called "+n.Call.Name+".") + `</p>` + "\n")
@@ -1286,6 +1353,10 @@ func (r *htmlRenderer) block(w util.BufWriter, src []byte, node ast.Node, enteri
 		return ast.WalkContinue, nil
 	}
 	open, close, err := d.wrap(n.Call)
+	if err != nil && hosted && !sourceOnly[d.name] {
+		// The host may read the name in a way the built-in does not.
+		return hostDraws()
+	}
 	if err != nil {
 		if entering {
 			_, _ = w.WriteString(`<p>` + problemHTML(n.Call, err.Error()) + `</p>` + "\n")
@@ -1320,6 +1391,8 @@ func (r *htmlRenderer) paragraph(w util.BufWriter, src []byte, node ast.Node, en
 				return ast.WalkSkipChildren, nil
 			}
 		}
+		h, hosted := r.registry.host(sc.Call.Name)
+		hosted = hosted && h.Kind == "block"
 		if d := table[sc.Call.Name]; d != nil && d.kind == block {
 			if entering {
 				if parent, ok := node.Parent().(*Block); ok {
@@ -1331,8 +1404,17 @@ func (r *htmlRenderer) paragraph(w util.BufWriter, src []byte, node ast.Node, en
 				out, err := d.render(sc.Call, node.OwnerDocument(), src)
 				if err != nil {
 					out = `<p>` + problemHTML(sc.Call, err.Error()) + `</p>`
+					// The host may read the name in a way the built-in does not.
+					if hosted {
+						out = hostBlock(h, sc.Call, sc.Raw)
+					}
 				}
 				_, _ = w.WriteString(out + "\n")
+			}
+			return ast.WalkSkipChildren, nil
+		} else if d == nil && hosted {
+			if entering {
+				_, _ = w.WriteString(hostBlock(h, sc.Call, sc.Raw) + "\n")
 			}
 			return ast.WalkSkipChildren, nil
 		}

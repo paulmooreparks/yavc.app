@@ -482,6 +482,19 @@ func (p parser) walk(n ast.Node, marks []Mark, out *[]*Node) error {
 			if err := flush(); err != nil {
 				return err
 			}
+			if hosted, ok := shortcodes.HostSpan(node); ok {
+				// A span the host draws is a mark that keeps its opening
+				// as written, so the words inside stay rich text.
+				if node.Closing {
+					if len(marks) == 0 || marks[len(marks)-1].Type != "host_span" || marks[len(marks)-1].Attrs["name"] != hosted {
+						return ErrNotEditable
+					}
+					marks = marks[:len(marks)-1]
+				} else {
+					marks = withMark(marks, Mark{Type: "host_span", Attrs: map[string]any{"name": hosted, "open": node.Raw}})
+				}
+				continue
+			}
 			name, value, ok := shortcodes.Span(node)
 			if !ok {
 				// A shortcode that stands in the line on its own, keys or a
@@ -839,7 +852,7 @@ func intAttr(n *Node, key string, def int) int {
 }
 
 // markOrder is the order marks are opened in, outermost first.
-var markOrder = []string{"no_export", "class", "color", "mark", "sup", "sub", "link", "strong", "em", "underline", "strike", "code"}
+var markOrder = []string{"no_export", "host_span", "class", "color", "mark", "sup", "sub", "link", "strong", "em", "underline", "strike", "code"}
 
 func delimiters(m Mark) (string, string) {
 	switch m.Type {
@@ -863,6 +876,14 @@ func delimiters(m Mark) (string, string) {
 		return "{{" + m.Type + "}}", "{{/" + m.Type + "}}"
 	case "no_export":
 		return "{{no-export}}", "{{/no-export}}"
+	case "host_span":
+		name, _ := m.Attrs["name"].(string)
+		written, _ := m.Attrs["open"].(string)
+		open, ok := shortcodes.HostSpanOpen(name, written)
+		if !ok {
+			return "", ""
+		}
+		return open, "{{/" + name + "}}"
 	case "strike":
 		return "~~", "~~"
 	case "link":
@@ -1027,6 +1048,8 @@ func sameMark(a, b Mark) bool {
 		return a.Attrs["href"] == b.Attrs["href"] && isAuto(a) == isAuto(b)
 	case "color", "class":
 		return a.Attrs["value"] == b.Attrs["value"] && a.Attrs["name"] == b.Attrs["name"]
+	case "host_span":
+		return a.Attrs["open"] == b.Attrs["open"] && a.Attrs["name"] == b.Attrs["name"]
 	}
 	return true
 }

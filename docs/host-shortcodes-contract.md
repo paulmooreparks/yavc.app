@@ -1,0 +1,44 @@
+# Host-rendered shortcodes
+
+A content host can register product-specific shortcodes without putting product syntax or rendering code in the applets. The host supplies the catalog through `contentWorkspace.shortcodes(context)` and the optional service below through `contentWorkspace.shortcodeHost` before mounting a workspace. The site needs no service and retains its built-in behavior.
+
+```js
+shortcodeHost: {
+    version: 1,
+    render(request, context),
+    form(source, context),
+    build(kind, values, context)
+}
+```
+
+The additional context argument is optional for existing implementations. It contains the captured `resource`, the workspace root as `host`, an `AbortSignal`, and `current()`. A host should stop work when the signal is aborted or `current()` becomes false. Older implementations may ignore the argument. The applet independently checks that the document and insertion target are still current before applying an asynchronous result.
+
+## Catalog and drawing
+
+Catalog entries use the existing name, title, description, kind, example and parameter metadata. Kinds are `inline`, `block`, `container` and `span`. Names contain a lowercase letter followed by lowercase letters, digits or hyphens and have at most 64 characters. The engine accepts at most 256 host entries. Definitions inside the document retain precedence. Built-ins render compatible occurrences themselves; a host can handle an occurrence the built-in refuses. Definition and argument-processing names remain reserved.
+
+An inline entry can declare a one-character `prefix` from `@#~!$%&+=?^`. For example, a person shortcode with prefix `@` can read `{{@alex}}`. A `managed: true` entry is drawn but excluded from Insert. Managed paired content stays opaque to rich editing, and the applet refuses its page-edit form. Direct source editing remains available.
+
+`render` receives `{name, kind, args, source}` and resolves to `{html}` or no drawing. For editable containers and spans, `source` is the opening shortcode, and the body belongs to the applet. The returned frame must have exactly one `<slot name="content"></slot>`. Inline and block occurrences include their complete source. Managed block containers include their opaque source.
+
+The applet sanitizes returned HTML with the shared sanitizer and removes delegated action and host-marker attributes. It never executes scripts from a drawing. A rich span keeps editable words inside plain span wrappers derived from the slot's ancestors. Hosts should put span styling on those ancestors. Surrounding frame text and unrelated siblings are not rich-span content.
+
+Drawing calls have a 20-second deadline, a concurrency limit of six per workspace cache and a bounded waiting queue. A workspace retains at most 512 cached drawings and eight million UTF-16 code units of keys and HTML. Cache identity includes the document owner, resource and occurrence source. Drawings expire after five minutes; failed drawings can be retried after 30 seconds. A single drawing cannot exceed 512 KiB of UTF-16 code units. Initial rendering waits up to four seconds before displaying the fallback, then installs a valid late drawing. Until a drawing arrives, inline and block shortcodes show their source and editable paired shortcodes show their body.
+
+## Forms and insertion
+
+`form(source)` resolves to `null` or `{kind, title, description, fields}`. Each field is `{name, label, description, required, value, values}`. A nonempty values array produces a select; otherwise the applet uses a text input. The supplied value initializes both Insert and Change forms. Forms use the shared PUDL dialog and keep validation errors beside their fields.
+
+`build(kind, values)` resolves to `{source}` or `{error: {field, message}}`. The host owns argument parsing, quoting and validation. Forms accept at most 32 fields and a serialized descriptor of at most 256 KiB. Field names are unique, bounded identifiers. Prototype property names are refused. Built source has a 64 KiB limit and cannot contain NUL.
+
+Clicking an inline or opaque block opens its host form. A container's Arguments control opens the host form and preserves its body when the host returns a replacement opening alone. A rich span has a Change shortcode button; its form changes the opening while keeping the body. Removing the span removes its wrapper and retains its words. Cancel and stale responses leave source unchanged. Shortcodes without forms retain source editing where appropriate.
+
+The Insert menu and slash menu include non-managed host entries alongside built-ins. Insertion captures the active document, view and selection before awaiting the form. A changed target cancels insertion. Completing a typed host inline shortcode creates an atom only while the captured document is still current. Undo retains the normal editing history.
+
+## Export boundary
+
+This service supplies screen drawings for Document, Visual and Preview, including Slides' shared renderer. It does not define a trusted print or Office export representation. Export explicitly refuses host-rendered placeholders rather than exporting fallback text or losing content. A host that needs those exports must provide a separate export representation in a future contract.
+
+## Verification
+
+`scripts/test-host-shortcodes.cjs` runs an independent host fixture against a generated release package in Chromium, Firefox and WebKit. It checks rendering across views, sanitization, source retention, host defaults, field validation, Undo, insertion, paired body retention and delayed keyboard editing. The fixture uses synthetic product-neutral shortcodes and does not modify Dinah or GK Companion. Go tests cover parsing, precedence, prefixes, managed content and source round trips. These checks validate the applet contract; the receiving product must still validate its own Confluence output after pinning the release.

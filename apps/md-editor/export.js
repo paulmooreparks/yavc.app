@@ -99,6 +99,7 @@
         if ((rendered.problems || []).length) { throw new Error('Fix the document warnings before exporting.'); }
         // The HTML cleaner uses an inert template, so omitted assets have not loaded.
         fragment.querySelectorAll('[data-export="omit"],.sc-draft-note').forEach(function (node) { node.remove(); });
+        if (fragment.querySelector('[data-host-shortcode]')) { throw new Error('This document contains host-rendered shortcodes. This host must provide their export representation before printing or Office export.'); }
         // Browser printing includes every disclosure body without its controls.
         // Office conversion retains its separate structural representation gate.
         if (options.renderPages) {

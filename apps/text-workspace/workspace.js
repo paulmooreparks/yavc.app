@@ -1321,11 +1321,60 @@
         function mdEngine() {
             return loadScript(window.yavcUtil.versioned(new URL('../md-engine/loader.js', SELF_SRC).href)).then(function () { return window.yavcMdEngine(); });
         }
+        /* The shortcodes the host application draws
+           (docs/content-workspace-contract.md, shortcodes and shortcodeHost).
+           The host is asked for them once for the window. The document's
+           engine reads them and writes a placeholder where one is, and the
+           kit asks the host for each drawing (apps/md-editor/kit.js). A
+           document drawn before the host has said waits a little for it,
+           and is drawn again if the host says later. */
+        var hostEntries = null, hostAsked = null, hostSettled = false, hostLate = false, hostedBase = null, hostedEngine = null, hostFills = new Map();
+        function hostDraws() { var s = hostServices.shortcodeHost; return !!(s && s.version === 1 && typeof s.render === 'function'); }
+        function hostShortcodes() {
+            if (!hostAsked) {
+                hostAsked = Promise.resolve().then(function () {
+                    if (destroyed || typeof hostServices.shortcodes !== 'function') { return null; }
+                    return hostServices.shortcodes({ signal: styleLifetime.signal, current: function () { return !destroyed; } });
+                }).then(function (body) {
+                    var list = body && Array.isArray(body.shortcodes) ? shortcodeCatalog([], body.shortcodes) : null;
+                    hostSettled = true;
+                    if (!destroyed && list && list.length && hostDraws()) { hostEntries = list; if (hostLate) { hostsArrived(); } }
+                    return list;
+                }, function () { hostSettled = true; return null; });
+            }
+            return hostAsked;
+        }
+        function hostsReady() {
+            if (hostSettled || hostLate || typeof hostServices.shortcodes !== 'function' || !hostDraws()) { return Promise.resolve(); }
+            return new Promise(function (resolve) {
+                var timer = setTimeout(function () { hostLate = true; resolve(); }, 3000);
+                hostShortcodes().then(function () { clearTimeout(timer); resolve(); });
+            });
+        }
+        /* The engine with the host's shortcodes, where the host has any. */
+        function hosted(m) {
+            if (!hostEntries || typeof m.withHosts !== 'function') { return m; }
+            if (hostedBase !== m) { hostedBase = m; hostedEngine = m.withHosts(hostEntries); }
+            return hostedEngine;
+        }
+        function hostsArrived() {
+            if (destroyed || !view) { return; }
+            macroCache = null;
+            if (pageActive()) { visual.api.textChanged(true); }
+            if (readsAsPreview()) { schedulePreview(); }
+            if (!pageActive() && !readsAsPreview() && macroContext) { documentEngine().catch(function () {}); }
+        }
+        /* What the engine made, once the drawings of the host's shortcodes
+           in it are kept, so the page draws each in place as it builds. */
+        function withHostDrawings(value) {
+            return hostEntries && window.yavcMdEditor && window.yavcMdEditor.prefillHosts ? window.yavcMdEditor.prefillHosts(value, picturesHost()) : value;
+        }
         var macroContext = null, macroOwner = null, sharedMacros = '', macroRevision = 0;
         async function documentEngine(definitions) {
             var t = current(), source = definitions == null ? view ? view.state.doc.toString() : '' : definitions, host = picturesHost(), directory = host.dir(), revision = ++macroRevision;
             host.dir = function () { return directory; };
-            var m = await mdEngine(), K = await loadKit(), M = await K.macros(), prepared = await M.prepare(m, source, host);
+            await hostsReady();
+            var m = hosted(await mdEngine()), K = await loadKit(), M = await K.macros(), prepared = await M.prepare(m, source, host);
             if (!destroyed && revision === macroRevision && current() === t && view.state.doc.toString() === source) { macroContext = prepared.engine; macroOwner = t; sharedMacros = prepared.shared; }
             return revision === macroRevision ? prepared.engine : m.withMacros(source, macroOwner === t ? sharedMacros : '');
         }
@@ -1402,15 +1451,37 @@
                 /* The / menu on the page offers the Insert menu's shortcodes. */
                 inserts: function () {
                     var extra = [];
-                    if (F && F.mounted && shortcodes) {
-                        shortcodes.filter(function (s) { return !s.builtin && s.name !== 'column' && !SHORTCODES.some(function (i) { return i.name === s.name; }); }).forEach(function (s) {
-                            extra.push({ id: 'insert-' + s.name, label: s.title, words: s.name + ' ' + s.title.toLowerCase(), markdown: s.example });
+                    if (shortcodes && (F && F.mounted || hostEntries)) {
+                        shortcodes.filter(function (s) { return !s.builtin && !s.managed && s.name !== 'column' && !SHORTCODES.some(function (i) { return i.name === s.name; }); }).forEach(function (s) {
+                            var item = { id: 'insert-' + s.name, label: s.title, words: s.name + ' ' + s.title.toLowerCase(), markdown: s.example };
+                            /* The host's own shortcode is asked for with the host's form. */
+                            if (hostEntries) { item.run = function () { return insertShortcode(s.name); }; }
+                            extra.push(item);
                         });
                     }
                     return window.yavcMdEditor ? window.yavcMdEditor.inserts(extra, picturesHost) : [];
                 },
                 /* A picture pressed on the page opens the picture dialog. */
                 editBlock: function (src) { return window.yavcMdEditor.editBlock(src, picturesHost()); },
+                /* Shortcodes the host application draws: a drawing put into
+                   its placeholder, a span's drawing for the page to put the
+                   words in, a shortcode's title, and a host's inline
+                   shortcode that has just been typed. */
+                fill: function (target, cachedOnly) { window.yavcMdEditor.fillHosts(target, picturesHost(), cachedOnly); },
+                hostSpan: function (name, open) { return window.yavcMdEditor.hostSpan(name, open, picturesHost()); },
+                editHostSpan: function (name, open) { return window.yavcMdEditor.editHostSpan(name, open, picturesHost()); },
+                hostTitle: function (name) {
+                    var s = (hostEntries || []).find(function (x) { return x.name === name; });
+                    return s && typeof s.title === 'string' && s.title.trim() && s.title.length <= 256 ? s.title : '';
+                },
+                hostInline: function (src) {
+                    if (!hostEntries) { return Promise.resolve(null); }
+                    return Promise.resolve(currentMacroEngine() || documentEngine()).then(function (m) {
+                        var out = m.inline(src);
+                        if (!out || !window.yavcMdEditor.hostInlineOnly(out.html)) { return null; }
+                        return withHostDrawings(out);
+                    }).catch(function () { return null; });
+                },
                 review:function(raw){reviewTools().then(function(controller){return controller.browse(raw);}).catch(function(err){say(err.message,true);});},
                 hostSuggestionWidget:hostSuggestions?function(item){return hostSuggestions.widget(item,true);}:null,
                 root: root, page: el.page, scroll: el.scroll,
@@ -1420,12 +1491,12 @@
                 customName: function (name) { return customShortcodes().some(function (item) { return item.name === name; }); },
                 text: function () { return view.state.doc.toString(); },
                 setText: takeVisualText,
-                docOf: function (text) { return documentEngine(text).then(function (m) { return m.doc(text); }); },
+                docOf: function (text) { return documentEngine(text).then(function (m) { return withHostDrawings(m.doc(text)); }); },
                 markdownOf: function (doc) { return mdEngine().then(function (m) { return m.markdown(doc); }); },
-                sourceOf: function (src) { return documentEngine().then(function (m) { return m.source(src); }); },
-                wrapOf: function (line) { return documentEngine().then(function (m) { return m.container(line); }); },
-                inlineOf: function (src) { return documentEngine().then(function (m) { return m.inline(src); }); },
-                blocksOf: function (text) { return documentEngine().then(function (m) { return m.blocks(text); }); },
+                sourceOf: function (src) { return documentEngine().then(function (m) { return withHostDrawings(m.source(src)); }); },
+                wrapOf: function (line) { return documentEngine().then(function (m) { return withHostDrawings(m.container(line)); }); },
+                inlineOf: function (src) { return documentEngine().then(function (m) { return withHostDrawings(m.inline(src)); }); },
+                blocksOf: function (text) { return documentEngine().then(function (m) { return withHostDrawings(m.blocks(text)); }); },
                 draw: function (target, html, diagrams) { drawBlocks(target, [{ line: 0, html: html, diagrams: diagrams }]); },
                 keys: pageKeys,
                 say: say,
@@ -1573,7 +1644,14 @@
         async function drawPreview() {
             var gen = visual.gen, t = current(), source = view.state.doc.toString(), m = await documentEngine(source);
             if (gen !== visual.gen || !view || !readsAsPreview() || current() !== t || view.state.doc.toString() !== source) { return; }
-            var p = m.preview(source), top = el.scroll.scrollTop;
+            var p = m.preview(source);
+            if (hostEntries) {
+                /* The host's drawings are kept before the preview is drawn,
+                   so each is in place when the preview first shows. */
+                await withHostDrawings(p);
+                if (gen !== visual.gen || !view || !readsAsPreview() || current() !== t || view.state.doc.toString() !== source) { return; }
+            }
+            var top = el.scroll.scrollTop;
             if (pagedView(viewMode)) {
                 var flow = el.page.querySelector(':scope > .doc-page-flow');
                 if (!flow) { el.page.replaceChildren(); flow = document.createElement('div'); flow.className = 'doc-page-flow'; el.page.append(flow); }
@@ -1636,11 +1714,12 @@
         function picturesHost() {
             var owner=current(),resource=owner&&owner.path;
             return {
-                resources:hostServices.resources,resource:resource,
+                resources:hostServices.resources,resource:resource,owner:owner,
                 current:function(){return !destroyed&&!!owner&&current()===owner&&owner.path===resource;},
                 site: function () { return Promise.resolve({ F: F, FB: FB }); },
                 root: root, say: say,
                 macroContext: currentMacroEngine,
+                shortcodeHost: hostServices.shortcodeHost, hostFills: hostFills, hostCatalog: hostEntries,
                 read: function (path) { if(!H.fs || !H.fs.readText)throw new Error('This host cannot read dependencies.');return H.fs.readText(path); },
                 watch: H.fs && H.fs.onChange ? function(fn){return H.fs.onChange(fn);} : null,
                 signal: styleLifetime.signal, identity: current, text: function () { return view ? view.state.doc.toString() : ''; },
@@ -1790,7 +1869,7 @@
                 var params=Array.isArray(s.params)?s.params.slice(0,32).filter(function(p){return p&&typeof p.name==='string'&&/^[a-z][a-z0-9-]{0,63}$/.test(p.name)&&typeof p.description==='string'&&p.description.length<=2048;}).map(function(p){return {name:p.name,description:p.description,required:p.required===true};}):[];
                 if(typeof s.example==='string'&&s.example.length>4096)return;
                 var example=typeof s.example==='string'?s.example:'',size=s.name.length+s.title.length+s.description.length+example.length+params.reduce(function(n,p){return n+p.name.length+p.description.length;},0);if(units+size>128*1024)return;units+=size;
-                found.set(s.name,{name:s.name,title:s.title,description:s.description,kind:s.kind,params:params,example:example,argumentRequired:s.argumentRequired===true,builtin:origin===0});
+                found.set(s.name,{name:s.name,title:s.title,description:s.description,kind:s.kind,params:params,example:example,argumentRequired:s.argumentRequired===true,builtin:origin===0,managed:origin===1&&s.managed===true,prefix:origin===1&&s.kind==='inline'&&typeof s.prefix==='string'&&/^[@#~!$%&+=?^]$/.test(s.prefix)?s.prefix:''});
             });});return Array.from(found.values());
         }
         function loadShortcodes() {
@@ -1799,7 +1878,7 @@
                 shortcodesLoading = mdEngine().then(function(m){
                     if(destroyed)return [];
                     var builtin=m.shortcodes().shortcodes;shortcodes=shortcodeCatalog(builtin,[]);
-                    if(hostServices.shortcodes)Promise.resolve().then(function(){if(destroyed)return null;return hostServices.shortcodes({signal:styleLifetime.signal,current:function(){return !destroyed;}});}).then(function(body){if(!destroyed){shortcodes=shortcodeCatalog(builtin,body&&body.shortcodes);commandsChanged();}}).catch(function(){});
+                    if(hostServices.shortcodes)hostShortcodes().then(function(list){if(!destroyed){shortcodes=shortcodeCatalog(builtin,list);commandsChanged();}}).catch(function(){});
                     return shortcodes;
                 }).catch(function(){shortcodesLoading=null;return [];});
             }
@@ -1815,8 +1894,8 @@
             items.push('-');
             SHORTCODES.forEach(function (i) { items.push({ id: i.id, label: i.label, run: function () { insertBlock(i); } }); });
             if (custom.length) { items.push('-'); custom.forEach(function (s) { items.push({ id: 'insert-custom-' + s.name, label: s.name, run: function () { insertCustom(s.name); } }); }); }
-            if (F && F.mounted && shortcodes) {
-                var extra=shortcodes.filter(function (s) { return !s.builtin && s.name !== 'column'; }).sort(function (a, b) {
+            if (shortcodes && (F && F.mounted || hostEntries)) {
+                var extra=shortcodes.filter(function (s) { return !s.builtin && !s.managed && s.name !== 'column'; }).sort(function (a, b) {
                     return a.title.localeCompare(b.title, undefined, { sensitivity: 'base' });
                 });if(extra.length)items.push('-');extra.forEach(function (s) {
                     items.push({ id: 'insert-' + s.name, label: s.title, run: function () { insertShortcode(s.name); } });
@@ -1833,17 +1912,22 @@
             if (formatsThePage()) { visual.api.insertShortcode(metadata.kind, src); }
             else { insertText(metadata.kind === 'inline' ? src : '\n' + src + '\n'); }
         }
-        function insertShortcode(name) {
+        async function insertShortcode(name) {
             var s = (shortcodes || []).find(function (x) { return x.name === name; });
             if (!s) { return; }
+            var owner=current(),onPage=formatsThePage(),api=visual.api;
+            if(onPage && !await api.prepareEdit()) return;
+            if(destroyed||current()!==owner||onPage!==formatsThePage())return;
+            var doc=view.state.doc,selection=view.state.selection,stable=onPage?api.insertionTarget():function(){return view.state.doc===doc&&view.state.selection.eq(selection);};
             /* A figure is asked for as a form; the rest go in as their
                examples, into the page or into the text. */
-            var asked = s.name === 'figure' ? window.yavcMdEditor.askFigure(null, picturesHost()) : Promise.resolve(s.example);
-            asked.then(function (src) {
-                if (!src) { return; }
-                if (formatsThePage()) { visual.api.insertShortcode(s.name === 'figure' ? 'block' : s.kind === 'span' ? 'inline' : s.kind, src); }
-                else { insertText(s.kind === 'inline' || s.kind === 'span' ? src : '\n' + src + '\n'); }
-            });
+            var asked = s.name === 'figure' ? window.yavcMdEditor.askFigure(null, picturesHost())
+                : !s.builtin && hostEntries && window.yavcMdEditor && window.yavcMdEditor.askHostInsert ? window.yavcMdEditor.askHostInsert(s.example, picturesHost())
+                : Promise.resolve(s.example);
+            var src=await asked;
+            if (!src || destroyed || current()!==owner || onPage!==formatsThePage() || !stable()) { return; }
+            if (onPage) { return api.insertShortcode(s.name === 'figure' ? 'block' : s.kind, src); }
+            return insertText(s.kind === 'inline' || s.kind === 'span' ? src : '\n' + src + '\n');
         }
 
         /* === Changes made elsewhere ======================================= */

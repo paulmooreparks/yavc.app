@@ -35,6 +35,9 @@ type MacroRegistry struct {
 	Entries     []MacroEntry `json:"entries"`
 	definitions map[string]MacroDefinition
 	problems    map[string]string
+	// hosts and prefixes are the host application's shortcodes (host.go).
+	hosts    map[string]HostShortcode
+	prefixes map[byte]string
 }
 
 func (r *MacroRegistry) definition(name string) (MacroDefinition, bool) {
@@ -323,7 +326,16 @@ func (r *MacroRegistry) ContainerOf(line string) (Container, bool) {
 		return Container{}, false
 	}
 	d, ok := r.definition(m[1])
-	if !ok || !d.Container || r.problems[d.Name] != "" {
+	if !ok {
+		// A container the host draws has the host's placeholder as its
+		// frame. A line the built-in of the name can draw is the
+		// built-in's, which the caller reads with the package's ContainerOf.
+		if _, builtin := ContainerOf(line); builtin {
+			return Container{}, false
+		}
+		return r.hostContainer(NewCall(m[1], m[2]))
+	}
+	if !d.Container || r.problems[d.Name] != "" {
 		return Container{}, false
 	}
 	standalone := false
