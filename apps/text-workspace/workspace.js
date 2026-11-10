@@ -1585,6 +1585,7 @@
                         visual.api = window.yavcPageView.attach(pageHost());
                         if (window.yavcMdEditor) { window.yavcMdEditor._page = visual.api; }
                     }
+                    var wasOn = visual.api.active();
                     await visual.api.enable(true);
                     if (gen !== visual.gen) { return; }
                     /* Split keeps the page; the text beside it opens at the page's place. */
@@ -1592,6 +1593,8 @@
                     if (!el.findPlace.hidden && lastFind) { pageFind.set(lastFind); visualFind.refresh(); }
                     say('');
                     visual.api.repaginate();
+                    /* A page just turned on opened at the text's caret; now that it is shown, bring that into view. */
+                    if (!wasOn) { visual.api.scrollToSelection(); }
                     if ((mode === 'visual' || mode === 'document') && inFront()) { visual.api.focus(); }
                 }
             } catch (err) {

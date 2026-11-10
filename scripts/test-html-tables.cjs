@@ -73,6 +73,8 @@ const types={'.html':'text/html','.js':'text/javascript','.css':'text/css','.jso
    await p.evaluate(()=>yavcMdEditor.libs().then(CM=>{const v=CM.EditorView.findFromDOM(document.querySelector('#source .cm-editor')),at=v.state.doc.toString().indexOf('Filler paragraph 30');v.dispatch({selection:{anchor:at+3},effects:CM.EditorView.scrollIntoView(at,{y:'center'})});}));
    await action('editor','view',{mode:'visual'});await p.locator('#source .ProseMirror').waitFor();
    await p.waitForFunction(()=>{const s=window.getSelection(),node=s&&s.anchorNode,p=node&&(node.nodeType===1?node:node.parentElement).closest('#source .ProseMirror p');return !!p&&/Filler paragraph 30/.test(p.textContent);});
+   // The page scrolled so the caret's paragraph is in view (the scroller was at the top before).
+   await p.waitForFunction(()=>{const sc=document.querySelector('#source .ed-scroll'),s=window.getSelection(),node=s&&s.anchorNode,par=node&&(node.nodeType===1?node:node.parentElement).closest('#source .ProseMirror p');if(!sc||!par)return false;const r=par.getBoundingClientRect(),b=sc.getBoundingClientRect();return sc.scrollTop>0&&r.top>=b.top&&r.bottom<=b.bottom;});
 
    await action('editor','view',{mode:'preview'});await p.locator('#source [data-line]').first().waitFor();
    assert.deepEqual(errors,[]);console.log(engine+': HTML tables, literal bodies, contents list, table reshaping, cell colour and place keeping passed');

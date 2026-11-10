@@ -1961,6 +1961,24 @@ var schemaCache = null;
          where the text is exactly the page (sourceSelection), or else
          the start of the block the caret is in. The page is written to
          the text first. null when there is no page. */
+      /* Brings the page's selection into view once the page has its
+         layout: when the page is turned on it is built before it is
+         shown, so a scroll asked for then lands on no layout (decision
+         113). A second look follows, for a page whose sheets are laid
+         out after it is shown. */
+      scrollToSelection: function () {
+        if (!view || !on) return;
+        var target = view, sel = view.state.selection;
+        function bring() {
+          if (view !== target || !on || !view.state.selection.eq(sel)) return;
+          try {
+            var c = view.coordsAtPos(view.state.selection.from), r = o.scroll.getBoundingClientRect();
+            if (c.top < r.top || c.bottom > r.bottom) o.scroll.scrollTop += c.top - r.top - r.height / 2;
+          } catch (err) { }
+        }
+        requestAnimationFrame(bring);
+        setTimeout(bring, 300);
+      },
       placeInText: async function () {
         if (!view || !on) return null;
         var target = view;
