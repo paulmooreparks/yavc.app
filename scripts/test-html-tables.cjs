@@ -51,19 +51,34 @@ const types={'.html':'text/html','.js':'text/javascript','.css':'text/css','.jso
    await doc.locator('table:not(.pm-raw-table) td',{hasText:/^one$/}).first().click();
    await ready('#document','table-heading-cell');await command('#document','table-heading-cell');
    now=await text('docs');
-   assert.ok(now.includes('## Pipe table\n\n<table><tbody>\n<tr><th>A</th><th>B</th></tr>\n<tr><th>one</th><td>two</td></tr>\n<tr><td>three</td><td>four</td></tr>\n</tbody></table>\n\n## Literal rest'),now);
+   assert.ok(now.includes('## Pipe table\n\n<table><tbody>\n<tr><th>A</th><th>B</th></tr>\n<tr><th>one</th><td>two</td></tr>\n<tr><td>three</td><td>four</td></tr>\n</tbody></table>\n\n## Citations'),now);
    assert.ok(!now.includes('| A | B |'),now);
    await command('#document','undo');await settled('#document');assert.equal(await text('docs'),source);
-   // A cell's colour, asked in the dialog, is written as its style.
-   await doc.locator('table:not(.pm-raw-table) td',{hasText:/^two$/}).first().click();
+   // On a pipe table the host's own cell colour shortcode is written first in the cell, through the host's form, and the table stays a pipe table.
+   const inCell=word=>p.waitForFunction(word=>{const s=window.getSelection(),n=s&&s.anchorNode,td=n&&(n.nodeType===1?n:n.parentElement).closest('#document td');return !!td&&td.textContent.trim().endsWith(word);},word);
+   await doc.locator('table:not(.pm-raw-table) td',{hasText:/^two$/}).first().click();await inCell('two');await settled('#document');
    await ready('#document','table-cell-colour');await command('#document','table-cell-colour');
-   const colour=p.getByRole('dialog',{name:'Cell Color',exact:true});await colour.waitFor();
-   await colour.getByLabel('Background Color',{exact:true}).fill('#ffeeaa');await colour.getByRole('button',{name:'Apply',exact:true}).click();await colour.waitFor({state:'hidden'});
-   now=await text('docs');
-   assert.ok(now.includes('<tr><td>one</td><td style="background-color: #ffeeaa;">two</td></tr>'),now);
-   await command('#document','undo');await settled('#document');assert.equal(await text('docs'),source);
+   const insertColour=p.getByRole('dialog',{name:'Insert Cell Color',exact:true});await insertColour.waitFor();
+   await insertColour.getByLabel('Color',{exact:true}).fill('purple');await insertColour.getByRole('button',{name:'Insert',exact:true}).click();await insertColour.getByText('Use blue, grey or a hex color.',{exact:true}).waitFor();
+   await insertColour.getByLabel('Color',{exact:true}).fill('blue');await insertColour.getByRole('button',{name:'Insert',exact:true}).click();await insertColour.waitFor({state:'hidden'});
+   await p.waitForFunction(()=>pudlActions.run('yavc.docs/document@1',{},{grant:'all'}).then(r=>r.text.includes('{{cell-colour:blue}} two |')));
+   now=await text('docs');assert.ok(now.includes('| A | B |')&&!now.includes('<td>one</td>'),now);
+   await doc.locator('table:not(.pm-raw-table) .pm-sc').first().waitFor();
+   // A change that needs an HTML table is refused while a cell has the host's colour.
+   await settled('#document');await ready('#document','table-heading-cell');await command('#document','table-heading-cell').catch(()=>{});await settled('#document');
+   now=await text('docs');assert.ok(now.includes('| A | B |')&&now.includes('{{cell-colour:blue}} two |'),now);
+   // The same command changes the colour, starting from the one there, and Remove takes it away.
+   await ready('#document','table-cell-colour');await command('#document','table-cell-colour');
+   const changeColour=p.getByRole('dialog',{name:'Change Cell Color',exact:true});await changeColour.waitFor();
+   assert.equal(await changeColour.getByLabel('Color',{exact:true}).inputValue(),'blue');
+   await changeColour.getByLabel('Color',{exact:true}).fill('grey');await changeColour.getByRole('button',{name:'Change',exact:true}).click();await changeColour.waitFor({state:'hidden'});
+   await p.waitForFunction(()=>pudlActions.run('yavc.docs/document@1',{},{grant:'all'}).then(r=>r.text.includes('{{cell-colour:grey}} two |')));
+   await settled('#document');await ready('#document','table-cell-colour');await command('#document','table-cell-colour');await changeColour.waitFor();
+   await changeColour.getByRole('button',{name:'Remove',exact:true}).click();await changeColour.waitFor({state:'hidden'});
+   await p.waitForFunction(source=>pudlActions.run('yavc.docs/document@1',{},{grant:'all'}).then(r=>r.text===source),source);
+   const colour=p.getByRole('dialog',{name:'Cell Color',exact:true});
    // In the host's literal table the colour also writes the host's own attribute, and clearing it removes both.
-   await doc.locator('table.pm-raw-table td',{hasText:/^1$/}).first().click();
+   await doc.locator('table.pm-raw-table td',{hasText:/^1$/}).first().click();await inCell('1');await settled('#document');
    await ready('#document','table-cell-colour');await command('#document','table-cell-colour');await colour.waitFor();
    await colour.getByLabel('Background Color',{exact:true}).fill('#ffeeaa');await colour.getByRole('button',{name:'Apply',exact:true}).click();await colour.waitFor({state:'hidden'});
    now=await text('docs');
@@ -75,7 +90,6 @@ const types={'.html':'text/html','.js':'text/javascript','.css':'text/css','.jso
    now=await text('docs');assert.ok(now.includes('<tr><td>1</td><td>Press'),now);
    for(let i=0;i<3&&(await text('docs'))!==source;i++){await command('#document','undo');await settled('#document');}assert.equal(await text('docs'),source);
    // The host's colour classes go when a cell's colour is changed or cleared; other classes and untouched cells stay.
-   const inCell=word=>p.waitForFunction(word=>{const s=window.getSelection(),n=s&&s.anchorNode,td=n&&(n.nodeType===1?n:n.parentElement).closest('#document td');return !!td&&td.textContent===word;},word);
    await doc.locator('table.pm-raw-table td',{hasText:/^grey$/}).first().click();await inCell('grey');await settled('#document');
    await ready('#document','table-cell-colour');await command('#document','table-cell-colour');await colour.waitFor();
    await colour.getByLabel('Background Color',{exact:true}).fill('#FFEBE6');await colour.getByRole('button',{name:'Apply',exact:true}).click();await colour.waitFor({state:'hidden'});
@@ -113,7 +127,22 @@ const types={'.html':'text/html','.js':'text/javascript','.css':'text/css','.jso
    await p.waitForFunction(()=>{const sc=document.querySelector('#source .ed-scroll'),s=window.getSelection(),node=s&&s.anchorNode,par=node&&(node.nodeType===1?node:node.parentElement).closest('#source .ProseMirror p');if(!sc||!par)return false;const r=par.getBoundingClientRect(),b=sc.getBoundingClientRect();return sc.scrollTop>0&&r.top>=b.top&&r.bottom<=b.bottom;});
 
    await action('editor','view',{mode:'preview'});await p.locator('#source [data-line]').first().waitFor();
-   assert.deepEqual(errors,[]);console.log(engine+': HTML tables, literal bodies, contents list, table reshaping, cell colour and its host attribute, speaker notes kept off the slide and place keeping passed');
+   // A paragraph with text in brackets is edited on the page, and its brackets are written as they were.
+   await action('docs','view',{mode:'visual'});await doc.locator('.ProseMirror').waitFor();
+   const cited=doc.locator('.ProseMirror > p',{hasText:'Cited words here. [S2]'});await cited.waitFor();
+   assert.equal(await doc.locator('.pm-source',{hasText:'Cited words here'}).count(),0);
+   await cited.click();await p.keyboard.press('End');await p.keyboard.type(' and [S3] more');
+   await p.waitForFunction(()=>pudlActions.run('yavc.docs/document@1',{},{grant:'all'}).then(r=>r.text.includes('Cited words here. [S2] and [S3] more\n')));
+   // A host whose document has no saved location yet: Save asks where to save, in Docs and in Slides, and writes nothing.
+   await p.goto(`http://127.0.0.1:${server.address().port}${prefix}workspace-lab/index.html?unplaced=1`);await p.locator('#document .ProseMirror').waitFor();
+   const writesBefore=await p.evaluate(()=>fixture.writes.length);
+   await action('docs','view',{mode:'visual'});await p.locator('#document .ProseMirror > p',{hasText:'Cited words here.'}).click();await p.keyboard.type('x');await settled('#document');
+   await command('#document','save');await p.waitForFunction(()=>fixture.htmlTables.saveAsCalls.length===1);
+   await action('slides','view',{mode:'visual'});await p.locator('#deck .deck-slide .ProseMirror p',{hasText:'First.'}).click();await p.keyboard.type('y');
+   await p.waitForFunction(()=>pudlActions.run('yavc.slides/text@1',{},{grant:'all'}).then(r=>r.text.includes('y')));
+   await command('#deck','save');await p.waitForFunction(()=>fixture.htmlTables.saveAsCalls.length===2);
+   assert.equal(await p.evaluate(()=>fixture.writes.length),writesBefore);
+   assert.deepEqual(errors,[]);console.log(engine+': HTML tables, literal bodies, contents list, table reshaping, cell colour and its host attribute, speaker notes kept off the slide, bracketed text, Save without a location and place keeping passed');
   }catch(e){console.error(engine,(await p.locator('body').innerText()).slice(-3000),errors);throw e;}finally{await browser.close();}
  }}finally{await new Promise(resolve=>server.close(resolve));}
 })().catch(e=>{console.error(e);process.exitCode=1;});

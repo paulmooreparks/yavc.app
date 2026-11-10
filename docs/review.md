@@ -1,5 +1,15 @@
 # Stem-to-stern review, November 2026
 
+## Bracketed text, Save without a location, and a host's cell colour shortcode, 2026-11-10
+
+Paul reported that a block with text such as `[S2]` dropped to Markdown in Visual view, and came back when he wrote `(S2)`. The writer escapes an opening bracket in case the document defines a reference of that name, so the block never came back as it was read. The engine now decides once for the document: with no line that could define a reference, bracketed text is rich text and is written plainly where that reads the same (DESIGN.md, decision 118). The tests in `internal/pageview/brackets_test.go` cover the paragraph, list and table cases, the document with a definition, and the typed text whose escape must stay. One existing gap was seen and left: a typed `[ ]` at the start of a list item was never escaped by the writer.
+
+He also reported that Save did nothing on a new document in a receiving product, where only Save As worked. That host binds a new document to a draft, so the applets wrote the draft. A host can now say `needsLocation: true`, and Save opens Save As (decision 120). `apps/content-kit/test/resources.test.mjs` tests the flag from the host's result to the placed resource, and the browser suite checks that Save in Docs and in Slides calls the host's Save As and writes nothing. The receiving host must set the flag for the fix to show.
+
+Two approved seams went in with them. Cell Color on a pipe table writes a host's own colour shortcode through the host's form, and the table stays a pipe table (decision 119); the suite checks a refused colour, the write, the refusal of a heading cell while a colour is there, the change and the removal. The host's file reader is told which document asks. While building, a menu row that returned its dialog's promise made the command wait on its own dialog, which the suite caught as a hang; the row no longer returns it.
+
+The portable Diagrams suite lost its Firefox page again (`page.goto: Page crashed`) when the three engines ran in one process. Run alone, Firefox passed twice on this build and WebKit once, and the released v0.2.60 package crashed in Firefox twice the same way, so the crash is the one recorded on 9 November and not this change. Its cause is still unproven.
+
 ## A cell's colour classes and the reader for referenced files, 2026-11-10
 
 Cell Color left a wiki's colour class, such as `highlight-grey`, on a cell whose colour it changed or cleared. A literal catalog entry may now say `colorClassPrefix`, and the classes that begin with it go with the old colour (DESIGN.md, decision 117). The three-engine suite recolours a cell with a colour class and another class, and clears one with only a colour class, and checks the first keeps its other class, the second loses its class attribute, and a neighbouring cell is untouched until it is itself changed.

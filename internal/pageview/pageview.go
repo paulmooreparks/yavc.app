@@ -67,10 +67,13 @@ func Parse(part string) (*Node, error) {
 
 // ParseWithMacros retains custom invocations as inline atoms.
 func ParseWithMacros(part string, registry *shortcodes.MacroRegistry) (*Node, error) {
-	return parseWithNotes(part, registry, nil)
+	return parseWithNotes(part, registry, nil, false)
 }
 
-func parseWithNotes(part string, registry *shortcodes.MacroRegistry, notes map[string]int) (*Node, error) {
+// relax admits a part whose only difference from what is written back is an
+// opening bracket's escape (bracketsOnly), which the caller allows only for
+// a document with no reference definitions.
+func parseWithNotes(part string, registry *shortcodes.MacroRegistry, notes map[string]int, relax bool) (*Node, error) {
 	part = strings.TrimRight(part, "\n")
 	if strings.TrimSpace(part) == "" || strings.Contains(part, "\r") {
 		return nil, ErrNotEditable
@@ -120,7 +123,7 @@ func parseWithNotes(part string, registry *shortcodes.MacroRegistry, notes map[s
 		// Quotes may use lazy continuation lines and tables may vary their
 		// delimiter widths. Admit those spellings only when canonical output
 		// parses to the same rich tree, and retain the original source.
-		if len(doc.Content) != 1 || !canonicalSource(doc.Content[0]) {
+		if len(doc.Content) != 1 || !(canonicalSource(doc.Content[0]) || relax && bracketsOnly(back, part)) {
 			return nil, ErrNotEditable
 		}
 		check := &Node{Type: "doc"}
