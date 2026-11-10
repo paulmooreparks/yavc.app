@@ -256,7 +256,7 @@ var schemaCache = null;
             var span = document.createElement('span');
             span.className = 'pm-raw-inline';
             span.setAttribute('data-xml', n.attrs.xml);
-            span.setAttribute('title', 'Markup kept as it was written');
+            span.setAttribute('data-tooltip', 'Markup kept as it was written');
             span.appendChild(window.yavcHTML.fragment(n.attrs.xml));
             if (!span.textContent.trim()) span.textContent = n.attrs.xml;
             return span;

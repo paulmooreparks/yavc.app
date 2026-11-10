@@ -426,9 +426,9 @@
        empty answer takes the colour away. */
     function askCellColour(page) {
         var current = page.marks().cellColour || '';
-        return window.yavcDialog.askText('Cell Colour', 'Background Colour', current, {
-            placeholder: '#DEEBFF', help: 'A CSS colour for the background of the selected cells. Leave it empty to take the colour away.', okLabel: 'Apply',
-            validate: function (v) { v = String(v || '').trim(); return !v || (v.length <= 64 && /^[#()%.,\/\sA-Za-z0-9-]+$/.test(v) && CSS.supports('background-color', v)) ? null : 'That is not a colour the browser knows.'; }
+        return window.yavcDialog.askText('Cell Color', 'Background Color', current, {
+            placeholder: '#DEEBFF', help: 'A CSS color for the background of the selected cells. Leave it empty to take the color away.', okLabel: 'Apply',
+            validate: function (v) { v = String(v || '').trim(); return !v || (v.length <= 64 && /^[#()%.,\/\sA-Za-z0-9-]+$/.test(v) && CSS.supports('background-color', v)) ? null : 'That is not a color the browser knows.'; }
         }).then(function (v) {
             if (v == null) { return; }
             page.run('cell-colour', String(v).trim());
@@ -456,7 +456,7 @@
             if (t === '-') { items.push('-'); return; }
             items.push(row({ id: 'table-' + t[0], label: t[1], op: t[0], run: function () { var p = pageHere(); if (p) { p.run(t[0]); } } }, true));
         });
-        items.push(row({ id: 'table-cell-colour', label: 'Cell Colour…', op: 'cell-colour', run: function () { var p = pageHere(); if (p) { askCellColour(p); } } }, true));
+        items.push(row({ id: 'table-cell-colour', label: 'Cell Color…', op: 'cell-colour', run: function () { var p = pageHere(); if (p) { askCellColour(p); } } }, true));
         items.push('-');
         [['default', 'Default Alignment'], ['left', 'Align Column Left'], ['center', 'Center Column'], ['right', 'Align Column Right']].forEach(function (option) {
             var value = option[0] === 'default' ? '' : option[0];

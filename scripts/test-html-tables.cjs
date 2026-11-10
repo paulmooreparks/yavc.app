@@ -57,8 +57,8 @@ const types={'.html':'text/html','.js':'text/javascript','.css':'text/css','.jso
    // A cell's colour, asked in the dialog, is written as its style.
    await doc.locator('table:not(.pm-raw-table) td',{hasText:/^two$/}).first().click();
    await ready('#document','table-cell-colour');await command('#document','table-cell-colour');
-   const colour=p.getByRole('dialog',{name:'Cell Colour',exact:true});await colour.waitFor();
-   await colour.getByLabel('Background Colour',{exact:true}).fill('#ffeeaa');await colour.getByRole('button',{name:'Apply',exact:true}).click();await colour.waitFor({state:'hidden'});
+   const colour=p.getByRole('dialog',{name:'Cell Color',exact:true});await colour.waitFor();
+   await colour.getByLabel('Background Color',{exact:true}).fill('#ffeeaa');await colour.getByRole('button',{name:'Apply',exact:true}).click();await colour.waitFor({state:'hidden'});
    now=await text('docs');
    assert.ok(now.includes('<tr><td>one</td><td style="background-color: #ffeeaa;">two</td></tr>'),now);
    await command('#document','undo');await settled('#document');assert.equal(await text('docs'),source);
