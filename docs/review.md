@@ -842,3 +842,9 @@ The resource-backed Save As adapter disabled the download choice even though the
 
 Browser print preparation imposed the Office writer's full-page pixel width and height on embedded images. The sample's column constrained width through CSS while the inline height remained fixed, stretching the image vertically. Browser print now retains authored sizing and the same responsive image rules used by Document view. Office dimensions and image safety limits remain unchanged. The sample regression compares rendered and natural aspect ratios and checks column bounds in both screen and print media, light and dark themes, Editor and Docs. PUDL source review found no remaining issue.
 
+## Host shortcode integration (2026-11-10)
+
+The private host-shortcodes branch added engine placeholders, host drawings and forms, catalog insertion and the missing page insertion method. Review added bounds on catalogs, drawings, queues and forms; captured document checks for asynchronous edits; cancellation signals; and removal of host-supplied delegated action attributes. Insertion after Undo now prepares the current rich view before capturing its target. Paired container and span edits preserve their bodies. Managed spans stay outside rich editing. Export refuses host placeholders explicitly.
+
+The independent-host browser regression exercises the generated package rather than source snippets. PUDL review found that Insert discarded supplied text-field defaults and delayed span rendering removed its Change control. Both defects now have regression coverage. Keyboard activation also needs to stop the rich editor from consuming the span button's Enter key. Receiving-product Confluence behavior remains an acceptance check for that product after it pins the release.
+

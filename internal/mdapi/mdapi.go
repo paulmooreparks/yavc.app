@@ -71,11 +71,14 @@ var functions = map[string]func(string) (any, error){
 	"review-inline":  inlineReview,
 	"review-edit":    editReview,
 	"export-preview": func(request string) (any, error) {
-		var r struct{ Text, Definitions, Shared string }
+		var r struct {
+			Text, Definitions, Shared string
+			Hosts                     []shortcodes.HostShortcode
+		}
 		if err := json.Unmarshal([]byte(request), &r); err != nil {
 			return nil, err
 		}
-		registry := shortcodes.DiscoverMacros(r.Definitions, r.Shared)
+		registry := shortcodes.DiscoverMacros(r.Definitions, r.Shared).WithHosts(r.Hosts)
 		blocks, problems, err := preview.RenderExport(r.Text, registry)
 		if err != nil {
 			return nil, err
@@ -91,11 +94,15 @@ var functions = map[string]func(string) (any, error){
 		return map[string]any{"blocks": blocks, "problems": problems, "slideSettings": settings}, err
 	},
 	"macro-context": func(request string) (any, error) {
-		var r struct{ Op, Text, Definitions, Shared string }
+		var r struct {
+			Op, Text, Definitions, Shared string
+			// Hosts are the shortcodes the hosting application draws.
+			Hosts []shortcodes.HostShortcode
+		}
 		if err := json.Unmarshal([]byte(request), &r); err != nil {
 			return nil, err
 		}
-		registry := shortcodes.DiscoverMacros(r.Definitions, r.Shared)
+		registry := shortcodes.DiscoverMacros(r.Definitions, r.Shared).WithHosts(r.Hosts)
 		if r.Op == "catalog" {
 			for i := range registry.Entries {
 				entry := &registry.Entries[i]
