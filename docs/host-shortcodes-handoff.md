@@ -1,5 +1,21 @@
 # Host shortcode integration handoff
 
+## v0.2.64: a slide change no longer rebuilds the show
+
+Paul saw each slide in a show elsewhere fade in, vanish and grow back. [v0.2.64](https://github.com/paulmooreparks/yavc.app/releases/tag/v0.2.64), tagged at `0fcb59601865ad0255eddc27dc5d530e62bf4928` ([PR #93](https://github.com/paulmooreparks/yavc.app/pull/93)), sends the deck to the show only when its text has changed, and the show's page keeps its stage for a deck it already shows. The change is in Slides alone, and a host does nothing but take the release in place of v0.2.63.
+
+| Item | Value |
+| --- | --- |
+| Tag | `v0.2.64` |
+| Tagged commit | `0fcb596` |
+| Archive | yavc-content-v0.2.64.zip |
+| Archive SHA256 | `89774868d6bf623ecc74f67974f5dbe029d8efc9eaf3e503e0a7352e17ac0d35` |
+| Manifest SHA256 | `bbd858a2d69965a4fefbfc21702111c1ad4526a3c082b3f97830c5353db2c89e` |
+| Content digest | `a312f5087807d245bbc406bcb657d4abd1f6dd71d600d2418c0bb4c4d9dea945` |
+| Files | 484 |
+
+The content digest is the one the suites ran against before the tag.
+
 ## v0.2.63: the show's page asks the host for the deck's folder
 
 The receiving host's check of v0.2.62 found that a diagram referred to by a relative path was refused on the show's page. [v0.2.63](https://github.com/paulmooreparks/yavc.app/releases/tag/v0.2.63), tagged at `e89aae8517322c50aea0104b21aa292db69e1553` ([PR #91](https://github.com/paulmooreparks/yavc.app/pull/91)), asks `contentWorkspace.directory` for the deck's folder there, and makes show mode fill its window whatever height its mount has. Pin this release in place of v0.2.62.
