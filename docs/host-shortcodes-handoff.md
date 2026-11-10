@@ -1,5 +1,23 @@
 # Host shortcode integration handoff
 
+## v0.2.65: a canvas drawn as a screen looks
+
+Paul wants a point-of-sale screen recreated in Diagrams down to its buttons, fonts, colours and symbols. [v0.2.65](https://github.com/paulmooreparks/yavc.app/releases/tag/v0.2.65), tagged at `f6d4b61ab4fff1f76cc8bf39c8389e44873d643e` ([PR #95](https://github.com/paulmooreparks/yavc.app/pull/95)), adds picture nodes with a fit and a tint, a colour, size, weight, font and padding for text, a corner radius and a choice of outlined sides, and named styles. `docs/canvas-extension.md` defines them and DESIGN.md decision 122 gives the reasons.
+
+A receiving host has three things to do for a faithful screen. Its `contentWorkspace.resources.resolve` must be offered to Diagrams as well as to the document applets, and it is asked with the canvas file as `resource` and the picture's path as `href` (`docs/document-host-overlays-contract.md`). The pictures must be files the host can serve on its own origin, each at most 1 MiB. A brand font must be loaded by the host's own page, since a canvas gives a font by its family name and the applet fetches none. An exported PNG and a canvas shown in a document use only the fonts installed on the reader's machine.
+
+| Item | Value |
+| --- | --- |
+| Tag | `v0.2.65` |
+| Tagged commit | `f6d4b61` |
+| Archive | yavc-content-v0.2.65.zip |
+| Archive SHA256 | `c289ec1628e82ebefbfeeea46794b7aa1410346523cf87bcf4b56da5f3eadce1` |
+| Manifest SHA256 | `a56862b4c8cfc52577018ffe31f59f4469cb70e47cc50c75c9f0090d0a569e0f` |
+| Content digest | `f570540d1b49aee7461ff7e4ff65980f32b492700738db768bd3cec0070ebfbd` |
+| Files | 485 |
+
+The content digest is the one the suites ran against before the tag.
+
 ## v0.2.64: a slide change no longer rebuilds the show
 
 Paul saw each slide in a show elsewhere fade in, vanish and grow back. [v0.2.64](https://github.com/paulmooreparks/yavc.app/releases/tag/v0.2.64), tagged at `0fcb59601865ad0255eddc27dc5d530e62bf4928` ([PR #93](https://github.com/paulmooreparks/yavc.app/pull/93)), sends the deck to the show only when its text has changed, and the show's page keeps its stage for a deck it already shows. The change is in Slides alone, and a host does nothing but take the release in place of v0.2.63.
