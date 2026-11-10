@@ -6,7 +6,7 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {createHash} from 'node:crypto';
 const root=fileURLToPath(new URL('../',import.meta.url)),dist=path.join(root,'web/pudl');
-const manifest=JSON.parse(fs.readFileSync(path.join(root,'docs/pudl-0.105.0.json'),'utf8'));
+const manifest=JSON.parse(fs.readFileSync(path.join(root,'docs/pudl-0.106.2.json'),'utf8'));
 const digest=bytes=>createHash('sha256').update(bytes).digest('hex');
 function files(dir,prefix=''){return fs.readdirSync(dir,{withFileTypes:true}).flatMap(entry=>entry.isDirectory()?files(path.join(dir,entry.name),prefix+entry.name+'/'):[prefix+entry.name]);}
 test('the complete bundled PUDL distribution matches the verified release archive',()=>{

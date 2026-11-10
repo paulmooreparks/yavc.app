@@ -1,5 +1,9 @@
 # Stem-to-stern review, November 2026
 
+## PUDL 0.106.2 integration, 2026-11-11
+
+The bundled PUDL went from 0.105.0 to 0.106.2 so that Dinah and GK Companion can take stacked taskbar buttons, since their release test requires the package's `pudl/` files to equal their own. The archive, manifest and tag commit were verified and all 196 files replaced together; the host and the applets needed no change. `pudl-upgrade-0.106.2.md` records the evidence, a missing wait fixed in `test-pudl-upgrade.cjs`, and five site tests that were already out of date and remain so.
+
 ## A canvas drawn as a screen looks, 2026-11-11
 
 Paul asked what Diagrams needs to recreate a point-of-sale screen faithfully, and an agent's attempt in the receiving product showed the gaps (DESIGN.md, decision 122). The Canvas extension gained picture nodes with a fit and a tint, a colour, size, weight, font and padding for text, a corner radius and a choice of outlined sides, and named styles. `docs/canvas-extension.md` was written first and the reader, writer, drawing, inspector and `canvas-edit` action follow it.
