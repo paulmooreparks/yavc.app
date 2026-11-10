@@ -112,18 +112,48 @@ func RenderExport(markdown string, registry *shortcodes.MacroRegistry) ([]Block,
 	return renderDocument(markdown, registry, true)
 }
 
-func renderDocument(markdown string, registry *shortcodes.MacroRegistry, exporting bool) ([]Block, []Problem, error) {
+// Whole parses a document as the preview reads it, for rendering a part of
+// it on its own (a container's body, for the page view) with the whole in
+// reach of the shortcodes that read the document, such as the contents
+// list (shortcodes.MacroRegistry.Within).
+func Whole(markdown string, registry *shortcodes.MacroRegistry) *shortcodes.Outer {
+	src, _ := sourceOf(markdown)
+	md, _ := markdownOf(registry, false)
+	return &shortcodes.Outer{Doc: md.Parser().Parse(text.NewReader(src)), Src: src}
+}
+
+// sourceOf is a document's text as Markdown reads it: with \n line ends,
+// and its front matter as blank lines, which Markdown ignores, so the
+// lines of everything after it keep their numbers.
+func sourceOf(markdown string) ([]byte, []int) {
 	markdown = strings.ReplaceAll(markdown, "\r\n", "\n")
 	lines := strings.Split(markdown, "\n")
-	// Front matter becomes blank lines, which Markdown ignores, so the
-	// lines of everything after it keep their numbers.
 	front := frontMatterLines(markdown)
 	for i := 0; i < front; i++ {
 		lines[i] = ""
 	}
 	src := []byte(strings.Join(lines, "\n"))
-	starts := lineStarts(src)
+	return src, lineStarts(src)
+}
 
+func renderDocument(markdown string, registry *shortcodes.MacroRegistry, exporting bool) ([]Block, []Problem, error) {
+	src, starts := sourceOf(markdown)
+	md, d := markdownOf(registry, exporting)
+	doc := md.Parser().Parse(text.NewReader(src))
+	if exporting {
+		if err := shortcodes.PruneExport(doc); err != nil {
+			return nil, nil, err
+		}
+		if review.Unresolved(doc, src) {
+			return nil, nil, fmt.Errorf("choose an accepted or original review projection, or resolve the review marks, before exporting")
+		}
+		footnotes.PrepareExport(doc)
+	}
+	return renderParsed(md, d, doc, src, starts, exporting)
+}
+
+// markdownOf is the Markdown reader and renderer for a document's registry.
+func markdownOf(registry *shortcodes.MacroRegistry, exporting bool) (goldmark.Markdown, *drawer) {
 	d := &drawer{}
 	shortcodeExtension := shortcodes.WithMacros(registry)
 	if exporting {
@@ -143,17 +173,11 @@ func renderDocument(markdown string, registry *shortcodes.MacroRegistry, exporti
 			renderer.WithNodeRenderers(util.Prioritized(d, 100)),
 		),
 	)
-	doc := md.Parser().Parse(text.NewReader(src))
-	if exporting {
-		if err := shortcodes.PruneExport(doc); err != nil {
-			return nil, nil, err
-		}
-		if review.Unresolved(doc, src) {
-			return nil, nil, fmt.Errorf("choose an accepted or original review projection, or resolve the review marks, before exporting")
-		}
-		footnotes.PrepareExport(doc)
-	}
+	return md, d
+}
 
+// renderParsed draws a parsed document as its top-level blocks.
+func renderParsed(md goldmark.Markdown, d *drawer, doc ast.Node, src []byte, starts []int, exporting bool) ([]Block, []Problem, error) {
 	var problems []Problem
 	if catalog, err := review.DisplayCatalog(doc); err != nil && !exporting {
 		problems = append(problems, Problem{Line: 1, Message: err.Error()})

@@ -80,6 +80,8 @@ type builder struct {
 	uid      int
 	registry *shortcodes.MacroRegistry
 	notes    map[string]int
+	// whole is the document as parsed, read once for the bodies in it.
+	whole *shortcodes.Outer
 }
 
 func (b *builder) lineEnd(line int) int {
@@ -134,6 +136,15 @@ func (b *builder) node(u Unit, src string) *Node {
 	// bypassed by rendering the same invocation again as an editable atom.
 	if strings.Contains(u.HTML, "shortcode expansions exceed") || strings.Contains(u.HTML, "shortcode expansion exceeds") {
 		return b.source(u.Kind, src, u.HTML, u.Diagrams)
+	}
+	// An HTML block that is one table of a strict shape is edited as a
+	// table and written back as HTML (rawtable.go).
+	if u.Kind == "html" {
+		if t, ok := parseHTMLTable("", src, ""); ok {
+			t.Attrs["uid"] = b.next()
+			t.Attrs["src"] = src
+			return t
+		}
 	}
 	if richKinds[u.Kind] {
 		if d, err := parseWithNotes(src, b.registry, b.notes); err == nil && len(d.Content) == 1 {
@@ -236,11 +247,34 @@ func (b *builder) container(src string) *Node {
 	if !ok {
 		return nil
 	}
+	// A host container whose body is literal HTML: one table of the strict
+	// shape is edited as a table, with the container's lines around it
+	// (rawtable.go); any other body is one source block, read whole.
+	if info.Literal {
+		if t, ok := parseHTMLTable(open, body, close); ok {
+			t.Attrs["uid"] = b.next()
+			t.Attrs["src"] = src
+			return t
+		}
+	}
 	attrs := map[string]any{"uid": b.next(), "src": src, "name": info.Name, "args": info.Args, "open": open, "close": close, "before": info.Before, "after": info.After}
 	// A body of one empty line, between the opening and the closing line,
 	// is told apart from no body at all, so each comes back as it was.
 	if body == "" && strings.Count(src, "\n") > 1 {
 		attrs["blank"] = true
+	}
+	if info.Literal {
+		attrs["literal"] = true
+		var content []*Node
+		if body != "" {
+			n := b.source("html", body, body, nil)
+			n.Attrs["gap"] = ""
+			content = []*Node{n}
+		} else {
+			content = []*Node{{Type: "paragraph"}}
+		}
+		attrs["tail"] = ""
+		return &Node{Type: "container", Attrs: attrs, Content: content}
 	}
 	if info.Separator != "" {
 		parts, none, seps := splitBody(body, info.Separator)
@@ -286,8 +320,13 @@ func splitBody(body, sep string) (parts []string, none []bool, seps []string) {
 // body reads a container's body as blocks, with the blank text after the
 // last one. An empty body gives one empty paragraph to type into.
 func (b *builder) body(text string) ([]*Node, string) {
-	blocks, _ := preview.RenderWithMacros(text, b.registry)
-	inner := builder{text: text, starts: lineStarts(text), uid: b.uid, registry: b.registry, notes: b.notes}
+	// The body is drawn with the whole document in reach, so a contents
+	// list in a container lists the document's headings, not the body's.
+	if b.whole == nil {
+		b.whole = preview.Whole(b.text, b.registry)
+	}
+	blocks, _ := preview.RenderWithMacros(text, b.registry.Within(b.whole))
+	inner := builder{text: text, starts: lineStarts(text), uid: b.uid, registry: b.registry, notes: b.notes, whole: b.whole}
 	content, tail := inner.sequence(Units(blocks), 0, len(text))
 	b.uid = inner.uid
 	if len(content) == 0 {
@@ -383,6 +422,9 @@ func sequenceText(nodes []*Node, first string) (string, error) {
 func blockText(n *Node) (string, error) {
 	if n.Type == "source_block" {
 		return stringAttr(n, "src"), nil
+	}
+	if rawTableOf(n) != nil {
+		return rawTableText(n)
 	}
 	var s string
 	var err error

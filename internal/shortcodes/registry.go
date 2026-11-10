@@ -38,6 +38,36 @@ type MacroRegistry struct {
 	// hosts and prefixes are the host application's shortcodes (host.go).
 	hosts    map[string]HostShortcode
 	prefixes map[byte]string
+	// outer is the whole document, when a part of it is rendered on its
+	// own (a container's body, for the page view), so a shortcode that
+	// reads the document, such as the contents list, reads all of it.
+	outer *Outer
+}
+
+// Outer is a whole document as parsed, with the text it was parsed from.
+type Outer struct {
+	Doc ast.Node
+	Src []byte
+}
+
+// Within is the registry for rendering a part of doc on its own: the same
+// registry, with the whole document for the shortcodes that read it.
+func (r *MacroRegistry) Within(outer *Outer) *MacroRegistry {
+	if r == nil {
+		r = &MacroRegistry{Entries: []MacroEntry{}, definitions: map[string]MacroDefinition{}, problems: map[string]string{}}
+	}
+	within := *r
+	within.outer = outer
+	return &within
+}
+
+// Document is the document a shortcode reads: the whole one, when a part
+// is being rendered on its own, and otherwise the one it is in.
+func (r *MacroRegistry) Document(doc ast.Node, src []byte) (ast.Node, []byte) {
+	if r != nil && r.outer != nil && r.outer.Doc != nil {
+		return r.outer.Doc, r.outer.Src
+	}
+	return doc, src
 }
 
 func (r *MacroRegistry) definition(name string) (MacroDefinition, bool) {
