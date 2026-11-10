@@ -1,5 +1,21 @@
 # Host shortcode integration handoff
 
+## v0.2.63: the show's page asks the host for the deck's folder
+
+The receiving host's check of v0.2.62 found that a diagram referred to by a relative path was refused on the show's page. [v0.2.63](https://github.com/paulmooreparks/yavc.app/releases/tag/v0.2.63), tagged at `e89aae8517322c50aea0104b21aa292db69e1553` ([PR #91](https://github.com/paulmooreparks/yavc.app/pull/91)), asks `contentWorkspace.directory` for the deck's folder there, and makes show mode fill its window whatever height its mount has. Pin this release in place of v0.2.62.
+
+| Item | Value |
+| --- | --- |
+| Tag | `v0.2.63` |
+| Tagged commit | `e89aae8` |
+| Archive | yavc-content-v0.2.63.zip |
+| Archive SHA256 | `3235fae19ac188258b0210075b9f21090769a29568f7ba70fb404ed44a7ef8f1` |
+| Manifest SHA256 | `b91a147326d3398f897ffc1170ada714dd7a1ace5f02c2f7ce6ef013c4abd03d` |
+| Content digest | `4e8bed529a85fc1924a6a15e077847cfb80ebc5d48fd272bcdd10984f8805578` |
+| Files | 484 |
+
+The content digest is the one the suites ran against before the tag.
+
 ## v0.2.62: a slide show in a window of the host's own
 
 [v0.2.62](https://github.com/paulmooreparks/yavc.app/releases/tag/v0.2.62), tagged at `58685da6d632926b03819c4cec4c0aef223be132` ([PR #89](https://github.com/paulmooreparks/yavc.app/pull/89)), adds version 2 of the presentation capability, which Paul approved on 10 November. A host may offer `presentation.openShow`, and Slides then leaves the editing window as it is and drives a show the host runs elsewhere, on a page mounted with `show=1`. The whole contract is [presentation-contract.md](presentation-contract.md), and DESIGN.md decision 121 records the reasons. A host at version 1, or one with no other display, presents as before.
