@@ -53,7 +53,9 @@ func ParseDocumentWithMacros(text string, units []Unit, registry *shortcodes.Mac
 			notes[label] = number
 		}
 	}
-	b := builder{text: text, starts: lineStarts(text), registry: registry, notes: notes}
+	refs := definesReferences(text)
+	doc.Attrs["refs"] = refs
+	b := builder{text: text, starts: lineStarts(text), registry: registry, notes: notes, relax: !refs}
 	content, tail := b.sequence(units, len(front), len(text))
 	doc.Attrs["tail"] = tail
 	if len(content) == 0 {
@@ -82,6 +84,9 @@ type builder struct {
 	notes    map[string]int
 	// whole is the document as parsed, read once for the bodies in it.
 	whole *shortcodes.Outer
+	// relax says the document defines no link references, so text in
+	// brackets is only text (brackets.go).
+	relax bool
 }
 
 func (b *builder) lineEnd(line int) int {
@@ -147,7 +152,7 @@ func (b *builder) node(u Unit, src string) *Node {
 		}
 	}
 	if richKinds[u.Kind] {
-		if d, err := parseWithNotes(src, b.registry, b.notes); err == nil && len(d.Content) == 1 {
+		if d, err := parseWithNotes(src, b.registry, b.notes, b.relax); err == nil && len(d.Content) == 1 {
 			n := d.Content[0]
 			if n.Attrs == nil {
 				n.Attrs = map[string]any{}
@@ -326,7 +331,7 @@ func (b *builder) body(text string) ([]*Node, string) {
 		b.whole = preview.Whole(b.text, b.registry)
 	}
 	blocks, _ := preview.RenderWithMacros(text, b.registry.Within(b.whole))
-	inner := builder{text: text, starts: lineStarts(text), uid: b.uid, registry: b.registry, notes: b.notes, whole: b.whole}
+	inner := builder{text: text, starts: lineStarts(text), uid: b.uid, registry: b.registry, notes: b.notes, whole: b.whole, relax: b.relax}
 	content, tail := inner.sequence(Units(blocks), 0, len(text))
 	b.uid = inner.uid
 	if len(content) == 0 {
@@ -367,6 +372,11 @@ func Fresh(nodes []*Node) []*Node {
 func SerializeDocument(doc *Node) (string, error) {
 	if doc == nil || doc.Type != "doc" {
 		return "", errors.New("not an editor's document")
+	}
+	// A document that defined no link references when it was read writes
+	// text in brackets without an escape where that reads the same.
+	if refs, ok := doc.Attrs["refs"].(bool); ok && !refs {
+		relaxAll(doc.Content)
 	}
 	front := stringAttr(doc, "front")
 	first := ""
@@ -446,6 +456,9 @@ func blockText(n *Node) (string, error) {
 	}
 	if src, ok := n.Attrs["src"].(string); ok && n.Attrs["canonical"] == s {
 		return src, nil
+	}
+	if relax, _ := n.Attrs["relax"].(bool); relax {
+		s = plainBrackets(s)
 	}
 	return s, nil
 }

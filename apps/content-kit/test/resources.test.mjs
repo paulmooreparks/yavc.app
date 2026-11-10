@@ -80,3 +80,18 @@ test('encoding acknowledgements fail closed and unsigned UTF-16 is never inferre
     const wrong=create({...base,write:async({resource})=>({resource,revision:'2',writable:true,encoding:'utf-8',bom:false})});await assert.rejects(wrong.write(await wrong.read('one'),'body'),/changed.*encoding/);
     const client=create({...base,create:async()=>{throw new Error('must not run');}});await assert.rejects(client.create('one','body',{encoding:'utf-16le',bom:false}),/signature/);
 });
+test('a resource with no saved location asks Save for one until Save As gives it a place', async () => {
+    const placed={version:1,
+        async read({resource}){return {resource,revision:'1',text:'draft',writable:true,needsLocation:true};},
+        async write({resource}){return {resource,revision:'2',writable:true,needsLocation:true};},
+        async saveAs({name}){return {resource:'workspace:saved',revision:'1',name,writable:true};}};
+    const client=create(placed),draft=await client.read('draft:one');
+    assert.equal(client.needsLocation(draft),true);
+    assert.equal(client.needsLocation({...draft}),false);
+    assert.equal(client.needsLocation(await client.write(draft,'more')),true);
+    const saved=await client.saveAs({name:'note.md',sourceResource:'draft:one'},'more');
+    assert.equal(client.needsLocation(saved),false);
+    const without=create({version:1,read:placed.read}),alone=await without.read('draft:one');
+    assert.equal(without.needsLocation(alone),false);
+    assert.equal(create(host()).needsLocation(await create(host()).read('workspace:one')),false);
+});
