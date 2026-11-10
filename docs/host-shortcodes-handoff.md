@@ -1,5 +1,23 @@
 # Host shortcode integration handoff
 
+## v0.2.56: HTML tables, the reader's place and the contents list
+
+Paul's three requests of 10 November are in [v0.2.56](https://github.com/paulmooreparks/yavc.app/releases/tag/v0.2.56), tagged at `82bcb7f0af1820051736fcd9a39073b8868e0d62` ([PR #77](https://github.com/paulmooreparks/yavc.app/pull/77)). DESIGN.md decisions 112 to 114 and docs/review.md record them. A receiving product that has pinned v0.2.55 moves to this release the same way; the shortcode contract of v0.2.55 is unchanged, with one addition.
+
+| Item | Value |
+| --- | --- |
+| Tag | `v0.2.56` |
+| Tagged commit | `82bcb7f` |
+| Archive | yavc-content-v0.2.56.zip |
+| Archive SHA256 | `7037191d52701f64af5719a4507b0b201f265afd4bec411a5316fc3b39196674` |
+| Manifest SHA256 | `24e2d8bb9144ff24f3081ed5eceeeca9d4885275c585ee81e077c76f3f314d6a` |
+| Content digest | `2f8b7de3eb3d24047bd7e6eff5814211dd7884b1bca13a35a8944e2ba8fc6b66` |
+| Files | 484 |
+
+The addition is a catalog field. A container entry may say `literal: true`, which makes the engine read its body as markup, whole, blank lines and all, and edit one strict table in it as a table with no box (docs/host-shortcodes-contract.md). A product whose wiki markup arrives in such a container should mark that entry literal. Without the field, a literal body with a blank line is still split at the blank line, as before.
+
+The receiving product should check, on its own pages: a wiki table with merged and coloured cells edited in Visual and Document view and written back with every attribute and untouched cell as it was; a cell colour, merge, split or heading change on a pipe table turning it into an HTML table its converter accepts; a change of view in each direction landing on the same block; and a contents list inside its container listing the page's headings with `minLevel`, `maxLevel`, `type` and `outline` left as written. The table export checks of v0.2.55 still apply: Office export refuses merged cells explicitly, and exports a table's cells without their colours.
+
 The yavc.app side of the Dinah and GK Companion shortcode integration is merged in [PR #74](https://github.com/paulmooreparks/yavc.app/pull/74) and published as [v0.2.55](https://github.com/paulmooreparks/yavc.app/releases/tag/v0.2.55). The local site at `http://localhost:8401` serves the same tested content. The receiving product can now pin this release and perform its Confluence acceptance checks. Neither maintained receiving checkout was changed by this work.
 
 ## Release identity
