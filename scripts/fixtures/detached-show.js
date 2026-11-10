@@ -13,9 +13,13 @@
         wire.onmessage=function(e){var d=e.data||{};if(d.from===name)return;if(d.closed){if(port.onclose)port.onclose();return;}fixture.show.received.push(d.message);if(port.onmessage)port.onmessage(d.message);};
         return port;
     }
-    fixture.show={opened:[],sent:[],received:[],closed:false,displays:params.has('one-display')?1:2};
+    fixture.show={opened:[],sent:[],received:[],closed:false,displays:params.has('one-display')?1:2,directories:[]};
+    // A slide refers to a diagram beside the deck, which only the host's directory service can place.
+    fixture.records.get('memory:deck.slides.md').text='# Slide one\n\nFirst.\n\n---\n\n# Slide two\n\nSecond.\n\n{{diagram:plan.canvas alt="Beside the deck"}}\n';
+    pudlHost.contentWorkspace.directory=function(resource){fixture.show.directories.push(resource);return resource==='memory:deck.slides.md'||resource==='memory:document.docs.md'?'~/portable':null;};
     if(params.has('show')){
-        // The show's page: the port and nothing else of the capability.
+        // The show's page: the port and nothing else of the capability, and no service that reads or writes a deck.
+        pudlHost.contentResources=undefined;pudlHost.contentResourceAdapter=undefined;
         pudlHost.presentation=params.has('no-port')?{version:2}:{version:2,showPort:function(){return end('show');}};
         document.addEventListener('pudl:applet-state',function(event){if(event.target.id==='deck')event.detail.state='show=1&channel=fixture';});
         return;

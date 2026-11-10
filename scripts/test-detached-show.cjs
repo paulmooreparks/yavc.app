@@ -36,6 +36,13 @@ const types={'.html':'text/html','.js':'text/javascript','.css':'text/css','.jso
    await show.locator('#deck .deck-show:not(.deck-show-waiting)').focus();await show.keyboard.press('ArrowRight');
    await show.waitForFunction(()=>/Slide two/.test(document.querySelector('#deck .deck-show:not(.deck-show-waiting) .deck-current').innerText));
    await editor.waitForFunction(()=>/Slide 2 of 2/.test(document.querySelector('#deck [data-role="position"]').textContent));
+   // The show's page has no resource service; it asks the host for the deck's folder, so a diagram beside the deck is drawn.
+   await show.locator('#deck .deck-show:not(.deck-show-waiting) .deck-current [data-diagram-src="plan.canvas"] :is(img,svg)').first().waitFor();
+   assert.equal(await show.locator('#deck .deck-show .notice',{hasText:'could not be loaded'}).count(),0);
+   assert.ok(await show.evaluate(()=>fixture.show.directories.includes('memory:deck.slides.md')&&!pudlHost.contentResources));
+   // The show fills its window, whatever height its mount has.
+   const box=await show.locator('#deck').boundingBox(),size=show.viewportSize();
+   assert.deepEqual([Math.round(box.x),Math.round(box.y),Math.round(box.width),Math.round(box.height)],[0,0,size.width,size.height]);
    // The editing window's navigation moves the show.
    await editor.locator('#deck [data-slide="0"]').click();
    await show.waitForFunction(()=>/Slide one/.test(document.querySelector('#deck .deck-show:not(.deck-show-waiting) .deck-current').innerText));

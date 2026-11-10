@@ -55,7 +55,7 @@ The editing window keeps the deck. It is the only one that reads or saves it, an
 
 ### What the show's page needs from the host
 
-The show draws the slide the canvas draws, so it needs the services the canvas reads with, bound to the deck's resource from `openShow`: `contentWorkspace.resources.resolve` for pictures, `contentWorkspace.directory` and `pudlHost.fs.readText` for a diagram a slide refers to, and the shortcode catalogue with `shortcodeHost`. It needs none of the services that write: no `contentResources`, no snapshot service and no settings.
+The show draws the slide the canvas draws, so it needs the services the canvas reads with, bound to the deck's resource from `openShow`: `contentWorkspace.resources.resolve` for pictures, `contentWorkspace.directory` and `pudlHost.fs.readText` for a diagram a slide refers to, and the shortcode catalogue with `shortcodeHost`. It needs none of the services that read or write a deck: no `contentResources`, no snapshot service and no settings. Slides asks `contentWorkspace.directory` with the resource from `state` for the deck's folder, and takes no folder from the resource's own text. The page fills its window whatever height its mount has.
 
 The host chooses the display, gives the show's window keyboard focus when it opens, and closes it on `end`, on `close()`, or when the editing window goes away.
 
