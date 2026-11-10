@@ -20,6 +20,21 @@ func exportHTML(t *testing.T, source string) string {
 	return out.String()
 }
 
+func TestExportRetainsColumnSeparators(t *testing.T) {
+	source := "{{columns}}\nFirst column.\n{{column}}\nSecond column.\n{{/columns}}\n"
+	out := exportHTML(t, source)
+	if strings.Contains(out, "sc-problem") || strings.Count(out, `class="sc-column"`) != 2 {
+		t.Fatalf("column structure was lost during export: %s", out)
+	}
+	if !strings.Contains(out, "Second column.") {
+		t.Fatalf("separator consumed following text: %s", out)
+	}
+	out = exportHTML(t, "{{columns}}\nFirst.\n{{column}}\n{{figure:/static/image.png alt=Picture}}\n{{/columns}}\n")
+	if !strings.Contains(out, "<img") {
+		t.Fatalf("separator consumed following figure: %s", out)
+	}
+}
+
 func TestExcludedReviewMarksCannotBlockOrLeakIntoExport(t *testing.T) {
 	for _, source := range []string{
 		"{{no-export}}\n{++private draft++}\n{{/no-export}}\n\nPublic.\n",

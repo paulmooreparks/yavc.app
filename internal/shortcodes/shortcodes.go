@@ -164,6 +164,17 @@ type Closer struct {
 
 var KindCloser = ast.NewNodeKind("ShortcodeCloser")
 
+// Separator is a container's standalone column boundary. Its own node keeps
+// goldmark's paragraph continuation rules from consuming the following line.
+type Separator struct{ ast.BaseBlock }
+
+var KindSeparator = ast.NewNodeKind("ShortcodeSeparator")
+
+func (n *Separator) Kind() ast.NodeKind { return KindSeparator }
+func (n *Separator) Dump(src []byte, level int) {
+	ast.DumpHelper(n, src, level, nil, nil)
+}
+
 func (n *Closer) Kind() ast.NodeKind { return KindCloser }
 func (n *Closer) Dump(src []byte, level int) {
 	ast.DumpHelper(n, src, level, nil, nil)
@@ -315,6 +326,15 @@ func (p *blockParser) Open(parent ast.Node, reader text.Reader, pc parser.Contex
 		return nil, parser.NoChildren
 	}
 	def := table[string(m[1])]
+	// A container separator owns its line even without surrounding blank lines.
+	if container, ok := parent.(*Block); ok {
+		if owner := table[container.Call.Name]; owner != nil && owner.separator == string(m[1]) {
+			node := &Separator{}
+			node.Lines().Append(seg)
+			takeLine(reader, line)
+			return node, parser.NoChildren
+		}
+	}
 	macro, custom := p.registry.definition(string(m[1]))
 	declaration := string(m[1]) == "define"
 	if !declaration && (!custom || !macro.Container) && (def == nil || def.kind != container) {
@@ -330,6 +350,9 @@ func (p *blockParser) Open(parent ast.Node, reader text.Reader, pc parser.Contex
 }
 
 func (p *blockParser) Continue(node ast.Node, reader text.Reader, pc parser.Context) parser.State {
+	if node.Kind() == KindSeparator {
+		return parser.Close
+	}
 	// A closer ends at once, so the line after it is the parent's.
 	if _, ok := node.(*Closer); ok {
 		return parser.Close
@@ -1091,6 +1114,16 @@ type htmlRenderer struct {
 }
 
 func (r *htmlRenderer) RegisterFuncs(reg renderer.NodeRendererFuncRegisterer) {
+	reg.Register(KindSeparator, func(w util.BufWriter, src []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
+		if entering {
+			if parent, ok := node.Parent().(*Block); ok {
+				if owner := table[parent.Call.Name]; owner != nil {
+					_, _ = w.WriteString(owner.separatorHTML + "\n")
+				}
+			}
+		}
+		return ast.WalkSkipChildren, nil
+	})
 	reg.Register(KindInline, r.inline)
 	reg.Register(KindBlock, r.block)
 	reg.Register(KindCloser, func(w util.BufWriter, src []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
