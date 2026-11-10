@@ -1,5 +1,11 @@
 # Stem-to-stern review, November 2026
 
+## A cell colour's host attribute and collapsed speaker notes, 2026-11-10
+
+Two more from the same day. The receiving product pointed out that a wiki records a custom cell colour twice, in the cell's style and in an attribute of its own, so a pulled cell recoloured or cleared in Docs kept a stale attribute. A literal container's catalog entry may now say which attribute that is (`colorAttribute`), and Cell Color writes, changes and removes it with the style's colour and reads it as the current colour (DESIGN.md, decision 115). A bare HTML table keeps the style alone. Paul also asked that a deck's speaker notes stop being drawn on the slide, since the window's notes pane shows them. The canvas hides them in every mode, and on an editable canvas the notes box is collapsed to its bar, with Show and Hide for editing in place (decision 116).
+
+The three-engine suite in `scripts/test-html-tables.cjs` now colours a cell of the host's table and checks both the attribute and the style are written, that an existing attribute on another cell is untouched, that the dialog opens with the attribute's value, and that clearing removes both; and it opens a deck with notes, checks nothing of the notes is visible on the slide while the notes pane shows them, and that Show and Hide draw and hide the box without changing the deck's text. The host-shortcode and portable-workspace suites pass against the same package.
+
 ## HTML tables, the reader's place and the contents list, 2026-11-10
 
 Paul reported three things from a day's use of a product built on the content applets. A wiki's table, which pipe tables cannot write, arrived as an HTML block that Visual view drew in a box nobody could type in. Changing between Visual and Text put him at the top of the document every time. And a contents list inside a container drew nothing. DESIGN.md decisions 112 to 114 record the shapes chosen.

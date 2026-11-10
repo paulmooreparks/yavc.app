@@ -1474,6 +1474,12 @@
                     var s = (hostEntries || []).find(function (x) { return x.name === name; });
                     return s && typeof s.title === 'string' && s.title.trim() && s.title.length <= 256 ? s.title : '';
                 },
+                /* The attribute a host keeps equal to a cell's colour in the
+                   tables of one of its literal containers, or ''. */
+                colourAttribute: function (name) {
+                    var s = (hostEntries || []).find(function (x) { return x.name === name; });
+                    return s && s.literal && typeof s.colorAttribute === 'string' ? s.colorAttribute : '';
+                },
                 hostInline: function (src) {
                     if (!hostEntries) { return Promise.resolve(null); }
                     return Promise.resolve(currentMacroEngine() || documentEngine()).then(function (m) {
@@ -1889,7 +1895,7 @@
                 var params=Array.isArray(s.params)?s.params.slice(0,32).filter(function(p){return p&&typeof p.name==='string'&&/^[a-z][a-z0-9-]{0,63}$/.test(p.name)&&typeof p.description==='string'&&p.description.length<=2048;}).map(function(p){return {name:p.name,description:p.description,required:p.required===true};}):[];
                 if(typeof s.example==='string'&&s.example.length>4096)return;
                 var example=typeof s.example==='string'?s.example:'',size=s.name.length+s.title.length+s.description.length+example.length+params.reduce(function(n,p){return n+p.name.length+p.description.length;},0);if(units+size>128*1024)return;units+=size;
-                found.set(s.name,{name:s.name,title:s.title,description:s.description,kind:s.kind,params:params,example:example,argumentRequired:s.argumentRequired===true,builtin:origin===0,managed:origin===1&&s.managed===true,literal:origin===1&&s.kind==='container'&&s.literal===true,prefix:origin===1&&s.kind==='inline'&&typeof s.prefix==='string'&&/^[@#~!$%&+=?^]$/.test(s.prefix)?s.prefix:''});
+                found.set(s.name,{name:s.name,title:s.title,description:s.description,kind:s.kind,params:params,example:example,argumentRequired:s.argumentRequired===true,builtin:origin===0,managed:origin===1&&s.managed===true,literal:origin===1&&s.kind==='container'&&s.literal===true,colorAttribute:origin===1&&s.kind==='container'&&s.literal===true&&typeof s.colorAttribute==='string'&&/^[a-z][a-z0-9:_-]{0,63}$/.test(s.colorAttribute)?s.colorAttribute:'',prefix:origin===1&&s.kind==='inline'&&typeof s.prefix==='string'&&/^[@#~!$%&+=?^]$/.test(s.prefix)?s.prefix:''});
             });});return Array.from(found.values());
         }
         function loadShortcodes() {
