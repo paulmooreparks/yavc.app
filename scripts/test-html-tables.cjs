@@ -78,8 +78,8 @@ const types={'.html':'text/html','.js':'text/javascript','.css':'text/css','.jso
    await action('slides','view',{mode:'visual'});await p.locator('#deck .deck-slide .ProseMirror').waitFor();
    await p.locator('#deck [data-role="notes-view"]:not([hidden])').waitFor();assert.match(await p.locator('#deck [data-role="notes-view"]').innerText(),/Say this quietly/);
    assert.equal(await p.locator('#deck .deck-slide .sc-notes:visible').count(),0);
-   const showNotes=p.locator('#deck .deck-slide .pm-box-collapsible [data-box="toggle"]');await showNotes.waitFor();assert.equal(await showNotes.innerText(),'Show');
-   await showNotes.click();assert.equal(await p.locator('#deck .deck-slide .sc-notes:visible').count(),1);assert.equal(await showNotes.innerText(),'Hide');
+   const showNotes=p.locator('#deck .deck-slide .pm-box-collapsible [data-box="toggle"]');await showNotes.waitFor();assert.equal(await showNotes.getAttribute('aria-expanded'),'false');assert.match(await showNotes.innerText(),/Speaker Notes/);
+   await showNotes.click();assert.equal(await p.locator('#deck .deck-slide .sc-notes:visible').count(),1);assert.equal(await showNotes.getAttribute('aria-expanded'),'true');
    await showNotes.click();assert.equal(await p.locator('#deck .deck-slide .sc-notes:visible').count(),0);
    assert.ok((await action('slides','text')).text.includes('{{notes}}\nSay this quietly.\n{{/notes}}'));
    // Leaving the page for Text keeps the place: the caret lands on the

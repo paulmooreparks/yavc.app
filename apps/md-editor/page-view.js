@@ -351,7 +351,7 @@ var schemaCache = null;
        (o.caret): set when the page is turned on, so that changing from
        Text to Visual keeps the reader's place; a page built again for a
        change to the text keeps its own scroll instead. */
-    var placeFromText = false;
+    var placeFromText = false, boxCount = 0;
     /* The position just inside the top-level block that holds an offset
        into the document's text, worked out from each block's text and the
        text before it, as the page writes itself back; null when the
@@ -1527,9 +1527,8 @@ var schemaCache = null;
       /* A box the host keeps collapsed (a deck's speaker notes, shown in
          the window's own notes pane): its bar stands in for it, with Show
          and Hide for the author who wants to edit it here. */
-      var collapsible = !!(o.collapsed && o.collapsed(node.attrs.name));
-      bar.innerHTML = '<span class="pm-box-kind">' + escText(boxTitle(node)) + '</span>' +
-        (collapsible ? '<button type="button" class="btn btn-sm" data-box="toggle" aria-expanded="false">Show</button>' : '') +
+      var collapsible = !!(o.collapsed && o.collapsed(node.attrs.name)), frameId = collapsible ? 'pm-box-frame-' + (++boxCount) : '';
+      bar.innerHTML = (collapsible ? '<button type="button" class="btn btn-sm disclosure" data-box="toggle" aria-expanded="false" aria-controls="' + frameId + '">' + escText(boxTitle(node)) + '</button>' : '<span class="pm-box-kind">' + escText(boxTitle(node)) + '</span>') +
         (o.customName && o.customName(node.attrs.name) ? '<button type="button" class="btn btn-sm" data-box="custom-args">Parameters…</button>' : '') +
         (hostBox(node) ? '<button type="button" class="btn btn-sm" data-box="custom-args">Arguments…</button>' : BOX_TITLED[node.attrs.name] ? '<button type="button" class="btn btn-sm" data-box="args">' + escText(BOX_TITLED[node.attrs.name]) + '…</button>' : '') +
         (isColumns ? '<button type="button" class="btn btn-sm" data-box="column">Add a Column</button>' : '') +
@@ -1540,8 +1539,10 @@ var schemaCache = null;
         var b = e.target.closest('[data-box]');
         if (!b) return;
         if (b.getAttribute('data-box') === 'toggle') {
-          var open = dom.classList.toggle('pm-box-open');
-          b.textContent = open ? 'Hide' : 'Show';
+          /* PUDL's disclosure button: the state is its aria-expanded, and
+             the frame's hidden attribute does the hiding. */
+          var open = frame.hidden;
+          frame.hidden = !open;
           b.setAttribute('aria-expanded', String(open));
           if (open) v.focus();
           return;
@@ -1568,6 +1569,7 @@ var schemaCache = null;
         frame.querySelectorAll('details').forEach(function (det) { det.open = true; });
         frame.querySelectorAll('summary').forEach(function (s) { s.addEventListener('click', function (e) { e.preventDefault(); }); });
       }
+      if (collapsible) { frame.id = frameId; frame.hidden = true; }
       dom.append(bar, frame);
       return {
         dom: dom, contentDOM: contentDOM,
@@ -1764,7 +1766,7 @@ var schemaCache = null;
     /* The attribute the host keeps equal to a cell's colour in a table of
        its own literal container (docs/host-shortcodes-contract.md), read
        from the container's opening line kept with the table; '' for a
-       bare HTML table or a host that names none. */
+       bare HTML table or a host that gives none. */
     function colourAttribute(table) {
       var raw = table && table.attrs.raw, m = raw && /^\{\{([a-z][a-z0-9-]*)/.exec(raw.open || '');
       var name = m && o.colourAttribute ? o.colourAttribute(m[1]) : '';
@@ -1787,7 +1789,7 @@ var schemaCache = null;
       }
       if (!cells.length) return false;
       if (!dispatch) return true;
-      /* The host may name an attribute of its own that records a cell's
+      /* The host may give an attribute of its own that records a cell's
          colour beside the style (a wiki's data-highlight-colour): it is
          written, changed and removed with the colour. */
       var found = PM.findTable(state.selection.$from), attribute = found ? colourAttribute(found.node) : '';
