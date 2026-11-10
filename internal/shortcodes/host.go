@@ -31,6 +31,11 @@ type HostShortcode struct {
 	// whole, blank lines and all, and drawn as it is. One table of the
 	// strict shape in it is edited as a table (internal/pageview).
 	Literal bool `json:"literal,omitempty"`
+	// ColorAttribute is the name of an attribute the host keeps equal to
+	// a table cell's colour beside its style, in a literal container's
+	// table (a wiki's data-highlight-colour). The page writes, changes
+	// and removes it with the colour; the engine only carries it.
+	ColorAttribute string `json:"colorAttribute,omitempty"`
 }
 
 const (

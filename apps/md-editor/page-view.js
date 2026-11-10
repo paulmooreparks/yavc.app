@@ -1524,7 +1524,12 @@ var schemaCache = null;
       var bar = document.createElement('div');
       bar.className = 'pm-box-bar';
       bar.contentEditable = 'false';
+      /* A box the host keeps collapsed (a deck's speaker notes, shown in
+         the window's own notes pane): its bar stands in for it, with Show
+         and Hide for the author who wants to edit it here. */
+      var collapsible = !!(o.collapsed && o.collapsed(node.attrs.name));
       bar.innerHTML = '<span class="pm-box-kind">' + escText(boxTitle(node)) + '</span>' +
+        (collapsible ? '<button type="button" class="btn btn-sm" data-box="toggle" aria-expanded="false">Show</button>' : '') +
         (o.customName && o.customName(node.attrs.name) ? '<button type="button" class="btn btn-sm" data-box="custom-args">Parameters…</button>' : '') +
         (hostBox(node) ? '<button type="button" class="btn btn-sm" data-box="custom-args">Arguments…</button>' : BOX_TITLED[node.attrs.name] ? '<button type="button" class="btn btn-sm" data-box="args">' + escText(BOX_TITLED[node.attrs.name]) + '…</button>' : '') +
         (isColumns ? '<button type="button" class="btn btn-sm" data-box="column">Add a Column</button>' : '') +
@@ -1533,8 +1538,17 @@ var schemaCache = null;
       bar.addEventListener('mousedown', function (e) { e.preventDefault(); });
       bar.addEventListener('click', function (e) {
         var b = e.target.closest('[data-box]');
-        if (b) boxAction(b.getAttribute('data-box'), current, getPos, v);
+        if (!b) return;
+        if (b.getAttribute('data-box') === 'toggle') {
+          var open = dom.classList.toggle('pm-box-open');
+          b.textContent = open ? 'Hide' : 'Show';
+          b.setAttribute('aria-expanded', String(open));
+          if (open) v.focus();
+          return;
+        }
+        boxAction(b.getAttribute('data-box'), current, getPos, v);
       });
+      if (collapsible) dom.classList.add('pm-box-collapsible');
       var frame;
       if (isColumns) {
         frame = document.createElement('div');
@@ -1747,6 +1761,15 @@ var schemaCache = null;
       'heading-cell': function () { return reshape(PM.toggleHeaderCell); },
       'cell-colour': function () { return reshape(colourCells); }
     };
+    /* The attribute the host keeps equal to a cell's colour in a table of
+       its own literal container (docs/host-shortcodes-contract.md), read
+       from the container's opening line kept with the table; '' for a
+       bare HTML table or a host that names none. */
+    function colourAttribute(table) {
+      var raw = table && table.attrs.raw, m = raw && /^\{\{([a-z][a-z0-9-]*)/.exec(raw.open || '');
+      var name = m && o.colourAttribute ? o.colourAttribute(m[1]) : '';
+      return typeof name === 'string' && /^[a-z][a-z0-9:_-]{0,63}$/.test(name) && name !== 'style' && name !== 'colspan' && name !== 'rowspan' ? name : '';
+    }
     /* Colours the selected cells, or the cell the cursor is in, with the
        colour the page asked for (pendingColour), as a background colour in
        the cell's style; an empty colour takes it away. */
@@ -1764,13 +1787,19 @@ var schemaCache = null;
       }
       if (!cells.length) return false;
       if (!dispatch) return true;
+      /* The host may name an attribute of its own that records a cell's
+         colour beside the style (a wiki's data-highlight-colour): it is
+         written, changed and removed with the colour. */
+      var found = PM.findTable(state.selection.$from), attribute = found ? colourAttribute(found.node) : '';
       var tr = state.tr;
       cells.forEach(function (c) {
-        var keep = (c.node.attrs.xattrs || []).filter(function (a) { return a[0] !== 'style'; });
+        var keep = (c.node.attrs.xattrs || []).filter(function (a) { return a[0] !== 'style' && a[0] !== attribute; });
         var style = (c.node.attrs.xattrs || []).find(function (a) { return a[0] === 'style'; });
         var rest = style ? style[1].split(';').map(function (s) { return s.trim(); }).filter(function (s) { return s && !/^background(-color)?\s*:/i.test(s); }).join('; ') : '';
-        if (pendingColour) keep.push(['style', 'background-color: ' + pendingColour + ';' + (rest ? ' ' + rest + ';' : '')]);
-        else if (rest) keep.push(['style', rest + ';']);
+        if (pendingColour) {
+          if (attribute) keep.push([attribute, pendingColour]);
+          keep.push(['style', 'background-color: ' + pendingColour + ';' + (rest ? ' ' + rest + ';' : '')]);
+        } else if (rest) keep.push(['style', rest + ';']);
         tr.setNodeMarkup(c.pos, null, Object.assign({}, c.node.attrs, { xattrs: keep }));
       });
       dispatch(tr);
@@ -2144,8 +2173,9 @@ var schemaCache = null;
           for (var depth = $f.depth; depth > 0; depth--) {
             var role = $f.node(depth).type.spec.tableRole;
             if (role !== 'cell' && role !== 'header_cell') continue;
-            var style = ($f.node(depth).attrs.xattrs || []).find(function (a) { return a[0] === 'style'; }), m = style && /(?:^|;)\s*background(?:-color)?\s*:\s*([^;]+)/i.exec(style[1]);
-            out.cellColour = m ? m[1].trim() : '';
+            var attrs = $f.node(depth).attrs.xattrs || [], attribute = colourAttribute(rect.table), own = attribute && attrs.find(function (a) { return a[0] === attribute; });
+            var style = attrs.find(function (a) { return a[0] === 'style'; }), m = style && /(?:^|;)\s*background(?:-color)?\s*:\s*([^;]+)/i.exec(style[1]);
+            out.cellColour = own ? own[1] : m ? m[1].trim() : '';
             break;
           }
         }
