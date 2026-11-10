@@ -43,6 +43,18 @@ const types={'.html':'text/html','.js':'text/javascript','.css':'text/css','.jso
    // The show fills its window, whatever height its mount has.
    const box=await show.locator('#deck').boundingBox(),size=show.viewportSize();
    assert.deepEqual([Math.round(box.x),Math.round(box.y),Math.round(box.width),Math.round(box.height)],[0,0,size.width,size.height]);
+   // Moving between slides does not send the deck again, and the show keeps the stage it drew: a stage built
+   // again on every slide showed as a slide that vanished and grew back after each transition.
+   const stageBefore=await show.evaluateHandle(()=>document.querySelector('#deck .deck-show:not(.deck-show-waiting)'));
+   const statesBefore=await show.evaluate(()=>fixture.show.received.filter(m=>m.type==='state').length);
+   for(const [key,title] of [['ArrowLeft','Slide one'],['ArrowRight','Slide two']]){
+    await show.locator('#deck .deck-show:not(.deck-show-waiting)').focus();await show.keyboard.press(key);
+    await show.waitForFunction(title=>new RegExp(title).test(document.querySelector('#deck .deck-show:not(.deck-show-waiting) .deck-current').innerText),title);
+    await editor.waitForFunction(n=>new RegExp('Slide '+n+' of 2').test(document.querySelector('#deck [data-role="position"]').textContent),title==='Slide one'?1:2);
+    await show.waitForTimeout(800);
+   }
+   assert.equal(await show.evaluate(()=>fixture.show.received.filter(m=>m.type==='state').length),statesBefore);
+   assert.equal(await show.evaluate(stage=>stage===document.querySelector('#deck .deck-show:not(.deck-show-waiting)')&&stage.isConnected,stageBefore),true);
    // The editing window's navigation moves the show.
    await editor.locator('#deck [data-slide="0"]').click();
    await show.waitForFunction(()=>/Slide one/.test(document.querySelector('#deck .deck-show:not(.deck-show-waiting) .deck-current').innerText));

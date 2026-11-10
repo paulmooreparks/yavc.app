@@ -37,7 +37,7 @@ From the editing window to the show:
 
 | Type | Fields | Meaning |
 | --- | --- | --- |
-| `state` | `text`, `resource`, `slide`, `step` | The whole deck as its Markdown, at most 2,097,152 characters, the deck's resource or null, and the place to show. Sent when the show says it is ready and again after each change to the deck. The show keeps its place across a later `state`. |
+| `state` | `text`, `resource`, `slide`, `step` | The whole deck as its Markdown, at most 2,097,152 characters, the deck's resource or null, and the place to show. Sent when the show says it is ready and again after each change to the deck's text, and not for a move to another slide, which is an `at`. The show keeps its stage for a `state` with the text it already shows, and replaces it without animation for a changed one. |
 | `unavailable` | none | The deck is larger than a `state` may be. The editing window then ends the show and says why. |
 | `at` | `slide`, `step` | The editing window moved to a slide. |
 | `advance` | `direction`: `next` or `previous` | The show is to go one step forward or back, as the presenter view's keys ask. |
