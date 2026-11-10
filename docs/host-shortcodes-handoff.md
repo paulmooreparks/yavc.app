@@ -1,5 +1,23 @@
 # Host shortcode integration handoff
 
+## v0.2.60: a cell's colour classes, and the reader for referenced files
+
+[v0.2.60](https://github.com/paulmooreparks/yavc.app/releases/tag/v0.2.60), tagged at `c71e76817c638214034abdcd85dfccc30b8e1e23` ([PR #85](https://github.com/paulmooreparks/yavc.app/pull/85)), adds `colorClassPrefix` on a literal catalog entry: when Cell Color changes or clears a cell's colour, the classes that begin with the prefix are removed, and the class attribute with them when none is left (DESIGN.md decision 117, docs/host-shortcodes-contract.md). Pin this release in place of v0.2.59.
+
+| Item | Value |
+| --- | --- |
+| Tag | `v0.2.60` |
+| Tagged commit | `c71e768` |
+| Archive | yavc-content-v0.2.60.zip |
+| Archive SHA256 | `07d01c4e1b98f9f5f6e49c7a3210c56ca557309bb7bcf982ccc8a1c8a2b0ed2a` |
+| Manifest SHA256 | `003ff5d05c3a9e3a62655d4acb81bb706f27429d1ac3a9e87a57e46bef042e80` |
+| Content digest | `6297ef3e2b7035b46bc4fb471e7336ebc702927cd622669d484770d4d518b830` |
+| Files | 484 |
+
+The content digest is the one the three-engine suites ran against before the tag.
+
+A receiving host still has work of its own before a document can show a file it refers to. An embedded diagram, `{{diagram:path}}`, is read only through `pudlHost.fs.readText(path, options)`, which the host supplies; the table in docs/content-workspace-contract.md now lists it, with the optional `contentWorkspace.directory(resource)` for relative paths and `pudlHost.fs.onChange` for following a file. A host without the reader draws a notice that says so. This release passes the reader its `signal` and `maxBytes`, which the applets dropped before.
+
 ## v0.2.59: speaker notes have no presence on the slide
 
 Paul rejected the collapsed notes bar of v0.2.58. In [v0.2.59](https://github.com/paulmooreparks/yavc.app/releases/tag/v0.2.59), tagged at `046a925a5afb365004cc91fda18a81c55728f702` ([PR #83](https://github.com/paulmooreparks/yavc.app/pull/83)), a deck's speaker notes are not on the slide in any form, and they appear only in the pane at the bottom of the window. They are written and changed in Text view. Nothing else changed; pin this release in place of v0.2.58.
