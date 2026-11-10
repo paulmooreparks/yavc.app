@@ -27,6 +27,10 @@ type HostShortcode struct {
 	// Managed says the host keeps the shortcode's content with a tool of
 	// its own, so the page shows it and does not edit it.
 	Managed bool `json:"managed,omitempty"`
+	// Literal says a container's body is markup, not Markdown: it is read
+	// whole, blank lines and all, and drawn as it is. One table of the
+	// strict shape in it is edited as a table (internal/pageview).
+	Literal bool `json:"literal,omitempty"`
 }
 
 const (
@@ -194,5 +198,12 @@ func (r *MacroRegistry) hostContainer(c Call) (Container, bool) {
 	if d := table[c.Name]; d != nil && (d.kind != container || sourceOnly[d.name]) {
 		return Container{}, false
 	}
-	return Container{Name: c.Name, Args: c.Args, Before: hostContainerOpen(h, c), After: hostContainerClose}, true
+	return Container{Name: c.Name, Args: c.Args, Before: hostContainerOpen(h, c), After: hostContainerClose, Literal: h.Literal && table[c.Name] == nil}, true
+}
+
+// literalHost says whether a name is a host container whose body is
+// markup, read whole; only a name no built-in has can be one.
+func (r *MacroRegistry) literalHost(name string) bool {
+	h, ok := r.hostOnly(name)
+	return ok && h.Kind == "container" && h.Literal
 }

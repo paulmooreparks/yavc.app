@@ -1,0 +1,81 @@
+// Copyright 2026 Paul Parks. SPDX-License-Identifier: Apache-2.0
+// HTML tables edited as tables (DESIGN.md, decision 112), the reader's place
+// kept across views (113) and the contents list in a container (114), run
+// against a built content package in an independent host:
+//   node scripts/test-html-tables.cjs <artifact> [chromium firefox webkit]
+const assert=require('node:assert/strict'),http=require('node:http'),fs=require('node:fs/promises'),path=require('node:path'),pw=require('playwright');
+const artifact=path.resolve(process.argv[2]),prefix='/independent/content-release/';
+const types={'.html':'text/html','.js':'text/javascript','.css':'text/css','.json':'application/json','.wasm':'application/wasm','.svg':'image/svg+xml','.woff2':'font/woff2'};
+(async()=>{
+ const manifest=JSON.parse(await fs.readFile(path.join(artifact,'manifest.json'),'utf8')),allowed=new Set(manifest.files.map(f=>f.path)),addon=await fs.readFile(path.join(__dirname,'fixtures/html-tables.js'),'utf8');
+ const server=http.createServer(async(req,res)=>{try{const u=new URL(req.url,'http://localhost');if(!u.pathname.startsWith(prefix))return res.writeHead(404).end();const name=decodeURIComponent(u.pathname.slice(prefix.length));if(!allowed.has(name))return res.writeHead(404).end();let body=await fs.readFile(path.join(artifact,name));if(name==='workspace-lab/host.js')body=Buffer.from(body+'\n'+addon);res.setHeader('Content-Type',types[path.extname(name)]||'application/octet-stream');res.setHeader('Content-Security-Policy',"default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; worker-src 'self'; object-src 'none'; base-uri 'none'");res.end(body);}catch(e){res.writeHead(500).end(e.message);}});
+ await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));try{for(const engine of process.argv.slice(3).length?process.argv.slice(3):['chromium','firefox','webkit']){
+  const browser=await pw[engine].launch({headless:true}),p=await browser.newPage({viewport:{width:1550,height:900}}),errors=[];p.setDefaultTimeout(20000);p.on('pageerror',e=>errors.push(e.message));
+  const action=(app,name,input={})=>p.evaluate(({app,name,input})=>pudlActions.run('yavc.'+app+'/'+name+'@1',input,{grant:'all'}),{app,name,input});
+  const text=async app=>(await action(app,'document')).text;
+  // The page is still after an edit was written to the text and any reading of it again has finished.
+  const settled=async root=>{await p.waitForTimeout(300);await p.locator(root+' .ProseMirror:not([aria-busy="true"])').first().waitFor();};
+  const command=(root,id,arg)=>p.evaluate(({root,id,arg})=>pudlCommands.run(id,arg==null?null:arg,document.querySelector(root)),{root,id,arg});
+  // A table command is offered once the page's selection is in a table and the page is the text.
+  const ready=(root,id)=>p.waitForFunction(({root,id})=>{const c=pudlCommands.find(id,document.querySelector(root));if(!c)return false;const off=typeof c.disabled==='function'?c.disabled():!!c.disabled,hidden=typeof c.hidden==='function'?c.hidden():!!c.hidden;return !off&&!hidden;},{root,id});
+  try{await p.goto(`http://127.0.0.1:${server.address().port}${prefix}workspace-lab/index.html`);await p.locator('#document .ProseMirror').waitFor();
+   const source=await p.evaluate(()=>fixture.htmlTables.source);
+   await action('docs','view',{mode:'visual'});
+   const doc=p.locator('#document');
+   // The wiki's table and the bare one are tables on the page, with no box
+   // around the literal container's; the literal body that is not a table
+   // keeps its box; a cell's colour shows, and the wiki's element is one piece.
+   await doc.locator('table.pm-raw-table').nth(1).waitFor();
+   assert.equal(await doc.locator('table.pm-raw-table').count(),2);
+   assert.equal(await doc.locator('.pm-box[data-name="raw"]').count(),1);
+   assert.match(await doc.locator('.pm-box[data-name="raw"] .pm-source').innerText(),/Two paragraphs/);
+   assert.equal(await doc.locator('table.pm-raw-table td[style*="background-color"]').count(),2);
+   assert.equal(await doc.locator('table.pm-raw-table th[colspan="2"]').count(),1);
+   assert.equal(await doc.locator('table.pm-raw-table .pm-raw-inline[data-xml^="<ac:link>"]').count(),1);
+   assert.equal(await doc.locator('table.pm-raw-table td[rowspan="2"]').count(),1);
+   assert.equal(await doc.locator('.pm-raw-table script, .pm-raw-table [onclick]').count(),0);
+   assert.equal(await text('docs'),source);
+   // The contents list inside the note lists the document's headings.
+   const toc=await doc.locator('.sc-toc a').allInnerTexts();
+   assert.ok(toc.includes('Wiki table')&&toc.includes('Last heading'),JSON.stringify(toc));
+   // Typing in a cell writes the table back as HTML with everything else as it was.
+   await doc.locator('table.pm-raw-table td',{hasText:/^1$/}).first().click();await p.keyboard.press('End');await p.keyboard.type('x');
+   await settled('#document');
+   let now=await text('docs');
+   assert.ok(now.includes('<tr><td>1x</td><td>Press <code>"Pay"</code> and see <ac:link><ri:page ri:content-title="Exports" /></ac:link> here.<br />Second line.</td></tr>'),now);
+   assert.ok(now.includes('{{raw}}\n<table><tbody>\n<tr><th colspan="2">Scenario</th></tr>\n<tr><td data-highlight-colour="#DEEBFF" style="background-color: rgb(222,235,255);"><strong>Number</strong></td>'),now);
+   assert.ok(now.includes('</tbody></table>\n{{/raw}}\n\n## Bare table\n\n<table>\n<tr><td>bare</td><td rowspan="2">tall</td></tr>\n<tr><td>row</td></tr>\n</table>\n'),now);
+   assert.ok(!now.includes('| 1x'),now);
+   await command('#document','undo');await settled('#document');assert.equal(await text('docs'),source);
+   // A pipe table given a heading cell becomes an HTML table, and Undo takes it back.
+   await doc.locator('table:not(.pm-raw-table) td',{hasText:/^one$/}).first().click();
+   await ready('#document','table-heading-cell');await command('#document','table-heading-cell');
+   now=await text('docs');
+   assert.ok(now.includes('## Pipe table\n\n<table><tbody>\n<tr><th>A</th><th>B</th></tr>\n<tr><th>one</th><td>two</td></tr>\n<tr><td>three</td><td>four</td></tr>\n</tbody></table>\n\n## Literal rest'),now);
+   assert.ok(!now.includes('| A | B |'),now);
+   await command('#document','undo');await settled('#document');assert.equal(await text('docs'),source);
+   // A cell's colour, asked in the dialog, is written as its style.
+   await doc.locator('table:not(.pm-raw-table) td',{hasText:/^two$/}).first().click();
+   await ready('#document','table-cell-colour');await command('#document','table-cell-colour');
+   const colour=p.getByRole('dialog',{name:'Cell Color',exact:true});await colour.waitFor();
+   await colour.getByLabel('Background Color',{exact:true}).fill('#ffeeaa');await colour.getByRole('button',{name:'Apply',exact:true}).click();await colour.waitFor({state:'hidden'});
+   now=await text('docs');
+   assert.ok(now.includes('<tr><td>one</td><td style="background-color: #ffeeaa;">two</td></tr>'),now);
+   await command('#document','undo');await settled('#document');assert.equal(await text('docs'),source);
+   // Leaving the page for Text keeps the place: the caret lands on the
+   // block it was in, and coming back lands on the same block.
+   await doc.locator('.ProseMirror p',{hasText:'Last words here.'}).click();
+   await action('editor','view',{mode:'visual'});await p.locator('#source .ProseMirror').waitFor();
+   await p.locator('#source .ProseMirror p',{hasText:'Last words here.'}).click();await p.keyboard.press('End');
+   await action('editor','view',{mode:'text'});await p.locator('#source .cm-editor').waitFor();
+   await p.waitForFunction(()=>yavcMdEditor.libs().then(CM=>{const v=CM.EditorView.findFromDOM(document.querySelector('#source .cm-editor'));return v&&v.state.doc.lineAt(v.state.selection.main.head).text==='Last words here.'&&v.scrollDOM.scrollTop>0;}));
+
+   await p.evaluate(()=>yavcMdEditor.libs().then(CM=>{const v=CM.EditorView.findFromDOM(document.querySelector('#source .cm-editor')),at=v.state.doc.toString().indexOf('Filler paragraph 30');v.dispatch({selection:{anchor:at+3},effects:CM.EditorView.scrollIntoView(at,{y:'center'})});}));
+   await action('editor','view',{mode:'visual'});await p.locator('#source .ProseMirror').waitFor();
+   await p.waitForFunction(()=>{const s=window.getSelection(),node=s&&s.anchorNode,p=node&&(node.nodeType===1?node:node.parentElement).closest('#source .ProseMirror p');return !!p&&/Filler paragraph 30/.test(p.textContent);});
+
+   await action('editor','view',{mode:'preview'});await p.locator('#source [data-line]').first().waitFor();
+   assert.deepEqual(errors,[]);console.log(engine+': HTML tables, literal bodies, contents list, table reshaping, cell colour and place keeping passed');
+  }catch(e){console.error(engine,(await p.locator('body').innerText()).slice(-3000),errors);throw e;}finally{await browser.close();}
+ }}finally{await new Promise(resolve=>server.close(resolve));}
+})().catch(e=>{console.error(e);process.exitCode=1;});

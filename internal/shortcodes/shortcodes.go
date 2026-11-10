@@ -360,7 +360,10 @@ func (p *blockParser) Open(parent ast.Node, reader text.Reader, pc parser.Contex
 	takeLine(reader, line)
 	node := &Block{Call: NewCall(string(m[1]), string(m[2])), BodyStart: seg.Stop, BodyEnd: len(reader.Source())}
 	node.SetPos(seg.Start)
-	if declaration {
+	// A declaration's body is read as text, and so is a literal host
+	// container's: markup, blank lines and all, which Markdown would end
+	// at the first blank line.
+	if declaration || p.registry.literalHost(node.Call.Name) {
 		return node, parser.NoChildren
 	}
 	return node, parser.HasChildren
@@ -397,7 +400,7 @@ func (p *blockParser) Continue(node ast.Node, reader text.Reader, pc parser.Cont
 		pc.Set(closing, blk)
 		return parser.Close
 	}
-	if blk.Call.Name == "define" {
+	if blk.Call.Name == "define" || p.registry.literalHost(blk.Call.Name) {
 		return parser.Continue | parser.NoChildren
 	}
 	return parser.Continue | parser.HasChildren
@@ -460,6 +463,8 @@ type Container struct {
 	Name, Args    string
 	Before, After string
 	Separator     string
+	// Literal says the body is markup, read whole, not Markdown (host.go).
+	Literal bool
 }
 
 // sourceOnly are the containers whose body is not rich text.
@@ -596,17 +601,34 @@ func init() {
 	add(&def{name: "toc", kind: block, title: "Contents", what: "A list of the page's headings, linked, for a long page.",
 		example: "{{toc}}",
 		render: func(c Call, doc ast.Node, src []byte) (string, error) {
+			// min and max are the site's spellings, with 2 and 3 when
+			// absent; minLevel and maxLevel are a wiki's, and when either
+			// is written an absent bound is the wiki's, 1 and 6, so a page
+			// written for the wiki lists what the wiki lists. Arguments
+			// the list does not know (a wiki's type, outline) are left be.
 			min, max := 2, 3
-			if v, ok := c.Get("min", -1); ok {
-				if n, err := strconv.Atoi(v); err == nil {
-					min = clamp(n, 1, 6)
+			_, wikiMin := c.Get("minLevel", -1)
+			_, wikiMax := c.Get("maxLevel", -1)
+			if wikiMin || wikiMax {
+				min, max = 1, 6
+			}
+			for _, key := range []string{"min", "minLevel"} {
+				if v, ok := c.Get(key, -1); ok {
+					if n, err := strconv.Atoi(strings.TrimSpace(v)); err == nil {
+						min = clamp(n, 1, 6)
+					}
 				}
 			}
-			if v, ok := c.Get("max", -1); ok {
-				if n, err := strconv.Atoi(v); err == nil {
-					max = clamp(n, min, 6)
+			bounded := false
+			for _, key := range []string{"max", "maxLevel"} {
+				if v, ok := c.Get(key, -1); ok {
+					if n, err := strconv.Atoi(strings.TrimSpace(v)); err == nil {
+						max = clamp(n, min, 6)
+						bounded = true
+					}
 				}
-			} else if max < min {
+			}
+			if !bounded && max < min {
 				max = min
 			}
 			type head struct {
@@ -1287,7 +1309,8 @@ func (r *htmlRenderer) inline(w util.BufWriter, src []byte, node ast.Node, enter
 	case d.kind == container:
 		_, _ = w.WriteString(problemHTML(n.Call, n.Call.Name+" opens on a line of its own and closes with {{/"+n.Call.Name+"}}."))
 	default:
-		out, err := d.render(n.Call, node.OwnerDocument(), src)
+		whole, wholeSrc := r.registry.Document(node.OwnerDocument(), src)
+		out, err := d.render(n.Call, whole, wholeSrc)
 		if err != nil {
 			out = problemHTML(n.Call, err.Error())
 			// The host may read the name in a way the built-in does not.
@@ -1332,11 +1355,18 @@ func (r *htmlRenderer) block(w util.BufWriter, src []byte, node ast.Node, enteri
 	d := table[n.Call.Name]
 	h, hosted := r.registry.host(n.Call.Name)
 	hosted = hosted && h.Kind == "container"
+	literal := hosted && h.Literal && d == nil && n.Closed
 	hostDraws := func() (ast.WalkStatus, error) {
 		if entering {
 			_, _ = w.WriteString(hostContainerOpen(h, n.Call) + "\n")
 			if !n.Closed {
 				_, _ = w.WriteString(`<p>` + problemHTML(n.Call, n.Call.Name+" runs to the end of the page: it needs {{/"+n.Call.Name+"}} on a line of its own.") + `</p>` + "\n")
+			}
+			// A literal body is markup, drawn as it is (the page makes it
+			// safe, as it does an HTML block's); it was read with no
+			// children, so the body is its text.
+			if literal && n.BodyStart <= n.BodyEnd && n.BodyEnd <= len(src) {
+				_, _ = w.WriteString(string(src[n.BodyStart:n.BodyEnd]))
 			}
 		} else {
 			_, _ = w.WriteString(hostContainerClose + "\n")
@@ -1401,7 +1431,8 @@ func (r *htmlRenderer) paragraph(w util.BufWriter, src []byte, node ast.Node, en
 						return ast.WalkSkipChildren, nil
 					}
 				}
-				out, err := d.render(sc.Call, node.OwnerDocument(), src)
+				whole, wholeSrc := r.registry.Document(node.OwnerDocument(), src)
+				out, err := d.render(sc.Call, whole, wholeSrc)
 				if err != nil {
 					out = `<p>` + problemHTML(sc.Call, err.Error()) + `</p>`
 					// The host may read the name in a way the built-in does not.
