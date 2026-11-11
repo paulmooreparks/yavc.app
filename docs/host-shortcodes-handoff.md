@@ -1,5 +1,19 @@
 # Host shortcode integration handoff
 
+## v0.2.77: Diagrams takes a host's document commands
+
+[v0.2.77](https://github.com/paulmooreparks/yavc.app/releases/tag/v0.2.77) ([PR #117](https://github.com/paulmooreparks/yavc.app/pull/117)) followed on 2026-11-12, after Paul approved editing a diagram kept on a wiki page from the page (DESIGN.md decision 129). Diagrams takes `pudlHost.documentCommands` as Editor and Docs do, so a host's Publish can stand in place of Save there (`docs/document-commands-contract.md`). A host's shortcut that CodeMirror also uses, such as `Mod+Shift+U`, does not reach its command while a text pane has the keyboard, and the contract now says so.
+
+| Item | Value |
+| --- | --- |
+| Commit | `a2740e367182beb89a063fed85fd5f502ea8ca90` |
+| Archive sha256 | `699c3f052af69f117b0df1f2b7e5b63046449a4281f906afe9a7638aee5e82b9` |
+| Manifest sha256 | `90630b6e586094e331062cb24a2396548bfd08fde3c9d0510b2146dbec374fe6` |
+| Content digest | `12bbc128ec306f6ceb9de6993792ed45420c6a9c89858fdf1af34ffeb9abde45` (490 files) |
+| Applets | Editor 46.33.0, Docs 1.33.0, Slides 0.61.0, Diagrams 0.42.0 |
+
+The published archive and manifest passed their checksums, and the digest equals a local build of the tagged commit.
+
 ## v0.2.76: a picture in a canvas file, and a radius for each corner
 
 [v0.2.76](https://github.com/paulmooreparks/yavc.app/releases/tag/v0.2.76) ([PR #115](https://github.com/paulmooreparks/yavc.app/pull/115)) followed on 2026-11-12 and closes the last two gaps the receiving product counted on the canvases its screen viewer writes (DESIGN.md decision 128). A picture node may keep its picture in the file as `picture`, a data address of at most 256 KiB that is checked when the file is read. `radiusCorners` gives each corner of a rectangle its own radius. `docs/canvas-extension.md` defines both. `radiusCorners` can be set through the agent's edit action; `picture` is written by whatever makes the file.
