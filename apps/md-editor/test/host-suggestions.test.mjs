@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
-const {parse,mapItem}=createRequire(import.meta.url)('../host-suggestions.js');
+const {parse,mapItem,narrow,cells}=createRequire(import.meta.url)('../host-suggestions.js');
 const snapshot=(text,item={})=>({revision:'one',text,items:[{id:'a',start:0,end:1,before:text.slice(0,1),after:'New',...item}]});
 test('Host suggestion ranges preserve UTF-16 and original line-ending boundaries',()=>{
     const text='A\r\n😀 end';
@@ -29,4 +29,22 @@ test('Mapping outside a range retains it while overlapping edits make it stale',
     const within={iterChangedRanges(fn){fn(2,3);},mapPos(pos){return pos;}};
     assert.equal(mapItem(item,within,{sliceString(){return 'OrXginal';}}).stale,true);
     assert.equal(mapItem({...item,stale:true},prefix,null).stale,true);
+});
+test('A suggestion is narrowed to the words that differ',()=>{
+    assert.deepEqual(narrow('| a | GAP 01 | c |','| a | GAP 05 | c |'),{head:10,tail:6});
+    assert.deepEqual(narrow('Improved','Clearer'),{head:0,tail:0});
+    assert.deepEqual(narrow('one two','one new two'),{head:4,tail:3});
+    assert.deepEqual(narrow('cat sat','cats sat'),{head:0,tail:4});
+    assert.deepEqual(narrow('colour','color'),{head:0,tail:0});
+    assert.deepEqual(narrow('same','same'),{head:4,tail:0});
+    assert.deepEqual(narrow('x y','x y z'),{head:3,tail:0});
+    assert.deepEqual(narrow('aaa','aa'),{head:0,tail:0});
+    assert.deepEqual(narrow('a 😀 b','a 😁 b'),{head:2,tail:2});
+    assert.deepEqual(narrow('',''),{head:0,tail:0});
+});
+test('A pipe table row is read as its cells',()=>{
+    assert.deepEqual(cells('| a | b\\|c |  |'),['a','b\\|c','']);
+    assert.deepEqual(cells('  | one |'),['one']);
+    assert.equal(cells('plain words'),null);
+    assert.equal(cells('| a |\n| b |'),null);
 });

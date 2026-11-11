@@ -28,6 +28,25 @@ const types={'.html':'text/html','.js':'text/javascript','.css':'text/css','.jso
    await p.evaluate(()=>{fixture.publishFails=true;return pudlCommands.run('host-publish',null,document.querySelector('#document'));});
    await p.locator('.toast-region',{hasText:'The page could not be published.'}).waitFor();
    await p.evaluate(()=>{fixture.publishFails=false;return pudlCommands.run('save',null,document.querySelector('#document'));});
+   // A host command that stands in place of Save (docs/document-commands-contract.md): the Save command is the host's for that document alone, and the applet writes nothing.
+   const saveRow=mount=>p.evaluate(mount=>{const c=pudlCommands.find('save',document.querySelector(mount));return {label:pudlCommands.value(c,'label'),glyph:pudlCommands.value(c,'glyph'),disabled:!!pudlCommands.value(c,'disabled'),reason:pudlCommands.value(c,'reason')||null};},mount);
+   assert.deepEqual([(await saveRow('#document')).label,(await saveRow('#document')).glyph],['Save','yavc-save']);
+   await p.evaluate(()=>fixture.releaseChanged(true,'Nothing has changed since the last release.'));
+   assert.deepEqual(await saveRow('#document'),{label:'Release…',glyph:'upload',disabled:true,reason:'Nothing has changed since the last release.'});
+   assert.equal((await saveRow('#source')).label,'Save');
+   // This lab draws no toolbar for Docs, so a button for the command stands where the host's toolbar would draw one.
+   await p.evaluate(()=>{const b=document.createElement('button');b.type='button';b.id='save-probe';b.setAttribute('data-command','save');document.querySelector('#document').appendChild(b);pudlCommands.changed();});
+   await p.waitForFunction(()=>{const b=document.querySelector('#save-probe');return b.textContent.trim()==='Release'&&b.disabled&&b.title==='Release…: Nothing has changed since the last release.'&&b.querySelector('.glyph').style.getPropertyValue('--glyph')==='var(--glyph-upload)';});
+   await p.evaluate(()=>fixture.releaseChanged(true));assert.equal((await saveRow('#document')).disabled,false);
+   await rich.locator('p').filter({hasText:'Editable words.'}).click();await p.keyboard.press('End');await p.keyboard.type(' Draft only.');
+   const writesBefore=await p.evaluate(()=>fixture.writes.length);
+   await p.evaluate(()=>pudlCommands.run('save',null,document.querySelector('#document')));
+   await p.keyboard.press('ControlOrMeta+s');await p.waitForFunction(()=>fixture.released.length===2);
+   await p.keyboard.press('ControlOrMeta+Shift+l');await p.waitForFunction(()=>fixture.released.length===3);
+   assert.deepEqual(await p.evaluate(()=>fixture.released[0]),{resource:'memory:document.docs.md',modified:true});
+   assert.equal(await p.evaluate(()=>fixture.writes.length),writesBefore);assert.doesNotMatch(await p.evaluate(()=>fixture.records.get('memory:document.docs.md').text),/Draft only/);
+   await p.evaluate(()=>fixture.releaseChanged(false));assert.equal((await saveRow('#document')).label,'Save');await p.waitForFunction(()=>document.querySelector('#save-probe').textContent.trim()==='Save');await p.evaluate(()=>document.querySelector('#save-probe').remove());
+   await p.evaluate(()=>pudlCommands.run('save',null,document.querySelector('#document')));assert.match(await p.evaluate(()=>fixture.records.get('memory:document.docs.md').text),/Draft only/);assert.equal(await p.evaluate(()=>fixture.released.length),3);
    // A host command in Review that needs the selection: unavailable without one, and given the selection as a range of the document's text.
    const request=mount=>p.evaluate(mount=>{const c=pudlCommands.find('host-request-change',document.querySelector(mount));return {hidden:!!pudlCommands.value(c,'hidden'),disabled:!!pudlCommands.value(c,'disabled'),reason:pudlCommands.value(c,'reason')||null};},mount);
    const ask=mount=>p.evaluate(mount=>pudlCommands.run('host-request-change',null,document.querySelector(mount)),mount);
@@ -40,7 +59,7 @@ const types={'.html':'text/html','.js':'text/javascript','.css':'text/css','.jso
    await rich.locator('p').filter({hasText:'Editable words.'}).click();await p.keyboard.press('Home');await p.keyboard.press('Shift+End');
    await p.waitForFunction(()=>!pudlCommands.value(pudlCommands.find('host-request-change',document.querySelector('#document')),'disabled'));await ask('#document');
    const documentText=(await p.evaluate(()=>pudlActions.run('yavc.docs/document@1',{}, {grant:'all'}))).text,mapped=await p.evaluate(()=>fixture.requested.pop());
-   assert.match(mapped.selection.text,/^Editable words\..* Unsaved\.$/);assert.equal(documentText.slice(mapped.selection.start,mapped.selection.end),mapped.selection.text);
+   assert.match(mapped.selection.text,/^Editable words\..* Unsaved\. Draft only\.$/);assert.equal(documentText.slice(mapped.selection.start,mapped.selection.end),mapped.selection.text);
    // It is offered where a person right-clicks the selection, and it stands in Review.
    await rich.locator('p').filter({hasText:'Editable words.'}).click({button:'right'});
    await p.getByRole('menuitem',{name:'Request a Change…'}).waitFor();await p.keyboard.press('Escape');

@@ -32,7 +32,15 @@ The limits are 256 items, 4 Mi UTF-16 source units, 64 Ki units per before/after
 
 CodeMirror and ProseMirror map placed decorations through local transactions while waiting for the host's next snapshot. Edits touching a suggestion make its local placement stale and disable Accept. The host remains responsible for durable remapping, grouping and suggestion history. Applet overlays are omitted from recovery, exports, serialization and Undo content. The existing persisted Markdown review actions keep their separate meaning.
 
-Text view marks exact source spans. Rich view highlights the affected blocks and places a card with the exact proposed removal and replacement after them. It does not strike unrelated words in the surrounding paragraph. Rich positions are rebuilt from verified block serialization when an edited block no longer retains its original source, without reloading the editor. Host controls retain host theme tokens and form a lower boundary of authored stylesheet scope.
+A suggestion is marked no wider than what it changes, whatever range the host gives it. The applet compares `before` with `after` and leaves unmarked the text they share at the start and at the end, stopping at the edge of a word so that a changed word is shown whole. Accept, Reject and Edit still act on the whole suggestion as the host gave it, and the request to `decide` has the host's range. A stale suggestion keeps its whole range, since its text is no longer the text there.
+
+Text view strikes the changed words in the source. Rich view marks them like this:
+
+- In a table whose text has a line for each row, only the rows the change touches are tinted. That is a pipe table, and also a table written as HTML with one `<tr>` on a line, as in a host's literal container. A change to the delimiter line, or to a line that is not a row, tints the whole table.
+- Changed words that are in the block's text once and on the page once are struck where they stand, in a paragraph, a heading, a list or a single changed row. The paragraph around them is not tinted.
+- Any other change tints the affected blocks, as before. That includes an insertion, which has no old words to strike, and changed text that has markup in it or is there more than once.
+
+The card after the block shows the shared words before and after the change unmarked and shortened when long, the old words struck and the new ones beside them. In Rich view a changed pipe table row is shown as its cells, with the difference marked inside each changed cell. Rich positions are rebuilt from verified block serialization when an edited block no longer retains its original source, without reloading the editor. Host controls retain host theme tokens and form a lower boundary of authored stylesheet scope.
 
 ## Decisions
 
