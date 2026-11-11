@@ -1,5 +1,19 @@
 # Host shortcode integration handoff
 
+## v0.2.78: a shared definitions file in a host, and a host's own resolving of references
+
+[v0.2.78](https://github.com/paulmooreparks/yavc.app/releases/tag/v0.2.78) ([PR #119](https://github.com/paulmooreparks/yavc.app/pull/119)) followed on 2026-11-12 (DESIGN.md decision 130). A document's `shortcodes` file is read through the host's `fs.readText` from any local path, and a file that is missing leaves the page drawn. A host may offer `contentWorkspace.resolvePath` (`docs/content-workspace-contract.md`) to say where a document's reference to a diagram, a stylesheet or that file is. The Browse buttons in the applets' forms need `pudlHost.fileFields` (`docs/file-fields-contract.md`), which the receiving host does not offer yet.
+
+| Item | Value |
+| --- | --- |
+| Commit | `059576adb3b22bb38cb8ff97059769849b9ba2f3` |
+| Archive sha256 | `413670bc48f6b0dc3f35d37c24bd91e8d8e34b2a336aae02e4007af7316929fd` |
+| Manifest sha256 | `97a164155bc083f6cc78ec4d415f93ae848a18d9f6f3e2a3526decddca8848e1` |
+| Content digest | `db890c2afb91a9676e3c322079281e893d0353a56f9c03bae0dd715c8277706e` (490 files) |
+| Applets | Editor 46.34.0, Docs 1.34.0, Slides 0.62.0, Diagrams 0.43.0 |
+
+The published archive and manifest passed their checksums, and the digest equals a local build of the tagged commit. `scripts/test-portable-workspace.cjs` timed out once at a page wait in seven runs before the release and passed in the other six; the cause is not known.
+
 ## v0.2.77: Diagrams takes a host's document commands
 
 [v0.2.77](https://github.com/paulmooreparks/yavc.app/releases/tag/v0.2.77) ([PR #117](https://github.com/paulmooreparks/yavc.app/pull/117)) followed on 2026-11-12, after Paul approved editing a diagram kept on a wiki page from the page (DESIGN.md decision 129). Diagrams takes `pudlHost.documentCommands` as Editor and Docs do, so a host's Publish can stand in place of Save there (`docs/document-commands-contract.md`). A host's shortcut that CodeMirror also uses, such as `Mod+Shift+U`, does not reach its command while a text pane has the keyboard, and the contract now says so.
