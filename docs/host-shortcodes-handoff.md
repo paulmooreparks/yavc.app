@@ -1,5 +1,23 @@
 # Host shortcode integration handoff
 
+## v0.2.74 and v0.2.75: the baseline from the font, and a document's own shortcodes expanded
+
+Two releases followed on 2026-11-12 from the receiving product's second measurement and from its publisher's need.
+
+[v0.2.74](https://github.com/paulmooreparks/yavc.app/releases/tag/v0.2.74) ([PR #112](https://github.com/paulmooreparks/yavc.app/pull/112)) places a canvas's text from the font's own ascent and descent where a page gives them, trusts an estimated width only beyond a fifth for a new line, and adds `paddingSides` (DESIGN.md decision 128, `docs/canvas-extension.md`). A host may offer `contentWorkspace.openDiagram`, which Edit Diagram asks before PUDL's `diagram` verb (`docs/content-workspace-contract.md`).
+
+[v0.2.75](https://github.com/paulmooreparks/yavc.app/releases/tag/v0.2.75) ([PR #113](https://github.com/paulmooreparks/yavc.app/pull/113)) adds `expand` to the engine, which returns a document's Markdown with every use of a shortcode the document or its shared file defines replaced, and the definitions removed (`docs/shortcode-destinations.md`).
+
+| Item | v0.2.74 | v0.2.75 |
+| --- | --- | --- |
+| Commit | `1f72ce414643f6345a3807bc56d9177a2bfa6cfc` | `78ed616d0715fdf1e2779a8a7fb2eba256dbce20` |
+| Archive sha256 | `8596657ddfbdda5ecdf2f1de60357116a13f333876aa4306b6e2f1de339a4136` | `211c931c84e7b5e0a0812cda4514beced9fe2ac1bf4a9fc39d9fd31d1666f4fb` |
+| Manifest sha256 | `c70638ca6fe096a829395a6debf7733bd3ef7e11fed437453c4ee481f0584700` | `1997bf8abef332f0eb00f9a4c5d23d5818e09d2e6341c631001af3c1a42dd19f` |
+| Content digest | `9625599b53e61b51d55cf9174db605a60d93175ca3f56e3ec5e976d302c9fa72` | `4a98901493dea4166d41ce54bb7b1dbe6533d0be34067ed7873eddccf330e8c6` |
+| Applets | Editor 46.32.0, Docs 1.32.0, Slides 0.60.0, Diagrams 0.40.0 | unchanged |
+
+Each published archive and manifest passed its checksums, and each digest equals a local build of the tagged commit. A picture inside a canvas file and a radius for each corner are the next two pieces the receiving product asked for.
+
 ## v0.2.73: a canvas written from a screen, drawn closer to the screen
 
 [v0.2.73](https://github.com/paulmooreparks/yavc.app/releases/tag/v0.2.73) ([PR #110](https://github.com/paulmooreparks/yavc.app/pull/110)) followed on 2026-11-12 from the receiving product's pixel comparison of 72 canvases written by its screen viewer (DESIGN.md decision 128). Font families are quoted in a drawing, and a picture's lines are broken by measured width where there is a page. A node may have `lineHeight`, `outlinePosition` and `noFill` (`docs/canvas-extension.md`). A picture inside the file, a radius for each corner and padding for each side were counted and left for later.
