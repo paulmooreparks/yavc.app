@@ -10,9 +10,28 @@ const types={'.html':'text/html','.js':'text/javascript','.css':'text/css','.jso
   const b=await pw[engine].launch({headless:true}),p=await b.newPage({viewport:{width:1500,height:1600}}),errors=[],bad=[];p.on('pageerror',e=>errors.push(e.message));p.on('request',r=>{const u=new URL(r.url());if(u.protocol.startsWith('http')&&!u.pathname.startsWith(prefix))bad.push(r.url());});p.setDefaultTimeout(25000);
   try{await p.goto(`http://127.0.0.1:${server.address().port}${prefix}workspace-lab/index.html`);await p.locator('#source .cm-content').waitFor({state:'attached'});await p.locator('#document .ProseMirror').waitFor();await p.locator('#deck .deck-canvas').waitFor();
    assert.deepEqual(await p.evaluate(()=>[typeof pcSiteFs,typeof pcConfig,typeof pcSnapshot,localStorage.length,sessionStorage.length]),['undefined','undefined','undefined',0,0]);
-   await p.evaluate(()=>pudlCommands.run('view-text',null,document.querySelector('#source')));
+   
    const source=p.locator('#source .cm-content');await source.click();await p.keyboard.press('ControlOrMeta+End');await p.keyboard.type('\nChanged source.');await p.evaluate(()=>pudlCommands.run('save',null,document.querySelector('#source')));assert.match(await p.evaluate(()=>fixture.records.get('memory:source.md').text),/Changed source/);
    const rich=p.locator('#document .ProseMirror');await rich.locator('p').filter({hasText:'Editable words.'}).click();await p.keyboard.press('ControlOrMeta+End');await p.keyboard.type(' Changed document.');await p.evaluate(()=>pudlCommands.run('save',null,document.querySelector('#document')));assert.match(await p.evaluate(()=>fixture.records.get('memory:document.docs.md').text),/Changed document/);assert.doesNotMatch(await p.evaluate(()=>fixture.records.get('memory:source.md').text),/Changed document/);
+   // The Editor is a text editor: it has no view to choose, a page view is refused with a pointer to Docs, and a Markdown document opens in Docs.
+   assert.deepEqual(await p.evaluate(()=>['view-text','view-visual','view-split','view-preview','md-default','view-mode'].map(id=>{const c=pudlCommands.find(id,document.querySelector('#source'));return !c||!!pudlCommands.value(c,'hidden');})),[true,true,true,true,true,true]);
+   assert.equal(await p.evaluate(()=>!!pudlCommands.value(pudlCommands.find('view-visual',document.querySelector('#document')),'hidden')),false);
+   assert.match(await p.evaluate(()=>pudlActions.run('yavc.editor/view@1',{mode:'text'},{grant:'all'}).then(r=>r.mode)),/text/);
+   assert.equal(await p.locator('#source .ProseMirror').count(),0);
+   assert.match(await p.evaluate(()=>pudlActions.run('yavc.editor/open-file@1',{path:'memory:other.md'},{grant:'all'}).then(()=>'opened',e=>e.message)),/A Markdown document opens in Docs\. Use yavc\.docs\/open-file@1 for memory:other\.md/);
+   // A Markdown file the person chooses in the Editor is handed to the host for Docs. Where the host cannot open it there, it opens in the Editor as text. A deck's text stays in the Editor.
+   await p.evaluate(()=>{fixture.records.set('memory:other.md',{text:'# Other\n\nWords.\n',revision:1,name:'Other.md'});fixture.records.set('memory:talk.slides.md',{text:'# Talk\n',revision:1,name:'Talk.slides.md'});fixture.handed=[];fixture.docsTakes=true;fixture.chosen='memory:other.md';
+     pudlHost.fs.open=async function(){return {path:fixture.chosen};};pudlHost.fileResolution={version:1,open:async function(request){fixture.handed.push(request);if(!fixture.docsTakes)throw new Error('Docs is not here.');}};});
+   const editorTabs=()=>p.evaluate(()=>pudlActions.run('yavc.editor/documents@1',{},{grant:'all'}).then(r=>r.documents.map(d=>d.path)));
+   const tabsBefore=await editorTabs();
+   await p.evaluate(()=>pudlCommands.run('open',null,document.querySelector('#source')));
+   assert.deepEqual(await p.evaluate(()=>fixture.handed),[{resource:'memory:other.md',applet:'docs'}]);assert.deepEqual(await editorTabs(),tabsBefore);
+   await p.evaluate(()=>{fixture.chosen='memory:talk.slides.md';return pudlCommands.run('open',null,document.querySelector('#source'));});
+   assert.equal(await p.evaluate(()=>fixture.handed.length),1);assert.ok((await editorTabs()).includes('memory:talk.slides.md'));
+   await p.evaluate(()=>{fixture.docsTakes=false;fixture.chosen='memory:other.md';return pudlCommands.run('open',null,document.querySelector('#source'));});
+   assert.equal(await p.evaluate(()=>fixture.handed.length),2);assert.ok((await editorTabs()).includes('memory:other.md'));assert.equal(await p.locator('#source .ProseMirror').count(),0);
+   await p.evaluate(async()=>{delete pudlHost.fs.open;delete pudlHost.fileResolution;for(const path of ['memory:other.md','memory:talk.slides.md']){const list=(await pudlActions.run('yavc.editor/documents@1',{},{grant:'all'})).documents,at=list.findIndex(d=>d.path===path);if(at>=0)await pudlActions.run('yavc.editor/close@1',{index:at+1},{grant:'all'});}});
+   assert.deepEqual(await editorTabs(),tabsBefore);
    // A command of the host's own in File: there for the documents the host says, unavailable with the host's reason, and run by the host.
    const hostCommand=mount=>p.evaluate(mount=>{const c=pudlCommands.find('host-publish',document.querySelector(mount));return c?{label:c.label,shortcut:pudlCommands.value(c,'shortcut'),hidden:!!pudlCommands.value(c,'hidden'),disabled:!!pudlCommands.value(c,'disabled'),reason:pudlCommands.value(c,'reason')||null}:null;},mount);
    assert.deepEqual(await hostCommand('#document'),{label:'Publish…',shortcut:'Mod+Shift+U',hidden:false,disabled:true,reason:'There are no changes to publish.'});

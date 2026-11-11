@@ -38,9 +38,9 @@ const types={'.html':'text/html','.js':'text/javascript','.css':'text/css','.jso
                 cdp.on('Debugger.paused',async event=>{try{const result=await cdp.send('Debugger.evaluateOnCallFrame',{callFrameId:event.callFrames[0].callFrameId,expression:'({out,text,parts,entries:entries.map(e=>({gap:e.node.attrs.gap,src:e.node.attrs.src,canonical:e.node.attrs.canonical}))})',returnByValue:true});if(result.result.value?.out!==result.result.value?.text)console.error('Mapping debugger:',result.result.value);}finally{await cdp.send('Debugger.resume');}});
             }
             await page.goto('http://127.0.0.1:'+server.address().port+prefix+'workspace-lab/index.html');
-            await page.locator('#document .ProseMirror').waitFor();await page.evaluate(()=>pudlCommands.run('view-text',null,document.querySelector('#source')));await page.locator('#source .cm-content').waitFor();
+            await page.locator('#document .ProseMirror').waitFor();await page.locator('#source .cm-content').waitFor();
             const action=(app,name,input={})=>page.evaluate(({app,name,input})=>pudlActions.run('yavc.'+app+'/'+name+'@1',input,{grant:'all'}),{app,name,input});
-            for(const [app,root,modes] of [['docs','document',['document','visual','split','preview']],['editor','source',['split','preview']],['slides','deck',['visual','split']]]){
+            for(const [app,root,modes] of [['docs','document',['document','visual','split','preview']],['slides','deck',['visual','split']]]){
                 for(const mode of modes){await action(app,'view',{mode});await page.waitForFunction(id=>Array.from(document.querySelectorAll('#'+id+' img[data-attachment="shot.png"]')).some(img=>img.naturalWidth===1&&img.src.includes('/draft-file?')),root).catch(async error=>{console.error(engine,app,mode,errors,await page.locator('#'+root+' img').evaluateAll(nodes=>nodes.map(img=>({src:img.src,width:img.naturalWidth,attachment:img.dataset.attachment,missing:img.className}))));throw error;});}
             }
             assert.deepEqual(bad,[],'No relative picture may be requested beneath an applet package.');
@@ -53,7 +53,7 @@ const types={'.html':'text/html','.js':'text/javascript','.css':'text/css','.jso
                 return {refused:result,authored:image.getAttribute('data-attachment'),src:image.getAttribute('src'),handler:image.getAttribute('onerror'),images:model.blocks.filter(function(block){return block.kind==='image';}).length,origins:fixture.overlays.assetCalls.map(function(call){return call.resource;})};
             });
             assert.deepEqual(safety.refused,['','','','']);assert.equal(safety.authored,'raw.png');assert.equal(safety.src,null);assert.equal(safety.handler,null);assert.equal(safety.images,1);
-            assert.ok(['memory:document.docs.md','memory:source.md','memory:deck.slides.md'].every(resource=>safety.origins.includes(resource)));
+            assert.ok(['memory:document.docs.md','memory:deck.slides.md'].every(resource=>safety.origins.includes(resource)));
             await action('docs','view',{mode:'text'});
             const overlay=page.locator('#document .cm-editor [data-host-suggestion="proposal-1"]');await overlay.waitFor();
             assert.match(await overlay.innerText(),/Improved/);

@@ -115,18 +115,18 @@ const types={'.html':'text/html','.js':'text/javascript','.css':'text/css','.jso
    // Leaving the page for Text keeps the place: the caret lands on the
    // block it was in, and coming back lands on the same block.
    await doc.locator('.ProseMirror p',{hasText:'Last words here.'}).click();
-   await action('editor','view',{mode:'visual'});await p.locator('#source .ProseMirror').waitFor();
-   await p.locator('#source .ProseMirror p',{hasText:'Last words here.'}).click();await p.keyboard.press('End');
-   await action('editor','view',{mode:'text'});await p.locator('#source .cm-editor').waitFor();
-   await p.waitForFunction(()=>yavcMdEditor.libs().then(CM=>{const v=CM.EditorView.findFromDOM(document.querySelector('#source .cm-editor'));return v&&v.state.doc.lineAt(v.state.selection.main.head).text==='Last words here.'&&v.scrollDOM.scrollTop>0;}));
+   await action('docs','view',{mode:'visual'});await p.locator('#document .ProseMirror').waitFor();
+   await p.locator('#document .ProseMirror p',{hasText:'Last words here.'}).click();await p.keyboard.press('End');
+   await action('docs','view',{mode:'text'});await p.locator('#document .cm-editor').waitFor();
+   await p.waitForFunction(()=>yavcMdEditor.libs().then(CM=>{const v=CM.EditorView.findFromDOM(document.querySelector('#document .cm-editor'));return v&&v.state.doc.lineAt(v.state.selection.main.head).text==='Last words here.'&&v.scrollDOM.scrollTop>0;}));
 
-   await p.evaluate(()=>yavcMdEditor.libs().then(CM=>{const v=CM.EditorView.findFromDOM(document.querySelector('#source .cm-editor')),at=v.state.doc.toString().indexOf('Filler paragraph 30');v.dispatch({selection:{anchor:at+3},effects:CM.EditorView.scrollIntoView(at,{y:'center'})});}));
-   await action('editor','view',{mode:'visual'});await p.locator('#source .ProseMirror').waitFor();
-   await p.waitForFunction(()=>{const s=window.getSelection(),node=s&&s.anchorNode,p=node&&(node.nodeType===1?node:node.parentElement).closest('#source .ProseMirror p');return !!p&&/Filler paragraph 30/.test(p.textContent);});
+   await p.evaluate(()=>yavcMdEditor.libs().then(CM=>{const v=CM.EditorView.findFromDOM(document.querySelector('#document .cm-editor')),at=v.state.doc.toString().indexOf('Filler paragraph 30');v.dispatch({selection:{anchor:at+3},effects:CM.EditorView.scrollIntoView(at,{y:'center'})});}));
+   await action('docs','view',{mode:'visual'});await p.locator('#document .ProseMirror').waitFor();
+   await p.waitForFunction(()=>{const s=window.getSelection(),node=s&&s.anchorNode,p=node&&(node.nodeType===1?node:node.parentElement).closest('#document .ProseMirror p');return !!p&&/Filler paragraph 30/.test(p.textContent);});
    // The page scrolled so the caret's paragraph is in view (the scroller was at the top before).
-   await p.waitForFunction(()=>{const sc=document.querySelector('#source .ed-scroll'),s=window.getSelection(),node=s&&s.anchorNode,par=node&&(node.nodeType===1?node:node.parentElement).closest('#source .ProseMirror p');if(!sc||!par)return false;const r=par.getBoundingClientRect(),b=sc.getBoundingClientRect();return sc.scrollTop>0&&r.top>=b.top&&r.bottom<=b.bottom;});
+   await p.waitForFunction(()=>{const sc=document.querySelector('#document .ed-scroll'),s=window.getSelection(),node=s&&s.anchorNode,par=node&&(node.nodeType===1?node:node.parentElement).closest('#document .ProseMirror p');if(!sc||!par)return false;const r=par.getBoundingClientRect(),b=sc.getBoundingClientRect();return sc.scrollTop>0&&r.top>=b.top&&r.bottom<=b.bottom;});
 
-   await action('editor','view',{mode:'preview'});await p.locator('#source [data-line]').first().waitFor();
+   await action('docs','view',{mode:'preview'});await p.locator('#document [data-line]').first().waitFor();
    // A paragraph with text in brackets is edited on the page, and its brackets are written as they were.
    await action('docs','view',{mode:'visual'});await doc.locator('.ProseMirror').waitFor();
    const cited=doc.locator('.ProseMirror > p',{hasText:'Cited words here. [S2]'});await cited.waitFor();
