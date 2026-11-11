@@ -1,5 +1,28 @@
 # Host shortcode integration handoff
 
+## v0.2.68 to v0.2.70: one menu bar, a host's commands, and actions that change a document
+
+Three releases followed on 2026-11-11, each for something Paul asked of the receiving product.
+
+[v0.2.68](https://github.com/paulmooreparks/yavc.app/releases/tag/v0.2.68) ([PR #102](https://github.com/paulmooreparks/yavc.app/pull/102)) bundles PUDL 0.107.1, whose menu bar a host's page can set to one application bar. No applet changed.
+
+[v0.2.69](https://github.com/paulmooreparks/yavc.app/releases/tag/v0.2.69) ([PR #103](https://github.com/paulmooreparks/yavc.app/pull/103)) adds `pudlHost.documentCommands` version 1 to Editor and Docs, so that a host can put a command such as Publish in the File menu (`docs/document-commands-contract.md`).
+
+[v0.2.70](https://github.com/paulmooreparks/yavc.app/releases/tag/v0.2.70) ([PR #104](https://github.com/paulmooreparks/yavc.app/pull/104)) lets such a command stand in Review, be offered on a right-click, and be given the selection. Every action of Editor, Docs, Slides and Diagrams now has `"changes": "document"` or `"changes": "none"` in its manifest (`docs/agents-design.md`, decision 10). A host that lets agents propose changes and not make them refuses an agent's call to an action marked `document`, and should treat an action without the member as one. The Go toolchain moved to 1.26.11 for GO-2026-6859.
+
+| Item | v0.2.68 | v0.2.69 | v0.2.70 |
+| --- | --- | --- | --- |
+| Tagged commit | `55e8eba` | `4258d03` | `d2e1418` |
+| Archive SHA256 | `ad55755999dd1cf6b6211b42b244034465c8ed993835a96cec2d30256448270f` | `74ecdc6e164afebd84d75b7860d679d665d2967a1dcb7e7d900543b31349a365` | `bcef6ae817a6795a458180bbb2bfe9301f187b0d5d0ebca465ae5a5406e218b2` |
+| Manifest SHA256 | `a3b61559f8ea383510919796b1359c84eeea6a2e3f5dab546d68c6f0f00a06e7` | `57823d7194ac9d862e26e90412044405f3190d09aea70694882a0c55fc93ee50` | `7ddc1b3c7eb58d2384da10f378ec67e7b415b1ca3fd93f54ac26050edc69b889` |
+| Content digest | `7e8ae406a4f6060162c6f9b53e133cdc1b0391db298311108a0935cbff2f4f60` | `d437d4b86db6e14512bdec72fafe67b54b0214ea988269128c7c3f481f0be6be` | `5caafe36f9f7fe36584359d0527916c52e34e9bea6c678562c862fdee99dbac7` |
+| Files | 488 | 488 | 488 |
+| Editor, Docs | 46.27.0, 1.27.0 | 46.28.0, 1.28.0 | 46.29.0, 1.29.0 |
+| Slides, Diagrams | 0.56.0, 0.36.0 | 0.56.0, 0.36.0 | 0.57.0, 0.37.0 |
+| PUDL | 0.107.1 | 0.107.1 | 0.107.1 |
+
+Each content digest is the one the package tests ran against before its tag. The Diagrams package test crashed the Firefox page on one navigation in about half its runs that day, on v0.2.69's package as well as v0.2.70's, and passed when run again; the cause is not traced.
+
 ## v0.2.67: attribute blocks, site-path pictures and the standalone host
 
 Paul opened pages of his own web site in Dinah's standalone Editor and saw `{#top}` as words in his headings and no pictures. [v0.2.67](https://github.com/paulmooreparks/yavc.app/releases/tag/v0.2.67), tagged at `d017c2787249c96cfb5856381ab736eb6d43f989` ([PR #100](https://github.com/paulmooreparks/yavc.app/pull/100)), reads attribute blocks after a heading, a link or a picture, and offers a picture at a site path to the host's picture resolver (DESIGN.md, decision 123). It also fixes two Editor defects that the standalone host exposed and adds `scripts/test-standalone-editor.cjs`, which proves the Editor in that host.
