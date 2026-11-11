@@ -410,3 +410,33 @@ test('padding can differ on each side', () => {
   assert.match(drawn({ width: 100, height: 60, yavc: { fontSize: 20, lineHeight: 1, paddingSides: [10, 4, 2, 30], textAlign: 'center', textVerticalAlign: 'middle' } }, {}, { measure: false }).svg, /<text x="63\.0" y="41\.0"/);
   for (const bad of [[1, 2, 3], [1, 2, 3, 99], '4', [1, 2, 3, 1.5]]) assert.match(jc.read(JSON.stringify({ nodes: [{ id: 'a', type: 'text', x: 0, y: 0, width: 10, height: 10, text: '', yavc: { paddingSides: bad } }], edges: [] })).problems[0].message, /paddingSides must be four whole numbers/);
 });
+test('a picture can be kept in the file itself', () => {
+  const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYGD4DwABBAEAX+XDSwAAAABJRU5ErkJggg==';
+  const file = picture => JSON.stringify({ nodes: [{ id: 'p', type: 'file', x: 0, y: 0, width: 40, height: 40, file: 'thumb.png', yavc: { picture } }], edges: [] });
+  const read = jc.read(file(PNG));
+  assert.deepEqual(read.problems.filter(p => !p.warning), []);
+  assert.equal(jc.embedded(read.doc.nodes[0]), PNG);
+  // It is drawn with no picture given by the caller, and wins over one that is.
+  const out = jc.render(read.doc, { palette: PALETTE, pad: 0 });
+  assert.match(out.svg, /<image[^>]* href="data:image\/png;base64,iVBORw0KGgo/);
+  assert.equal(out.boxes[0].picture, true);
+  assert.ok(jc.render(read.doc, { palette: PALETTE, pad: 0, pictures: { 'thumb.png': 'data:image/gif;base64,R0lGODlhAQABAAAAACw=' } }).svg.includes('image/png'));
+  // The stable form keeps it.
+  assert.equal(jc.read(jc.write(read.doc)).doc.nodes[0].yavc.picture, PNG);
+  // What is not image data of the kind it says is refused, as is a picture on a node that is not a picture.
+  const refused = picture => jc.read(file(picture)).problems[0].message;
+  assert.match(refused('https://example.test/a.png'), /picture must be a data address/);
+  assert.match(refused('data:text/html;base64,PGI+'), /picture must be a data address/);
+  assert.match(refused('data:image/png;base64,' + 'A'.repeat(300000)), /at most 256 KiB/);
+  assert.match(refused('data:image/png;base64,R0lGODlhAQABAAAAACw='), /is not the kind of picture it says/);
+  assert.match(refused('data:image/svg+xml;base64,' + Buffer.from('<p>not a drawing</p>').toString('base64')), /is not the kind of picture it says/);
+  assert.deepEqual(jc.read(file('data:image/svg+xml;base64,' + Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"/>').toString('base64'))).problems.filter(p => !p.warning), []);
+  assert.match(jc.read(JSON.stringify({ nodes: [{ id: 't', type: 'text', x: 0, y: 0, width: 40, height: 40, text: '', yavc: { picture: PNG } }], edges: [] })).problems[0].message, /picture belongs on a file node/);
+});
+test('each corner can have a radius of its own', () => {
+  const out = drawn({ yavc: { radiusCorners: [8, 0, 100, 4], lineWidth: 2 } }).svg;
+  assert.match(out, /<path d="M 8 0 L 100 0 L 100 20 A 20 20 0 0 1 80 40 L 4 40 A 4 4 0 0 1 0 36 L 0 8 A 8 8 0 0 1 8 0 Z"/);
+  // Inside the edge the path is smaller by half the line, and so is each radius.
+  assert.match(drawn({ yavc: { radiusCorners: [8, 0, 0, 0], lineWidth: 2, outlinePosition: 'inside' } }).svg, /<path d="M 8 1 L 99 1 L 99 39 L 1 39 L 1 8 A 7 7 0 0 1 8 1 Z"/);
+  for (const bad of [[1, 2, 3], [1, 2, 3, -1], 4, [1, 2, 3, '4']]) assert.match(jc.read(JSON.stringify({ nodes: [{ id: 'a', type: 'text', x: 0, y: 0, width: 10, height: 10, text: '', yavc: { radiusCorners: bad } }], edges: [] })).problems[0].message, /radiusCorners must be four numbers/);
+});

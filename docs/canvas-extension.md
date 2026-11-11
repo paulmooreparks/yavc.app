@@ -66,6 +66,7 @@ A line that ends in a backslash, or in two spaces, breaks there without the gap 
 - `radius` is the corner radius in file pixels, a number from 0 to 1000, on a node drawn as a rectangle: a text node whose shape is `rectangle` or `rounded`, and a file, link or group node. It is drawn no larger than half the node's shorter side. When absent, each of those keeps its own radius.
 - `outlineSides` is a list of the sides whose outline is drawn, from `top`, `right`, `bottom` and `left`, on the same nodes. An empty list draws the fill with no outline. When absent, the whole outline is drawn. A side that is drawn alone is a straight line, whatever the radius.
 
+- `radiusCorners` is a radius for each corner, as four numbers from 0 to 1000 for the top left, top right, bottom right and bottom left, on the same nodes. It takes the place of `radius` where both are given, and each is drawn no larger than half the node's shorter side. A reader that ignores it uses `radius` or its own corners. It was added on 2026-11-12 (DESIGN.md, decision 128) and is an additive version 1 property.
 - `outlinePosition` is `center` or `inside`, on the same nodes. `center`, the default, draws the outline astride the node's edge, half inside and half outside, as SVG draws a stroke. `inside` draws it wholly within the node's box, as CSS draws a border, so a screen's one-pixel borders land on the pixels they have in the browser.
 - `noFill` is a boolean, on the same nodes. When true the node has its outline and nothing inside it, whatever `fillColor` or `color` say, and its text is coloured to be read against the canvas's background. It is a property of its own and not a value of `fillColor`, because a reader of an earlier release refuses a colour it does not know and ignores a property it does not know.
 
@@ -82,6 +83,17 @@ A file node whose `file` ends in `.png`, `.jpg`, `.jpeg`, `.gif`, `.webp` or `.s
 The host reads the picture, by the rules of `docs/document-host-overlays-contract.md`. Diagrams accepts PNG, JPEG, GIF, WebP and SVG, checks that the bytes are of the kind the name says, and draws at most 64 different pictures in a canvas, of at most 1 MiB each and 8 MiB together. A picture goes into the drawing as image data inside an SVG `image` element and never as markup of the drawing's own, so an SVG picture's scripts and outside references do not run or load. A picture that cannot be read is drawn as the box with the file's name that every other file node has, and Diagrams says which picture and why.
 
 These are additive version 1 properties. Another reader draws the file node its own way.
+
+#### A picture in the file
+
+A picture node may keep its picture in the canvas file, as `picture` in the node's `yavc` object: a data address such as `data:image/png;base64,...`. It is for a picture that belongs to one drawing and has no file of its own, such as a product's thumbnail on a screen that was written out as a canvas. The node still has a `file` that ends as a picture's name does, which is what makes it a picture node, and another reader shows that name.
+
+- The address is base64 image data of a PNG, JPEG, GIF, WebP or SVG picture and is at most 256 KiB long. Its first bytes must be of the kind it says. A file with a `picture` that breaks these rules is refused, as any value this version cannot read is.
+- The picture in the file is drawn, and the host is not asked for the node's `file`. `fit`, `tint` and the outline rules apply as to any picture.
+- It goes into the drawing as image data inside an SVG `image` element, as a picture the host read does, so an SVG picture's scripts and outside references do not run or load.
+- The whole canvas file is still at most 2 MiB, which bounds the pictures in it together. A picture used on many nodes is better kept as a file, since each node would have its own copy.
+
+`picture` was added on 2026-11-12 (DESIGN.md, decision 128) and is an additive version 1 property.
 
 ### Named styles
 
