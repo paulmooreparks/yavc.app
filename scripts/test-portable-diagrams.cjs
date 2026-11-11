@@ -46,6 +46,25 @@ const types={'.html':'text/html','.js':'text/javascript','.css':'text/css','.jso
     assert.match(await source.innerText(),/Newer/);assert.equal(await p.locator('#one .doc-tab-dirty').count(),1);
     await p.evaluate(()=>pudlCommands.run('save',null,document.querySelector('#one')));
     assert.equal(await p.evaluate(()=>fixture.records.get('memory:first.d2').text.includes('Newer')),true);
+    // A host command in place of Save: for the diagram the host says, Save is the host's command, by the button's command and by the key, and Diagrams writes nothing.
+    const saveRow=()=>p.evaluate(()=>{const c=pudlCommands.find('save',document.querySelector('#one'));return {label:pudlCommands.value(c,'label'),glyph:pudlCommands.value(c,'glyph'),disabled:!!pudlCommands.value(c,'disabled'),reason:pudlCommands.value(c,'reason')||null};});
+    assert.equal(await p.evaluate(()=>fixture.commandsAskedFor),'diagrams');assert.equal((await saveRow()).label,'Save');
+    assert.equal(await p.evaluate(()=>!!pudlCommands.value(pudlCommands.find('host-share',document.querySelector('#one')),'hidden')),false);
+    assert.equal(await p.evaluate(()=>pudlCommands.find('host-reviewed',document.querySelector('#one'))),null,'Diagrams has no Review menu, so a command for it is left out.');
+    await source.click({button:'right'});await p.getByRole('menuitem',{name:'Share…'}).waitFor();assert.equal(await p.getByRole('menuitem',{name:'Mark Reviewed'}).count(),0);await p.keyboard.press('Escape');
+    await p.evaluate(()=>fixture.publishChanged(true,'Nothing has changed since it was published.'));
+    assert.deepEqual(await saveRow(),{label:'Publish…',glyph:'upload',disabled:true,reason:'Nothing has changed since it was published.'});
+    // The key in the text says why an unavailable command did nothing.
+    await source.click();await p.keyboard.press('ControlOrMeta+s');await p.locator('.toast-region',{hasText:'Nothing has changed since it was published.'}).waitFor();assert.equal(await p.evaluate(()=>fixture.published.length),0);
+    await p.evaluate(()=>fixture.publishChanged(true));await source.click();await p.keyboard.press('ControlOrMeta+End');await p.keyboard.type('\ne: Draft');
+    const writesBeforePublish=await p.evaluate(()=>fixture.writes.length);
+    await p.evaluate(()=>pudlCommands.run('save',null,document.querySelector('#one')));
+    await p.keyboard.press('ControlOrMeta+s');await p.waitForFunction(()=>fixture.published.length===2);
+    await p.keyboard.press('ControlOrMeta+Shift+l');await p.waitForFunction(()=>fixture.published.length===3);
+    assert.deepEqual(await p.evaluate(()=>fixture.published[0]),{id:'publish',application:'diagrams',resource:'memory:first.d2',name:await p.evaluate(()=>fixture.published[0].name),modified:true,selected:false,selection:null,rooted:true});
+    assert.equal(await p.evaluate(()=>fixture.writes.length),writesBeforePublish);assert.equal(await p.evaluate(()=>fixture.records.get('memory:first.d2').text.includes('Draft')),false);
+    await p.evaluate(()=>fixture.publishChanged(false));assert.equal((await saveRow()).label,'Save');
+    await p.evaluate(()=>pudlCommands.run('save',null,document.querySelector('#one')));assert.equal(await p.evaluate(()=>fixture.records.get('memory:first.d2').text.includes('Draft')),true);
     assert.equal(await p.locator('#one .doc-tab-dirty').count(),0);
     await p.evaluate(()=>{fixture.records.get('memory:first.d2').revision++;});
     await source.click();await p.keyboard.press('ControlOrMeta+End');await p.keyboard.type('\ne: Conflict');
