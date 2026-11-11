@@ -1,5 +1,25 @@
 # Host shortcode integration handoff
 
+## v0.2.67: attribute blocks, site-path pictures and the standalone host
+
+Paul opened pages of his own web site in Dinah's standalone Editor and saw `{#top}` as words in his headings and no pictures. [v0.2.67](https://github.com/paulmooreparks/yavc.app/releases/tag/v0.2.67), tagged at `d017c2787249c96cfb5856381ab736eb6d43f989` ([PR #100](https://github.com/paulmooreparks/yavc.app/pull/100)), reads attribute blocks after a heading, a link or a picture, and offers a picture at a site path to the host's picture resolver (DESIGN.md, decision 123). It also fixes two Editor defects that the standalone host exposed and adds `scripts/test-standalone-editor.cjs`, which proves the Editor in that host.
+
+A receiving host has two things it may do. Its `contentWorkspace.resources.resolve` is now asked for a reference that starts with one `/`, and it returns null unless it keeps the document's web site somewhere of its own. When the place of a document's pictures changes, it calls the listeners of `pudlHost.fs.onChange`, and Editor and Docs resolve the pictures in view again. A host that does neither behaves as it did.
+
+| Item | Value |
+| --- | --- |
+| Tag | `v0.2.67` |
+| Tagged commit | `d017c27` |
+| Archive | yavc-content-v0.2.67.zip |
+| Archive SHA256 | `0d0dce79dba92759ca20236f70b090c80149e318ca54c676a77ee05284cf852e` |
+| Manifest SHA256 | `4a6f9da7776af1c4c2121cde54e799acf7c48cea436ddf6ee488965d1f585dca` |
+| Content digest | `ef604a3dbfbb32d6a9347253d0997a5489bf238a73218ef287834db45c6a3817` |
+| Files | 488 |
+| Applets | Editor 46.27.0, Docs 1.27.0, Slides 0.56.0, Diagrams 0.36.0 |
+| PUDL | 0.106.2 |
+
+The content digest is the one the suites ran against before the tag.
+
 ## v0.2.66: PUDL 0.106.2 in the package
 
 Paul asked for stacked taskbar buttons in GK Companion, and a receiving host cannot take a new PUDL until the content package bundles the same one. [v0.2.66](https://github.com/paulmooreparks/yavc.app/releases/tag/v0.2.66), tagged at `88220c83e6ef247bcda2de8534a311ed1ad6f914` ([PR #98](https://github.com/paulmooreparks/yavc.app/pull/98)), replaces the package's `pudl/` whole with the verified PUDL v0.106.2 distribution. No applet changed, so the applet versions are those of v0.2.65. A host takes this release together with PUDL 0.106.2 and does nothing else for it; `docs/pudl-upgrade-0.106.2.md` has the evidence.
