@@ -16,6 +16,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"yavc.app/internal/shortcodes"
 )
 
 type asset struct {
@@ -154,6 +156,19 @@ func assemble(root, out, md, d2 string) error {
 		return fmt.Errorf("project glyphs are missing")
 	}
 	if err = os.WriteFile(filepath.Join(out, "support", "glyphs.css"), []byte(":root {\n"+strings.Join(glyphs, "\n")+"\n}\n"), 0644); err != nil {
+		return err
+	}
+	// The table of every built-in shortcode, for a host that sends a
+	// document somewhere else (docs/shortcode-destinations.md).
+	codes, err := shortcodes.Portable()
+	if err != nil {
+		return err
+	}
+	codeBytes, err := json.MarshalIndent(codes, "", "  ")
+	if err != nil {
+		return err
+	}
+	if err = os.WriteFile(filepath.Join(out, "content", "shortcodes.json"), append(codeBytes, '\n'), 0644); err != nil {
 		return err
 	}
 	gorootBytes, err := goCommand(root, "env", "GOROOT")

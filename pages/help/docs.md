@@ -81,7 +81,7 @@ Edit offers Cut, Copy, Paste and Select All for the pane you were editing. Read-
 
 Edit, Find and Replace (Ctrl+F) opens a bar with the two fields, Match Case, Whole Word and Regular Expression, and Replace and Replace All. It works on the Markdown in Text view and on the page in Visual view. Go, Go to Line (Ctrl+Alt+G) moves to a line by its number.
 
-A right-click on the text or the page gives Undo, Redo, Find and the Format menu. On a tab it gives Close and Close the Others, and on a file in the pane it gives Open. Shift+F10 and the Menu key open the same menus from the keyboard.
+A right-click on the text or the page gives Undo, Redo, Find and the Format menu. On a tab it gives Close and Close the Others, and on a file in the pane it gives Open. On a diagram drawn from a file it also gives Edit Diagram, which opens the file in Diagrams; the document draws the diagram again when you save it there. The same command is a button in the diagram's form and is in the Format menu for the diagram the cursor is on. Shift+F10 and the Menu key open the same menus from the keyboard.
 
 ## Keys
 
