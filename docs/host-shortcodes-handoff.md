@@ -1,5 +1,19 @@
 # Host shortcode integration handoff
 
+## v0.2.76: a picture in a canvas file, and a radius for each corner
+
+[v0.2.76](https://github.com/paulmooreparks/yavc.app/releases/tag/v0.2.76) ([PR #115](https://github.com/paulmooreparks/yavc.app/pull/115)) followed on 2026-11-12 and closes the last two gaps the receiving product counted on the canvases its screen viewer writes (DESIGN.md decision 128). A picture node may keep its picture in the file as `picture`, a data address of at most 256 KiB that is checked when the file is read. `radiusCorners` gives each corner of a rectangle its own radius. `docs/canvas-extension.md` defines both. `radiusCorners` can be set through the agent's edit action; `picture` is written by whatever makes the file.
+
+| Item | Value |
+| --- | --- |
+| Commit | `3ae2cf8f828009d4739a0c52e23bd610840e0236` |
+| Archive sha256 | `afae90fa297a504b49d42db0d843ac1c5f707b84703a11522a5d241f6ebd3492` |
+| Manifest sha256 | `da7f22a923d266adf5a394906ebce2303e98916074fa7b1c96a79f075c25ac58` |
+| Content digest | `62424e152d62423f4cbfd73d40e53adc89654027aef96bb77b9cce3e4d1d3790` (490 files) |
+| Applets | Diagrams 0.41.0; the others as in v0.2.75 |
+
+The published archive and manifest passed their checksums, and the digest equals a local build of the tagged commit.
+
 ## v0.2.74 and v0.2.75: the baseline from the font, and a document's own shortcodes expanded
 
 Two releases followed on 2026-11-12 from the receiving product's second measurement and from its publisher's need.
