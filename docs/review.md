@@ -978,3 +978,7 @@ Decision 130. `apps/md-editor/macros.js` required the shared file to be under th
 Decision 131. The Editor's Markdown views were Visual, Text, Split and Preview; it now has Text alone and draws no View choice. `scripts/test-portable-workspace.cjs` covers the Editor's side: no view commands, the view action refusing a page view with a pointer to Docs, a Markdown file chosen in the Editor handed to the host for Docs, the same file opening as text when the host cannot, and an agent's request to open a Markdown document refused with the Docs action named unless it asks for the text. The package tests that used the Editor's Visual view for place keeping and for pictures in drawn views now use Docs for the same checks, and the checks themselves are unchanged. The Editor's manifest no longer offers a page view, and its table action gives the same guidance as the other actions that moved to Docs.
 
 The site tests that open a Markdown file in the Editor's Visual view are not part of the commit checks. Those that still test something the Editor has were changed to use Docs; the list is in the release note.
+
+## A file chosen with Browse (2026-11-12)
+
+Decision 132. `scripts/test-portable-workspace.cjs` covers `yavcDialog.referenceFrom` for a file below the document's folder, beside it through a shared parent, in another branch that shares only the root, under another root, and for a document with no folder; and it presses Browse in the diagram's form with a host chooser that returns a full path and reads the reference the field was given.
