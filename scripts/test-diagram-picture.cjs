@@ -57,9 +57,12 @@ const CANVAS = JSON.stringify({ yavc: { version: 1 }, nodes: [
                 const width = Math.ceil(rule.measureText('Subtotal').width), text = JSON.stringify({ yavc: { version: 1 }, nodes: [{ id: 't', type: 'text', x: 0, y: 0, width: width, height: 26, text: 'Subtotal', yavc: { shape: 'text', padding: 0, fontSize: 19, fontWeight: 700, fontFamily: '7 Segment Display', lineHeight: 1.17 } }], edges: [] });
                 const out = await yavcDiagramPicture.draw({ kind: 'canvas', text: text }), doc = new DOMParser().parseFromString(out.svg, 'image/svg+xml'), holder = document.createElement('div');
                 holder.innerHTML = out.svg; document.body.append(holder); const shown = getComputedStyle(holder.querySelector('text')).fontFamily; holder.remove();
-                return { lines: Array.from(doc.querySelectorAll('tspan')).map(node => node.textContent), shown: shown, width: width };
+                const m = rule.measureText('Hg'), known = typeof m.fontBoundingBoxAscent === 'number', up = Math.round(m.fontBoundingBoxAscent), down = Math.round(m.fontBoundingBoxDescent), line = 19 * 1.17;
+                return { lines: Array.from(doc.querySelectorAll('tspan')).map(node => node.textContent), shown: shown, width: width, y: Number(doc.querySelector('text').getAttribute('y')), want: known ? Number(((line - (up + down)) / 2 + up).toFixed(1)) : null };
             });
             assert.deepEqual(fitted.lines, ['Subtotal'], 'width ' + fitted.width); assert.match(fitted.shown, /7 Segment Display/);
+            // The baseline is placed from the font's own ascent and descent, which every engine tested gives.
+            assert.notEqual(fitted.want, null); assert.equal(Number((fitted.y - 24).toFixed(1)), fitted.want, 'The picture has a margin of 24 around the canvas.');
             // Without a reader the canvas is still drawn, and it says the picture is missing.
             const bare = await p.evaluate(async text => { const out = await yavcDiagramPicture.draw({ kind: 'canvas', text: text }); return { image: /<image[\s>]/.test(out.svg), problems: out.problems }; }, CANVAS);
             assert.equal(bare.image, false); assert.equal(bare.problems.length, 1);
