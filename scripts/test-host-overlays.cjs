@@ -114,6 +114,7 @@ const types={'.html':'text/html','.js':'text/javascript','.css':'text/css','.jso
             assert.ok(await page.evaluate(()=>originalCard===document.querySelector('#document .ProseMirror [data-host-suggestion="paged"]')),'Typing adjacent to a proposal must retain its widget DOM.');
             assert.ok(await page.locator('#document [data-role="page-problems"]').isHidden());
             assert.deepEqual(errors,[]);
+            await require('./fixtures/host-suggestion-narrowing.cjs')(page,action,assert);assert.deepEqual(errors,[]);
             const races=await page.evaluate(await fs.readFile(path.join(__dirname,'fixtures/host-suggestion-races.js'),'utf8'));
             assert.equal(races.decisions,2);assert.equal(races.unsubscribed,3);
             console.log(engine+' document-relative images resolve in all drawn modes; host-owned decisions, refresh, mapping, stale protection and disposal pass.');
