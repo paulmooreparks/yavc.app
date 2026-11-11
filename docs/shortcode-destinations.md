@@ -46,8 +46,25 @@ A change that would make a reader of version 1 treat a row wrongly needs a new v
 ## What is not in the table
 
 - A shortcode the host application adds (`docs/host-shortcodes-contract.md`). The host that added it knows what it means.
-- A shortcode a document defines for itself with `{{define:name}}`, or takes from a shared file. A use of one stands for the definition's body, which is Markdown and other shortcodes. A destination works from the text with those uses expanded. The `define` row is in the table so that the definition itself is recognised and left out.
+- A shortcode a document defines for itself with `{{define:name}}`, or takes from a shared file. A use of one stands for the definition's body, which is Markdown and other shortcodes. A destination works from the text with those uses expanded, which the engine gives it (the next section). The `define` row is in the table so that the definition itself is recognised and left out.
 - Review marks in CriticMarkup, and an attribute block such as `{#top}` after a heading, a link or a picture (decision 123). They are Markdown syntax of this engine and not shortcodes, and a destination meets them in the same text.
+
+## A document with its own shortcodes expanded
+
+The engine in `content/md-engine` gives a document's Markdown with every use of a shortcode the document or its shared file defines replaced by what it stands for, and with the definitions taken out. What is left has only built-in shortcodes and the host's own, which a destination can look up.
+
+```
+const engine = await yavcMdEngine();
+const { text, problems } = engine.expand({ text, shared, hosts });
+```
+
+| Member | Meaning |
+| --- | --- |
+| `text` | The document's Markdown, at most 4 MiB. |
+| `shared` | The text of the shared definitions file the document uses, or an empty string. |
+| `hosts` | The host's shortcodes, as `withHosts` takes them, so that a literal container's body is left alone. |
+
+The front matter is kept as it is, and the result's line endings are LF. The rules are the ones the engine draws by: the same arguments and defaults, at most eight levels of one shortcode using another, and at most 256 KiB of expansion in a document. A use inside a code block, a quoted example or a host's literal container is not a use and is not touched. A use that cannot be expanded, for an argument the definition does not have or a definition with a mistake in it, stays as it is written, and `problems` has its `name`, a `message` and `at`, its place in the text given with LF line endings. A destination should treat such a use as it treats a shortcode it has no answer for. Expanding the result again changes nothing.
 
 ## A picture of a diagram
 

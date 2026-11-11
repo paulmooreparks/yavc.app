@@ -60,7 +60,24 @@ func render(text string) ([]preview.Block, []problem) {
 
 var functions = map[string]func(string) (any, error){
 	"shortcodes": func(string) (any, error) { return map[string]any{"shortcodes": shortcodes.Definitions()}, nil },
-	"outline":    func(source string) (any, error) { return outline(source), nil },
+	// expand is a document with its own shortcodes replaced by what they
+	// stand for, for a destination that knows only the built-in ones
+	// (docs/shortcode-destinations.md).
+	"expand": func(request string) (any, error) {
+		var r struct {
+			Text, Shared string
+			Hosts        []shortcodes.HostShortcode
+		}
+		if err := json.Unmarshal([]byte(request), &r); err != nil {
+			return nil, err
+		}
+		if len(r.Text) > 4<<20 || len(r.Shared) > 4<<20 {
+			return nil, fmt.Errorf("a document to expand must be no larger than 4 MiB")
+		}
+		text, problems := shortcodes.ExpandDocument(r.Text, r.Shared, r.Hosts)
+		return map[string]any{"text": text, "problems": problems}, nil
+	},
+	"outline": func(source string) (any, error) { return outline(source), nil },
 	"outline-state": func(source string) (any, error) {
 		return map[string]any{"entries": outline(source), "revision": sourceRevision(source)}, nil
 	},

@@ -228,6 +228,11 @@ func (r *MacroRegistry) expand(call Call, body string, depth int, budget *MacroB
 	if budget.Used > MacroLimit {
 		return "", fmt.Errorf("shortcode expansions exceed 256 KiB in this document")
 	}
+	// A template that is one paragraph ends with the line ending its
+	// definition gave it, which would break the line it is used in.
+	if d.Inline {
+		value = strings.TrimRight(value, "\n")
+	}
 	return r.expandText(value, depth+1, budget)
 }
 

@@ -76,6 +76,9 @@ const types={'.html':'text/html','.js':'text/javascript','.css':'text/css','.jso
    await p.evaluate(()=>{const view=CM.EditorView.findFromDOM(document.querySelector('#document .cm-editor')),at=view.state.doc.toString().indexOf('{{diagram:');view.dispatch({selection:{anchor:0}});fixture.offDiagram=!!pudlCommands.value(pudlCommands.find('edit-diagram',document.querySelector('#document')),'disabled');view.dispatch({selection:{anchor:at+4}});});
    assert.equal(await p.evaluate(()=>fixture.offDiagram),true);await p.evaluate(()=>pudlCommands.run('edit-diagram',null,document.querySelector('#document')));
    assert.deepEqual(await p.evaluate(()=>fixture.diagramRequests[2]),{path:'~/portable/plan.canvas',from:'document'});
+   // The packaged engine gives a document with its own shortcodes replaced, for a destination that knows only the built-in ones.
+   const expanded=await p.evaluate(async()=>(await yavcMdEngine()).expand({text:'{{define:greet}}\n{{param:who default="you"}}\nHello, {{arg:who}}.\n{{/define}}\n\n{{greet:who=Sam}} {{status:green Done}}\n\n{{raw}}\n<p>{{greet}}</p>\n{{/raw}}\n\n{{missing-arg}}\n',shared:'{{define:missing-arg}}\n{{param:x}}\n{{arg:y}}\n{{/define}}\n',hosts:[{name:'raw',kind:'container',literal:true}]}));
+   assert.equal(expanded.text,'\nHello, Sam. {{status:green Done}}\n\n{{raw}}\n<p>{{greet}}</p>\n{{/raw}}\n\n{{missing-arg}}\n');assert.equal(expanded.problems.length,1);assert.equal(expanded.problems[0].name,'missing-arg');
    // A host that opens files itself is asked first, and PUDL is asked only when the host does not take the request.
    await p.evaluate(()=>{fixture.hostOpened=[];fixture.hostTakes=true;pudlHost.contentWorkspace.openDiagram=function(path,context){fixture.hostOpened.push({path:path,rooted:context.host instanceof Element,document:context.document});return fixture.hostTakes;};});
    await p.evaluate(()=>pudlCommands.run('edit-diagram',null,document.querySelector('#document')));
