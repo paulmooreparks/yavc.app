@@ -27,6 +27,14 @@
             }
         }
     });
+    // A command of the host's own for a diagram (docs/document-commands-contract.md): Publish stands in place of Save for one diagram while the host says so, and Share is an ordinary row.
+    var commandListeners=new Set();fixture.published=[];fixture.publishing=false;fixture.publishReason='';
+    fixture.publishChanged=function(on,reason){fixture.publishing=on;fixture.publishReason=reason||'';commandListeners.forEach(function(fn){fn();});};
+    pudlHost.documentCommands={version:1,
+        list:function(application){fixture.commandsAskedFor=application;return [{id:'publish',label:'Publish…',glyph:'upload',shortcut:'Mod+Shift+L',replaces:'save'},{id:'share',label:'Share…',context:true},{id:'reviewed',label:'Mark Reviewed',menu:'review',context:true}];},
+        state:function(id,context){fixture.lastCommandContext=context;return id==='share'?{present:true}:{present:fixture.publishing&&context.resource==='memory:first.d2',disabled:!!fixture.publishReason,reason:fixture.publishReason||undefined};},
+        run:async function(id,context){fixture.published.push({id:id,application:context.application,resource:context.resource,name:context.name,modified:context.modified,selected:context.selected,selection:context.selection,rooted:context.root instanceof Element});},
+        onChange:function(fn){commandListeners.add(fn);return function(){commandListeners.delete(fn);};}};
     if(options.has('creation')){
         fixture.copies=[];
         pudlHost.contentResources.create=async function(request){if(records.has(request.resource))throw new Error('Already exists');records.set(request.resource,{text:request.text,revision:1,name:'Created.d2'});fixture.persist();return {resource:request.resource,revision:'1',name:'Created.d2',writable:true};};
