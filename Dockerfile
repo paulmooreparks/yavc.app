@@ -2,7 +2,7 @@
 # packages, in a small image. Sessions live in /data, a volume. Both images
 # are pinned to an exact release, so a rebuild takes the same base until
 # the pins are moved on purpose.
-FROM golang:1.26.10-alpine3.24 AS build
+FROM golang:1.26.11-alpine3.24 AS build
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download

@@ -244,6 +244,27 @@ rules.push({ id: 'action-reads-declare', run() {
   }
 } });
 
+// A host that lets agents propose changes and not make them refuses an
+// agent's call to an action that changes a document, and it tells which
+// those are from the manifest (docs/agents-design.md, decision 10). So
+// every action of a document applet says "changes": "document" when it
+// changes a document's text, saves it, or creates, closes or replaces one,
+// and "changes": "none" otherwise. A new action cannot leave it unsaid.
+rules.push({ id: 'action-changes-declared', run() {
+  for (const f of files.filter((f) => /^apps\/(editor|docs|slides|diagrams)\/actions\.json$/.test(f))) {
+    let m; try { m = JSON.parse(text.get(f)); } catch (err) { continue; }
+    for (const a of m.actions || []) {
+      if (a.changes !== 'document' && a.changes !== 'none') {
+        report('action-changes-declared', f, text.get(f).indexOf('"' + a.ref + '"'), `${a.ref} does not say whether it changes a document ("changes": "document" or "none")`);
+      } else if (a.changes === 'none' && (a.capabilities || []).includes('files.write')) {
+        report('action-changes-declared', f, text.get(f).indexOf('"' + a.ref + '"'), `${a.ref} declares files.write but says it changes no document`);
+      } else if (a.changes === 'document' && a.replay === 'pure') {
+        report('action-changes-declared', f, text.get(f).indexOf('"' + a.ref + '"'), `${a.ref} says it changes a document but its replay is pure`);
+      }
+    }
+  }
+} });
+
 // Only the person's own typing holds every capability; anything else that
 // passes grant: 'all' to the broker must say why on the same line.
 rules.push({ id: 'grant-all', run() {

@@ -28,6 +28,22 @@ const types={'.html':'text/html','.js':'text/javascript','.css':'text/css','.jso
    await p.evaluate(()=>{fixture.publishFails=true;return pudlCommands.run('host-publish',null,document.querySelector('#document'));});
    await p.locator('.toast-region',{hasText:'The page could not be published.'}).waitFor();
    await p.evaluate(()=>{fixture.publishFails=false;return pudlCommands.run('save',null,document.querySelector('#document'));});
+   // A host command in Review that needs the selection: unavailable without one, and given the selection as a range of the document's text.
+   const request=mount=>p.evaluate(mount=>{const c=pudlCommands.find('host-request-change',document.querySelector(mount));return {hidden:!!pudlCommands.value(c,'hidden'),disabled:!!pudlCommands.value(c,'disabled'),reason:pudlCommands.value(c,'reason')||null};},mount);
+   const ask=mount=>p.evaluate(mount=>pudlCommands.run('host-request-change',null,document.querySelector(mount)),mount);
+   await p.evaluate(()=>{const view=CM.EditorView.findFromDOM(document.querySelector('#source .cm-editor'));view.dispatch({selection:{anchor:0}});});
+   assert.deepEqual(await request('#source'),{hidden:false,disabled:true,reason:'Select the passage to change first.'});
+   const sourceText=await p.evaluate(()=>{const view=CM.EditorView.findFromDOM(document.querySelector('#source .cm-editor')),text=view.state.doc.toString(),at=text.indexOf('Retained');view.dispatch({selection:{anchor:at,head:at+8}});return text;});
+   assert.equal((await request('#source')).disabled,false);await ask('#source');
+   assert.deepEqual(await p.evaluate(()=>fixture.requested.pop()),{resource:'memory:source.md',selected:true,selection:{text:'Retained',start:sourceText.indexOf('Retained'),end:sourceText.indexOf('Retained')+8}});
+   // On the page, the selection is the range of the text it maps to.
+   await rich.locator('p').filter({hasText:'Editable words.'}).click();await p.keyboard.press('Home');await p.keyboard.press('Shift+End');
+   await p.waitForFunction(()=>!pudlCommands.value(pudlCommands.find('host-request-change',document.querySelector('#document')),'disabled'));await ask('#document');
+   const documentText=(await p.evaluate(()=>pudlActions.run('yavc.docs/document@1',{}, {grant:'all'}))).text,mapped=await p.evaluate(()=>fixture.requested.pop());
+   assert.match(mapped.selection.text,/^Editable words\..* Unsaved\.$/);assert.equal(documentText.slice(mapped.selection.start,mapped.selection.end),mapped.selection.text);
+   // It is offered where a person right-clicks the selection, and it stands in Review.
+   await rich.locator('p').filter({hasText:'Editable words.'}).click({button:'right'});
+   await p.getByRole('menuitem',{name:'Request a Change…'}).waitFor();await p.keyboard.press('Escape');
    assert.deepEqual(await p.evaluate(()=>pudlActions.problems()),[]);assert.match((await p.evaluate(()=>pudlActions.run('yavc.docs/document@1',{}, {grant:'all'}))).text,/Changed document/);
    await p.evaluate(()=>{fixture.reviewPromise=pudlCommands.run('review-changes',null,document.querySelector('#document'));});const review=p.getByRole('dialog',{name:'Review Changes',exact:true});await review.waitFor();assert.equal(await p.evaluate(()=>typeof pudlListbox.refresh),'function');await review.getByRole('button',{name:'Close',exact:true}).click();await p.evaluate(()=>fixture.reviewPromise);
    const sourceFont=await source.evaluate(el=>getComputedStyle(el).fontFamily);await p.evaluate(()=>{pudlCommands.run('document-theme',null,document.querySelector('#document'));});let dialog=p.getByRole('dialog',{name:'Document Theme',exact:true});await dialog.getByLabel('Theme',{exact:true}).selectOption('manuscript');await p.waitForFunction(()=>!document.querySelector('.md-gallery-sample[aria-busy]'));await dialog.getByRole('button',{name:'Apply',exact:true}).click();await p.waitForFunction(()=>getComputedStyle(document.querySelector('#document .ProseMirror')).fontSize==='16px');assert.equal(await source.evaluate(el=>getComputedStyle(el).fontFamily),sourceFont);await p.evaluate(()=>pudlCommands.run('save',null,document.querySelector('#document')));assert.match(await p.evaluate(()=>fixture.records.get('memory:document.docs.md').text),/theme: manuscript/);
