@@ -1,5 +1,9 @@
 # Stem-to-stern review, November 2026
 
+## PUDL 0.107.1 integration, 2026-11-11
+
+The bundled PUDL went from 0.106.2 to 0.107.1 so that the standalone Editor's host can draw one menu bar, which PUDL added as an option the host's page sets. The archive, manifest and tag commit were verified and all 196 files replaced together; only the menu bar's script and a version comment differ. The site and the applets needed no change. `pudl-upgrade-0.107.1.md` records the evidence.
+
 ## The Editor in a standalone host, 2026-11-11
 
 Dinah built a standalone document host, one window and one process for each document with a service behind them, and `scripts/test-standalone-editor.cjs` now proves the Editor in it against real files in Chromium, Firefox and WebKit. The test starts the host's service headless and covers saving, a save refused after the file changed, Save As, New and Open arriving in other windows, an open file raised, drafts kept across reload and close, another program's action behind the person's leave, and a path the person did not choose being refused. It needs the host's executable, so it is not part of the commit checks.

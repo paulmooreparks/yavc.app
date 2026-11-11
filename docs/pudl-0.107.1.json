@@ -1,14 +1,14 @@
 {
-  "version": "0.106.2",
-  "tag": "v0.106.2",
-  "commit": "a6e0d432cdd57f5798c4e58384b94f4f26d8722f",
+  "version": "0.107.1",
+  "tag": "v0.107.1",
+  "commit": "e2c05a919dba47ead103b0940e51f3d8200fb01a",
   "archive": {
-    "url": "https://github.com/paulmooreparks/pudl/releases/download/v0.106.2/pudl-0.106.2.zip",
-    "sha256": "7e315f5775f2486808b94cb0de9142a8dec168f602560d68269137aace8afc10"
+    "url": "https://github.com/paulmooreparks/pudl/releases/download/v0.107.1/pudl-0.107.1.zip",
+    "sha256": "8b9cac72f0430e9601f56b20e91915dec5a614cd501eafeedf4166ef982be9e6"
   },
   "manifest": {
-    "url": "https://github.com/paulmooreparks/pudl/releases/download/v0.106.2/pudl-0.106.2-dist-manifest.json",
-    "sha256": "60b3fff55740c41cf4e0e895582874fa1386ba0ee78fb918e2e62ffe9afa1b93"
+    "url": "https://github.com/paulmooreparks/pudl/releases/download/v0.107.1/pudl-0.107.1-dist-manifest.json",
+    "sha256": "8469d48c529a7077b5a36477fb7d001cffeb218c5f0e8ead9edef5964a47f2b5"
   },
   "files": {
     "fonts/Inter-cyrillic-ext.woff2": "bdd00273de4ad0466c16e22d5dba25a90ab65b101453e40b13ff5137dbf974ad",
@@ -89,8 +89,8 @@
     "min/pudl-md.js.map": "9a7ccd953c164538bab6b2734d012c9efaecb075e11f06d14fac281905d6d634",
     "min/pudl-menu.js": "153bb6476c1b7c0b7b861aa534fa76ef97283b5843c413c6b90bf261db7cbcd1",
     "min/pudl-menu.js.map": "822fb5bf7a961d7aa63406e5275bb3a20708f07a3dd66e7003f07b68f35cd20a",
-    "min/pudl-menubar.js": "a4cf95c24186e0743a538708ff589036997758ced6343322f0601a1f112fd6ec",
-    "min/pudl-menubar.js.map": "05e9e7d6c8221e5ca355571f5ebe784b862cd802730ea337d6f6f8c1e7e551ef",
+    "min/pudl-menubar.js": "74e60b638ff609ee30231e61e71318da263dadb8613936eef7497da8118c6644",
+    "min/pudl-menubar.js.map": "2817d9b6e3d73a9dd3fdb817644fd7e4b9a8db2cd8be7a657e881476ea750d45",
     "min/pudl-native.js": "d5da0d855fd17e644f3cac7af6450dc3c7e5789038c4b01b65fde788b127a92a",
     "min/pudl-native.js.map": "9cefcaab8229376f5b62952a794b2e1c183d53bae4576b01e42e8e782fabdca9",
     "min/pudl-regions.js": "75597f2455e0a92568b3c84a6f5f264987ca855b768323ff387198153d4dbf19",
@@ -167,7 +167,7 @@
     "pudl-listbox.js": "eeec95bbb9c6b8592ccb0b8723b70b1fdbff8603cfb1656f0fb01aa630a48d68",
     "pudl-md.js": "e66403746508892777b7fd9e61f5d3f5fb830062ea8132e7e501d2429224295c",
     "pudl-menu.js": "2b1eb8c36e555669c5074789234f4e082efb28f8d41d8ea1d2c72776d5dae524",
-    "pudl-menubar.js": "a9d25aead2d0bf0c25690007a70b503fc154b535e90ea89c16b938f20504b048",
+    "pudl-menubar.js": "96f16512f8c643face76165c8d210f2518f879f896ccc667a964002ba36f2b86",
     "pudl-native.js": "a4775bb3e75b6d62a758104e85f565d999d085350f01de5ea3605406768d4b71",
     "pudl-regions.js": "69b5be094fafa8db91b9ece0d9afdddce2576248528188a876f6f8629cf75544",
     "pudl-reorder.js": "4b2a17fdc3e5c2457c8960c853991ae141d9dcd747609bee38c8cc744db3ae55",
@@ -196,7 +196,7 @@
     "pudl-windows.css": "4350866b6034c8896eefd70bb08335b91d3c38ec9d9d9210a18bf541f8974cc8",
     "pudl-windows.js": "bb35e8aec4b346c7cb1bb0cd4c27df2ba5bb7425e4c7068ec75cb55f6d90c4c1",
     "pudl-zoom.js": "399eb946d42b1de0baeb9d0865c589e58a3170c62321b8fc77c3a0b67f6df379",
-    "pudl.css": "9eb125e9f7774366f9996a932849cb19bbe4833a4ab5ebafff02afe0776f737c",
+    "pudl.css": "8d464a5f1ddbb49944dc3bceb027e539157a39c0aa0de2cf844de3ddccfb02fb",
     "vendor/cfworker-json-schema-4.1.1/deep-compare-strict.js": "22e2f69237e382c7c7bf0ab2c28ef9368550e2aeec71b51a45a1ff2939ed91de",
     "vendor/cfworker-json-schema-4.1.1/dereference.js": "31f6e9efa95a71467802ef4748d41d1fb953490aaae236fc2118ab0d9f3a63ad",
     "vendor/cfworker-json-schema-4.1.1/format.js": "5520a0a12d84540f476ae92d88271e99a2e786b7d2ed8f4515f4a61fb6374738",
