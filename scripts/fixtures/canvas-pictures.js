@@ -31,8 +31,14 @@
         fixture.records.set('~/portable/screens/plan.canvas',{text:JSON.stringify({nodes:[{id:'moved',type:'file',x:0,y:0,width:48,height:48,file:'icons/moved.svg'}],edges:[]}),revision:1,name:'plan.canvas'});
         workspace.resources.resolve=(function(inner){return async function(request){
             if(request.href==='screens/icons/moved.svg'){fixture.pictures.asked.push({resource:request.resource,href:request.href,kind:request.kind});return {url:pictures+'moved.svg'};}
+            // A path from the document's web site, which this host keeps somewhere of its own until the test moves it.
+            if(request.href==='/site/logo.png'){fixture.pictures.asked.push({resource:request.resource,href:request.href,kind:request.kind});return fixture.pictures.webRoot?{url:pictures+fixture.pictures.webRoot}:null;}
             return inner(request);
         };})(workspace.resources.resolve);
-        fixture.records.get('memory:document.docs.md').text='# Document\n\n{{diagram:screens/plan.canvas alt="A screen"}}\n\n```canvas\n'+JSON.stringify({nodes:[{id:'home',type:'file',x:0,y:0,width:48,height:48,file:'icons/home.svg'},{id:'missing',type:'file',x:80,y:0,width:120,height:48,file:'icons/missing.svg'}],edges:[]})+'\n```\n\nEditable words.\n';
+        fixture.records.get('memory:document.docs.md').text='# Document\n\n{{diagram:screens/plan.canvas alt="A screen"}}\n\n```canvas\n'+JSON.stringify({nodes:[{id:'home',type:'file',x:0,y:0,width:48,height:48,file:'icons/home.svg'},{id:'missing',type:'file',x:80,y:0,width:120,height:48,file:'icons/missing.svg'}],edges:[]})+'\n```\n\nEditable words.\n\n## Anchored {#anchored .wide}\n\nA [link](https://example.com/){target="_blank" rel="noopener"} with attributes.\n\n![Site picture](/site/logo.png)\n';
+        // The host says that files changed, as it does after its web root moves.
+        var listeners=new Set(),fsHost=pudlHost.fs||(pudlHost.fs={}),watched=fsHost.onChange;
+        fsHost.onChange=function(fn){listeners.add(fn);var off=watched?watched.call(fsHost,fn):null;return function(){listeners.delete(fn);if(off)off();};};
+        fixture.pictures.moved=function(to){fixture.pictures.webRoot=to;listeners.forEach(function(fn){fn();});};
     }
 })();

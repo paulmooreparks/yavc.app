@@ -30,6 +30,7 @@ import (
 	"github.com/yuin/goldmark/text"
 	"github.com/yuin/goldmark/util"
 
+	"yavc.app/internal/attrblock"
 	"yavc.app/internal/footnotes"
 	"yavc.app/internal/frontmatter"
 	"yavc.app/internal/review"
@@ -164,7 +165,7 @@ func markdownOf(registry *shortcodes.MacroRegistry, exporting bool) (goldmark.Ma
 		display = review.ExportRendering(func(body string) string { return reviewInline(body, shortcodeExtension) }, shortcodeExtension, footnotes.Extension)
 	}
 	md := goldmark.New(
-		goldmark.WithExtensions(extension.GFM, shortcodeExtension, footnotes.Extension, display),
+		goldmark.WithExtensions(extension.GFM, shortcodeExtension, footnotes.Extension, display, attrblock.Extension),
 		goldmark.WithParserOptions(parser.WithAutoHeadingID()),
 		goldmark.WithRendererOptions(
 			// The document is the person's own, and inline HTML (<u>, a
@@ -264,7 +265,7 @@ func ReviewInlineHTML(body string, registry *shortcodes.MacroRegistry) string {
 
 func reviewInline(body string, syntax goldmark.Extender) string {
 	source := []byte("x " + body)
-	markdown := goldmark.New(goldmark.WithExtensions(extension.GFM, syntax), goldmark.WithRendererOptions(html.WithUnsafe()))
+	markdown := goldmark.New(goldmark.WithExtensions(extension.GFM, syntax, attrblock.Extension), goldmark.WithRendererOptions(html.WithUnsafe()))
 	doc := markdown.Parser().Parse(text.NewReader(source))
 	paragraph := doc.FirstChild()
 	if paragraph == nil || paragraph.Kind() != ast.KindParagraph || paragraph.NextSibling() != nil {
@@ -533,7 +534,17 @@ func (d *drawer) image(w util.BufWriter, src []byte, node ast.Node, entering boo
 			shortcodes.Esc("!["+alt+"]("+string(n.Destination)+")") + `</code>`)
 		return ast.WalkSkipChildren, nil
 	}
-	_, _ = w.WriteString(imageTag(dest, alt, "", "", ""))
+	// An attribute block after the picture gives it a size, a title and an anchor.
+	sized := func(name string) string {
+		if _, ok := attrblock.Raw(n); !ok {
+			return ""
+		}
+		v, _ := n.AttributeString(name)
+		b, _ := v.([]byte)
+		return string(b)
+	}
+	tag := imageTag(dest, alt, sized("width"), sized("height"), "")
+	_, _ = w.WriteString(strings.TrimSuffix(tag, ">") + attrblock.Written(n, "class", "width", "height") + ">")
 	return ast.WalkSkipChildren, nil
 }
 

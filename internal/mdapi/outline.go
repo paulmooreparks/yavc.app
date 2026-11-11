@@ -12,6 +12,7 @@ import (
 	"github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/extension"
 	"github.com/yuin/goldmark/text"
+	"yavc.app/internal/attrblock"
 	"yavc.app/internal/frontmatter"
 	"yavc.app/internal/shortcodes"
 )
@@ -51,7 +52,7 @@ func outline(source string) []heading {
 			parsed[i] = ' '
 		}
 	}
-	md := goldmark.New(goldmark.WithExtensions(extension.GFM, shortcodes.Extension))
+	md := goldmark.New(goldmark.WithExtensions(extension.GFM, shortcodes.Extension, attrblock.Extension))
 	doc := md.Parser().Parse(text.NewReader(parsed))
 	entries := []heading{}
 	var parents []int
