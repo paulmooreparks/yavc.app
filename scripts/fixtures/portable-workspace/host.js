@@ -15,12 +15,12 @@
    write:async function (request) {var record=records.get(request.resource);if(!record || request.expectedRevision!==String(record.revision))throw new Error('Resource conflict');writes.push(request);record.text=request.text;record.revision++;return {resource:request.resource,revision:String(record.revision),name:record.name,writable:true};}}
  });
  // A command of the host's own in the File menu (docs/document-commands-contract.md): present for one document, and unavailable until the host says otherwise.
- var commandListeners=new Set();fixture.published=[];fixture.publishable=false;
+ var commandListeners=new Set();fixture.published=[];fixture.publishable=false;fixture.requested=[];fixture.requestStates=[];
  fixture.publishChanged=function(on){fixture.publishable=on;commandListeners.forEach(function(fn){fn();});};
  pudlHost.documentCommands={version:1,
-  list:function(app){return [{id:'publish',label:'Publish…',glyph:'upload',shortcut:'Mod+Shift+U',after:'save-as'},{id:'Not An Id',label:'Refused'},{id:'unlabelled',label:' '},{id:'publish',label:'Declared twice'}];},
-  state:function(id,context){return {present:context.resource==='memory:document.docs.md'||context.resource==='memory:source.md'&&fixture.publishable,disabled:!fixture.publishable,reason:fixture.publishable?undefined:'There are no changes to publish.'};},
-  run:async function(id,context){fixture.published.push({id:id,resource:context.resource,name:context.name,modified:context.modified,application:context.application,rooted:context.root instanceof Element});if(fixture.publishFails)throw new Error('The page could not be published.');},
+  list:function(app){return [{id:'publish',label:'Publish…',glyph:'upload',shortcut:'Mod+Shift+U',after:'save-as'},{id:'Not An Id',label:'Refused'},{id:'unlabelled',label:' '},{id:'publish',label:'Declared twice'},{id:'request-change',label:'Request a Change…',glyph:'comments',menu:'review',context:true}];},
+  state:function(id,context){if(id==='request-change'){fixture.requestStates.push(context.selected);return {present:true,disabled:!context.selected,reason:context.selected?undefined:'Select the passage to change first.'};}return {present:context.resource==='memory:document.docs.md'||context.resource==='memory:source.md'&&fixture.publishable,disabled:!fixture.publishable,reason:fixture.publishable?undefined:'There are no changes to publish.'};},
+  run:async function(id,context){if(id==='request-change'){fixture.requested.push({resource:context.resource,selected:context.selected,selection:context.selection});return;}fixture.published.push({id:id,resource:context.resource,name:context.name,modified:context.modified,application:context.application,rooted:context.root instanceof Element});if(fixture.publishFails)throw new Error('The page could not be published.');},
   onChange:function(fn){commandListeners.add(fn);return function(){commandListeners.delete(fn);};}};
  function fileServices(){return {files:{read:pudlHost.fs.readText}};}
  pudlActions.capability('files.read',fileServices);pudlActions.capability('files.write',fileServices);

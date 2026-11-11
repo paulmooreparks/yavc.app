@@ -1,5 +1,9 @@
 # Stem-to-stern review, November 2026
 
+## Actions that change a document, and a host command with the selection, 2026-11-11
+
+All 99 actions of Editor, Docs, Slides and Diagrams now say `"changes": "document"` or `"changes": "none"` (decision 125, and decision 10 of `agents-design.md`). Each was decided from what it does: 49 change a document. The new commit rule `action-changes-declared` refuses an action of these applets that leaves it unsaid, one that declares `files.write` and claims to change nothing, and one that claims a change with a pure replay. A host's command can now stand in Review, be offered on a right-click, and be given the selection as a range of the document's text; `test-portable-workspace.cjs` covers the selection in Text view and on the page. A fallback that widened an unmappable selection to whole blocks was removed before release because no test could reach it.
+
 ## A host's commands in the File menu, 2026-11-11
 
 Paul looked for Publish in the File menu of Docs and Editor, and the receiving host had it only in its own menu bar. Editor and Docs now take commands from `pudlHost.documentCommands` (decision 124, `document-commands-contract.md`). What a host declares is treated as untrusted: ids, labels, glyph names and shortcuts are checked, at most eight are taken, and the command's id is prefixed so that it cannot stand in for an applet command. `test-portable-workspace.cjs` covers presence by document, the host's reason, the change notice, the run and a failure. The row's place in the menu was checked by hand in Dinah's standalone page, since the portable fixture draws no menus.
