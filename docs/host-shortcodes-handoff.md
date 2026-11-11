@@ -1,5 +1,19 @@
 # Host shortcode integration handoff
 
+## v0.2.73: a canvas written from a screen, drawn closer to the screen
+
+[v0.2.73](https://github.com/paulmooreparks/yavc.app/releases/tag/v0.2.73) ([PR #110](https://github.com/paulmooreparks/yavc.app/pull/110)) followed on 2026-11-12 from the receiving product's pixel comparison of 72 canvases written by its screen viewer (DESIGN.md decision 128). Font families are quoted in a drawing, and a picture's lines are broken by measured width where there is a page. A node may have `lineHeight`, `outlinePosition` and `noFill` (`docs/canvas-extension.md`). A picture inside the file, a radius for each corner and padding for each side were counted and left for later.
+
+| Item | Value |
+| --- | --- |
+| Commit | `e87022efe45f710591a0c091cd4e286817d44d15` |
+| Archive sha256 | `0f73d7fd729a785c7c5428396eb2d81c02b4bac2f40a9d5a354b3f4b9bbf0c21` |
+| Manifest sha256 | `1ae33ad34c0ec123ca6cbad70c817a3ba0b2cd502267117ed057de47f10d7d11` |
+| Content digest | `503ce0274773937f4315ef928fdcc3caf4f17ed89b9fc8e317ea330e36affe0d` (490 files) |
+| Applets | Diagrams 0.39.0; the others as in v0.2.72 |
+
+The published archive and manifest passed their checksums, and the digest equals a local build of the tagged commit. The receiving product is to measure again with the new properties written.
+
 ## v0.2.72: the shortcode table, a diagram's picture, and Edit Diagram
 
 [v0.2.72](https://github.com/paulmooreparks/yavc.app/releases/tag/v0.2.72) ([PR #108](https://github.com/paulmooreparks/yavc.app/pull/108)) followed on the night of 2026-11-11, when Paul asked the two teams to make shortcodes work as general-purpose codes and to make an embedded diagram editable (DESIGN.md decision 127). PUDL stays at 0.107.1. `docs/shortcode-destinations.md` is the contract for all three parts.
