@@ -982,3 +982,7 @@ The site tests that open a Markdown file in the Editor's Visual view are not par
 ## A file chosen with Browse (2026-11-12)
 
 Decision 132. `scripts/test-portable-workspace.cjs` covers `yavcDialog.referenceFrom` for a file below the document's folder, beside it through a shared parent, in another branch that shares only the root, under another root, and for a document with no folder; and it presses Browse in the diagram's form with a host chooser that returns a full path and reads the reference the field was given.
+
+## The dialog test that waited on an old database (2026-11-12)
+
+`scripts/test-dialog-overhaul.cjs` stopped finishing when guest files moved to the `yavc-vfs` database (2026-11-10). Its phase for a cancelled import kept a transaction open on the database of the earlier name, `yavc-home`, with the stores of that time. The browser made an empty database of that name, the transaction could not start, and the test waited without end. The test now keeps its transaction open on `yavc-vfs` and its three stores, and passes in Chromium, Firefox and WebKit. The applets and the site did not change.
