@@ -15,11 +15,22 @@ const sources=[
   phase='Editor native no-op saves';await p.goto(`http://editor.localhost:${port}/`);await p.locator('.cm-content').waitFor({state:'attached'});
   for(let i=0;i<sources.length;i++){
    const name='editor-preserve-'+i+'.md',source=sources[i];await p.evaluate(async({name,source})=>{const F=await yavcUtil.siteFs();await F.write(F.home(),name,source,false);},{name,source});
-   await p.evaluate(async name=>{await pudlActions.run('yavc.editor/open-file@1',{path:'~/'+name},{grant:'all'});await pudlActions.run('yavc.editor/view@1',{mode:'split'},{grant:'all'});await pudlActions.run('yavc.editor/save@1',{}, {grant:'all'});},name);
+   /* The Editor opens a Markdown file only as its text, and only when asked for the text (DESIGN.md, decision 131). */
+   await assert.rejects(p.evaluate(name=>pudlActions.run('yavc.editor/open-file@1',{path:'~/'+name},{grant:'all'}),name),/A Markdown document opens in Docs\. Use yavc\.docs\/open-file@1/);
+   await p.evaluate(async name=>{await pudlActions.run('yavc.editor/open-file@1',{path:'~/'+name,view:'text'},{grant:'all'});await pudlActions.run('yavc.editor/save@1',{}, {grant:'all'});},name);
    assert.equal(await p.evaluate(name=>pcSiteFs.readHome(pcSiteFs.resolve(pcSiteFs.home(),name)),name),source);
    assert.equal((await p.evaluate(()=>pudlActions.run('yavc.editor/document@1',{}, {grant:'all'}))).modified,false);
   }
-  phase='native Editor copy';await p.evaluate(()=>pudlActions.run('yavc.editor/open-file@1',{path:'~/editor-preserve-3.md'},{grant:'all'}));await p.evaluate(()=>{window.copyDone=pudlCommands.run('save-as',null,document.querySelector('[data-applet]'));});const picker=p.locator('.fb-picker[open]');await picker.waitFor();await picker.getByLabel('File Name',{exact:true}).fill('native-copy.md');await picker.getByRole('button',{name:'Save',exact:true}).click();await p.evaluate(()=>copyDone);assert.equal(await p.evaluate(()=>pcSiteFs.readHome(pcSiteFs.resolve(pcSiteFs.home(),'native-copy.md'))),sources[3]);
+  /* Split is drawn by Docs now, so the save that follows a drawn view is tested there. */
+  phase='Docs Split no-op saves';const docs=await browser.newPage({viewport:{width:1450,height:1000}});docs.setDefaultTimeout(25000);docs.on('pageerror',e=>errors.push(e.message));await docs.goto(`http://docs.localhost:${port}/`);await docs.locator('.cm-content').waitFor({state:'attached'});
+  for(let i=0;i<sources.length;i++){
+   const name='docs-preserve-'+i+'.md',source=sources[i];await docs.evaluate(async({name,source})=>{const F=await yavcUtil.siteFs();await F.write(F.home(),name,source,false);},{name,source});
+   await docs.evaluate(async name=>{await pudlActions.run('yavc.docs/open-file@1',{path:'~/'+name},{grant:'all'});await pudlActions.run('yavc.docs/view@1',{mode:'split'},{grant:'all'});await pudlActions.run('yavc.docs/save@1',{}, {grant:'all'});},name);
+   assert.equal(await docs.evaluate(name=>pcSiteFs.readHome(pcSiteFs.resolve(pcSiteFs.home(),name)),name),source);
+   assert.equal((await docs.evaluate(()=>pudlActions.run('yavc.docs/document@1',{}, {grant:'all'}))).modified,false);
+  }
+  await docs.close();
+  phase='native Editor copy';await p.evaluate(()=>pudlActions.run('yavc.editor/open-file@1',{path:'~/editor-preserve-3.md',view:'text'},{grant:'all'}));await p.evaluate(()=>{window.copyDone=pudlCommands.run('save-as',null,document.querySelector('[data-applet]'));});const picker=p.locator('.fb-picker[open]');await picker.waitFor();await picker.getByLabel('File Name',{exact:true}).fill('native-copy.md');await picker.getByRole('button',{name:'Save',exact:true}).click();await p.evaluate(()=>copyDone);assert.equal(await p.evaluate(()=>pcSiteFs.readHome(pcSiteFs.resolve(pcSiteFs.home(),'native-copy.md'))),sources[3]);
   phase='Markdown typed preservation';const markdown='# Heading\r\n\r\n<!-- retain this comment -->\r\n\r\n{{future-widget:mode=keep}}\r\n\r\n```custom language=keep\r\nraw <tag>\r\n```\r\n';const typed=await p.evaluate(async source=>{const m=await yavcMdEngine();const doc=m.doc(source);const unchanged=m.markdown(JSON.parse(JSON.stringify(doc)));doc.content[0].content[0].text='Edited';return {unchanged,edited:m.markdown(doc)};},markdown);assert.equal(typed.unchanged,markdown);assert.match(typed.edited,/Edited/);assert.ok(typed.edited.includes('<!-- retain this comment -->'));assert.ok(typed.edited.includes('{{future-widget:mode=keep}}'));assert.ok(typed.edited.includes('```custom language=keep\r\nraw <tag>\r\n```'));
   await p.evaluate(()=>pudlHost.config.set('editor',{}));
   await p.goto(`http://slides.localhost:${port}/`);await action(p,'deck');

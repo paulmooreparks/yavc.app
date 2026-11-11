@@ -18,10 +18,11 @@ async function cssText(dialog, text) { await dialog.locator('.cm-editor').evalua
         const browser = await playwright[engine].launch({ headless: true }); let page;
         try {
             const context = await browser.newContext({ viewport: { width: 1500, height: 1000 } }); page = await context.newPage(); page.setDefaultTimeout(15000);
-            await page.goto(`http://editor.localhost:${port}/`); await page.locator('.cm-editor').waitFor();
+            /* Styles show in a drawn view, and Docs draws every Markdown view (DESIGN.md, decision 131). The Editor shows the same source as text. */
+            await page.goto(`http://docs.localhost:${port}/`); await page.locator('.cm-content').waitFor({ state: 'attached' });
             const original = '# 😀 Styles\n\n{{style}}\n.custom { color: rgb(10, 30, 50); }\n{{/style}}\n\n{{class:custom}}\nStyled words.\n{{/class}}\n';
-            await action(page, 'editor', 'new', { path: '~/Documents/style.md', text: original });
-            await action(page, 'editor', 'view', { mode: 'preview' });
+            await action(page, 'docs','new', { path: '~/Documents/style.md', text: original });
+            await action(page, 'docs','view', { mode: 'preview' });
             await color(page.locator('[data-ed-page] .custom').first(), 'rgb(10, 30, 50)');
             await command(page, 'stylesheet'); let dialog = page.getByRole('dialog', { name: 'Document Stylesheet', exact: true });
             await dialog.waitFor();
@@ -40,11 +41,11 @@ async function cssText(dialog, text) { await dialog.locator('.cm-editor').evalua
             await color(page.locator('[data-ed-page] .custom').first(), 'rgb(60, 40, 20)');
             await page.evaluate(() => pudlCommands.run('undo', null, document.querySelector('[data-applet]')));
             await color(page.locator('[data-ed-page] .custom').first(), 'rgb(10, 30, 50)');
-            await action(page,'editor','view',{mode:'visual'});await page.locator('.ProseMirror h1').click();
+            await action(page,'docs','view',{mode:'visual'});await page.locator('.ProseMirror h1').click();
             await command(page, 'class'); dialog = page.getByRole('dialog', { name: 'Text Style', exact: true });
-            await dialog.getByLabel('Text Style',{exact:true}).waitFor();assert.ok((await dialog.locator('option').allTextContents()).includes('custom'));await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();await action(page,'editor','view',{mode:'preview'});
+            await dialog.getByLabel('Text Style',{exact:true}).waitFor();assert.ok((await dialog.locator('option').allTextContents()).includes('custom'));await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();await action(page,'docs','view',{mode:'preview'});
             await page.evaluate(() => pudlHost.fs.writeText('~/Styles/shared.css', '.shared { color: rgb(12, 34, 56); }'));
-            await action(page, 'editor', 'set-text', { text: '---\nstylesheet: ../Styles/shared.css\n---\n\n{{class:shared}}\nShared words.\n{{/class}}\n' });
+            await action(page, 'docs','set-text', { text: '---\nstylesheet: ../Styles/shared.css\n---\n\n{{class:shared}}\nShared words.\n{{/class}}\n' });
             await color(page.locator('[data-ed-page] .shared').first(), 'rgb(12, 34, 56)');
             await command(page, 'shared-stylesheet'); dialog = page.getByRole('dialog', { name: 'Shared Stylesheet', exact: true });
             await dialog.waitFor(); await cssText(dialog, '.shared { color: rgb(65, 43, 21); }');
@@ -77,11 +78,11 @@ async function cssText(dialog, text) { await dialog.locator('.cm-editor').evalua
             assert.equal(await dialog.locator('.cm-editor').evaluate(e => CM.EditorView.findFromDOM(e).state.readOnly), false);
             await dialog.getByRole('button', { name: 'Cancel', exact: true }).click(); await page.evaluate(() => { pudlHost.fs.writeText = styleWriteOriginal; });
             await command(page, 'stylesheet'); dialog = page.getByRole('dialog', { name: 'Document Stylesheet', exact: true }); await dialog.waitFor();
-            await action(page, 'editor', 'new', { path: '~/another.md', text: 'Another document.' });
+            await action(page, 'docs','new', { path: '~/another.md', text: 'Another document.' });
             await cssText(dialog, 'p { color:red }'); await dialog.getByRole('button', { name: 'Apply Styles', exact: true }).click();
             await dialog.getByText(/The document changed.*Close and reopen/).waitFor();
             await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
-            console.log(engine + ': Editor styles, Unicode source edits/undo, named classes, shared CSS and stale-dialog guard passed');
+            console.log(engine + ': Docs styles, Unicode source edits/undo, named classes, shared CSS and stale-dialog guard passed');
 
             await page.goto(`http://slides.localhost:${port}/`); await page.locator('.yavc-command-toolbar').waitFor();
             const deck = '# First\n\n{{style}}\n.custom { color: rgb(100, 20, 30); }\n{{/style}}\n\n{{style:slide}}\n.custom { color: rgb(30, 20, 100); }\n{{/style}}\n\n{{class:custom}}\nFirst words.\n{{/class}}\n\n---\n\n# Second\n\n{{class:custom}}\nSecond words.\n{{/class}}\n';

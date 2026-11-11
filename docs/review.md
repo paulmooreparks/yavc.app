@@ -972,3 +972,9 @@ Decision 129. The declarations a host gives were checked in the text workspace a
 ## A shared definitions file in a host, and a host's own resolving of references (2026-11-12)
 
 Decision 130. `apps/md-editor/macros.js` required the shared file to be under the home folder and read it through the site's files, and it threw when the file was missing, which stopped Docs from building the page. `scripts/test-portable-workspace.cjs` now covers a document whose shared file the host places at a path outside the home folder: the host is asked with the document, the reference and the kind, a missing file leaves the page drawn and is said once, and the file's definitions are used once it is there. The dialog that manages definitions still refuses to save a reference to a file that cannot be read, since there the person is at the field that is wrong.
+
+## The Editor as a text editor (2026-11-12)
+
+Decision 131. The Editor's Markdown views were Visual, Text, Split and Preview; it now has Text alone and draws no View choice. `scripts/test-portable-workspace.cjs` covers the Editor's side: no view commands, the view action refusing a page view with a pointer to Docs, a Markdown file chosen in the Editor handed to the host for Docs, the same file opening as text when the host cannot, and an agent's request to open a Markdown document refused with the Docs action named unless it asks for the text. The package tests that used the Editor's Visual view for place keeping and for pictures in drawn views now use Docs for the same checks, and the checks themselves are unchanged. The Editor's manifest no longer offers a page view, and its table action gives the same guidance as the other actions that moved to Docs.
+
+The site tests that open a Markdown file in the Editor's Visual view are not part of the commit checks. Those that still test something the Editor has were changed to use Docs; the list is in the release note.

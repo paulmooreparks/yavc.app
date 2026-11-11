@@ -1,8 +1,8 @@
 # Editor
 
-Editor edits text and source code. It opens Markdown as source, including `.docs.md` and `.slides.md`, without changing its identity or converting the file. Docs provides visual Markdown authoring and document layout.
+Editor edits text and source code. It shows Markdown as source, including `.docs.md` and `.slides.md`, without changing its identity or converting the file. Docs provides visual Markdown authoring and document layout.
 
-Text is the default view. Markdown also offers Split and Preview with a read-only rendered surface. These views cannot format the document or start embedded applets. Save preserves the native source; Save As creates a copy through the host file service.
+Editor shows every file as its text, and it has no other view. A Markdown document is drawn in Docs, as a page or as it will look. When you choose a `.md` file in Editor's Open dialog or its Files pane, it opens in Docs where Docs is there to open it, unless it is already open in Editor. A deck's `.slides.md` file is the deck's source and stays in Editor. File, Open in Docs sends the document in front to Docs, and Docs has Open in Editor for the times you want a document as plain source. Save preserves the native source; Save As creates a copy through the host file service.
 
 Files occupies the outer pane below the toolbar. Document tabs run to its right. Outline belongs to the active document and has its own width. Both widths are remembered.
 
