@@ -50,6 +50,16 @@ const CANVAS = JSON.stringify({ yavc: { version: 1 }, nodes: [
             assert.equal(canvas.format, 'svg'); assert.equal(canvas.root, 'svg'); assert.equal(canvas.bad, false); assert.match(canvas.text, /Registration[\s\S]*Payment/);
             assert.ok(canvas.width > 500 && canvas.height > 200); assert.equal(canvas.image, true, 'The picture node must be in the drawing.'); assert.equal(canvas.script, false);
             assert.deepEqual(canvas.paths, ['icons/cash.png']); assert.deepEqual(canvas.problems, []);
+            // A label whose box is exactly as wide as its letters is drawn whole, because the page measures the text, and a family that is not a CSS identifier still reaches the browser.
+            const fitted = await p.evaluate(async () => {
+                const rule = document.createElement('canvas').getContext('2d');
+                rule.font = "700 19px '7 Segment Display', 'Inter', system-ui, sans-serif";
+                const width = Math.ceil(rule.measureText('Subtotal').width), text = JSON.stringify({ yavc: { version: 1 }, nodes: [{ id: 't', type: 'text', x: 0, y: 0, width: width, height: 26, text: 'Subtotal', yavc: { shape: 'text', padding: 0, fontSize: 19, fontWeight: 700, fontFamily: '7 Segment Display', lineHeight: 1.17 } }], edges: [] });
+                const out = await yavcDiagramPicture.draw({ kind: 'canvas', text: text }), doc = new DOMParser().parseFromString(out.svg, 'image/svg+xml'), holder = document.createElement('div');
+                holder.innerHTML = out.svg; document.body.append(holder); const shown = getComputedStyle(holder.querySelector('text')).fontFamily; holder.remove();
+                return { lines: Array.from(doc.querySelectorAll('tspan')).map(node => node.textContent), shown: shown, width: width };
+            });
+            assert.deepEqual(fitted.lines, ['Subtotal'], 'width ' + fitted.width); assert.match(fitted.shown, /7 Segment Display/);
             // Without a reader the canvas is still drawn, and it says the picture is missing.
             const bare = await p.evaluate(async text => { const out = await yavcDiagramPicture.draw({ kind: 'canvas', text: text }); return { image: /<image[\s>]/.test(out.svg), problems: out.problems }; }, CANVAS);
             assert.equal(bare.image, false); assert.equal(bare.problems.length, 1);

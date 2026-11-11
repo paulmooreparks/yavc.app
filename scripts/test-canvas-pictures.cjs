@@ -57,7 +57,7 @@ const served={'home.svg':Buffer.from(house),'plain.svg':Buffer.from(house),'move
    const download=p.waitForEvent('download');await p.evaluate(()=>pudlCommands.run('export-svg',null,document.querySelector('#two')));
    const svg=await fs.readFile(await (await download).path(),'utf8');
    assert.ok(!/(?:href|src)="(?!data:image\/)/.test(svg)&&!svg.includes('foreignObject'));
-   assert.match(svg,/<text[^>]* font-size="22" font-weight="500" font-family="Roboto, Arial, Georgia,/);
+   assert.match(svg,/<text[^>]* font-size="22" font-weight="500" font-family="&#39;Roboto&#39;, &#39;Arial&#39;, &#39;Georgia&#39;,/);
    const colours=await p.evaluate(async svg=>{const img=new Image();img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);await img.decode();const c=document.createElement('canvas');c.width=img.naturalWidth;c.height=img.naturalHeight;const g=c.getContext('2d');g.drawImage(img,0,0);
     const at=(x,y)=>Array.from(g.getImageData(x,y,1,1).data.slice(0,3));return {tinted:at(68,70),key:at(200,36),plain:at(348,54),beside:at(326,26)};},svg);
    assert.deepEqual(colours.tinted,[255,255,255]);assert.deepEqual(colours.key,[0,160,230]);assert.deepEqual(colours.plain,[0,0,0]);assert.notDeepEqual(colours.beside,[0,0,0]);

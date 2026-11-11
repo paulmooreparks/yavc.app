@@ -269,3 +269,15 @@ test('a picture node, the text and outline properties, and named styles are edit
     assert.throws(() => M.edit(doc, { op: 'document', property: 'font', value: 'a"b' }), /font/);
     assert.deepEqual(doc.custom, { keep: true });
 });
+test('an edit sets and clears a line height, an outline inside the edge and no fill', () => {
+    let doc = { nodes: [{ id: 'a', type: 'text', x: 0, y: 0, width: 100, height: 40, text: 'Total' }], edges: [] };
+    doc = M.edit(doc, { op: 'set', key: 'a', property: 'lineHeight', value: 1.17 }).doc;
+    doc = M.edit(doc, { op: 'set', key: 'a', property: 'outlinePosition', value: 'inside' }).doc;
+    doc = M.edit(doc, { op: 'set', key: 'a', property: 'noFill', value: false }).doc;
+    assert.deepEqual(doc.nodes[0].yavc, { lineHeight: 1.17, outlinePosition: 'inside', noFill: false });
+    doc = M.edit(doc, { op: 'set', key: 'a', property: 'noFill', value: true }).doc;
+    assert.equal(doc.nodes[0].yavc.noFill, true);
+    doc = M.edit(doc, { op: 'set', key: 'a', property: 'noFill', value: null }).doc;
+    assert.equal('noFill' in doc.nodes[0].yavc, false);
+    assert.throws(() => M.edit(doc, { op: 'set', key: 'a', property: 'lineHeight', value: 9 }));
+});
