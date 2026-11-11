@@ -38,6 +38,9 @@ const action = (p, name, input = {}) => p.evaluate(({name,input}) => pudlActions
    await page.evaluate(() => pudlApplets.destroy(document.querySelector('[data-applet]')));
    await page.reload();await page.locator('.cm-content').waitFor({state:'attached'});
    await page.waitForFunction(async()=> (await pudlActions.run('yavc.editor/document@1',{}, {grant:'all'})).text.includes('Kept unsaved draft'));
+   // Showing the restored view used to clear this message before anyone could read it.
+   await page.waitForFunction(()=>/Your unsaved changes to .+ are back\./.test(document.querySelector('[data-role=message]').textContent),null,{timeout:8000});
+   await page.waitForTimeout(1500);assert.match(await page.locator('[data-role=message]').textContent(),/are back\./);
    await action(page,'save');assert.equal((await action(page,'document')).modified,false);
    const desktop=await browser.newPage();
    await desktop.goto(`http://localhost:${port}/?open=editor`);

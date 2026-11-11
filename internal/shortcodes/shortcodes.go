@@ -23,6 +23,8 @@ import (
 	"strconv"
 	"strings"
 
+	"yavc.app/internal/attrblock"
+
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/extension"
@@ -1108,7 +1110,7 @@ func Esc(s string) string { return escaper.Replace(s) }
 
 // inlineHTML draws a title or a caption written in Markdown, without the
 // paragraph around it.
-var inlineMD = goldmark.New(goldmark.WithExtensions(extension.GFM))
+var inlineMD = goldmark.New(goldmark.WithExtensions(extension.GFM, attrblock.Extension))
 
 func inlineHTML(md string) string {
 	var b bytes.Buffer

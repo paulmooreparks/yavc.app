@@ -49,6 +49,12 @@ The Insert menu offers Link (Ctrl+K), and under Insert it lists headings, lists,
 
 Insert, Picture opens a dialog for a picture. It asks for the picture's address, with Browse for one already in your home folder or on the site and Upload for one from your computer, and for what it shows, its largest width and a caption. An uploaded picture is kept beside the document when the document is saved under `~`, and in `~/Pictures` otherwise; either way it lives in this browser, as your files do. In Visual view a click on a picture opens the same dialog to change it or remove it.
 
+## Anchors and attributes
+
+Braces at the end of a heading, or directly after a link or a picture, give it attributes. `## Techniques {#techniques}` gives the heading the anchor `techniques`, so that `[see below](#techniques)` goes to it. `[the repository](https://example.com){target="_blank" rel="noopener"}` opens the link in another tab. A block can hold an anchor (`#name`), classes (`.name`) and pairs (`name="value"`).
+
+Visual view and Preview show the heading or the link without the braces, and saving writes them back as they were. To add or change a block, use Text view. Only some attributes are applied: the anchor and classes, `title` and `lang`, `target` and `rel` on a link, and `width` and `height` on a picture. Others stay in the file and do nothing. Braces anywhere else are ordinary words, and so are braces after a backslash, as in `\{#not-an-anchor}`.
+
 ## Shortcodes
 
 A shortcode is written `{{name:args}}`, or `{{name}}` and `{{/name}}` around some content. The Docs draws shortcodes in Visual view and Preview as the site does. These are the ones most used.

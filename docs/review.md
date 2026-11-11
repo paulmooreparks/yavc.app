@@ -1,5 +1,13 @@
 # Stem-to-stern review, November 2026
 
+## The Editor in a standalone host, 2026-11-11
+
+Dinah built a standalone document host, one window and one process for each document with a service behind them, and `scripts/test-standalone-editor.cjs` now proves the Editor in it against real files in Chromium, Firefox and WebKit. The test starts the host's service headless and covers saving, a save refused after the file changed, Save As, New and Open arriving in other windows, an open file raised, drafts kept across reload and close, another program's action behind the person's leave, and a path the person did not choose being refused. It needs the host's executable, so it is not part of the commit checks.
+
+The host exposed two defects in the Editor that every host had. The message that unsaved changes are back was said to the status line and cleared at once when the view was shown, so nobody saw it; it is now said after the view settles, and `test-editor-session.cjs` checks it stays. A recovered draft whose file changed meanwhile had no lasting sign beyond a disabled Save. It now has a warning that stays beside the document while it is in front, says which of three causes applies, and goes when the draft is saved under another name. The Editor's View menu also listed a command only Docs has, which PUDL reported in the console.
+
+Paul's first files showed two gaps, both recorded as decision 123. The engine did not read attribute blocks, the braces after a heading or a link, so his headings showed `{#top}` as words. And a picture at a path from the site's root was never offered to the host's picture resolver, so a host with a web root on disk could not supply it. I had told the host's author that such a path already reached the resolver, from reading the check in front of the call and not the place the call is made from; her test showed otherwise. `test-canvas-pictures.cjs` now covers both in the package, with a host that resolves the path only after it says its files changed.
+
 ## PUDL 0.106.2 integration, 2026-11-11
 
 The bundled PUDL went from 0.105.0 to 0.106.2 so that Dinah and GK Companion can take stacked taskbar buttons, since their release test requires the package's `pudl/` files to equal their own. The archive, manifest and tag commit were verified and all 196 files replaced together; the host and the applets needed no change. `pudl-upgrade-0.106.2.md` records the evidence, a missing wait fixed in `test-pudl-upgrade.cjs`, and five site tests that were already out of date and remain so.

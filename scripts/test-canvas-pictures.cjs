@@ -7,7 +7,7 @@ const artifact=path.resolve(process.argv[2]),prefix='/independent/content-releas
 const types={'.html':'text/html','.js':'text/javascript','.css':'text/css','.json':'application/json','.wasm':'application/wasm','.svg':'image/svg+xml','.woff2':'font/woff2','.png':'image/png'};
 // Neutral stand-ins: a house drawn in black, and one black pixel.
 const house='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 11 12 3l9 8v10H3z" fill="#000000"/></svg>';
-const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYGD4DwABBAEAwS2OUAAAAABJRU5ErkJggg==','base64');
+const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYGD4DwABBAEAX+XDSwAAAABJRU5ErkJggg==','base64');
 const served={'home.svg':Buffer.from(house),'plain.svg':Buffer.from(house),'moved.svg':Buffer.from(house),'logo.png':pixel,'fake.png':Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"/>'),'large.svg':Buffer.from(house+' '.repeat(1024*1024))};
 (async()=>{
  const manifest=JSON.parse(await fs.readFile(path.join(artifact,'manifest.json'),'utf8')),allowed=new Set(manifest.files.map(f=>f.path)),addon=await fs.readFile(path.join(__dirname,'fixtures/canvas-pictures.js'),'utf8');
@@ -119,6 +119,21 @@ const served={'home.svg':Buffer.from(house),'plain.svg':Buffer.from(house),'move
    assert.ok(fromDocument.some(a=>a.href==='screens/icons/moved.svg'&&a.resource==='memory:document.docs.md'));
    assert.ok(fromDocument.some(a=>a.href==='icons/home.svg'&&a.resource==='memory:document.docs.md'));
    await d.locator('#document .notice',{hasText:'The picture icons/missing.svg is shown by its name, because it was not found.'}).first().waitFor();
+   phase='attribute blocks and a picture at a site path';
+   // A block after a heading or a link is kept with it and not drawn among its words.
+   const anchored=d.locator('#document .ProseMirror h2[data-md-attributes="#anchored .wide"]');await anchored.waitFor();assert.equal(await anchored.innerText(),'Anchored');
+   const linked=d.locator('#document .ProseMirror a[data-md-attributes]');assert.equal(await linked.innerText(),'link');assert.equal(await linked.getAttribute('data-md-attributes'),'target="_blank" rel="noopener"');
+   assert.equal(await d.locator('#document .ProseMirror').evaluate(el=>/[{}]/.test(el.querySelector('h2').textContent+el.querySelector('a[data-md-attributes]').parentElement.textContent)),false);
+   await anchored.click();await d.keyboard.press('End');await d.keyboard.type(' Heading');await linked.click();await d.keyboard.press('End');await d.keyboard.type(' Typed.');
+   const written=(await d.evaluate(()=>pudlActions.run('yavc.docs/document@1',{}, {grant:'all'}))).text;
+   assert.match(written,/^## Anchored Heading \{#anchored \.wide\}$/m);assert.match(written,/^A \[link\]\(https:\/\/example\.com\/\)\{target="_blank" rel="noopener"\} with attributes\. Typed\.$/m);
+   // The host is asked for a picture at a site path. Unresolved, the path stays as written; once the host says files changed, it is asked again.
+   const site=d.locator('#document img[data-site-picture="/site/logo.png"]').first();await site.waitFor({state:'attached'});
+   await d.waitForFunction(()=>fixture.pictures.asked.some(a=>a.href==='/site/logo.png'&&a.kind==='image'&&a.resource==='memory:document.docs.md'));
+   assert.equal(await site.getAttribute('src'),'/site/logo.png');
+   await d.evaluate(()=>fixture.pictures.moved('logo.png'));
+   await d.waitForFunction(()=>/fixture-pictures\/logo\.png$/.test(document.querySelector('#document img[data-site-picture="/site/logo.png"]').getAttribute('src')));
+   await d.waitForFunction(()=>{const i=document.querySelector('#document img[data-site-picture="/site/logo.png"]');return i.complete&&i.naturalWidth>0;});
    assert.deepEqual(errors,[]);console.log(engine+': pictures, tint, text faces, outlines and named styles are drawn, exported, edited in the inspector and by an agent, and drawn in a document passed');
   }catch(e){console.error(engine,phase,(await p.locator('#two').innerText().catch(()=>'')).slice(-600),errors);throw e;}finally{await browser.close();}
  }}finally{await new Promise(resolve=>server.close(resolve));}

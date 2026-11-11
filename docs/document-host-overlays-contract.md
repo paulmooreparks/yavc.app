@@ -6,6 +6,10 @@ These optional services belong to `pudlHost.contentWorkspace` version 1. They ap
 
 `resources.resolve({resource, href, kind:'image'}, context)` returns a promise of `{url}` or null. The request contains the authored document-relative reference. Null means the host does not resolve it; the existing optional yavc VFS adapter may then try. A rejected request or invalid result leaves a missing image without fetching the authored reference against the applet URL.
 
+A reference that starts with one `/` is a path from the root of the document's web site, such as `/images/chart.png`. The host is asked for it with the same request, and the `href` is the path as written. A host that keeps the site somewhere of its own, a folder the person chose as the web root say, returns `{url}`. A host that is the web site returns null, and the path is then used as written. The page is drawn with the written path first and corrected when the host answers, so such a host sees one request for the written path before the resolved one.
+
+The pictures in view are asked for again when the host calls the listeners of `pudlHost.fs.onChange` (`content-workspace-contract.md`). A host calls them when the place of a document's pictures changes. A picture that resolves to the address it already has is left as it is.
+
 The returned URL may be root-relative, relative to the host page, or absolute. Its resolved form must use HTTP or HTTPS on the host page's origin, without embedded credentials. Other schemes and origins are refused. Ordinary authored web and image-data URLs keep their existing rules and do not call this resolver. The host validates names, allowed folders, draft ownership and response content types. For example, Dinah can return `/draft-file?draft=ID&name=shot.png` without changing its routing.
 
 Context contains `host`, the applet mount, its lifetime `signal`, and a `current()` predicate. The result is discarded after changing the active resource, Save As or disposal. The URL belongs to the host and the applet does not revoke it. Hosts should serve mutable draft images with appropriate cache headers or versioned URLs.

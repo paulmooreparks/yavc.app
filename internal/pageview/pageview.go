@@ -26,6 +26,7 @@ import (
 	"strconv"
 	"strings"
 	"unicode"
+	"yavc.app/internal/attrblock"
 	"yavc.app/internal/footnotes"
 	"yavc.app/internal/preview"
 	"yavc.app/internal/review"
@@ -57,7 +58,7 @@ type Mark struct {
 // its other text, so it is edited as source.
 var ErrNotEditable = errors.New("this part is edited as source")
 
-var md = goldmark.New(goldmark.WithExtensions(extension.GFM, shortcodes.Extension, review.Rendering(func(body string) string { return preview.ReviewInlineHTML(body, nil) }, shortcodes.Extension)))
+var md = goldmark.New(goldmark.WithExtensions(extension.GFM, shortcodes.Extension, review.Rendering(func(body string) string { return preview.ReviewInlineHTML(body, nil) }, shortcodes.Extension), attrblock.Extension))
 
 // Parse reads one part of a document as an editor's document. A part that
 // would not be written back exactly as it is returns ErrNotEditable.
@@ -82,11 +83,11 @@ func parseWithNotes(part string, registry *shortcodes.MacroRegistry, notes map[s
 	engine := md
 	if registry != nil {
 		syntax := shortcodes.WithMacros(registry)
-		engine = goldmark.New(goldmark.WithExtensions(extension.GFM, syntax, review.Rendering(func(body string) string { return preview.ReviewInlineHTML(body, registry) }, syntax)))
+		engine = goldmark.New(goldmark.WithExtensions(extension.GFM, syntax, review.Rendering(func(body string) string { return preview.ReviewInlineHTML(body, registry) }, syntax), attrblock.Extension))
 	}
 	if len(notes) > 0 {
 		syntax := shortcodes.WithMacros(registry)
-		extensions := []goldmark.Extender{extension.GFM, syntax, footnotes.Extension, review.Rendering(func(body string) string { return preview.ReviewInlineHTML(body, registry) }, syntax, footnotes.Extension)}
+		extensions := []goldmark.Extender{extension.GFM, syntax, footnotes.Extension, review.Rendering(func(body string) string { return preview.ReviewInlineHTML(body, registry) }, syntax, footnotes.Extension), attrblock.Extension}
 		engine = goldmark.New(goldmark.WithExtensions(extensions...))
 		var labels []string
 		for label := range notes {
@@ -226,7 +227,11 @@ func (p parser) block(n ast.Node) (*Node, error) {
 		if err != nil {
 			return nil, err
 		}
-		return &Node{Type: "heading", Attrs: map[string]any{"level": node.Level}, Content: inline}, nil
+		attrs := map[string]any{"level": node.Level}
+		if raw, ok := attrblock.Raw(node); ok {
+			attrs["attributes"] = raw
+		}
+		return &Node{Type: "heading", Attrs: attrs, Content: inline}, nil
 	case *ast.List:
 		return p.list(node)
 	case *extast.Table:
@@ -439,6 +444,9 @@ func (p parser) walk(n ast.Node, marks []Mark, out *[]*Node) error {
 				return ErrNotEditable
 			}
 			link := Mark{Type: "link", Attrs: map[string]any{"href": string(node.Destination), "title": nil}}
+			if raw, ok := attrblock.Raw(node); ok {
+				link.Attrs["attributes"] = raw
+			}
 			if err := p.walk(node, withMark(marks, link), out); err != nil {
 				return err
 			}
@@ -691,7 +699,15 @@ func serializeBlock(n *Node, indent string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		return strings.Repeat("#", level) + " " + escapeHeading(strings.ReplaceAll(s, "\n", " ")), nil
+		title := escapeHeading(strings.ReplaceAll(s, "\n", " "))
+		if at, _, looks := attrblock.Trailing(title); looks {
+			brace := at + strings.Index(title[at:], "{")
+			title = title[:brace] + `\` + title[brace:]
+		}
+		if raw := blockAttr(n.Attrs); raw != "" {
+			title = strings.TrimLeft(title+" {"+raw+"}", " ")
+		}
+		return strings.Repeat("#", level) + " " + title, nil
 	case "bullet_list", "ordered_list":
 		return serializeList(n, indent)
 	case "table":
@@ -894,9 +910,23 @@ func delimiters(m Mark) (string, string) {
 			return "", ""
 		}
 		href, _ := m.Attrs["href"].(string)
+		if raw := blockAttr(m.Attrs); raw != "" {
+			return "[", "](" + href + "){" + raw + "}"
+		}
 		return "[", "](" + href + ")"
 	}
 	return "", ""
+}
+
+// blockAttr returns the attribute block a heading or a link keeps, as the
+// text between its braces, or nothing when it has none or the text is not a
+// block. An editor could send any text here, and only a block is written.
+func blockAttr(attrs map[string]any) string {
+	raw, _ := attrs["attributes"].(string)
+	if _, ok := attrblock.Parse(raw); !ok || strings.ContainsAny(raw, "{}\r\n") {
+		return ""
+	}
+	return raw
 }
 
 // isAuto reports whether a link is a bare URL, written as the URL itself.
@@ -919,7 +949,16 @@ func serializeInline(nodes []*Node, cell bool) (string, error) {
 		return false
 	}
 	pending := ""
-	flush := func() { b.WriteString(pending); pending = "" }
+	// afterLink says the last thing written closed a link, so braces
+	// written next would be read as its attribute block.
+	afterLink := false
+	flush := func() {
+		if pending != "" {
+			afterLink = false
+		}
+		b.WriteString(pending)
+		pending = ""
+	}
 	closeTo := func(keep int) {
 		for len(open) > keep {
 			// Whitespace inside an exclusion must stay excluded. Moving it
@@ -929,6 +968,7 @@ func serializeInline(nodes []*Node, cell bool) (string, error) {
 			}
 			_, end := delimiters(open[len(open)-1])
 			b.WriteString(end)
+			afterLink = open[len(open)-1].Type == "link" && !isAuto(open[len(open)-1])
 			open = open[:len(open)-1]
 		}
 	}
@@ -972,6 +1012,10 @@ func serializeInline(nodes []*Node, cell bool) (string, error) {
 		var body string
 		if n.Type == "text" && !code && !auto {
 			esc := escapeText(n.Text, cell, neighbour(nodes, at, at-1), neighbour(nodes, at, at+1))
+			if _, _, looks := attrblock.Leading(esc); afterLink && looks {
+				esc = `\` + esc
+			}
+			afterLink = false
 			body = strings.TrimLeft(esc, " \t")
 			b.WriteString(esc[:len(esc)-len(body)])
 			if body == "" {
@@ -979,6 +1023,7 @@ func serializeInline(nodes []*Node, cell bool) (string, error) {
 				continue
 			}
 		}
+		afterLink = false
 		for _, m := range outer[keep:] {
 			if has(open, m) {
 				continue
@@ -1048,7 +1093,7 @@ func sameMark(a, b Mark) bool {
 	}
 	switch a.Type {
 	case "link":
-		return a.Attrs["href"] == b.Attrs["href"] && isAuto(a) == isAuto(b)
+		return a.Attrs["href"] == b.Attrs["href"] && isAuto(a) == isAuto(b) && blockAttr(a.Attrs) == blockAttr(b.Attrs)
 	case "color", "class":
 		return a.Attrs["value"] == b.Attrs["value"] && a.Attrs["name"] == b.Attrs["name"]
 	case "host_span":

@@ -14,6 +14,7 @@ import (
 	"github.com/yuin/goldmark/renderer/html"
 	"github.com/yuin/goldmark/text"
 	xhtml "golang.org/x/net/html"
+	"yavc.app/internal/attrblock"
 	"yavc.app/internal/frontmatter"
 )
 
@@ -416,7 +417,7 @@ func (r *MacroRegistry) render(call Call, body string, inline bool, budget *Macr
 	if err != nil {
 		return "", err
 	}
-	md := goldmark.New(goldmark.WithExtensions(extension.GFM, Extension), goldmark.WithRendererOptions(html.WithUnsafe()))
+	md := goldmark.New(goldmark.WithExtensions(extension.GFM, Extension, attrblock.Extension), goldmark.WithRendererOptions(html.WithUnsafe()))
 	var out bytes.Buffer
 	parsed := md.Parser().Parse(text.NewReader([]byte(expanded)))
 	if len(exporting) > 0 && exporting[0] {
