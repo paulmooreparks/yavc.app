@@ -1,5 +1,23 @@
 # Host shortcode integration handoff
 
+## v0.2.72: the shortcode table, a diagram's picture, and Edit Diagram
+
+[v0.2.72](https://github.com/paulmooreparks/yavc.app/releases/tag/v0.2.72) ([PR #108](https://github.com/paulmooreparks/yavc.app/pull/108)) followed on the night of 2026-11-11, when Paul asked the two teams to make shortcodes work as general-purpose codes and to make an embedded diagram editable (DESIGN.md decision 127). PUDL stays at 0.107.1. `docs/shortcode-destinations.md` is the contract for all three parts.
+
+- `content/shortcodes.json` lists every built-in shortcode with its kind, arguments, meaning, plain form, whether a picture stands in for it and whether it is published. A receiving host reads it and keeps no list of its own.
+- `content/diagram-kit/picture.js` gives a host's page `yavcDiagramPicture.draw`, which makes an SVG or PNG of a canvas, D2 or Mermaid diagram from its text with no applet on the page.
+- Editor and Docs offer Edit Diagram for a diagram drawn from a file. It asks PUDL for the `diagram` verb with the file's resolved path, so the receiving host has to open that request in Diagrams.
+
+| Item | Value |
+| --- | --- |
+| Commit | `568a96a597a7f0fa9f279585d51e8976254c60f5` |
+| Archive sha256 | `fe825b6a53fc797d733b8e993f3f14896ab1ba05c4eb96ce1b2d675b0b22b027` |
+| Manifest sha256 | `0ad7bd26fec529478aa24429d563b16b8723da22ac54b231b2ee601cad82f64f` |
+| Content digest | `ccdf7e66142e20c8f0429323ab52d1ca1c86f4b1d50eb482726507bc728dba1d` (490 files) |
+| Applets | Editor 46.31.0, Docs 1.31.0, Slides 0.59.0, Diagrams 0.38.0 |
+
+The published archive and manifest passed their checksums, and the digest equals a local build of the tagged commit. All seven package tests passed in Chromium, Firefox and WebKit. Paul approved the shortcode rule in his own words; Edit Diagram was built as part of the diagram thread he opened and is his to confirm.
+
 ## v0.2.71: a host command in place of Save, and suggestions marked by what they change
 
 [v0.2.71](https://github.com/paulmooreparks/yavc.app/releases/tag/v0.2.71) ([PR #106](https://github.com/paulmooreparks/yavc.app/pull/106)) followed on 2026-11-11 from two things Paul met in the receiving product (DESIGN.md decision 126). PUDL stays at 0.107.1.
