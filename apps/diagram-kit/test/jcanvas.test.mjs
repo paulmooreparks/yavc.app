@@ -384,3 +384,29 @@ test('a node can have an outline and no fill', () => {
   assert.match(out.svg, /<text[^>]* fill="#[ef][0-9a-f]{5}"/i, 'The text is read against what is behind the node.');
   assert.match(jc.read(JSON.stringify({ nodes: [{ id: 'a', type: 'text', x: 0, y: 0, width: 10, height: 10, text: '', yavc: { noFill: 'yes' } }], edges: [] })).problems[0].message, /noFill must be a boolean/);
 });
+test('the first baseline comes from the font where the page gives its ascent and descent', () => {
+  // A text font: ascent 0.95 and descent 0.25 of the size. At 15 pixels in an 18 pixel line a page paints the baseline 14 below the line's top.
+  const font = (up, down) => Object.assign((text, size) => text.length * size * 0.5, { metrics: size => ({ ascent: size * up, descent: size * down }) });
+  const text = drawn({ height: 18, yavc: { shape: 'text', padding: 0, fontSize: 15, lineHeight: 1.2 } }, {}, { measure: font(0.95, 0.25) }).svg;
+  assert.match(text, /<text x="0\.0" y="14\.0"/);
+  // A symbol font: ascent 0.94 and descent 0.06. At 22 pixels in a 22 pixel line the baseline is 21 below the top.
+  assert.match(drawn({ height: 22, yavc: { shape: 'text', padding: 0, fontSize: 22, lineHeight: 1 } }, {}, { measure: font(0.94, 0.06) }).svg, /<text x="0\.0" y="21\.0"/);
+  // A page that cannot give them, and no page at all, keep the estimate.
+  const none = Object.assign((text, size) => text.length * size * 0.5, { metrics: () => null });
+  assert.match(drawn({ height: 22, yavc: { shape: 'text', padding: 0, fontSize: 22, lineHeight: 1 } }, {}, { measure: none }).svg, /<text x="0\.0" y="18\.7"/);
+  assert.match(drawn({ height: 22, yavc: { shape: 'text', padding: 0, fontSize: 22, lineHeight: 1 } }, {}, { measure: false }).svg, /<text x="0\.0" y="18\.7"/);
+});
+test('an estimate does not start a new line for a text it is not sure is too wide', () => {
+  const lines = svg => Array.from(svg.matchAll(/<tspan[^>]*>([^<]*)<\/tspan>/g)).map(m => m[1]);
+  // Take payment at 14 pixels is estimated at 94 pixels. A box of 80 is within a fifth of that; a box of 60 is not.
+  assert.deepEqual(lines(drawn({ width: 80, height: 60, text: 'Take payment', yavc: { padding: 0 } }, {}, { measure: false }).svg), ['Take payment']);
+  assert.deepEqual(lines(drawn({ width: 60, height: 60, text: 'Take payment', yavc: { padding: 0 } }, {}, { measure: false }).svg), ['Take', 'payment']);
+});
+test('padding can differ on each side', () => {
+  const out = drawn({ width: 100, height: 60, yavc: { fontSize: 20, lineHeight: 1, paddingSides: [10, 4, 2, 30] } }, {}, { measure: false });
+  assert.match(out.svg, /<text x="30\.0" y="27\.0"/);
+  assert.deepEqual(out.boxes[0].text.pads, [10, 4, 2, 30]);
+  assert.match(drawn({ width: 100, height: 60, yavc: { fontSize: 20, lineHeight: 1, paddingSides: [10, 4, 2, 30], textAlign: 'right', textVerticalAlign: 'bottom' } }, {}, { measure: false }).svg, /<text x="96\.0" y="55\.0"/);
+  assert.match(drawn({ width: 100, height: 60, yavc: { fontSize: 20, lineHeight: 1, paddingSides: [10, 4, 2, 30], textAlign: 'center', textVerticalAlign: 'middle' } }, {}, { measure: false }).svg, /<text x="63\.0" y="41\.0"/);
+  for (const bad of [[1, 2, 3], [1, 2, 3, 99], '4', [1, 2, 3, 1.5]]) assert.match(jc.read(JSON.stringify({ nodes: [{ id: 'a', type: 'text', x: 0, y: 0, width: 10, height: 10, text: '', yavc: { paddingSides: bad } }], edges: [] })).problems[0].message, /paddingSides must be four whole numbers/);
+});

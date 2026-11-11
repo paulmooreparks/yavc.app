@@ -76,6 +76,12 @@ const types={'.html':'text/html','.js':'text/javascript','.css':'text/css','.jso
    await p.evaluate(()=>{const view=CM.EditorView.findFromDOM(document.querySelector('#document .cm-editor')),at=view.state.doc.toString().indexOf('{{diagram:');view.dispatch({selection:{anchor:0}});fixture.offDiagram=!!pudlCommands.value(pudlCommands.find('edit-diagram',document.querySelector('#document')),'disabled');view.dispatch({selection:{anchor:at+4}});});
    assert.equal(await p.evaluate(()=>fixture.offDiagram),true);await p.evaluate(()=>pudlCommands.run('edit-diagram',null,document.querySelector('#document')));
    assert.deepEqual(await p.evaluate(()=>fixture.diagramRequests[2]),{path:'~/portable/plan.canvas',from:'document'});
+   // A host that opens files itself is asked first, and PUDL is asked only when the host does not take the request.
+   await p.evaluate(()=>{fixture.hostOpened=[];fixture.hostTakes=true;pudlHost.contentWorkspace.openDiagram=function(path,context){fixture.hostOpened.push({path:path,rooted:context.host instanceof Element,document:context.document});return fixture.hostTakes;};});
+   await p.evaluate(()=>pudlCommands.run('edit-diagram',null,document.querySelector('#document')));
+   assert.deepEqual(await p.evaluate(()=>[fixture.hostOpened,fixture.diagramRequests.length]),[[{path:'~/portable/plan.canvas',rooted:true,document:'memory:document.docs.md'}],3]);
+   await p.evaluate(()=>{fixture.hostTakes=false;return pudlCommands.run('edit-diagram',null,document.querySelector('#document'));});
+   assert.deepEqual(await p.evaluate(()=>[fixture.hostOpened.length,fixture.diagramRequests.length]),[2,4]);await p.evaluate(()=>{delete pudlHost.contentWorkspace.openDiagram;});
    await p.evaluate(()=>pudlCommands.run('view-visual',null,document.querySelector('#document')));await rich.waitFor();
    assert.deepEqual(await p.evaluate(()=>pudlActions.problems()),[]);assert.match((await p.evaluate(()=>pudlActions.run('yavc.docs/document@1',{}, {grant:'all'}))).text,/Changed document/);
    await p.evaluate(()=>{fixture.reviewPromise=pudlCommands.run('review-changes',null,document.querySelector('#document'));});const review=p.getByRole('dialog',{name:'Review Changes',exact:true});await review.waitFor();assert.equal(await p.evaluate(()=>typeof pudlListbox.refresh),'function');await review.getByRole('button',{name:'Close',exact:true}).click();await p.evaluate(()=>fixture.reviewPromise);
