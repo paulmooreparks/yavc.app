@@ -23,6 +23,7 @@ Every service is optional to the applet, which says what it cannot do when one i
 | `pudlHost.contentBytes` | Reads a file's bytes so that the applet can detect its encoding and keep it on save. | `text-bytes-contract.md`, `encoded-resources-contract.md` |
 | `pudlHost.fileResolution` | Decides which application opens a file, from the package's catalogue of file kinds. A desktop host maps this to file associations and Open With. | `file-resolution-contract.md`, `file-associations.md` |
 | `pudlHost.commandToolbar` | Stores the person's toolbar arrangement. | `command-toolbar-design.md` |
+| `pudlHost.documentCommands` | Puts commands of the host's own in the File menu, such as publishing a document, and runs them. | `document-commands-contract.md` |
 
 Docs adds Office import and export, which run in the page and need nothing more. Slides adds `pudlHost.presentation` for the presenter view and a show in another window (`presentation-contract.md`). Diagrams uses the same resource, recovery, window and picture services as Editor.
 

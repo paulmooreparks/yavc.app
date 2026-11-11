@@ -1,5 +1,9 @@
 # Stem-to-stern review, November 2026
 
+## A host's commands in the File menu, 2026-11-11
+
+Paul looked for Publish in the File menu of Docs and Editor, and the receiving host had it only in its own menu bar. Editor and Docs now take commands from `pudlHost.documentCommands` (decision 124, `document-commands-contract.md`). What a host declares is treated as untrusted: ids, labels, glyph names and shortcuts are checked, at most eight are taken, and the command's id is prefixed so that it cannot stand in for an applet command. `test-portable-workspace.cjs` covers presence by document, the host's reason, the change notice, the run and a failure. The row's place in the menu was checked by hand in Dinah's standalone page, since the portable fixture draws no menus.
+
 ## PUDL 0.107.1 integration, 2026-11-11
 
 The bundled PUDL went from 0.106.2 to 0.107.1 so that the standalone Editor's host can draw one menu bar, which PUDL added as an option the host's page sets. The archive, manifest and tag commit were verified and all 196 files replaced together; only the menu bar's script and a version comment differ. The site and the applets needed no change. `pudl-upgrade-0.107.1.md` records the evidence.
