@@ -262,13 +262,13 @@ const picture = (id, x, y, extra) => Object.assign({ id, type: 'file', x, y, wid
 test('text takes a colour, a size, a weight, a font and a padding, and a hard break is a new line', () => {
   const doc = jc.read(file({ nodes: [node('a', 0, 0, { text: 'Total\\\n12.50', yavc: { textColor: '#ffffff', fillColor: '#00a0e6', fontSize: 22, fontWeight: 500, fontFamily: 'Roboto, Arial', padding: 2, textAlign: 'right' } }), node('b', 0, 100, { text: 'One\n\nTwo', height: 120 })], yavc: { version: 1, font: 'Noto Sans' } })).doc;
   const out = jc.render(doc, { palette: PALETTE, font: 'Inter, sans-serif' });
-  assert.match(out.svg, /<svg[^>]* font-family="Noto Sans, Inter, sans-serif"/);
-  assert.match(out.svg, /<text x="122\.0"[^>]* font-size="22" font-weight="500" font-family="Roboto, Arial, Noto Sans, Inter, sans-serif" fill="#ffffff" text-anchor="end">/);
+  assert.match(out.svg, /<svg[^>]* font-family="&#39;Noto Sans&#39;, &#39;Inter&#39;, sans-serif"/);
+  assert.match(out.svg, /<text x="122\.0"[^>]* font-size="22" font-weight="500" font-family="&#39;Roboto&#39;, &#39;Arial&#39;, &#39;Noto Sans&#39;, &#39;Inter&#39;, sans-serif" fill="#ffffff" text-anchor="end">/);
   const a = /<g data-text="a">(.*?)<\/g>/.exec(out.svg)[1], b = /<g data-text="b">(.*?)<\/g>/.exec(out.svg)[1];
   assert.deepEqual([...a.matchAll(/<tspan[^>]*>([^<]*)</g)].map(m => m[1]), ['Total', '12.50'], 'a hard break has no empty line between');
   assert.deepEqual([...b.matchAll(/<tspan[^>]*>([^<]*)</g)].map(m => m[1]), ['One', ' ', 'Two'], 'a paragraph keeps its gap');
   const box = out.boxes[0].text;
-  assert.deepEqual([box.color, box.size, box.weight, box.family, box.pad], ['#ffffff', 22, 500, 'Roboto, Arial, Noto Sans, Inter, sans-serif', 2]);
+  assert.deepEqual([box.color, box.size, box.weight, box.family, box.pad], ['#ffffff', 22, 500, "'Roboto', 'Arial', 'Noto Sans', 'Inter', sans-serif", 2]);
   assert.deepEqual([out.boxes[1].text.size, out.boxes[1].text.weight, out.boxes[1].text.family, out.boxes[1].text.pad], [14, null, null, null]);
 });
 
@@ -332,4 +332,55 @@ test('a node takes its style\'s properties, with its own over them, and the file
     assert.equal(jc.read(file({ nodes: [], yavc: { styles } })).doc, null, JSON.stringify(styles).slice(0, 60));
   }
   assert.ok(jc.read(file({ nodes: [{ id: 'g', type: 'group', x: 0, y: 0, width: 10, height: 10, yavc: { style: 'key' } }], yavc: { styles: original.yavc.styles } })).doc, 'a style\'s text alignment is ignored on a node it does not apply to');
+});
+
+// What a screen written out as a canvas showed was missing or wrong (DESIGN.md decision 128).
+function drawn(node, yavc, opts) {
+  const read = jc.read(JSON.stringify({ yavc: Object.assign({ version: 1 }, yavc), nodes: [Object.assign({ id: 'a', type: 'text', x: 0, y: 0, width: 100, height: 40, text: 'Total' }, node)], edges: [] }));
+  assert.deepEqual(read.problems.filter(p => !p.warning), []);
+  return jc.render(read.doc, Object.assign({ palette: PALETTE, pad: 0 }, opts));
+}
+test('a font family the format allows is written so that CSS reads it', () => {
+  assert.equal(jc.families('GKR Roboto 5-29-0, Arial,sans-serif'), "'GKR Roboto 5-29-0', 'Arial', sans-serif");
+  assert.equal(jc.families('"Inter", system-ui'), "'Inter', system-ui");
+  const out = drawn({ yavc: { fontFamily: 'GKR Roboto 5-29-0' } }, { font: '7 Segment' });
+  assert.match(out.svg, /<svg[^>]* font-family="&#39;7 Segment&#39;, &#39;Inter&#39;, system-ui, sans-serif"/);
+  assert.match(out.svg, /<text[^>]* font-family="&#39;GKR Roboto 5-29-0&#39;, &#39;7 Segment&#39;, &#39;Inter&#39;, system-ui, sans-serif"/);
+  assert.equal(out.boxes[0].text.family, "'GKR Roboto 5-29-0', '7 Segment', 'Inter', system-ui, sans-serif");
+});
+test('a label as wide as its letters is not cut, by a measured width or by an estimate', () => {
+  const lines = svg => Array.from(svg.matchAll(/<tspan[^>]*>([^<]*)<\/tspan>/g)).map(m => m[1]);
+  // The estimate takes Total at 14 pixels for 39 pixels wide. A box of 36 is within its error; a box of 20 is not.
+  assert.deepEqual(lines(drawn({ width: 36, yavc: { padding: 0 } }, {}, { measure: false }).svg), ['Total']);
+  assert.deepEqual(lines(drawn({ width: 20, height: 100, yavc: { padding: 0 } }, {}, { measure: false }).svg).join(''), 'Total');
+  assert.ok(lines(drawn({ width: 20, height: 100, yavc: { padding: 0 } }, {}, { measure: false }).svg).length > 1);
+  // A measured width decides exactly, and is asked with the node's face.
+  const asked = [], measure = (text, size, weight, family) => { asked.push([size, weight, family]); return text.length * 6; };
+  assert.deepEqual(lines(drawn({ width: 30, yavc: { padding: 0, fontSize: 12, fontWeight: 700, fontFamily: 'Roboto' } }, {}, { measure }).svg), ['Total']);
+  assert.deepEqual(asked[0], [12, 700, "'Roboto', 'Inter', system-ui, sans-serif"]);
+  assert.deepEqual(lines(drawn({ width: 60, height: 100, text: 'Total due now', yavc: { padding: 0 } }, {}, { measure }).svg), ['Total due', 'now']);
+});
+test('a line height is the distance between lines and places the first one', () => {
+  const two = { height: 100, text: 'One\\\nTwo', yavc: { fontSize: 20, padding: 0, lineHeight: 1 } }, out = drawn(two);
+  assert.match(out.svg, /<text x="0\.0" y="17\.0"/);
+  assert.match(out.svg, /<tspan x="0\.0" dy="20\.0">Two<\/tspan>/);
+  assert.equal(out.boxes[0].text.lineHeight, 1);
+  assert.match(drawn(Object.assign({}, two, { yavc: { fontSize: 20, padding: 0 } })).svg, /<text x="0\.0" y="20\.0"[\s\S]*dy="26\.0"/);
+  for (const bad of [0.5, 4, '1.2']) assert.match(jc.read(JSON.stringify({ nodes: [{ id: 'a', type: 'text', x: 0, y: 0, width: 10, height: 10, text: '', yavc: { lineHeight: bad } }], edges: [] })).problems[0].message, /lineHeight must be a number from 0\.8 to 3/);
+});
+test('an outline can be inside the edge, as a CSS border is', () => {
+  const inside = drawn({ yavc: { outlinePosition: 'inside', lineWidth: 1, radius: 4 } }).svg;
+  assert.match(inside, /<rect x="0\.5" y="0\.5" width="99" height="39" rx="3\.5"[^>]* stroke-width="1"\/>/);
+  assert.match(drawn({ yavc: { lineWidth: 1, radius: 4 } }).svg, /<rect x="0" y="0" width="100" height="40" rx="4"/);
+  const sides = drawn({ yavc: { outlinePosition: 'inside', lineWidth: 2, outlineSides: ['bottom'] } }).svg;
+  assert.match(sides, /<rect x="0" y="0" width="100" height="40"[^>]* stroke="none"/);
+  assert.match(sides, /<path d="M 99\.0 39\.0 L 1\.0 39\.0"[^>]* stroke-linecap="square"\/>/);
+  assert.match(jc.read(JSON.stringify({ nodes: [{ id: 'a', type: 'text', x: 0, y: 0, width: 10, height: 10, text: '', yavc: { outlinePosition: 'outside' } }], edges: [] })).problems[0].message, /outlinePosition must be center or inside/);
+});
+test('a node can have an outline and no fill', () => {
+  const out = drawn({ yavc: { noFill: true, strokeColor: '#ff0000', fillColor: '#00ff00' } }, { background: '#101010' });
+  assert.match(out.svg, /<rect x="0" y="0" width="100" height="40"[^>]* fill="none" stroke="#ff0000"/);
+  assert.equal(out.boxes[0].colors.fill, '#101010');
+  assert.match(out.svg, /<text[^>]* fill="#[ef][0-9a-f]{5}"/i, 'The text is read against what is behind the node.');
+  assert.match(jc.read(JSON.stringify({ nodes: [{ id: 'a', type: 'text', x: 0, y: 0, width: 10, height: 10, text: '', yavc: { noFill: 'yes' } }], edges: [] })).problems[0].message, /noFill must be a boolean/);
 });

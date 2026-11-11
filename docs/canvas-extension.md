@@ -46,6 +46,11 @@ These properties were added on 2026-11-11 so that a screen design can be drawn a
 - `fontWeight` is a whole number of hundreds from 100 to 900. The default is the font's normal weight, with bold where the Markdown asks for it.
 - `fontFamily` is a list of font family names separated by commas, such as `Roboto, Arial`. It may contain letters, digits, spaces, commas, hyphens and underscores only, and at most 200 characters. Diagrams adds its own font after the list, so a family the reader's machine does not have falls back to it.
 - `padding` is the space between the node's box and its text, a whole number of file pixels from 0 to 64. The default is 8 at the sides, and 6 above and below on the screen.
+- `lineHeight` is the height of a line of text as a multiple of the font size, a number from 0.8 to 3. The default is 1.3. It was added on 2026-11-12 (DESIGN.md, decision 128) and is an additive version 1 property.
+
+A family is written into a drawing so that CSS reads it. Each name is quoted, since the format allows a name that is not a CSS identifier, such as `GKR Roboto 5-29-0` with a word that starts with a digit, and CSS drops a whole list for one unquoted name of that kind. The generic families, such as `sans-serif` and `system-ui`, are left unquoted.
+
+The picture of a canvas, which is what an export, a document and a slide show, breaks a text into lines by its width. Where there is a page, the width is measured in the node's own font, size and weight, so a label in a box exactly as wide as its letters is drawn whole. Where there is none, as in Node, the width is estimated at 0.56 of the font size for each character, and a single word is cut only when the estimate says it is wider than its box by more than a fifth. A line breaks between words in both cases. A caller of `render` may pass `measure`, a function of the text, size, weight and family list that returns a width, or `measure: false` for the estimate.
 
 The file's `yavc` object accepts `font`, with the same rule as `fontFamily`. It is the font for every text in the canvas that has no `fontFamily` of its own.
 
@@ -58,7 +63,10 @@ A line that ends in a backslash, or in two spaces, breaks there without the gap 
 - `radius` is the corner radius in file pixels, a number from 0 to 1000, on a node drawn as a rectangle: a text node whose shape is `rectangle` or `rounded`, and a file, link or group node. It is drawn no larger than half the node's shorter side. When absent, each of those keeps its own radius.
 - `outlineSides` is a list of the sides whose outline is drawn, from `top`, `right`, `bottom` and `left`, on the same nodes. An empty list draws the fill with no outline. When absent, the whole outline is drawn. A side that is drawn alone is a straight line, whatever the radius.
 
-Both are additive version 1 properties. A reader that ignores them draws the whole outline with its own corners.
+- `outlinePosition` is `center` or `inside`, on the same nodes. `center`, the default, draws the outline astride the node's edge, half inside and half outside, as SVG draws a stroke. `inside` draws it wholly within the node's box, as CSS draws a border, so a screen's one-pixel borders land on the pixels they have in the browser.
+- `noFill` is a boolean, on the same nodes. When true the node has its outline and nothing inside it, whatever `fillColor` or `color` say, and its text is coloured to be read against the canvas's background. It is a property of its own and not a value of `fillColor`, because a reader of an earlier release refuses a colour it does not know and ignores a property it does not know.
+
+All four are additive version 1 properties. A reader that ignores them draws the whole outline astride the edge, with its own corners and its own fill. `outlinePosition` and `noFill` were added on 2026-11-12 (DESIGN.md, decision 128).
 
 ### Pictures
 
