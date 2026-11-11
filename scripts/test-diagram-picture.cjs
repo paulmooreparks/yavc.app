@@ -63,6 +63,14 @@ const CANVAS = JSON.stringify({ yavc: { version: 1 }, nodes: [
             assert.deepEqual(fitted.lines, ['Subtotal'], 'width ' + fitted.width); assert.match(fitted.shown, /7 Segment Display/);
             // The baseline is placed from the font's own ascent and descent, which every engine tested gives.
             assert.notEqual(fitted.want, null); assert.equal(Number((fitted.y - 24).toFixed(1)), fitted.want, 'The picture has a margin of 24 around the canvas.');
+            // A picture kept in the canvas file is drawn from the file, and the host is not asked for it.
+            const kept = await p.evaluate(async () => {
+                const asked = [], text = JSON.stringify({ yavc: { version: 1 }, nodes: [{ id: 'p', type: 'file', x: 0, y: 0, width: 32, height: 32, file: 'thumb.png', yavc: { picture: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYGD4DwABBAEAX+XDSwAAAABJRU5ErkJggg==', radiusCorners: [6, 0, 6, 0], strokeColor: '#333333', outlinePosition: 'inside', lineWidth: 1 } }], edges: [] });
+                const out = await yavcDiagramPicture.draw({ kind: 'canvas', text: text, pictures: async function (path) { asked.push(path); return null; } }), doc = new DOMParser().parseFromString(out.svg, 'image/svg+xml');
+                const made = await yavcDiagramPicture.draw({ kind: 'canvas', text: text, format: 'png', scale: 1 });
+                return { image: !!doc.querySelector('image'), path: !!doc.querySelector('g[data-node="p"] path'), asked: asked, problems: out.problems, png: made.blob.size > 100 };
+            });
+            assert.deepEqual(kept, { image: true, path: true, asked: [], problems: [], png: true });
             // Without a reader the canvas is still drawn, and it says the picture is missing.
             const bare = await p.evaluate(async text => { const out = await yavcDiagramPicture.draw({ kind: 'canvas', text: text }); return { image: /<image[\s>]/.test(out.svg), problems: out.problems }; }, CANVAS);
             assert.equal(bare.image, false); assert.equal(bare.problems.length, 1);
