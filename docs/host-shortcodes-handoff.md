@@ -1,5 +1,23 @@
 # Host shortcode integration handoff
 
+## v0.2.79 and v0.2.80: the Editor as a text editor, and Browse writing a reference from the document's folder
+
+[v0.2.79](https://github.com/paulmooreparks/yavc.app/releases/tag/v0.2.79) ([PR #121](https://github.com/paulmooreparks/yavc.app/pull/121)) followed on 2026-11-12 from Paul's proposal to sharpen the split between the two applications (DESIGN.md decision 131). The Editor shows every file as text and has no Visual, Split or Preview. A Markdown document chosen in the Editor is handed to Docs through `fileResolution.open`, and one sent to the Editor by name opens there as text. A receiving host has to open `.md` and `.markdown` files in Docs before it takes this release, which the receiving product did first. The standalone Editor application loses Visual for Markdown until its host does the same.
+
+[v0.2.80](https://github.com/paulmooreparks/yavc.app/releases/tag/v0.2.80) ([PR #122](https://github.com/paulmooreparks/yavc.app/pull/122)) writes a file chosen with Browse from the document's folder where the two share a folder (decision 132, `docs/file-fields-contract.md`), so that a host's `fileFields.choose` can return a full path without making documents that lose their files when saved elsewhere.
+
+| Item | v0.2.79 | v0.2.80 |
+| --- | --- | --- |
+| Commit | `95792672ec68b858792e8aa2a52e454adae6fe15` | `a34270f894ef92d0b61aa237e6b832f35ea7a211` |
+| Archive sha256 | `14c444caaaf2d410782bc525dba878f6c22b8be1b1e43be912dc059d5c5f2f34` | `80860150c42730f15128be570df3260041beb4c2b40dcddfbfa654cb50d8fbdb` |
+| Manifest sha256 | `cc8888d01f77f8f5d3d15408cfad0956fb541c0166835295b6e02728407cf0f5` | `ab1ef059fb4ba2f8b54d236de51045f65afcfdd10a2133d9f79c6a91d56ee48b` |
+| Content digest | `2799b0d14cb6ca7e6bf952158896c4b712cf2d788a0995348e3d1bd4c36c4309` | `544ae0314d379d1e48eed05abe3f37c8051b0ef1520e016c21f7d7eb6e90b718` |
+| Applets | Editor 46.35.0, Docs 1.35.0, Slides 0.63.0 | Editor 46.36.0, Docs 1.36.0, Slides 0.64.0 |
+
+Each published archive and manifest passed its checksums, and each digest equals a local build of the tagged commit.
+
+Site tests left failing, none caused by these releases as far as was checked: `test-content-preservation-routing.cjs` (a deck's text loses its byte order mark) and `test-document-gallery.cjs` (a template window check) fail the same way on v0.2.78. `test-dialog-overhaul.cjs` crashed the browser in a phase about a cancelled commit and was not checked against an earlier release.
+
 ## v0.2.78: a shared definitions file in a host, and a host's own resolving of references
 
 [v0.2.78](https://github.com/paulmooreparks/yavc.app/releases/tag/v0.2.78) ([PR #119](https://github.com/paulmooreparks/yavc.app/pull/119)) followed on 2026-11-12 (DESIGN.md decision 130). A document's `shortcodes` file is read through the host's `fs.readText` from any local path, and a file that is missing leaves the page drawn. A host may offer `contentWorkspace.resolvePath` (`docs/content-workspace-contract.md`) to say where a document's reference to a diagram, a stylesheet or that file is. The Browse buttons in the applets' forms need `pudlHost.fileFields` (`docs/file-fields-contract.md`), which the receiving host does not offer yet.
