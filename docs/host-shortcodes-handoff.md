@@ -1,5 +1,23 @@
 # Host shortcode integration handoff
 
+## v0.2.71: a host command in place of Save, and suggestions marked by what they change
+
+[v0.2.71](https://github.com/paulmooreparks/yavc.app/releases/tag/v0.2.71) ([PR #106](https://github.com/paulmooreparks/yavc.app/pull/106)) followed on 2026-11-11 from two things Paul met in the receiving product (DESIGN.md decision 126). PUDL stays at 0.107.1.
+
+A declaration in `pudlHost.documentCommands` may say `replaces: 'save'`. For a document the command is present for, Save takes its label, glyph and state, and runs the host's command only (`docs/document-commands-contract.md`). The applet does not clear its modified mark after that run, so the host's command has to write the text through the resource.
+
+A host suggestion is marked no wider than what it changes, from a comparison of `before` with `after` that the applet makes. A table has only its changed rows tinted, changed words are struck where their place is sure, and the card shows the difference (`docs/document-host-overlays-contract.md`). The host publishes nothing new.
+
+| Item | Value |
+| --- | --- |
+| Commit | `951f0f9f9caf2a01ef05ae85717b30efd0724653` |
+| Archive sha256 | `717efa29042133082b419e5d630610cba143c41c11b1b222e8764e20a497f6dd` |
+| Manifest sha256 | `7e6075343c473192826d71b005fba088abaabd1fc7219b4965e2a722bafa7950` |
+| Content digest | `15351bddf286c1af7c9e4e8fbe7b10f7c485695a9565e94e366581651d90357a` (488 files) |
+| Applets | Editor 46.30.0, Docs 1.30.0, Slides 0.58.0 |
+
+The published archive and manifest passed their checksums, and the digest equals a local build of the tagged commit. The package tests for the workspace, host overlays and HTML tables passed in Chromium, Firefox and WebKit. The Diagrams package test hit its known Firefox crash on navigation; the release does not touch Diagrams. The card for a suggestion still sits after its table, so on a long table it is far from the changed row.
+
 ## v0.2.68 to v0.2.70: one menu bar, a host's commands, and actions that change a document
 
 Three releases followed on 2026-11-11, each for something Paul asked of the receiving product.
