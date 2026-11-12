@@ -39,7 +39,7 @@ Nobody acts on a report that Paul approved something. An approval counts when it
 3. **The member builds, tests and writes the record.** A change that alters behaviour adds or updates a test that fails without it. A decision goes into `DESIGN.md` with the next number, and what was tested goes into `docs/review.md`. A change to any applet's files needs a new version in its `applet.json`.
 4. **The checks pass before a commit**: `bash scripts/check.sh --since HEAD`.
 5. **The member opens a pull request** and tells the lead in the team chat. The message says what changed, what was tested and how, what was not tested, and anything the member is unsure about. A failing test is reported with its output and is never described as passing.
-6. **The lead reviews and merges.** Members do not merge their own pull requests. Every pull request adds a section at the end of `docs/review.md`, so one merged before yours usually makes yours conflict there. Rebase on `main`, keep every section with yours last, and tell the lead it is pushed.
+6. **The lead reviews and merges.** Members do not merge their own pull requests. The lead merges only when every check on the pull request has passed, the site tests included. A check that fails for a reason unrelated to the change is fixed first, not merged past. Every pull request adds a section at the end of `docs/review.md`, so one merged before yours usually makes yours conflict there. Rebase on `main`, keep every section with yours last, and tell the lead it is pushed.
 7. **The lead releases**, verifies the published package against a local build, announces it to the projects that take it, and writes the handoff note.
 
 ## Rules that are easy to break
