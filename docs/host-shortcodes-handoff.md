@@ -1,5 +1,18 @@
 # Host shortcode integration handoff
 
+## v0.2.87: late focus, Typography, page count under zoom, and the suggestion card in tables
+
+[v0.2.87](https://github.com/paulmooreparks/yavc.app/releases/tag/v0.2.87) comes from pull requests 160, 162, 166, 168, 171 and 172 on 2026-11-12 and 13. A window that finishes starting takes the keyboard only if it is in front and the keyboard is free or already inside it (DESIGN.md decision 146), which matters most in a host where several windows start at once. Typography no longer writes into the field the person is in. Pages are measured at 100 percent, so the page count no longer depends on zoom in WebKit (decision 144). A suggestion's card for changed table rows is a row after the changed row (decision 145). On the site, the Slides presenter opens on an application's own origin, and analytics are sent only on the public site (decision 147). A host changes nothing.
+
+| Item | v0.2.87 |
+| --- | --- |
+| Commit | `b40e541c8b512c697cc9b8b751de5dbf7d427621` |
+| Archive sha256 | `e16f3ad1534c87f2465cc10808a1b9b2ed8d376193929525eecacae83c90f25b` |
+| Manifest sha256 | `a0780163dc74894b201798f2290395c691aac798e6c036799e4f2923a64d910f` |
+| Content digest | `d3de205075c6e6eebcb3ee892d278dc09acde9ff64e5fc9dcd3bb354b0a760a2` |
+| Files | 492 |
+| Applets | Editor 46.37.7, Docs 1.37.7, Slides 0.65.4, Diagrams 0.46.6 |
+
 ## v0.2.86: the Diagrams Inspectors keep up with changes, and the guest store copies its bytes
 
 [v0.2.86](https://github.com/paulmooreparks/yavc.app/releases/tag/v0.2.86) comes from pull requests 146, 152, 153 and 155 on 2026-11-12. In both Diagrams Inspectors a change made elsewhere shows while the keyboard is in a field, a click after typing a number is kept, and the keyboard goes to the Inspector's heading when its field goes (DESIGN.md decisions 142 and 143). The site's guest file store copies the bytes it is given at the call. A host changes nothing.
