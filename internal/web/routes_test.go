@@ -18,7 +18,7 @@ func TestSecurityHeaders(t *testing.T) {
 		}
 		h := w.Header()
 		for name, want := range map[string]string{
-			"Content-Security-Policy":    contentSecurityPolicy,
+			"Content-Security-Policy":    contentSecurityPolicy(true),
 			"X-Content-Type-Options":     "nosniff",
 			"X-Frame-Options":            "SAMEORIGIN",
 			"Referrer-Policy":            "same-origin",
@@ -147,11 +147,11 @@ func TestEngineWorkerPolicy(t *testing.T) {
 		t.Fatal("the worker's policy must leave every fetch to default-src 'none'")
 	}
 	for _, target := range []string{site("/applets/diagram-kit/d2.js"), site("/applets/shared/lib.js"), site("/applets/dice/dice.js")} {
-		if got := req(t, s, "GET", target, "").Header().Get("Content-Security-Policy"); got != contentSecurityPolicy {
+		if got := req(t, s, "GET", target, "").Header().Get("Content-Security-Policy"); got != contentSecurityPolicy(s.Secure) {
 			t.Errorf("%s: policy %q, want the page's", target, got)
 		}
 	}
-	if strings.Contains(contentSecurityPolicy, "'unsafe-eval'") {
+	if strings.Contains(contentSecurityPolicy(true), "'unsafe-eval'") || strings.Contains(contentSecurityPolicy(false), "'unsafe-eval'") {
 		t.Fatal("the page's policy must never allow eval")
 	}
 }

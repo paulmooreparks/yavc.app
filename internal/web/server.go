@@ -591,7 +591,7 @@ func (s *Server) pageData(r *http.Request, title string) map[string]any {
 	}
 	return map[string]any{
 		"AboutSite": "/about" + suffix, "AboutPUDL": "/about/pudl" + suffix,
-		"Site": s.Title, "Title": title, "SiteURL": s.siteURL(r), "DocumentGrouping": s.DocumentGrouping,
+		"Site": s.Title, "Title": title, "SiteURL": s.siteURL(r), "DocumentGrouping": s.DocumentGrouping, "Analytics": s.Secure,
 		"Appearance": s.appearanceOf(sess), "Skins": s.skinList, "Palettes": s.paletteList,
 		"State": state, "Config": config,
 		"Applets": s.appletEntries(r), "Dialog": "", "PUDLVersion": s.pudlVersion, "Retention": s.retention(), "StaticVersion": s.staticVersion, "SiteOrigin": strings.TrimSuffix(s.siteURL(r), "/"),
