@@ -121,7 +121,10 @@
         documentWindows: window.yavcDocumentWindows,
         presentation: {version:1,presenterURL:function(request){
             if(request.application!=='slides')throw new Error('This application has no presenter page.');
-            var url=new URL('/applet/slides',location.origin);url.searchParams.set('file',request.resource);url.searchParams.set('presenter','1');url.searchParams.set('presenter-channel',request.channel);return url.href;
+            /* On the desktop's own domain the presenter page is /applet/slides. On Slides' own origin, such as slides.yavc.app, that route is
+               the desktop's and the server answers Not found, so the presenter is the same origin's root page, which takes the same query. */
+            var own=document.body.classList.contains('standalone') && !location.pathname.startsWith('/applet/');
+            var url=new URL(own?'/':'/applet/slides',location.origin);url.searchParams.set('file',request.resource);url.searchParams.set('presenter','1');url.searchParams.set('presenter-channel',request.channel);return url.href;
         }},
         contentWorkspace: { version: 1,
             directory: function (resource) {var F=window.pcSiteFs;if(!F || typeof resource!=='string')return null;var node=F.resolve(null,resource);return node && !node.children ? F.splitPath(F.displayPath(node)).dir : null;},
