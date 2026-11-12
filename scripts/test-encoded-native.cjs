@@ -17,7 +17,10 @@ const raw=(p,name)=>p.evaluate(async name=>Array.from(new Uint8Array((await pcSi
         const p=await browser.newPage();await p.goto(`http://localhost:${port}/?open=files`);await p.locator('table.fm-list').waitFor();
         const source='# From Files\r\n\r\nSigned UTF-16 source.\n';
         await p.evaluate(async bytes=>{const F=await yavcUtil.siteFs();await F.writeBytes(F.home(),'utf16.md',new Uint8Array(bytes),'text/plain');await pudlCommands.run('home',null,document.querySelector('[data-applet="files"]'));},bytes(source));
-        await p.locator('tr[data-name="utf16.md"]').dblclick();await p.locator('.win[data-win^="docs"] .ProseMirror').waitFor();assert.equal((await call(p,'docs','document')).text,source.replace(/\r\n/g,'\n'));assert.deepEqual(await raw(p,'utf16.md'),bytes(source));
+        await p.locator('tr[data-name="utf16.md"]').dblclick();await p.locator('.win[data-win^="docs"] .ProseMirror').waitFor();
+        // The window shows its startup document until the file has loaded, so wait for the file's text before comparing it.
+        await p.waitForFunction(async()=>(await pudlActions.run('yavc.docs/document@1',{},{grant:'all'})).text.includes('Signed UTF-16 source.'));
+        assert.equal((await call(p,'docs','document')).text,source.replace(/\r\n/g,'\n'));assert.deepEqual(await raw(p,'utf16.md'),bytes(source));
         console.log(engine+': Slides and Diagrams retain encoded Save As/recovery; Files opens signed UTF-16 Markdown in Docs.');await p.close();
     }finally{await browser.close();}
 }})().catch(e=>{console.error(e);process.exitCode=1;});

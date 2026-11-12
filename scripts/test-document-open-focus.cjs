@@ -29,10 +29,13 @@ const action=(p,app,name,input)=>p.evaluate(({app,name,input})=>pudlActions.run(
             await pick();await p.locator(`.win[data-win="${app}-2"] [data-applet-state="running"]`).waitFor();
             // Let native dialog-close events and deferred question cleanup run.
             await p.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+            // The new window is raised and focused when the open has finished, which on a busy machine is later than two frames, so wait for that and then say what is wrong if it never happens.
+            await p.waitForFunction(app=>pudlWindows.state().top===app+'-2'&&document.activeElement.closest('.win')?.getAttribute('data-win')===app+'-2',app).catch(()=>{});
             assert.equal(await p.evaluate(()=>pudlWindows.state().top),app+'-2',app+' new document is behind its opener');
             assert.equal(await p.evaluate(()=>document.activeElement.closest('.win')?.getAttribute('data-win')),app+'-2');
             await p.evaluate(app=>pudlWindows.raise(app),app);await pick();
             await p.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+            await p.waitForFunction(app=>pudlWindows.state().top===app+'-2',app).catch(()=>{});
             assert.equal(await p.evaluate(()=>pudlWindows.state().top),app+'-2');assert.equal(await p.locator(`[data-applet="${app}"]`).count(),2);
             await p.evaluate(app=>pudlWindows.raise(app),app);await toolbar();await p.locator(`.win[data-win="${app}"] .yavc-command-toolbar [data-command="open"]`).click();
             await p.locator('.fb-picker[open] [data-pick="cancel"]').click();assert.equal(await p.evaluate(()=>pudlWindows.state().top),app);
