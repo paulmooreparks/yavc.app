@@ -57,9 +57,21 @@ async function run(engine) {
         item = (await doc()).nodes.find(n => n.id === 'process'); assert.equal(item.yavc.fillColor, undefined); assert.equal(item.yavc.strokeColor, '#ff0000');
         phase = 'splitters and folding';
         const width = () => page.locator('.dg-inspector').evaluate(e => e.getBoundingClientRect().width);
+        /* A fixed wait can only miss a change, so the layout is given its chance to change and then looked at: the resize observers that
+           are pending run, and two more frames are drawn after them. A change made by a resize observer or by the next frames is therefore
+           seen by what follows. The caller first waits for the separator it moved to show that the key took effect. */
+        const flush = () => page.evaluate(() => new Promise((resolve, reject) => {
+            const giveUp = setTimeout(() => reject(new Error('The layout did not report a frame.')), 5000);
+            const frames = count => count ? requestAnimationFrame(() => frames(count - 1)) : (clearTimeout(giveUp), resolve());
+            const observer = new ResizeObserver(() => { observer.disconnect(); frames(2); });
+            observer.observe(document.querySelector('.dg-inspector'));
+        }));
+        const separator = name => page.getByRole('separator', { name, exact: true });
+        const moved = (name, value) => page.waitForFunction(([name, value]) => document.querySelector('[role="separator"][aria-label="' + name + '"]')?.getAttribute('aria-valuenow') === String(value), [name, value]);
         const initialWidth = await width(); assert.ok(initialWidth >= 330, String(initialWidth));
-        const outer = page.getByRole('separator', { name: 'Resize the Text', exact: true }); await outer.focus(); await page.keyboard.press('Shift+ArrowRight');
-        await page.waitForTimeout(350); assert.ok(Math.abs(await width() - initialWidth) <= 1, 'Outer split changed Inspector width');
+        const outer = separator('Resize the Text'), outerAt = Number(await outer.getAttribute('aria-valuenow')); await outer.focus(); await page.keyboard.press('Shift+ArrowRight');
+        await page.waitForFunction(was => Number(document.querySelector('[role="separator"][aria-label="Resize the Text"]').getAttribute('aria-valuenow')) > was, outerAt);
+        await flush(); assert.ok(Math.abs(await width() - initialWidth) <= 1, 'Outer split changed Inspector width');
         const inner = page.getByRole('separator', { name: 'Resize the Inspector', exact: true }); await inner.focus(); await page.keyboard.press('Shift+ArrowRight');
         // The splitter is still moving when the key press returns. Wait until the Inspector has moved, then until its width has held for several frames.
         await page.waitForFunction(limit => document.querySelector('.dg-inspector').getBoundingClientRect().width < limit, initialWidth - 30);
@@ -74,14 +86,17 @@ async function run(engine) {
         assert.ok(chosen < initialWidth - 30);
         const mediumRows = await page.getByRole('group', { name: 'Horizontal Alignment', exact: true }).getByRole('button').evaluateAll(all => [...new Set(all.map(e => Math.round(e.getBoundingClientRect().top)))].length);
         assert.equal(mediumRows, 2);
-        await outer.focus(); await page.keyboard.press('Shift+ArrowLeft'); await page.waitForTimeout(350); assert.ok(Math.abs(await width() - chosen) <= 1);
-        await inner.focus(); for (let i = 0; i < 3; i++) await page.keyboard.press('Shift+ArrowRight'); await page.waitForTimeout(350);
+        await outer.focus(); await page.keyboard.press('Shift+ArrowLeft'); await moved('Resize the Text', outerAt);
+        await flush(); assert.ok(Math.abs(await width() - chosen) <= 1, 'Outer split changed Inspector width');
+        await inner.focus(); for (let i = 0; i < 3; i++) await page.keyboard.press('Shift+ArrowRight');
+        await page.waitForFunction(() => { const s = document.querySelector('[role="separator"][aria-label="Resize the Inspector"]'); return s.getAttribute('aria-valuenow') === s.getAttribute('aria-valuemax'); });
+        await flush();
         const horizontal = page.getByRole('group', { name: 'Horizontal Alignment', exact: true });
         assert.equal(await horizontal.getByRole('button', { name: 'Default', exact: true }).locator('span:not(.glyph)').evaluate(e => getComputedStyle(e).display), 'none');
         assert.equal(await horizontal.getByRole('button', { name: 'Bottom', exact: true }).count(), 0);
         assert.ok(await horizontal.getByRole('button', { name: 'Right', exact: true }).getAttribute('title'));
         await page.locator('.dg-inspector').screenshot({ path: path.join(evidence, engine + '-narrow-inspector.png') });
-        await inner.press('Enter'); await page.waitForTimeout(350);
+        await inner.press('Enter'); await page.waitForFunction(min => document.querySelector('.dg-inspector').getBoundingClientRect().width >= min, initialWidth - 1); await flush(); assert.ok(Math.abs(await width() - initialWidth) <= 1, 'Enter changed the Inspector width');
         phase = 'delayed saves'; await action('save', { path: '~/batch.canvas' });
         await page.evaluate(() => {
             const adapter = pudlHost.contentResourceAdapter;
