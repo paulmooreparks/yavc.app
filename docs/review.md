@@ -1167,3 +1167,9 @@ Ten runs of the whole site test list, two tests at a time, on a clean copy of ma
 Left alone, because the cause is not yet known or may be the page's: `test-pudl-upgrade` loses the compact launcher's search text on a close and reopen in about one run in five under load. A wait for the text to come back does not help, since it never does, and an isolated trace keeps it every time. `test-editor-visual-defaults` and `test-files-dialogs` each failed once or twice in the full runs and not in forty copies of themselves, so they need the logs of a failing run.
 
 `test-pudl-upgrade.cjs` is taken off `scripts/site-tests.txt` with a comment where it was. It fails about one run in five under load, so a failing run would be read as noise. Builder has it, to find whether the lost search text is the page's or PUDL's, and it goes back on the list when that is settled.
+
+## A package test that failed on a slow machine (2026-11-13)
+
+`test-host-overlays.cjs` clicks into a suggestion's text, presses Home and then Delete, and waits for the Accept button to be disabled. When the machine is slow the keys arrive before the click has moved the caret, so nothing is deleted and the wait never ends. Slowing Chromium's processor eight times reproduces it every time at that line, and it failed once in a run on GitHub. The test now waits for the caret to be in the paragraph, then for Home to move it, then for Delete to remove the letter, each by what the page shows. With the processor slowed eight times it passes three runs out of three, and normally it passes in all three browsers.
+
+`test-host-shortcodes.cjs` passes in all three browsers in the package job and is now in `scripts/package-tests.txt`.

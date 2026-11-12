@@ -9,3 +9,4 @@ test-diagram-picture.cjs
 test-host-overlays.cjs
 test-detached-show.cjs
 test-html-tables.cjs
+test-host-shortcodes.cjs

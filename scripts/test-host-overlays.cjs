@@ -87,7 +87,11 @@ const types={'.html':'text/html','.js':'text/javascript','.css':'text/css','.jso
             await page.locator('#document [data-host-suggestion="replacement"] button[data-suggestion-action="accept"]').waitFor();
             assert.equal(await page.locator('#document [data-host-suggestion="replacement"] button[data-suggestion-action="accept"]').isDisabled(),false);
             await action('docs','view',{mode:'document'});await page.locator('#document .ProseMirror [data-host-suggestion="replacement"]').waitFor();
-            await page.locator('#document .ProseMirror p').filter({hasText:'Improved words.'}).click();await page.keyboard.press('Home');await page.keyboard.press('Delete');await page.waitForTimeout(500);
+            // On a slow machine the keys arrive before the click has moved the caret, and the edit is lost, so each step waits for the effect of the one before it.
+            await page.locator('#document .ProseMirror p').filter({hasText:'Improved words.'}).click();
+            await page.waitForFunction(()=>{const node=getSelection().anchorNode,paragraph=node&&(node.nodeType===1?node:node.parentElement).closest('#document .ProseMirror p');return !!paragraph&&paragraph.textContent.includes('Improved words.');});
+            await page.keyboard.press('Home');await page.waitForFunction(()=>getSelection().anchorOffset===0);
+            await page.keyboard.press('Delete');await page.waitForFunction(()=>Array.from(document.querySelectorAll('#document .ProseMirror p')).some(p=>p.textContent==='mproved words.'));
             await page.waitForFunction(()=>document.querySelector('#document .ProseMirror [data-host-suggestion="replacement"] button[data-suggestion-action="accept"]')?.disabled);
             assert.match((await action('docs','document')).text,/shot\.png/);assert.doesNotMatch((await action('docs','document')).text,/Clearer|\{[+~\-]/);
             const rendered=(await action('docs','document')).text;
