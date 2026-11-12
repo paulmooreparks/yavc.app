@@ -19,14 +19,15 @@ async function colors(p) {
     const browser=await pw[engine].launch({headless:true});
     try {
         let expected;
-        for(const app of ['docs','editor']) {
+        for(const app of ['docs']) { // The Editor has no Markdown preview now (DESIGN.md, decision 131), so only Docs draws the paper.
             const p=await browser.newPage({viewport:{width:1500,height:1050}}), errors=[]; p.on('pageerror',e=>errors.push(e.message));
             try {
                 await p.goto(`http://${app}.localhost:${port}/`); await p.locator('.cm-editor').waitFor({state:'attached'});
                 await p.evaluate(()=>pudlSetTheme('dark'));
                 await action(p,app,'new',{path:'~/theme.docs.md',text:fixture});
                 if(app==='docs') {
-                    await p.locator('.ProseMirror').focus();await p.keyboard.type('Z');
+                    // The rich surface ignores typing while it is still loading (aria-busy), so wait for it to be ready before typing.
+                    await p.locator('.ProseMirror[aria-busy="false"]').waitFor();await p.locator('.ProseMirror').focus();await p.keyboard.type('Z');
                     await p.waitForFunction(()=>CM.EditorView.findFromDOM(document.querySelector('.cm-editor')).state.doc.toString().includes('# ZExport playground'));
                     const typed=(await action(p,app,'document')).text;
                     assert.ok(typed.includes('{{style}}\n.accent { color: #2355a0; }\n{{/style}}'),'Typing on initial open preserves the hidden stylesheet');
@@ -65,12 +66,12 @@ async function colors(p) {
                     const metadata='{{style}}\n.accent { color: #2355a0; }\n{{/style}}\n';
                     await action(p,app,'new',{path:'~/metadata.docs.md',text:metadata});
                     assert.equal((await action(p,app,'document')).text,metadata);
-                    await p.locator('.ProseMirror').focus();await p.keyboard.type('Visible typing');
+                    await p.locator('.ProseMirror[aria-busy="false"]').waitFor();await p.locator('.ProseMirror').focus();await p.keyboard.type('Visible typing');
                     await p.waitForFunction(()=>CM.EditorView.findFromDOM(document.querySelector('.cm-editor')).state.doc.toString().includes('Visible typing'));
                     assert.ok((await action(p,app,'document')).text.includes(metadata.trim()));
                 }
             } finally { await p.close(); }
         }
-        console.log(engine+': Docs Document/Visual/Split/Preview and Editor previews share theme-independent paper; authored colors and hidden stylesheet source survive');
+        console.log(engine+': Docs Document/Visual/Split/Preview share theme-independent paper; authored colors and hidden stylesheet source survive');
     } finally { await browser.close(); }
 }})().catch(error=>{console.error(error);process.exitCode=1;});

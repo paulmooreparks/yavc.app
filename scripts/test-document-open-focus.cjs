@@ -19,7 +19,7 @@ const action=(p,app,name,input)=>p.evaluate(({app,name,input})=>pudlActions.run(
             }
             const canvas=JSON.stringify({nodes:[{id:'one',type:'text',x:0,y:0,width:160,height:80,text:'Focus Target'}],edges:[]});
             await action(p,app,app==='slides'?'load':'new',app==='diagrams'?{kind:'canvas',text:canvas}:{text:'# Original window\n\nRetained draft.\n'});
-            const file='~/Focus Target'+(app==='diagrams'?'.canvas':app==='slides'?'.slides.md':app==='docs'?'.docs.md':'.md');
+            const file='~/Focus Target'+(app==='diagrams'?'.canvas':app==='slides'?'.slides.md':app==='docs'?'.docs.md':app==='editor'?'.txt':'.md'); // A Markdown file chosen in the Editor opens in Docs (DESIGN.md, decision 131), so the Editor opens a text file.
             await p.evaluate(async({file,text})=>{const F=await yavcUtil.siteFs();await F.write(F.home(),file,text,false);},{file,text:app==='diagrams'?canvas:'# Focus Target\n\nOpened document.\n'});
             async function pick(){
                 await toolbar();
