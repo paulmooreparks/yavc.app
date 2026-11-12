@@ -133,6 +133,24 @@ const served={'home.svg':Buffer.from(house),'plain.svg':Buffer.from(house),'move
    await group('paddingSides').locator('[data-parts-clear]').click();
    await p.waitForFunction(()=>document.querySelector('#two [data-parts="paddingSides"] .card-summary').textContent==='Not set');
    assert.deepEqual((await source()).nodes[0].yavc,{style:'key',fontSize:30,padding:2,outlineSides:['top','bottom']});
+   // A person fills the four sides in a row, with Tab between them. Each Tab stores the side just typed, and the keyboard
+   // arrives in the next field ready to type over it. The Inspector is drawn again after each change, and that must not
+   // take the keyboard from the field the person has just tabbed into.
+   const typedSides=[5,6,7,8],summaryOf=()=>p.evaluate(()=>document.querySelector('#two [data-parts="paddingSides"] .card-summary').textContent);
+   await part('paddingSides',0).focus();
+   for(let i=0;i<4;i++){
+    await p.keyboard.type(String(typedSides[i]));await p.keyboard.press('Tab');
+    const want=typedSides.map((v,j)=>j<=i?v:2).join(', ');
+    await p.waitForFunction(w=>document.querySelector('#two [data-parts="paddingSides"] .card-summary').textContent===w,want,{timeout:5000}).catch(()=>{});
+    assert.equal(await summaryOf(),want,'Tab out of side '+(i+1)+' did not store the number typed in it');
+    const where=await p.evaluate(()=>{const a=document.activeElement,field=a&&a.closest('.number-field'),own=field&&field.querySelector('input[data-part]');
+     return own?'side '+(Number(own.dataset.index)+1):a&&a.hasAttribute('data-parts-clear')?'Clear':a?a.tagName:'nothing';});
+    assert.equal(where,i<3?'side '+(i+2):'Clear','After Tab out of side '+(i+1)+' the keyboard is in '+where);
+   }
+   assert.deepEqual((await source()).nodes[0].yavc.paddingSides,typedSides);
+   await group('paddingSides').locator('[data-parts-clear]').click();
+   await p.waitForFunction(()=>document.querySelector('#two [data-parts="paddingSides"] .card-summary').textContent==='Not set');
+   assert.deepEqual((await source()).nodes[0].yavc,{style:'key',fontSize:30,padding:2,outlineSides:['top','bottom']});
    // A side emptied again goes back to the single value, and the single fields are still there.
    await part('paddingSides',0).fill('5');await part('paddingSides',0).press('Enter');
    await p.waitForFunction(()=>document.querySelector('#two [data-parts="paddingSides"] .card-summary').textContent==='5, 2, 2, 2');

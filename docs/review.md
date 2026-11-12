@@ -1014,3 +1014,7 @@ Decision 137. `scripts/test-diagram-picture.cjs` now loads each kind of drawing 
 ## Padding and corners in the Inspector (2026-11-12)
 
 Decision 138. `scripts/test-canvas-pictures.cjs`, in the Inspector phase, checks in Chromium, Firefox and WebKit that both groups are closed with Not set at first, that a side typed alone is written with the others taken from Text Padding, that the group stays open after a change, that a number past the limit is refused at its field with nothing written, that one undo takes back one change, that a selection which disagrees shows Mixed and is not filled in unseen, that all four set on every item is one change, that Clear removes the property from every item and from one, and that a picture has corners and no sides. Not tested: the layout of the groups at a narrow Inspector width beyond the review by eye, and a canvas shown in a host that does not load the disclosure script from its own PUDL folder.
+
+## Tabbing through the four sides of Padding by Side (2026-11-12)
+
+`scripts/test-canvas-pictures.cjs` now types the four sides in a row with Tab between them, and checks after each Tab that the number typed was stored and that the keyboard is in the next field. It fails on purpose until the Inspector's redraw stops taking the keyboard from the field a person has tabbed into. Chromium and WebKit end with the keyboard on the page after the first Tab. Firefox keeps the keyboard in the next field, but the typed 6 lands after the 2 already there and stores 26. The fix and this test are merged together.
