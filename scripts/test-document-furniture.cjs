@@ -27,8 +27,15 @@ const source='---\n# Keep this comment.\ntitle: "A <literal> title"\nauthor: Tes
   await command(page,'undo');await page.waitForFunction(()=>!CM.EditorView.findFromDOM(document.querySelector('.cm-editor')).state.doc.toString().includes('font: Georgia'));
   await action(page,'typography',{font:'Georgia','heading-font':'Arial',size:'12pt',spacing:'1.6','paragraph-spacing':'8pt'});
   await page.waitForFunction(()=>getComputedStyle(document.querySelector('.doc-page')).fontSize==='16px');
-  phase='zoom';const before=(await action(page,'document')).text;const count=await page.locator('[data-page-count]').getAttribute('data-page-count');
+  phase='zoom';const before=(await action(page,'document')).text;/* The count is read once it has stopped changing: after the typography is applied the page is measured again as the font loads. */
+const count=await page.evaluate(()=>new Promise(done=>{let last=null,since=Date.now();const timer=setInterval(()=>{const now=document.querySelector('[data-page-count]').getAttribute('data-page-count');if(now!==last){last=now;since=Date.now();}else if(Date.now()-since>800){clearInterval(timer);done(now);}},50);}));
   for(const value of [50,150,100]) {await action(page,'document-zoom',{value});await page.waitForTimeout(200);assert.equal(await page.locator('[data-page-count]').getAttribute('data-page-count'),count);assert.equal(Math.round(await page.locator('.doc-paginated').evaluate(n=>n.getBoundingClientRect().width)),Math.round(816*value/100));}
+  /* The page is measured at 100 percent, which is shorter than at 150. The place the reader has scrolled to must not move. */
+  await action(page,'document-zoom',{value:150});await page.waitForTimeout(300);
+  const scrolled=await page.evaluate(()=>{let n=document.querySelector('.doc-paginated').parentElement;while(n&&!(n.scrollHeight>n.clientHeight+50&&/auto|scroll/.test(getComputedStyle(n).overflowY)))n=n.parentElement;if(!n)return null;n.scrollTop=n.scrollHeight;window.measuredScroller=n;window.scrollWas=n.scrollTop;document.fonts.dispatchEvent(new Event('loadingdone'));return n.scrollTop;});
+  assert.ok(scrolled>500,'the page can be scrolled at 150 percent');await page.waitForTimeout(400);
+  assert.equal(await page.evaluate(()=>Math.abs(window.measuredScroller.scrollTop-window.scrollWas)<2),true,'measuring did not move the reader');
+  await action(page,'document-zoom',{value:100});await page.waitForTimeout(200);
   // Fit Width scales the page to the pane in both directions. The Files pane is hidden at first (DESIGN.md, decision 74), so the pane is nearly as wide
   // as the window: a window of 1100 grows the page past 816 and a window of 700 shrinks it below.
   await action(page,'document-zoom',{value:'width'});await page.setViewportSize({width:1100,height:900});await page.waitForTimeout(200);assert.ok(await page.locator('.doc-paginated').evaluate(n=>n.getBoundingClientRect().width>816));
