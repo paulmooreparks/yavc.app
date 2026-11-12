@@ -1000,3 +1000,7 @@ The PUDL review of this work found that each drawing of the Inspector left a com
 ## The Diagram Contents button (2026-11-12)
 
 Decision 136. `scripts/test-canvas-embed.cjs` checks that a canvas in a document has no such button and still has the labelled list of its contents.
+
+## The size of a D2 picture (2026-11-12)
+
+Decision 137. `scripts/test-diagram-picture.cjs` now loads each kind of drawing as a picture and compares the size the browser reports with the size the drawing was said to have, and does the same for the picture D2 draws into a document. Without the fix it fails with 222 by 474 said and 70 by 150 reported, the numbers the receiving product measured.
