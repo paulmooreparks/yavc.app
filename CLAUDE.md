@@ -28,3 +28,7 @@ When you fix a problem that could come back, add a rule or a test that would hav
 - Follow the Architectural Principles and PUDL. Buttons act and links navigate, every state has a URL, and errors appear as PUDL notices beside the control that failed.
 - Write patch scripts with the Write tool and run them from a file. Bash heredocs halve backslashes and have broken Go and JavaScript literals here more than once.
 - Deploy with `docker compose up -d --build` and check the change on https://yavc.app before reporting it as done.
+
+## The site tests
+
+The workflow `site tests` runs the tests listed in `scripts/site-tests.txt` in Chromium on every push to main, each against a fresh server (`node scripts/run-site-tests.mjs`, after building `yavc` and the two wasm engines). When you repair a test that is not listed, add it to that file in the same pull request. A change to an applet should also run that applet's own site and package tests before it is reported.
