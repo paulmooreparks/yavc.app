@@ -1,5 +1,18 @@
 # Host shortcode integration handoff
 
+## v0.2.82: no Diagram Contents button
+
+[v0.2.82](https://github.com/paulmooreparks/yavc.app/releases/tag/v0.2.82) ([PR #129](https://github.com/paulmooreparks/yavc.app/pull/129)) followed on 2026-11-12 from Paul's request. A canvas drawn in a document or a slide no longer has the Diagram Contents button under it (DESIGN.md decision 136). The list of the drawing's contents stays in the page for a screen reader. A host changes nothing.
+
+| Item | v0.2.82 |
+| --- | --- |
+| Commit | `bc48ff95c687be812e9e5f925c20e51f8bed1c8a` |
+| Archive sha256 | `fa3b8630e8dbfd55575d562cf8299629f28c869e20489bef926b2b27c731e6b0` |
+| Manifest sha256 | `fc8205f9042fb618b72b9597f9ab5ca6c6b27fd04d88c0525736094cc12eaedd` |
+| Content digest | `9ceb34c2cb48f2578e9a0f1974be3deff9080cb0c033e88a17c163a4a9c9d4f6` |
+| Files | 492 |
+| Applets | Editor 46.37.1, Docs 1.37.1, Slides 0.65.1, Diagrams 0.44.1 |
+
 ## v0.2.81: the toolbar a person can change, and text and fonts in Diagrams
 
 [v0.2.81](https://github.com/paulmooreparks/yavc.app/releases/tag/v0.2.81) ([PR #125](https://github.com/paulmooreparks/yavc.app/pull/125)) followed on 2026-11-12 from what Paul found in GK Companion that morning. The package now has the controller of the shared toolbar as `support/command-toolbar.js` with its rules in `support/command-toolbar.css` (DESIGN.md decision 133), and a host offers `pudlHost.commandToolbar` by passing that controller its config service (`docs/command-toolbar-design.md`, decision 9). The control at the end of the bar is a pencil. In Diagrams the Inspector's Text field and the editor over a shape grow with their text, and the Font fields are PUDL combo boxes whose list starts with the fonts the canvas uses (decision 134). A host should load `pudl/pudl-combo.js` where Diagrams runs; without it the browser draws the list.
