@@ -58,14 +58,14 @@ const evidence = path.join(os.tmpdir(), 'yavc-launcher-review'); fs.mkdirSync(ev
             await pin.waitFor({ state: 'detached' });
             await page.waitForFunction(async () => !(await pudlHost.config.load('desktop-taskbar', {})).pins?.includes('editor'));
             await open(); await root.locator('[data-launcher-pin]').click();
-            await page.waitForFunction(() => pudlLauncher.state(document.querySelector('#site-start')).presentation === 'pane');
+            await page.waitForFunction(() => pudlLauncher.state(document.querySelector('#site-start'))?.presentation === 'pane');
             assert.equal(new URL(page.url()).searchParams.get('start-mode'), 'pane');
             await page.waitForFunction(async () => (await (await fetch('/config/site-launcher')).json()).presentation === 'pane');
             // A fresh address uses the saved presentation and must canonicalize it for Back.
             await page.goto(`http://localhost:${port}/?open=dice&top=dice`);
             await page.waitForFunction(() => new URL(location.href).searchParams.get('start-mode') === 'pane');
             await root.locator('[data-start-category-key="games"]').click(); await page.goBack();
-            await page.waitForFunction(() => pudlLauncher.state(document.querySelector('#site-start')).presentation === 'pane' && pudlStart.state(document.querySelector('#site-start')).category === '');
+            await page.waitForFunction(() => pudlLauncher.state(document.querySelector('#site-start'))?.presentation === 'pane' && pudlStart.state(document.querySelector('#site-start'))?.category === '');
             await page.screenshot({ path: path.join(evidence, engine + '-pane.png') });
             await root.locator('[data-launcher-pin]').click();
             if (await root.isHidden()) await open();
@@ -75,6 +75,10 @@ const evidence = path.join(os.tmpdir(), 'yavc-launcher-review'); fs.mkdirSync(ev
             await page.keyboard.press('Escape');
             await page.waitForFunction(() => document.querySelector('.win-bar .win-bar-launcher') === document.activeElement);
             await page.setViewportSize({ width: 1280, height: 900 });
+            /* The file has to exist on this origin. The page leaves a file out of its address when it cannot open it, and that is right, so a
+               test that names a file nobody made passes or fails by how quickly the page finds out. */
+            await page.goto(`http://diagrams.localhost:${port}/`); await page.locator('.cm-content').waitFor();
+            await page.waitForFunction(async () => { try { await pudlActions.run('yavc.diagrams/new@1', { kind: 'canvas', text: '{"nodes":[],"edges":[]}' }, { grant: 'all' }); return true; } catch (error) { return false; } }); await page.evaluate(async () => { await pudlActions.run('yavc.diagrams/save@1', { path: '~/Documents/example.canvas' }, { grant: 'all' }); });
             await page.goto(`http://diagrams.localhost:${port}/?file=~/Documents/example.canvas&start=1`);
             await root.waitFor({ state: 'visible' });
             await root.locator('header').getByRole('link', { name: 'Settings', exact: true }).click();

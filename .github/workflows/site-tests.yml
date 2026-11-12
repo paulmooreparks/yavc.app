@@ -45,6 +45,7 @@ jobs:
           NODE_PATH: ${{ runner.temp }}/playwright/node_modules
           SITE_SERVER: ${{ github.workspace }}/yavc
           SITE_JOBS: '2'
+          SITE_LOGS: ${{ runner.temp }}/yavc-site-test-logs
         run: node scripts/run-site-tests.mjs
       - name: Logs of the tests
         if: failure()
