@@ -947,6 +947,33 @@
             SIDE_CHOICES.push([chosenSides.join(','), chosenSides.map(function (side) { return side.charAt(0).toUpperCase() + side.slice(1); }).join(', ')]);
         }
         SIDE_CHOICES = SIDE_CHOICES.slice(0, 3).concat(SIDE_CHOICES.slice(3).sort(function (a, b) { return a[0].split(',').length - b[0].split(',').length; }));
+        /* Padding for each side and a radius for each corner (docs/canvas-extension.md)
+           are four numbers in one property, so each is a group of four fields under
+           the single value it takes the place of. A group is closed until a person
+           opens it, and stays as they left it while the Inspector is drawn again. */
+        var PARTS = {
+            paddingSides: { title: 'Padding by Side', single: 'padding', fallback: 8, min: 0, max: 64, whole: true, names: ['Top', 'Right', 'Bottom', 'Left'], help: 'A side left empty uses Text Padding, or 8 where that is empty.' },
+            radiusCorners: { title: 'Radius by Corner', single: 'radius', fallback: 0, min: 0, max: 1000, whole: false, names: ['Top Left', 'Top Right', 'Bottom Right', 'Bottom Left'], help: 'A corner left empty uses Corner Radius, or 0 where that is empty.' }
+        };
+        var partsOpen = {};
+        function partsOf(item, group) { var a = item && item.yavc && item.yavc[group]; return Array.isArray(a) && a.length === 4 ? a : null; }
+        function partField(id, group, index, label, value, mixed, def, helpId) {
+            return field(id, label, '<span class="number-field"><input class="form-input" type="number" step="' + (def.whole ? '1' : 'any') + '" min="' + def.min + '" max="' + def.max + '" id="' + id + '" data-part="' + group + '" data-index="' + index + '" data-was="' + esc(mixed ? '' : value) + '" value="' + esc(mixed ? '' : value) + '" aria-describedby="' + helpId + '"' + (mixed ? ' data-mixed="true" placeholder="Mixed"' : '') + '></span>');
+        }
+        function partsHtml(group, entries, prefix) {
+            var def = PARTS[group], arrays = entries.map(function (e) { return partsOf(e.item, group); });
+            var same = arrays.every(function (a) { return JSON.stringify(a) === JSON.stringify(arrays[0]); });
+            var summary = same ? (arrays[0] ? arrays[0].join(', ') : 'Not set') : 'Mixed', bodyId = prefix + group + '-body', titleId = prefix + group + '-title', helpId = prefix + group + '-help';
+            var fields = def.names.map(function (name, i) {
+                var cells = arrays.map(function (a) { return a ? String(a[i]) : ''; });
+                var mixed = cells.some(function (c) { return c !== cells[0]; });
+                return partField(prefix + group + '-' + i, group, i, name, cells[0], mixed, def, helpId);
+            }).join('');
+            return '<section class="card disclosure dg-parts" data-parts="' + group + '" aria-labelledby="' + titleId + '"><div class="card-head"><button type="button" class="card-toggle" aria-expanded="' + !!partsOpen[group] + '" aria-controls="' + bodyId + '"></button>' +
+                '<h4 class="card-title" id="' + titleId + '">' + def.title + '</h4><span class="card-summary">' + esc(summary) + '</span></div>' +
+                '<div class="card-body" id="' + bodyId + '" role="group" aria-labelledby="' + titleId + '">' + fields + '<p class="form-help" id="' + helpId + '">' + def.help + '</p></div>' +
+                '<div class="card-actions"><button type="button" class="btn btn-sm" id="' + prefix + group + '-clear" aria-label="Clear ' + def.title + '" data-parts-clear="' + group + '"' + (arrays.every(function (a) { return !a; }) ? ' disabled' : '') + '>Clear</button></div></section>';
+        }
         function renderCanvasInspector(t) {
             renderOutline();
             var selected = canvasSelections(), show = !!(settings.inspector && t.cv);
@@ -1004,11 +1031,14 @@
             add('color', 'Color', 'color'); add('line', 'Line Style', 'segments', [['solid', 'Solid', 'yavc-line-solid'], ['dashed', 'Dashed', 'yavc-line-dashed'], ['dotted', 'Dotted', 'yavc-line-dotted']]); add('lineWidth', 'Line Width', 'number');
             add('fillColor', 'Fill Color', 'color'); add('noFill', 'Fill', 'select', [['', 'Default'], ['false', 'Filled'], ['true', 'No Fill']]); add('strokeColor', 'Outline Color', 'color');
             add('radius', 'Corner Radius', 'number');
+            if (properties.indexOf('radiusCorners') >= 0) { html += partsHtml('radiusCorners', entries, p); }
             add('outlineSides', 'Outlined Sides', 'select', SIDE_CHOICES);
             add('outlinePosition', 'Outline Position', 'select', [['', 'Default'], ['center', 'On the Edge'], ['inside', 'Inside the Edge']]);
             add('textColor', 'Text Color', 'color'); add('fontSize', 'Font Size', 'number');
             add('fontWeight', 'Font Weight', 'select', [['', 'Default'], ['100', 'Thin'], ['200', 'Extra Light'], ['300', 'Light'], ['400', 'Regular'], ['500', 'Medium'], ['600', 'Semibold'], ['700', 'Bold'], ['800', 'Extra Bold'], ['900', 'Black']]);
-            add('fontFamily', 'Font', 'font'); add('padding', 'Text Padding', 'number'); add('lineHeight', 'Line Height', 'number');
+            add('fontFamily', 'Font', 'font'); add('padding', 'Text Padding', 'number');
+            if (properties.indexOf('paddingSides') >= 0) { html += partsHtml('paddingSides', entries, p); }
+            add('lineHeight', 'Line Height', 'number');
             add('tint', 'Tint', 'color'); add('fit', 'Picture Fit', 'select', [['', 'Default'], ['contain', 'Contain'], ['cover', 'Cover'], ['stretch', 'Stretch']]);
             add('route', 'Route', 'segments', [['elbow', 'Elbow', 'yavc-route-elbow'], ['straight', 'Straight', 'yavc-route-straight'], ['curve', 'Curve', 'yavc-route-curve']]);
             var heads = [['none', 'None'], ['arrow', 'Arrow'], ['triangle', 'Triangle'], ['diamond', 'Diamond'], ['circle', 'Circle'], ['box', 'Box'], ['cross', 'Cross'], ['cf-one', 'One'], ['cf-one-required', 'Exactly One'], ['cf-many', 'Many'], ['cf-many-required', 'One or More']];
@@ -1076,6 +1106,41 @@
                 }
             } catch (err) { if (!destroyed && owner === current() && f.isConnected) { markField(f, err.message); } }
             finally { if (f.dataset.sending === value) { delete f.dataset.sending; } }
+        }
+        /* A change to one side or corner sends all four. A field left empty takes
+           the single value the group replaces, or the default; where the selection
+           disagrees about an empty field, the person is asked to fill it, so no
+           item's own number is replaced unseen. All four empty removes the property. */
+        async function canvasPartsChanged(f, clear) {
+            if (canvasWhy(true)) { return; }
+            var box = f.closest('[data-parts]'), group = box.dataset.parts, def = PARTS[group], inputs = Array.from(box.querySelectorAll('input[data-part]'));
+            var owner = current(), s = canvasSelection(), value = null;
+            function allowed(v) { return Number.isFinite(v) && v >= def.min && v <= def.max && (!def.whole || Number.isInteger(v)); }
+            if (!clear) {
+                if (!f.hasAttribute('data-mixed') && f.value === f.dataset.was) { return; }
+                inputs.forEach(function (i) { markField(i, null); });
+                var single = el.inspector.querySelector('[data-set="' + def.single + '"]'), base = single && !single.hasAttribute('data-mixed') && single.value.trim() !== '' && allowed(Number(single.value)) ? Number(single.value) : def.fallback;
+                var mixedEmpty = inputs.some(function (i) { return i.value.trim() === '' && i.hasAttribute('data-mixed'); });
+                var typed = inputs.filter(function (i) { return i.value.trim() !== ''; });
+                if (typed.length) {
+                    if (mixedEmpty) { markField(f, 'The selected items differ here. Fill in all four to set them together.'); return; }
+                    value = inputs.map(function (i) { return i.value.trim() === '' ? base : Number(i.value); });
+                    if (!value.every(allowed)) {
+                        markField(f, def.whole ? 'Enter whole numbers from ' + def.min + ' to ' + def.max + '.' : 'Enter numbers from ' + def.min + ' to ' + def.max + '.'); return;
+                    }
+                } else if (mixedEmpty) { markField(f, 'The selected items differ here. Use Clear to remove them from every item.'); return; }
+            }
+            var key = JSON.stringify(value);
+            if (box.dataset.sending === key) { return; }
+            box.dataset.sending = key;
+            var req = { op: 'set', key: s.id, kind: s.kind, property: group, value: value };
+            if (canvasSelections().length > 1) { req.items = canvasSelections(); }
+            try {
+                var result = await canvasEdit(req, owner.text, true);
+                if (destroyed || owner !== current() || owner.text !== result.text) { return; }
+                inputs.forEach(function (i) { markField(i, null); }); inspected = null; renderCanvasInspector(owner);
+            } catch (err) { if (!destroyed && owner === current() && f.isConnected) { markField(f, err.message); } }
+            finally { if (box.dataset.sending === key) { delete box.dataset.sending; } }
         }
         function canvasCommands() {
             function c(id, label, run, key, needs, glyph) {
@@ -1522,8 +1587,11 @@
                 if (paired) { paired.value = e.target.value; inspectorChanged(paired); }
                 return;
             }
+            if (e.target.matches('input[data-part]')) { canvasPartsChanged(e.target, false); return; }
             if (e.target.matches('[data-set], [data-arrows]')) { inspectorChanged(e.target); }
         });
+        /* The Inspector is drawn again at each change, so which groups a person has opened is kept here. */
+        el.inspector.addEventListener('pudl:disclose', function (e) { var card = e.target.closest('[data-parts]'); if (card) { partsOpen[card.dataset.parts] = e.detail.open; } });
         /* Enter makes the change and leaves the keyboard in the field. */
         el.inspector.addEventListener('keydown', function (e) {
             if (e.key === 'Enter' && e.target.matches('input.form-input[data-set]')) { e.preventDefault(); inspectorChanged(e.target); }
@@ -1531,6 +1599,8 @@
         el.inspector.addEventListener('click', function (e) {
             var setting = e.target.closest('button[data-set]');
             if (setting) { inspectorChanged(setting); return; }
+            var clearing = e.target.closest('button[data-parts-clear]');
+            if (clearing) { canvasPartsChanged(clearing, true); return; }
             if (!e.target.closest('[data-reverse]')) { return; }
             var t = current(), key = selection(), c = t && connectionOf(t, key);
             if (!c || !canEdit()) { return; }
@@ -2345,7 +2415,7 @@
         if (darkQuery) { darkQuery.addEventListener('change', modeChanged); }
 
         var booted = (async function () {
-            var got = await Promise.all([kit(), modes(), once('tree', (H.pudl || '/pudl/') + 'pudl-tree.js', 'pudlTree')]);
+            var got = await Promise.all([kit(), modes(), once('tree', (H.pudl || '/pudl/') + 'pudl-tree.js', 'pudlTree'), once('disclose', (H.pudl || '/pudl/') + 'pudl-disclose.js', 'pudlDisclose')]);
             var resourceHost = H.contentResources;
             if (!resourceHost && H.contentResourceAdapter && H.snapshot && H.snapshot.version === 2 && typeof H.contentResourceAdapter.available === 'function' && await H.contentResourceAdapter.available()) resourceHost = H.contentResourceAdapter;
             if (destroyed) return;

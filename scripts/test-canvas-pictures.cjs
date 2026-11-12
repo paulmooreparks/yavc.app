@@ -81,8 +81,68 @@ const served={'home.svg':Buffer.from(house),'plain.svg':Buffer.from(house),'move
    const sides=inspector.locator('select[data-set="outlineSides"]');await sides.selectOption('top,bottom');
    await p.waitForFunction(()=>document.querySelector('#two .dg-canvas [data-node="key"] > path'));
    assert.deepEqual((await source()).nodes[0].yavc,{style:'key',fontSize:30,padding:2,outlineSides:['top','bottom']});
+   // Padding for each side and a radius for each corner are groups of four fields under the single values, closed until opened.
+   const group=name=>inspector.locator('[data-parts="'+name+'"]'),part=(name,i)=>group(name).locator('.number-field:has([data-index="'+i+'"]) input:not([hidden])');
+   const groupState=async name=>group(name).evaluate(g=>({open:g.querySelector('.card-toggle').getAttribute('aria-expanded'),body:getComputedStyle(g.querySelector('.card-body')).display,summary:g.querySelector('.card-summary').textContent,sides:Array.from(g.querySelectorAll('input[data-part]')).map(i=>i.value),clear:g.querySelector('[data-parts-clear]').disabled}));
+   assert.deepEqual(await groupState('paddingSides'),{open:'false',body:'none',summary:'Not set',sides:['','','',''],clear:true});
+   assert.deepEqual(await groupState('radiusCorners'),{open:'false',body:'none',summary:'Not set',sides:['','','',''],clear:true});
+   assert.deepEqual(await inspector.locator('[data-parts="paddingSides"] input[data-part]').evaluateAll(l=>l.map(i=>[i.min,i.max])),[['0','64'],['0','64'],['0','64'],['0','64']]);
+   assert.deepEqual(await inspector.locator('[data-parts-clear]').evaluateAll(l=>l.map(b=>b.getAttribute('aria-label'))),['Clear Radius by Corner','Clear Padding by Side']);
+   await group('paddingSides').locator('.card-toggle').click();await part('paddingSides',0).waitFor();
+   // A side typed alone is set, and the others take the single Text Padding, which is 2.
+   await part('paddingSides',0).fill('10');await part('paddingSides',0).press('Enter');
+   await p.waitForFunction(()=>document.querySelector('#two [data-parts="paddingSides"] .card-summary').textContent==='10, 2, 2, 2');
+   assert.deepEqual((await source()).nodes[0].yavc.paddingSides,[10,2,2,2]);
+   // The group stays open while the Inspector is drawn again, and each of the four fields is its own side.
+   assert.equal((await groupState('paddingSides')).open,'true');
+   await part('paddingSides',3).fill('30');await part('paddingSides',3).press('Enter');
+   await p.waitForFunction(()=>document.querySelector('#two [data-parts="paddingSides"] .card-summary').textContent==='10, 2, 2, 30');
+   assert.deepEqual((await source()).nodes[0].yavc.paddingSides,[10,2,2,30]);
+   assert.deepEqual(await two.locator('.dg-canvas [data-text="key"] .dg-cv-text').evaluate(e=>{const s=getComputedStyle(e);return [s.paddingTop,s.paddingRight,s.paddingBottom,s.paddingLeft];}),['10px','2px','2px','30px']);
+   // A number outside the limit is refused at its field and nothing is written.
+   await part('paddingSides',1).fill('64');await part('paddingSides',1).press('Enter');
+   await p.waitForFunction(()=>document.querySelector('#two [data-parts="paddingSides"] .card-summary').textContent==='10, 64, 2, 30');
+   await group('paddingSides').locator('input[data-part][data-index="2"]').evaluate(i=>{i.value='65';i.dispatchEvent(new Event('change',{bubbles:true}));});
+   await group('paddingSides').locator('.form-error').waitFor();assert.deepEqual((await source()).nodes[0].yavc.paddingSides,[10,64,2,30]);
+   // One undo takes back one change.
+   await p.evaluate(()=>{document.activeElement.blur();pudlCommands.run('undo',null,document.querySelector('#two'));});
+   await p.waitForFunction(()=>document.querySelector('#two [data-parts="paddingSides"] .card-summary').textContent==='10, 2, 2, 30');
+   assert.deepEqual((await source()).nodes[0].yavc.paddingSides,[10,2,2,30]);
+   // The corners work the same way, and a corner left empty is 0 where there is no Corner Radius.
+   await group('radiusCorners').locator('.card-toggle').click();await part('radiusCorners',2).waitFor();
+   await part('radiusCorners',0).fill('12');await part('radiusCorners',0).press('Enter');
+   await p.waitForFunction(()=>document.querySelector('#two [data-parts="radiusCorners"] .card-summary').textContent==='12, 0, 0, 0');
+   assert.deepEqual((await source()).nodes[0].yavc.radiusCorners,[12,0,0,0]);
+   // A selection that disagrees shows Mixed, and a field is not filled in on the items' behalf.
+   await p.evaluate(()=>pudlCommands.run('cv-select-all',null,document.querySelector('#two')));
+   const mixed=part('radiusCorners',0);await mixed.waitFor();
+   assert.equal(await group('radiusCorners').locator('.card-summary').textContent(),'Mixed');
+   assert.equal(await group('radiusCorners').locator('input[data-part][data-index="0"]').getAttribute('placeholder'),'Mixed');
+   await part('radiusCorners',1).fill('7');await part('radiusCorners',1).press('Enter');
+   await group('radiusCorners').locator('.form-error',{hasText:'differ'}).waitFor();
+   assert.deepEqual((await source()).nodes[0].yavc.radiusCorners,[12,0,0,0]);
+   // Setting all four on every selected item is one change, and Clear takes the property back from every item.
+   for(let i=0;i<4;i++)await part('radiusCorners',i).fill(String(i+1));await part('radiusCorners',3).press('Enter');
+   await p.waitForFunction(()=>document.querySelector('#two [data-parts="radiusCorners"] .card-summary').textContent==='1, 2, 3, 4');
+   assert.ok((await source()).nodes.every(n=>JSON.stringify(n.yavc&&n.yavc.radiusCorners)==='[1,2,3,4]'));
+   await group('radiusCorners').locator('[data-parts-clear]').click();
+   await p.waitForFunction(()=>document.querySelector('#two [data-parts="radiusCorners"] .card-summary').textContent==='Not set');
+   assert.ok((await source()).nodes.every(n=>!n.yavc||n.yavc.radiusCorners===undefined));
+   // Clear on one node takes the sides back to the single value, which the node keeps.
+   await run('canvas-view',{op:'select',key:'key',kind:'node'});
+   await group('paddingSides').locator('[data-parts-clear]').click();
+   await p.waitForFunction(()=>document.querySelector('#two [data-parts="paddingSides"] .card-summary').textContent==='Not set');
+   assert.deepEqual((await source()).nodes[0].yavc,{style:'key',fontSize:30,padding:2,outlineSides:['top','bottom']});
+   // A side emptied again goes back to the single value, and the single fields are still there.
+   await part('paddingSides',0).fill('5');await part('paddingSides',0).press('Enter');
+   await p.waitForFunction(()=>document.querySelector('#two [data-parts="paddingSides"] .card-summary').textContent==='5, 2, 2, 2');
+   await part('paddingSides',0).fill('');await part('paddingSides',0).press('Enter');
+   await p.waitForFunction(()=>document.querySelector('#two [data-parts="paddingSides"] .card-summary').textContent==='2, 2, 2, 2');
+   assert.equal(await inspector.locator('[data-set="padding"], [data-set="radius"]').count(),2);
    await run('canvas-view',{op:'select',key:'home',kind:'node'});
    await inspector.locator('[data-set="fit"]').waitFor({state:'attached'});assert.equal(await inspector.locator('[data-set="fontSize"], [data-set="shape"]').count(),0);
+   // A picture has corners but no text, so it has no sides to pad.
+   assert.equal(await inspector.locator('[data-parts="radiusCorners"]').count(),1);assert.equal(await inspector.locator('[data-parts="paddingSides"]').count(),0);
    phase='agent actions and the command';
    // An agent adds a picture, tints it, and changes the canvas's styles and font, each as one edit.
    const made=await run('canvas-edit',{op:'create',type:'file',file:'icons/plain.svg',x:500,y:200,width:24,height:24});
