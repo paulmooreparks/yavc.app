@@ -170,6 +170,32 @@ const served={'home.svg':Buffer.from(house),'plain.svg':Buffer.from(house),'move
    assert.deepEqual(await p.evaluate(()=>[document.querySelectorAll('#two .dg-inspector [data-stale]').length,!!document.querySelector('#two [data-parts="paddingSides"] .card-toggle[aria-labelledby]'),document.querySelector('#two [data-parts="paddingSides"] .card-toggle').getAttribute('aria-expanded')]),[0,true,'true']);
    await group('paddingSides').locator('[data-parts-clear]').click();
    await p.waitForFunction(()=>document.querySelector('#two [data-parts="paddingSides"] .card-summary').textContent==='Not set');
+   // A change made while the keyboard is in the Inspector shows at once, and the field the person is in is left alone.
+   await part('radiusCorners',0).focus();await p.evaluate(()=>{document.activeElement.__mine=true;});
+   await run('canvas-edit',{op:'set',key:'key',kind:'node',property:'strokeColor',value:'#123456'});
+   await p.waitForFunction(()=>{const f=document.querySelector('#two .dg-inspector [data-set="strokeColor"]');return f&&f.value==='#123456';});
+   assert.equal(await p.evaluate(()=>document.activeElement.__mine===true),true);
+   await run('canvas-edit',{op:'set',key:'key',kind:'node',property:'strokeColor',value:null});
+   // When the field goes because the item no longer has that control, the keyboard goes to the Inspector's heading and not to the page.
+   await run('canvas-edit',{op:'set',key:'key',kind:'node',property:'shape',value:'oval'});
+   await p.waitForFunction(()=>!document.querySelector('#two .dg-inspector [data-parts="radiusCorners"]'));
+   assert.deepEqual(await p.evaluate(()=>[document.activeElement.tagName,document.activeElement.textContent,document.activeElement.classList.contains('dg-inspector-title')]),['H3','Node',true]);
+   await run('canvas-edit',{op:'set',key:'key',kind:'node',property:'shape',value:null});
+   await p.waitForFunction(()=>document.querySelector('#two .dg-inspector [data-parts="radiusCorners"]'));
+   // The same when the selection is cleared and the Inspector shows the diagram's settings.
+   await part('radiusCorners',0).focus();await run('canvas-view',{op:'select',key:null});
+   await p.waitForFunction(()=>!document.querySelector('#two .dg-inspector [data-parts]')&&document.querySelector('#two .dg-inspector-title')&&document.querySelector('#two .dg-inspector-title').textContent==='Diagram');
+   assert.deepEqual(await p.evaluate(()=>[document.activeElement.tagName,document.activeElement.textContent]),['H3','Diagram']);
+   await run('canvas-view',{op:'select',key:'key',kind:'node'});
+   await p.waitForFunction(()=>document.querySelector('#two .dg-inspector [data-parts="radiusCorners"]'));
+   // A click on another node after typing a number selects that node, and the number is still saved to the first.
+   await size.fill('31');
+   await two.locator('.dg-cv-hit[data-id="line"]').click();
+   await p.waitForFunction(()=>(document.querySelector('#two .dg-inspector-id')||{}).textContent==='line');
+   assert.equal((await source()).nodes[0].yavc.fontSize,31);
+   await run('canvas-edit',{op:'set',key:'key',kind:'node',property:'fontSize',value:30});
+   await run('canvas-view',{op:'select',key:'key',kind:'node'});
+   await p.waitForFunction(()=>(document.querySelector('#two .dg-inspector-id')||{}).textContent==='key');
    // A change is still being applied when the person has tabbed on and begun typing. The Inspector is given its new values around the field they are in, and what they have typed stays.
    await p.evaluate(()=>{fixture.pictures.delay=700;window.dispatchEvent(new Event('focus'));});
    await part('paddingSides',0).focus();await p.keyboard.type('9');await p.keyboard.press('Tab');await p.keyboard.type('7');
