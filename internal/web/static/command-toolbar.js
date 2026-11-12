@@ -82,7 +82,7 @@
             });
             var tools = document.createElement('div'); tools.className = 'toolbar-group'; tools.setAttribute('role', 'group');
             tools.setAttribute('aria-label', 'Toolbar Settings'); tools.setAttribute('data-toolbar-end', ''); tools.setAttribute('data-toolbar-priority', '100');
-            tools.innerHTML = '<button type="button" data-command="' + EDIT + '"></button>'; bar.appendChild(tools);
+            tools.innerHTML = '<button type="button" data-command="' + EDIT + '" data-toolbar-glyph-only></button>'; bar.appendChild(tools);
             changed();
             if (global.pudlToolbar) { global.pudlToolbar.enhance(slot); }
             if (ownedFocus) {
@@ -196,7 +196,7 @@
         } else { loading = false; }
         return { commands: function () { return [
             { id: SHOW, label: 'Show the Toolbar', glyph: 'panel', checked: function () { return prefs.visible; }, disabled: function () { return !!reason(); }, reason: reason, run: toggle },
-            { id: EDIT, label: 'Customize Toolbar…', glyph: 'gear', disabled: function () { return !!reason(); }, reason: reason, run: customize }
+            { id: EDIT, label: 'Customize Toolbar…', glyph: 'pencil', disabled: function () { return !!reason(); }, reason: reason, run: customize }
         ]; }, destroy: function () { destroyed = true; cancelAnimationFrame(focusFrame); if (off) { off(); } document.removeEventListener('pudl:commands-change', render); if (dialog) { dialog.close('cancel'); } bar.remove(); } };
     }
     var api = { attach: attach, normalize: normalize };

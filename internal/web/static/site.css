@@ -21,6 +21,7 @@
 .site-launcher-size-fields .number-field { min-width: 0; width: 100%; }
 .site-launcher-size [hidden] { display: none; }
 
+/* command-toolbar: these rules go into the content package as support/command-toolbar.css */
 [data-toolbar-slot]:has(> .yavc-command-toolbar[hidden]) { display: none; }
 .yavc-command-toolbar[hidden] { display: none; }
 .dialog.yavc-toolbar-dialog { width: min(54rem, 94vw); max-width: 94vw; }
@@ -39,6 +40,7 @@
 .yavc-toolbar-order { grid-area: order; flex-wrap: wrap; }
 .yavc-toolbar-fields > .check { display: block; margin-block: var(--space-2); }
 @media (max-width: 600px) { .yavc-toolbar-order { grid-column: 1 / -1; } }
+/* command-toolbar: end */
 
 /* The site's own tints apply only to the Standard skin while no PUDL
    colour theme is chosen: a colour theme sets these tokens itself

@@ -68,6 +68,14 @@ const served={'home.svg':Buffer.from(house),'plain.svg':Buffer.from(house),'move
    const size=inspector.locator('.number-field:has([data-set="fontSize"]) input:not([hidden])');await size.waitFor();
    assert.deepEqual(await inspector.evaluate(e=>['style','fontSize','fontWeight','fontFamily','padding','radius','outlineSides','textColor'].map(k=>{const f=e.querySelector('[data-set="'+k+'"]');return f?f.value:null;})),['key','22','','','2','','','']);
    assert.equal(await inspector.locator('[data-set="tint"], [data-set="fit"]').count(),0);
+   // The font is chosen from a list that starts with the fonts the diagram uses, and any family can still be typed.
+   const families=await inspector.locator('[data-set="fontFamily"]').evaluate(f=>f.list?Array.from(f.list.options).map(o=>o.value):null);
+   assert.ok(families && families.includes('Georgia') && families.includes('Times New Roman') && new Set(families.map(f=>f.toLowerCase())).size===families.length,String(families));
+   // The field for a shape's text is as tall as its text, to a limit, and then scrolls.
+   const words=inspector.locator('textarea[data-set="text"]'),tall=lines=>words.evaluate((f,lines)=>{f.value=Array(lines).fill('A line of text').join('\n');f.dispatchEvent(new Event('input',{bubbles:true}));return [f.offsetHeight,f.scrollHeight<=f.clientHeight+1,getComputedStyle(f).overflowY];},lines);
+   const kept=await words.inputValue(),few=await tall(2),more=await tall(8),most=await tall(60);
+   assert.ok(few[1] && more[1] && more[0]>few[0],JSON.stringify([few,more]));assert.deepEqual(most,[240,false,'auto']);
+   await words.evaluate((f,kept)=>{f.value=kept;f.dispatchEvent(new Event('input',{bubbles:true}));},kept);
    await size.fill('30');await size.press('Enter');
    await p.waitForFunction(()=>getComputedStyle(document.querySelector('#two .dg-canvas [data-text="key"] .dg-cv-text')).fontSize==='30px');
    const sides=inspector.locator('select[data-set="outlineSides"]');await sides.selectOption('top,bottom');

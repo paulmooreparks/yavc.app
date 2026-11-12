@@ -113,7 +113,9 @@ async function run(engine) {
                 const labels = await dialog.getByLabel('Toolbar Commands', { exact: true }).locator('option').allTextContents();
                 assert.ok(labels.includes('Add Shape (D2)')); assert.ok(labels.includes('Add Shape (Canvas)'));
             }
-            const addSplit = async () => { await dialog.getByLabel('Search Available Commands', { exact: true }).fill('Split'); await dialog.getByLabel('Available Commands', { exact: true }).selectOption('view-split'); await addArrow.click(); };
+            // The Editor shows text alone since decision 131 and has no Split view, so its bar takes another command that can be on or off.
+            const added = app === 'editor' ? ['Outline', 'toggle-outline'] : ['Split', 'view-split'];
+            const addSplit = async () => { await dialog.getByLabel('Search Available Commands', { exact: true }).fill(added[0]); await dialog.getByLabel('Available Commands', { exact: true }).selectOption(added[1]); await addArrow.click(); };
             await addSplit(); await dialog.screenshot({ path: path.join(evidence, engine + '-' + app + '-customize.png') });
             await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
             assert.deepEqual(await ids(), original);
@@ -125,15 +127,15 @@ async function run(engine) {
             await dialog.getByRole('button', { name: 'Move Down', exact: true }).click();
             await dialog.getByLabel('Keep Visible with the Ribbon', { exact: true }).uncheck();
             await dialog.getByRole('button', { name: 'Apply', exact: true }).click(); await dialog.waitFor({ state: 'hidden' });
-            assert.ok((await ids()).includes('view-split')); assert.equal(await bar.getAttribute('data-toolbar-ribbon'), 'hide');
+            assert.ok((await ids()).includes(added[1])); assert.equal(await bar.getAttribute('data-toolbar-ribbon'), 'hide');
             if (app === 'diagrams') {
                 const oval = bar.locator('[data-command="tool-oval"]'); await oval.click(); assert.equal(await oval.getAttribute('aria-pressed'), 'true');
                 await bar.locator('[data-command="drawing-tool"]').click();
                 await page.getByRole('menuitemcheckbox', { name: 'Oval', exact: true }).click();
                 assert.equal(await oval.getAttribute('aria-pressed'), 'false');
             }
-            await bar.locator('[data-command="view-split"]:not([data-command-choice] *)').click();
-            await page.waitForFunction(() => Array.from(document.querySelectorAll('.yavc-command-toolbar [data-command="view-split"]')).every(b => b.getAttribute('aria-pressed') === 'true'));
+            await bar.locator('[data-command="' + added[1] + '"]:not([data-command-choice] *)').click();
+            await page.waitForFunction(id => Array.from(document.querySelectorAll('.yavc-command-toolbar [data-command="' + id + '"]')).every(b => b.getAttribute('aria-pressed') === 'true'), added[1]);
             phase = app + ' ribbon'; await page.getByRole('button', { name: 'Show as ribbon', exact: true }).click();
             assert.equal(await bar.isVisible(), false);
             await page.evaluate(() => { window.toolbarDialog = pudlCommands.run('common-toolbar-customize', null, document.querySelector('[data-applet]')); }); await dialog.waitFor();

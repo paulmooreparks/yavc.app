@@ -986,3 +986,13 @@ Decision 132. `scripts/test-portable-workspace.cjs` covers `yavcDialog.reference
 ## The dialog test that waited on an old database (2026-11-12)
 
 `scripts/test-dialog-overhaul.cjs` stopped finishing when guest files moved to the `yavc-vfs` database (2026-11-10). Its phase for a cancelled import kept a transaction open on the database of the earlier name, `yavc-home`, with the stores of that time. The browser made an empty database of that name, the transaction could not start, and the test waited without end. The test now keeps its transaction open on `yavc-vfs` and its three stores, and passes in Chromium, Firefox and WebKit. The applets and the site did not change.
+
+## The toolbar in the package, and text and fonts in Diagrams (2026-11-12)
+
+Decisions 133 and 134. `scripts/test-portable-toolbar.cjs` checks that the package has the controller and its rules, that the lab host offers the toolbar with them, that each applet ends its bar with the control that opens Customize Toolbar, and that removing a command from the Editor's bar leaves the bar of Docs alone. `scripts/test-canvas-pictures.cjs` now reads the Font field's list and grows the Text field to its limit. The content tool refuses to build a package when it cannot find the toolbar's rules in `site.css`.
+
+A patch script written in a quoted heredoc lost the backslashes of a regular expression again, this time in Go. The pattern was replaced with `strings.Cut`, and the rule stands: a patch script is written with the Write tool.
+
+The PUDL review of this work found that each drawing of the Inspector left a combo box behind: PUDL keeps a list in the page and two window listeners for every combo box it takes in, and has no call that gives one back. The two font fields are therefore made once for each Diagrams window and put into each drawing of the Inspector. The review also found that choosing a font with Enter could send the change twice, so a field now sends one value once. A disposal call in PUDL would let the fields be drawn the ordinary way, and that has been asked of the PUDL team.
+
+`scripts/test-command-toolbar.cjs` had stopped at the Editor since decision 131, because it added the Split view to each bar and the Editor has none. It now adds Outline to the Editor's bar. Its last phase, a host with no toolbar capability, still fails for the Editor, and fails the same way at v0.2.78, so it was not looked into here. `scripts/test-diagram-chrome.cjs` fails on main as well, waiting for a row of the outline.

@@ -14,6 +14,8 @@
   contentResources:{version:1,read:async function (request) {var record=records.get(request.resource);if(!record)throw new Error('Missing resource');return {resource:request.resource,revision:String(record.revision),text:record.text,name:record.name,writable:true};},
    write:async function (request) {var record=records.get(request.resource);if(!record || request.expectedRevision!==String(record.revision))throw new Error('Resource conflict');writes.push(request);record.text=request.text;record.revision++;return {resource:request.resource,revision:String(record.revision),name:record.name,writable:true};}}
  });
+ // The toolbar a person can change (docs/command-toolbar-design.md), offered when the address asks for it. The controller is the package's own, and this host gives it only somewhere to keep the arrangement.
+ if(new URLSearchParams(location.search).has('toolbar'))pudlHost.commandToolbar={attach:function(root,options){return yavcCommandToolbar.attach(root,Object.assign({},options,{config:pudlHost.config}));}};
  // A command of the host's own in the File menu (docs/document-commands-contract.md): present for one document, and unavailable until the host says otherwise.
  var commandListeners=new Set();fixture.published=[];fixture.publishable=false;fixture.requested=[];fixture.released=[];fixture.releasing=false;fixture.releaseReason='';fixture.releaseChanged=function(on,reason){fixture.releasing=on;fixture.releaseReason=reason||'';commandListeners.forEach(function(fn){fn();});};fixture.requestStates=[];
  fixture.publishChanged=function(on){fixture.publishable=on;commandListeners.forEach(function(fn){fn();});};

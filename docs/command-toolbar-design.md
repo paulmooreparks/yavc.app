@@ -20,6 +20,16 @@ Paul authorised this batch on 5 November 2026 after the editing productivity rel
 
 8. **Command transfer uses aligned lists** (2026-11-05, Paul). Available Commands and Toolbar Commands share their top edge and height. Search Available Commands sits above both lists. The central `>` button adds the selected available command, and `<` removes the selected toolbar command; their accessible names and tooltips describe those actions. Move Up, Move Down and Add Separator remain below Toolbar Commands, with PUDL's arrow glyphs on the ordering buttons. Narrow dialogs retain horizontal transfer direction and let the ordering controls span the form. A wrapping line below each list shows its selected command's complete name, including format context, so clipped native option text remains identifiable. Native options expose the full accessible names; duplicate visual readouts do not announce the selection again.
 
+9. **The controller comes in the content package** (2026-11-12, Paul; DESIGN.md, decision 133). A host other than yavc.app loads `support/command-toolbar.js` and `support/command-toolbar.css` from the package, with `support/yavc-util.js`, `support/dialogs.js` and PUDL's toolbar, command and dialog scripts, which the applets need already. It then offers the capability in a few lines:
+
+    ```js
+    pudlHost.commandToolbar = { attach: function (root, options) {
+        return yavcCommandToolbar.attach(root, Object.assign({}, options, { config: pudlHost.config }));
+    } };
+    ```
+
+    The controller asks three things of `config`. `load('command-toolbars', {})` resolves to an object with one record per app key (`editor`, `docs`, `slides`, `diagrams`), or to `{}` when nothing is saved. `set('command-toolbars', { <app>: record })` saves that app's record without disturbing the others, and resolves to nothing, or to a sentence when it could not save. `onChange('command-toolbars', fn)` is optional; it calls `fn` with the whole object when another window saves, and returns a function that stops it. A host with no `set` still gets the default bar, with Customize Toolbar unavailable and the reason given. The control at the end of the bar is a pencil, drawn as a glyph alone at every width and labelled Customize Toolbar. `scripts/test-portable-toolbar.cjs` runs this in the package's own lab host, at `workspace-lab/index.html?toolbar=1`.
+
 ## Acceptance
 
 The combined browser fixture must cover all three applets, persistence across reload, Cancel, Reset/Apply, save failure, command state and dispatch, a drawing-tool submenu and individual shape toggles, ribbon visibility, narrow folding and keyboard access. It must also cover separate desktop windows, shared preferences without cross-window command dispatch, disposal, hostile preference input and the existing host fallback. Existing editor/diagram workflows must remain covered. Independent PUDL review and the repository gate run on the assembled candidate before a PR is offered for merge.

@@ -142,7 +142,7 @@ func assemble(root, out, md, d2 string) error {
 			return err
 		}
 	}
-	for _, name := range []string{"yavc-util.js", "dialogs.js", "doc-tabs.js", "pudl-host-kit.js", "snapshot.js"} {
+	for _, name := range []string{"yavc-util.js", "dialogs.js", "doc-tabs.js", "pudl-host-kit.js", "snapshot.js", "command-toolbar.js"} {
 		if err = copyFile(filepath.Join(root, "internal", "web", "static", name), filepath.Join(out, "support", name)); err != nil {
 			return err
 		}
@@ -156,6 +156,18 @@ func assemble(root, out, md, d2 string) error {
 		return fmt.Errorf("project glyphs are missing")
 	}
 	if err = os.WriteFile(filepath.Join(out, "support", "glyphs.css"), []byte(":root {\n"+strings.Join(glyphs, "\n")+"\n}\n"), 0644); err != nil {
+		return err
+	}
+	// The rules of the shared toolbar and its dialog, for a host that
+	// offers pudlHost.commandToolbar (docs/command-toolbar-design.md).
+	_, toolbar, found := strings.Cut(string(css), "/* command-toolbar: these rules go into the content package as support/command-toolbar.css */\n")
+	if found {
+		toolbar, _, found = strings.Cut(toolbar, "/* command-toolbar: end */")
+	}
+	if !found || !strings.Contains(toolbar, ".yavc-toolbar-columns") {
+		return fmt.Errorf("the command toolbar's rules are missing")
+	}
+	if err = os.WriteFile(filepath.Join(out, "support", "command-toolbar.css"), []byte(toolbar), 0644); err != nil {
 		return err
 	}
 	// The table of every built-in shortcode, for a host that sends a
