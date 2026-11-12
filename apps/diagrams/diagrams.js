@@ -542,9 +542,12 @@
                         edit: function (req, expected) { canvasEdit(req, expected); }
                     });
                 }
+                var chosen = JSON.stringify(canvasSelections());
                 t.cv.show(got.doc, out, svg);
                 var pending = t.cvPending; t.cvPending = null;
-                if (pending && pending.text === text) { t.cv.select(pending.selection, 'edit'); }
+                /* The edit's own selection is put back unless the person has selected something else while it was being made, as
+                   by clicking another node after typing a number: that click is theirs and is not undone. */
+                if (pending && pending.text === text) { if (pending.from === undefined || pending.from === chosen) { t.cv.select(pending.selection, 'edit'); } }
                 else if (cm && cm.hasFocus) { followCanvasCursor(t, cm.state.selection.main.head); }
                 richText(t, got.doc, out, svg, palette, isCurrent);
             }
@@ -811,7 +814,7 @@
                 var out = M.edit(got.doc, req);
                 if (out.text === t.text) { return out; }
                 var isEdge = out.doc.edges.some(function (x) { return x.id === out.key; }) && (req.op === 'connect' || req.op === 'reconnect' || req.kind === 'edge');
-                t.cvPending = { text: out.text, selection: out.selection || (out.key ? { kind: isEdge ? 'edge' : 'node', id: out.key } : null) };
+                t.cvPending = { text: out.text, selection: out.selection || (out.key ? { kind: isEdge ? 'edge' : 'node', id: out.key } : null), from: JSON.stringify(canvasSelections()) };
                 replaceText(out.text, userEvent || 'input.canvas');
                 await drawNow();
                 if (t === current()) { say('Changed the canvas. Undo puts it back.'); }
@@ -984,15 +987,23 @@
             inspectorPresentation(show);
             if (!show) { inspected = null; return; }
             var blocked = !!(canvasWhy(false) || mutationWhy(t)), state = 'canvas|' + JSON.stringify(selected) + '|' + blocked;
-            if (inspected === state && el.inspector.contains(document.activeElement)) { return; }
+            /* The controls for an item are updated in place and never replace the one the person is in, so they are drawn again
+               whenever something changes, even with the keyboard in them. The document settings are replaced, so they are not. */
+            if (!selected.length && inspected === state && el.inspector.contains(document.activeElement)) { return; }
             inspected = state;
-            if (!selected.length) { if (holdFocus()) { return; } inspectedItems = null; renderDocumentInspector(t, blocked); return; }
+            if (!selected.length) {
+                if (holdFocus()) { return; }
+                var wasIn = el.inspector.contains(document.activeElement) ? document.activeElement : null;
+                inspectedItems = null; renderDocumentInspector(t, blocked);
+                keyboardToHeading(wasIn);
+                return;
+            }
             var entries = selected.map(function (s) { return { kind: s.kind, item: (s.kind === 'node' ? t.cvDoc.nodes : t.cvDoc.edges).find(function (x) { return x.id === s.id; }) }; });
             if (entries.some(function (e) { return !e.item; })) { return; }
             var properties = entries.map(function (e) { return window.yavcCanvasModel.properties(e.item, e.kind); }).reduce(function (a, b) { return a.filter(function (k) { return b.indexOf(k) >= 0; }); });
             var p = 'dg-cv-in-' + n + '-';
             fontWanted = {};
-            var html = '<h3 class="dg-inspector-title">' + (selected.length > 1 ? selected.length + ' Items' : selected[0].kind === 'node' ? 'Node' : 'Connector') + '</h3><p class="dg-inspector-id">' + esc(selected.map(function (s) { return s.id; }).join(', ')) + '</p>';
+            var html = '<h3 class="dg-inspector-title" tabindex="-1">' + (selected.length > 1 ? selected.length + ' Items' : selected[0].kind === 'node' ? 'Node' : 'Connector') + '</h3><p class="dg-inspector-id">' + esc(selected.map(function (s) { return s.id; }).join(', ')) + '</p>';
             var defaults = { shape: 'rectangle', line: 'solid', lineWidth: 2, route: 'elbow' };
             function value(e, k) {
                 var ext = e.item.yavc || {};
@@ -1054,6 +1065,7 @@
             if (selected.length === 1 && selected[0].kind === 'edge') { html += '<fieldset class="form-fieldset"><legend>Endpoints</legend><div class="hstack"><button type="button" class="btn btn-sm" data-command="cv-reconnect-start"></button><button type="button" class="btn btn-sm" data-command="cv-reconnect-end"></button></div></fieldset>'; }
             var drawn = (blocked ? '<p class="form-help">Put the canvas text right before changing these settings.</p>' : '') + '<fieldset class="dg-inspector-fields" data-inspector="item"' + (blocked ? ' disabled' : '') + '>' + html + '</fieldset>';
             var itemsKey = (t.inspectorSerial || (t.inspectorSerial = ++inspectorSerial)) + '|' + JSON.stringify(selected);
+            var wasInside = el.inspector.contains(document.activeElement), wasField = wasInside ? document.activeElement : null;
             if (inspectedItems !== null && el.inspector.querySelector(':scope > fieldset[data-inspector="item"]')) {
                 /* The controls the person may be in are kept, and each is given its new value, placeholder and state. A refusal belongs to the
                    items that were selected, so it goes when the selection changes. */
@@ -1078,6 +1090,7 @@
             inspectedItems = itemsKey;
             if (window.pudlFields) { window.pudlFields.enhance(el.inspector); }
             placeFonts(t); growFields();
+            keyboardToHeading(wasField);
             newSelection = false;
         }
         function renderDocumentInspector(t, blocked) {
@@ -1086,7 +1099,7 @@
             var restoreKeyboard = holdKeyboard();
             var value = settings.background || '', resolved = /^[1-6]$/.test(value) ? palette.presets[Number(value) - 1] : /^#[a-f0-9]{3}$/i.test(value) ? value.replace(/([a-f0-9])/ig, '$1$1') : value;
             var color = colourField(id + 'background', 'background', 'Background', value, resolved || palette.bg).replace(/ data-set=/g, ' data-document data-set=');
-            var html = '<h3 class="dg-inspector-title">Diagram</h3><p class="form-help">Canvas settings are saved in this diagram.</p>' + color +
+            var html = '<h3 class="dg-inspector-title" tabindex="-1">Diagram</h3><p class="form-help">Canvas settings are saved in this diagram.</p>' + color +
                 '<button type="button" class="btn btn-sm" id="' + id + 'reset" data-document data-set="background" value="">Theme Default</button>';
             [['grid', 'Show Grid', !!settings.grid], ['snap', 'Snap to Grid and Shapes', settings.snap !== false]].forEach(function (setting) {
                 html += '<div class="form-group"><label class="check"><input type="checkbox" id="' + id + setting[0] + '" data-document data-set="' + setting[0] + '"' + (setting[2] ? ' checked' : '') + '> ' + setting[1] + '</label></div>';
@@ -1429,6 +1442,14 @@
         }, true);
         /* Where the keyboard is, to put it back after the fields are replaced: the field by its id, and the caret or the text that was
            selected in it, as the browser left them when it arrived. */
+        /* The field the keyboard was in has gone, as when another item without that control is selected or the selection is cleared. The
+           keyboard goes to the Inspector's heading, so that Tab goes on from the Inspector and a screen reader says where it is, and
+           not to the page. It is done only when the keyboard has fallen to the page, so no one is moved from where they chose to go. */
+        function keyboardToHeading(was) {
+            if (!was || was.isConnected || !(document.activeElement === document.body || !document.activeElement)) { return; }
+            var heading = el.inspector.querySelector('.dg-inspector-title');
+            if (heading) { heading.focus({ preventScroll: true }); }
+        }
         function holdKeyboard() {
             var a = document.activeElement, id = a && el.inspector.contains(a) && a.id ? a.id : null, from = null, to = null, direction = 'none', top = 0, was = null;
             if (id) { try { from = a.selectionStart; to = a.selectionEnd; direction = a.selectionDirection || 'none'; top = a.scrollTop; was = a.value; } catch (err) { from = null; } }
