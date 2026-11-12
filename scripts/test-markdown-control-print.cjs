@@ -5,7 +5,7 @@ const sources=['Slides.md','Editor.md'].map(name=>{let text=fs.readFileSync(path
 const action=(p,app,name,input={})=>p.evaluate(({app,name,input})=>pudlActions.run('yavc.'+app+'/'+name+'@1',input,{grant:'all'}),{app,name,input});
 function contrast(a,b){function luminance(rgb){const c=rgb.match(/[\d.]+/g).slice(0,3).map(Number).map(v=>{if(!rgb.startsWith('color(srgb '))v/=255;return v<=.04045?v/12.92:((v+.055)/1.055)**2.4;});return c[0]*.2126+c[1]*.7152+c[2]*.0722;}const x=luminance(a),y=luminance(b);return (Math.max(x,y)+.05)/(Math.min(x,y)+.05);}
 (async()=>{for(const engine of process.argv.slice(2).length?process.argv.slice(2):['chromium','firefox','webkit']){
- const browser=await pw[engine].launch({headless:true});try{for(const app of ['editor','docs']){
+ const browser=await pw[engine].launch({headless:true});try{for(const app of ['docs']){ // Only Docs has the Visual view (DESIGN.md, decision 131).
  const p=await browser.newPage({viewport:{width:1500,height:1100}});p.setDefaultTimeout(20000);await p.goto(`http://${app}.localhost:${port}/`);await p.locator('.cm-content').waitFor({state:'attached'});
  for(const theme of ['dark','light'])for(const sample of sources){
   await p.evaluate(theme=>pudlSetTheme(theme),theme);await action(p,app,'new',{path:'~/'+theme+'-'+sample.name,text:sample.text});await action(p,app,'view',{mode:'visual'});await p.locator('.ProseMirror[aria-busy="false"]').waitFor();

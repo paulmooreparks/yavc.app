@@ -12,7 +12,7 @@ const raw=(p,name)=>p.evaluate(async name=>Array.from(new Uint8Array((await pcSi
         for(const [index,format] of formats.entries()){
             const name='encoded-'+index+'.md',original=bytes(body,format);
             await p.evaluate(async({name,bytes})=>{const F=await yavcUtil.siteFs();const result=await F.writeBytes(F.home(),name,new Uint8Array(bytes),'text/plain');if(result.error)throw new Error(result.error);},{name,bytes:original});
-            await call(p,app,'open-file',{path:'~/'+name});await call(p,app,'view',{mode:'text'});
+            await call(p,app,'open-file',app==='editor'&&name.endsWith('.md')?{path:'~/'+name,view:'text'}:{path:'~/'+name});await call(p,app,'view',{mode:'text'});
             assert.equal((await call(p,app,'document')).text,body.replace(/\r\n?/g,'\n'));
             await call(p,app,'save');assert.deepEqual(await raw(p,name),original);
             const source=p.locator('.cm-content');await source.focus();await p.keyboard.press('ControlOrMeta+End');await p.keyboard.type('X');await call(p,app,'save');assert.deepEqual(await raw(p,name),bytes(body+'X',format));
@@ -31,13 +31,15 @@ const raw=(p,name)=>p.evaluate(async name=>Array.from(new Uint8Array((await pcSi
                 assert.deepEqual(await raw(p,'converted.md'),bytes(body+'X-recovered',formats[0]));assert.deepEqual(await raw(p,name),bytes(body+'X-recovered',format));
             }
         }
+        // The home store keeps each file as its own entry with its bytes beside it (#69), so the existing payload is made with put.
         const atomic=await p.evaluate(async()=>{
-            const S=yavcHomeStore,original=new Uint8Array([1,2,3]);await S.blobPut('atomic-existing',original.buffer);let failed=false;
-            try{await S.update(record=>{const data=S.parse(record.raw);data.files['/atomic-failed']={t:'b',id:'atomic-existing',s:2,y:'text/plain',m:1};return JSON.stringify(data);},{id:'atomic-existing',bytes:new Uint8Array([8,9])});}catch(error){failed=true;}
+            const S=yavcHomeStore,original=new Uint8Array([1,2,3]);await S.put('/atomic-existing.bin',new Blob([original]),{t:'b',y:'application/octet-stream'},null);
+            const existing=S.parse((await S.read()).data).files['/atomic-existing.bin'];let failed=false;
+            try{await S.update(record=>{const data=S.parse(record.data);data.files['/atomic-failed']={t:'b',id:existing.id,s:2,y:'text/plain',m:1};return data;},{id:existing.id,bytes:new Uint8Array([8,9])});}catch(error){failed=true;}
             class BufferLike extends Uint8Array {slice(){return this.subarray(0);}}
             const backing=new Uint8Array([9,1,2,3,9]),aliased=new BufferLike(backing.buffer,1,3);
-            const owned=S.update(record=>{const data=S.parse(record.raw);data.files['/atomic-owned']={t:'b',id:'atomic-owned',s:3,y:'application/octet-stream',m:1};return JSON.stringify(data);},{id:'atomic-owned',bytes:aliased});aliased[0]=99;await owned;
-            const after=await S.read();return {failed,exists:!!S.parse(after.raw).files['/atomic-failed'],bytes:Array.from(new Uint8Array(await S.blobGet('atomic-existing'))),owned:Array.from(new Uint8Array(await S.blobGet('atomic-owned')))};
+            const owned=S.update(record=>{const data=S.parse(record.data);data.files['/atomic-owned']={t:'b',id:'atomic-owned',s:3,y:'application/octet-stream',m:1};return data;},{id:'atomic-owned',bytes:aliased});aliased[0]=99;await owned;
+            const after=await S.read();return {failed,exists:!!S.parse(after.data).files['/atomic-failed'],bytes:Array.from(new Uint8Array(await S.blobGet(existing.id))),owned:Array.from(new Uint8Array(await S.blobGet('atomic-owned')))};
         });assert.deepEqual(atomic,{failed:true,exists:false,bytes:[1,2,3],owned:[1,2,3]});assert.deepEqual(errors,[]);
         await p.evaluate(()=>{window.openDone=pudlCommands.run('open',null,document.querySelector('[data-applet]'));});
         await p.locator('.fb-picker[open] input[data-pick="chooser"]').setInputFiles({name:'computer.md',mimeType:'text/plain',buffer:Buffer.from(bytes(body,formats[2]))});await p.evaluate(()=>openDone);
