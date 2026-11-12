@@ -1,5 +1,18 @@
 # Host shortcode integration handoff
 
+## v0.2.86: the Diagrams Inspectors keep up with changes, and the guest store copies its bytes
+
+[v0.2.86](https://github.com/paulmooreparks/yavc.app/releases/tag/v0.2.86) comes from pull requests 146, 152, 153 and 155 on 2026-11-12. In both Diagrams Inspectors a change made elsewhere shows while the keyboard is in a field, a click after typing a number is kept, and the keyboard goes to the Inspector's heading when its field goes (DESIGN.md decisions 142 and 143). The site's guest file store copies the bytes it is given at the call. A host changes nothing.
+
+| Item | v0.2.86 |
+| --- | --- |
+| Commit | `ae074385917303a134bbba57c1aaf326f60e790e` |
+| Archive sha256 | `6f30c09bd664f47be0f3a45dd9d71d15df70ce8a54624e9248835554e169888d` |
+| Manifest sha256 | `57c86389d57f9ab13eed1badf04190a2c77af95cc34121ba9e9fea42e2e8b9ea` |
+| Content digest | `28611564f550a959d6bd5cd58916c5e70417ca3c32436f0078f808e69a35f005` |
+| Files | 492 |
+| Applets | Editor 46.37.4, Docs 1.37.4, Slides 0.65.4, Diagrams 0.46.5 |
+
 ## v0.2.85: Slides asks where a referenced file is, and the Inspector updates in place
 
 [v0.2.85](https://github.com/paulmooreparks/yavc.app/releases/tag/v0.2.85) comes from pull requests 141, 142 and 143 on 2026-11-12. Slides now asks `contentWorkspace.resolvePath` for a deck's diagrams, stylesheet and shared shortcodes file, as Editor and Docs do, so a deck kept on a wiki page can find files attached to it. Docs' Edit Shared Stylesheet opens the file the host named. All three applications test a host's answer with one function, `yavcUtil.hostPath`. The canvas Inspector in Diagrams updates its controls in place, so a redraw cannot replace what a person has begun typing (DESIGN.md decision 141). A host that answers `resolvePath` should check that it answers for decks as well as documents.
