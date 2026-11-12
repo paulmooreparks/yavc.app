@@ -1070,14 +1070,7 @@
                 /* The controls the person may be in are kept, and each is given its new value, placeholder and state. A refusal belongs to the
                    items that were selected, so it goes when the selection changes. */
                 newSelection = itemsKey !== inspectedItems;
-                if (newSelection) {
-                    el.inspector.querySelectorAll('.form-error').forEach(function (e) { e.remove(); });
-                    el.inspector.querySelectorAll('[aria-invalid]').forEach(function (e) { e.removeAttribute('aria-invalid'); });
-                    el.inspector.querySelectorAll('[aria-describedby]').forEach(function (e) {
-                        var ids = e.getAttribute('aria-describedby').split(/\s+/).filter(function (id) { return id && !/-error$/.test(id); });
-                        if (ids.length) { e.setAttribute('aria-describedby', ids.join(' ')); } else { e.removeAttribute('aria-describedby'); }
-                    });
-                }
+                if (newSelection) { forgetRefusals(); }
                 var scratch = document.createElement('div');
                 scratch.innerHTML = drawn;
                 morphChildren(el.inspector, scratch);
@@ -1445,9 +1438,17 @@
         /* The field the keyboard was in has gone, as when another item without that control is selected or the selection is cleared. The
            keyboard goes to the Inspector's heading, so that Tab goes on from the Inspector and a screen reader says where it is, and
            not to the page. It is done only when the keyboard has fallen to the page, so no one is moved from where they chose to go. */
+        function forgetRefusals() {
+            el.inspector.querySelectorAll('.form-error').forEach(function (e) { e.remove(); });
+            el.inspector.querySelectorAll('[aria-invalid]').forEach(function (e) { e.removeAttribute('aria-invalid'); });
+            el.inspector.querySelectorAll('[aria-describedby]').forEach(function (e) {
+                var ids = e.getAttribute('aria-describedby').split(/\s+/).filter(function (id) { return id && !/-error$/.test(id); });
+                if (ids.length) { e.setAttribute('aria-describedby', ids.join(' ')); } else { e.removeAttribute('aria-describedby'); }
+            });
+        }
         function keyboardToHeading(was) {
             if (!was || was.isConnected || !(document.activeElement === document.body || !document.activeElement)) { return; }
-            var heading = el.inspector.querySelector('.dg-inspector-title');
+            var heading = el.inspector.querySelector('.dg-inspector-title, .dg-inspector-empty');
             if (heading) { heading.focus({ preventScroll: true }); }
         }
         function holdKeyboard() {
@@ -1626,25 +1627,28 @@
             renderOutline();
             var t = current(), key = selection();
             if (t && t.kind === 'canvas') { renderCanvasInspector(t); return; }
-            if (holdFocus()) { return; }
             var show = !!(settings.inspector && t && t.kind === 'd2' && t.canvas);
             inspectorPresentation(show);
             if (!show) { inspected = null; return; }
             var blocked = !!(readOnly(t) || t.problems && t.problems.length), state = key + '|' + blocked;
-            if (el.inspector.contains(document.activeElement) && inspected === state) { return; }
+            /* The controls for a shape or a connection are updated in place and never replace the one the person is in, so they are
+               drawn again whenever something changes, even with the keyboard in them. */
+            var wasInside = el.inspector.contains(document.activeElement), wasField = wasInside ? document.activeElement : null;
             inspected = state;
-            /* Where the keyboard was, to put it back: the fields' ids last
-               across a change of key, such as a new direction. */
-            var restoreKeyboard = holdKeyboard();
             var p = 'dg-in-' + n + '-';
             if (!key) {
-                el.inspector.innerHTML = '<p class="dg-inspector-empty">Select a shape or a connection to see its settings here.</p>';
+                /* The line that says nothing is selected is drawn once, so it is not replaced under a keyboard that rests on it. */
+                if (inspectedItems === null && el.inspector.children.length === 1 && el.inspector.firstElementChild.classList.contains('dg-inspector-empty')) { return; }
+                if (holdFocus()) { return; }
+                inspectedItems = null;
+                el.inspector.innerHTML = '<p class="dg-inspector-empty" tabindex="-1">Select a shape or a connection to see its settings here.</p>';
+                keyboardToHeading(wasField);
                 return;
             }
             var html;
             if (isConnection(key)) {
                 var c = connectionOf(t, key) || {}, st = c.style || {}, src = c.source || {}, dst = c.target || {};
-                html = '<h3 class="dg-inspector-title">Connection</h3><p class="dg-inspector-id">' + esc((c.from || '') + ' to ' + (c.to || '')) + '</p>' +
+                html = '<h3 class="dg-inspector-title" tabindex="-1">Connection</h3><p class="dg-inspector-id">' + esc((c.from || '') + ' to ' + (c.to || '')) + '</p>' +
                     textField(p + 'label', key, 'Label', c.label) +
                     field(p + 'arrows', 'Direction', '<div class="dg-row"><span class="form-select-wrap"><select class="form-select" id="' + p + 'arrows" data-arrows data-was="' + esc(c.arrows || '->') + '">' +
                         ARROWS.map(function (a) { return '<option value="' + esc(a[0]) + '"' + (a[0] === (c.arrows || '->') ? ' selected' : '') + '>' + esc(a[1] + ' (' + a[0] + ')') + '</option>'; }).join('') +
@@ -1659,7 +1663,7 @@
                     checks('Effects', [[key + '.style.animated', 'Animated', st.animated === 'true']]);
             } else {
                 var s = shapeOf(t, key) || {}, ss = s.style || {};
-                html = '<h3 class="dg-inspector-title">Shape</h3><p class="dg-inspector-id">' + esc(key) + '</p>' +
+                html = '<h3 class="dg-inspector-title" tabindex="-1">Shape</h3><p class="dg-inspector-id">' + esc(key) + '</p>' +
                     textField(p + 'label', key, 'Label', s.label) +
                     selectField(p + 'kind', key + '.shape', 'Kind', s.shape || 'rectangle', SHAPES) +
                     colourField(p + 'fill', key + '.style.fill', 'Fill', ss.fill) +
@@ -1674,12 +1678,28 @@
                     textField(p + 'link', key + '.link', 'Link', s.link) +
                     textField(p + 'tip', key + '.tooltip', 'Tooltip', s.tooltip);
             }
-            el.inspector.innerHTML = blocked
-                ? '<p class="form-help dg-inspector-blocked" id="' + p + 'blocked">' + (readOnly(t) ? 'This diagram is read-only. Use Save As to make an editable copy.' : 'The text has a mistake in it, so these settings cannot be changed until it is put right.') + '</p><fieldset class="dg-inspector-fields" disabled aria-describedby="' + p + 'blocked">' + html + '</fieldset>'
-                : html;
-            window.yavcMdEditor.wireColours(el.inspector);
+            var drawn = (blocked ? '<p class="form-help dg-inspector-blocked" id="' + p + 'blocked">' + (readOnly(t) ? 'This diagram is read-only. Use Save As to make an editable copy.' : 'The text has a mistake in it, so these settings cannot be changed until it is put right.') + '</p>' : '') +
+                '<fieldset class="dg-inspector-fields" data-inspector="item"' + (blocked ? ' disabled aria-describedby="' + p + 'blocked"' : '') + '>' + html + '</fieldset>';
+            var itemsKey = 'd2|' + (t.inspectorSerial || (t.inspectorSerial = ++inspectorSerial)) + '|' + key + '|' + blocked;
+            /* A change of the blocked state replaces the controls, since that is a change of what describes them and of whether they
+               can be used at all. Anything else is laid over what is there. */
+            if (inspectedItems !== null && inspectedItems.indexOf('d2|') === 0 && inspectedItems.split('|').pop() === String(blocked) && el.inspector.querySelector(':scope > fieldset[data-inspector="item"]')) {
+                newSelection = itemsKey !== inspectedItems;
+                if (newSelection) { forgetRefusals(); }
+                var scratch = document.createElement('div');
+                scratch.innerHTML = drawn;
+                morphChildren(el.inspector, scratch);
+            } else {
+                if (holdFocus()) { return; }
+                var restoreKeyboard = holdKeyboard();
+                el.inspector.innerHTML = drawn;
+                window.yavcMdEditor.wireColours(el.inspector);
+                restoreKeyboard();
+            }
+            inspectedItems = itemsKey;
             if (window.pudlFields && window.pudlFields.enhance) { window.pudlFields.enhance(el.inspector); }
-            restoreKeyboard();
+            keyboardToHeading(wasField);
+            newSelection = false;
         }
         /* A field's name, for what the status line says it did. */
         function labelOf(f) {
