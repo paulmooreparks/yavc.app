@@ -29,6 +29,7 @@ if (!/^\d+$/.test(port)) throw new Error('Invalid local port');
             assert.equal(!!(await state()).disabled, false);
             const opened = page.waitForEvent('popup'); await button.click(); const popup = await opened;
             await popup.locator('.deck-presenter-mode').waitFor();
+            assert.equal(new URL(popup.url()).pathname, '/', 'the presenter is the root page of the own origin of the application');
             assert.equal(new URL(popup.url()).searchParams.get('file'), '~/presenter.slides.md');
             await popup.locator('[data-role="pv-now"]').getByRole('heading', { name: 'Presenter', exact: true }).waitFor();
             await popup.close();

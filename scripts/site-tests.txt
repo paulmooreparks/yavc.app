@@ -97,3 +97,4 @@ test-slides-exclusions.cjs
 test-start.cjs
 test-typography-focus.cjs
 test-late-focus.cjs
+test-slides-presenter.cjs

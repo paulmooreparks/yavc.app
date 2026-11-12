@@ -6,7 +6,7 @@ Slides asks its host for two things when a deck is presented: a page for the pre
 
 `presentation.version` is 1 and the host offers one function.
 
-`presenterURL({application, resource, channel})` returns the address of a page that mounts Slides for the same deck with `presenter=1` and `presenter-channel` set to the channel given. The address must be on the origin Slides is running on, because the presenter view and the editing window follow each other over a `BroadcastChannel`, which the browsers define per origin. Slides opens that address with `window.open`. A host may open a window of its own for that call.
+`presenterURL({application, resource, channel})` returns the address of a page that mounts Slides for the same deck with `presenter=1` and `presenter-channel` set to the channel given. The address must be on the origin Slides is running on, because the presenter view and the editing window follow each other over a `BroadcastChannel`, which the browsers define per origin. Slides opens that address with `window.open`. The site's own host answers `/applet/slides` on the desktop's domain, and on an application's own origin, such as `slides.yavc.app`, where that route is the desktop's and gives Not found, it answers that origin's root address, which takes the same query. A host may open a window of its own for that call.
 
 ## Version 2: a show in a window of the host's own
 
