@@ -61,7 +61,17 @@ async function run(engine) {
         const outer = page.getByRole('separator', { name: 'Resize the Text', exact: true }); await outer.focus(); await page.keyboard.press('Shift+ArrowRight');
         await page.waitForTimeout(350); assert.ok(Math.abs(await width() - initialWidth) <= 1, 'Outer split changed Inspector width');
         const inner = page.getByRole('separator', { name: 'Resize the Inspector', exact: true }); await inner.focus(); await page.keyboard.press('Shift+ArrowRight');
-        await page.waitForTimeout(30); const chosen = await width(); assert.ok(chosen < initialWidth - 30);
+        // The splitter is still moving when the key press returns. Wait until the Inspector has moved, then until its width has held for several frames.
+        await page.waitForFunction(limit => document.querySelector('.dg-inspector').getBoundingClientRect().width < limit, initialWidth - 30);
+        const chosen = await page.evaluate(() => new Promise((resolve, reject) => {
+            const inspector = document.querySelector('.dg-inspector'), giveUp = setTimeout(() => reject(new Error('The Inspector width did not settle.')), 10000);
+            let last = -1, held = 0;
+            (function frame() {
+                const now = inspector.getBoundingClientRect().width; held = now === last ? held + 1 : 0; last = now;
+                if (held >= 5) { clearTimeout(giveUp); resolve(now); } else requestAnimationFrame(frame);
+            })();
+        }));
+        assert.ok(chosen < initialWidth - 30);
         const mediumRows = await page.getByRole('group', { name: 'Horizontal Alignment', exact: true }).getByRole('button').evaluateAll(all => [...new Set(all.map(e => Math.round(e.getBoundingClientRect().top)))].length);
         assert.equal(mediumRows, 2);
         await outer.focus(); await page.keyboard.press('Shift+ArrowLeft'); await page.waitForTimeout(350); assert.ok(Math.abs(await width() - chosen) <= 1);
