@@ -17,13 +17,13 @@ import { mkdtempSync, readFileSync, readdirSync, rmSync, mkdirSync, writeFileSyn
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import http from 'node:http';
+import net from 'node:net';
 
 const root = resolve(import.meta.dirname, '..');
 const server = resolve(process.env.SITE_SERVER || join(root, process.platform === 'win32' ? 'yavc.exe' : 'yavc'));
 const engine = process.env.SITE_ENGINE || 'chromium';
 const jobs = Math.max(1, Number(process.env.SITE_JOBS || 2));
 const limit = Number(process.env.SITE_TIMEOUT || 600) * 1000;
-const basePort = Number(process.env.SITE_BASE_PORT || 9100);
 const logs = process.env.SITE_LOGS || join(tmpdir(), 'yavc-site-test-logs');
 mkdirSync(logs, { recursive: true });
 
@@ -44,6 +44,11 @@ if (args.includes('--all')) {
 }
 for (const test of tests) { if (!/^test-[\w.-]+\.cjs$/.test(test.name)) { console.error('Not a site test file name: ' + test.name); process.exit(2); } }
 
+/* The operating system chooses a port that is free now. Another process could take it before the server does, so a test whose server
+   did not start is tried again on a new port. */
+function freePort() {
+    return new Promise((done, fail) => { const probe = net.createServer(); probe.on('error', fail); probe.listen(0, '127.0.0.1', () => { const { port } = probe.address(); probe.close(() => done(port)); }); });
+}
 function up(port) {
     return new Promise(done => { const request = http.get({ host: '127.0.0.1', port, path: '/', timeout: 1000 }, response => { response.resume(); done(true); }); request.on('error', () => done(false)); request.on('timeout', () => { request.destroy(); done(false); }); });
 }
@@ -57,6 +62,7 @@ function kill(child) {
 }
 
 async function runOne(test, port) {
+    /* One try on one port. */
     const started = Date.now(), data = mkdtempSync(join(tmpdir(), 'yavc-site-data-')), log = join(logs, test.name + '.log');
     let output = '', status = 'fail';
     const host = spawn(server, ['-addr', '127.0.0.1:' + port, '-data', data, ...test.flags], { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] });
@@ -77,10 +83,12 @@ async function runOne(test, port) {
     return { name: test.name, status, seconds: Math.round((Date.now() - started) / 1000), output };
 }
 
-const results = [], queue = tests.map((test, index) => ({ test, port: basePort + index }));
+const results = [], queue = tests.slice();
 async function worker() {
     while (queue.length) {
-        const { test, port } = queue.shift(), result = await runOne(test, port);
+        const test = queue.shift();
+        let result = await runOne(test, await freePort());
+        for (let again = 0; again < 2 && result.status !== 'pass' && result.output.startsWith('The server did not start.'); again++) { result = await runOne(test, await freePort()); }
         results.push(result);
         console.log((result.status === 'pass' ? 'PASS ' : 'FAIL ') + result.name + ' (' + result.seconds + ' s)');
         if (result.status !== 'pass') { console.log(result.output.split(/\r?\n/).filter(l => l.trim() && !/^\s+at /.test(l)).slice(-12).map(l => '    ' + l.slice(0, 300)).join('\n')); }
