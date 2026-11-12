@@ -1072,3 +1072,7 @@ Decision 107, which pull request 69 made, moved the guest files into individual 
 `update` now takes its own copy of a byte array or an ArrayBuffer before its first `await`. The copy is made with `set` into a new array and not with the array's own `slice`, since a subclass may answer `slice` with a view of the same memory, and the test uses one. A Blob is a snapshot already, and `put` and `commit` read theirs without waiting first, so neither needed a change. Nothing else in the store changed.
 
 `test-encoded-resources` had this check and failed on it. It passes now in Chromium, Firefox and WebKit for the Editor and for Docs, and it fails again with the change taken out.
+
+## The window title test and one document per window (2026-11-12)
+
+`scripts/test-document-titles.cjs` creates a second document and expects its tab in the same window. Since decision 82 the default is one document per window, so the second document opened a second window and the test found two tab bars, and it failed the same way at v0.2.83. The test now serves the page with the tabbed policy, which is how `test-document-grouping.cjs` chooses its policy, because its checks of the inactive dirty tab, switching and closing a tab need documents grouped in one window. It passes in Chromium, Firefox and WebKit. The title and dirty marker of a window that holds one document are covered by the first half of the same test, and the one-document-per-window behaviour is covered by `test-document-grouping.cjs`.
