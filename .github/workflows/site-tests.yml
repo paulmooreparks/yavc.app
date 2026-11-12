@@ -5,7 +5,7 @@ name: site tests
 
 on:
   push:
-    branches: [main]
+    branches: [main, builder/package-tests-ci]
   pull_request:
   workflow_dispatch:
 
@@ -53,4 +53,41 @@ jobs:
         with:
           name: site-test-logs
           path: ${{ runner.temp }}/yavc-site-test-logs
+          retention-days: 7
+
+  # The package tests load the built content package from a host of their own, as Dinah, GK Companion and PFO do, in all three
+  # browsers. The tests are listed in scripts/package-tests.txt, which scripts/run-package-tests.mjs reads.
+  package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Build the two engines and the content package
+        run: |
+          GOOS=js GOARCH=wasm go build -trimpath -o apps/md-engine/yavc-md.wasm ./cmd/yavc-md
+          GOOS=js GOARCH=wasm go build -trimpath -o apps/diagram-kit/yavc-d2.wasm ./cmd/yavc-d2
+          cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" apps/md-engine/wasm_exec.js
+          cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" apps/diagram-kit/wasm_exec.js
+          go run ./cmd/yavc-content -out "$RUNNER_TEMP/package"
+      - name: Install Playwright and the browsers
+        run: |
+          npm install --prefix "$RUNNER_TEMP/playwright" playwright@1.63.0
+          "$RUNNER_TEMP/playwright/node_modules/.bin/playwright" install --with-deps chromium firefox webkit
+      - name: Package tests
+        env:
+          NODE_PATH: ${{ runner.temp }}/playwright/node_modules
+          PACKAGE_LOGS: ${{ runner.temp }}/yavc-package-test-logs
+        run: node scripts/run-package-tests.mjs "$RUNNER_TEMP/package"
+      - name: Logs of the tests
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: package-test-logs
+          path: ${{ runner.temp }}/yavc-package-test-logs
           retention-days: 7
