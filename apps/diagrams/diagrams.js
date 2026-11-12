@@ -1450,8 +1450,24 @@
            label target and a textarea's grown height are the page's. A field the person is in is given no value, unless the
            selection has changed, and a refusal shown by a field stays until the field or the selection changes. */
         var inspectedItems = null, inspectorSerial = 0, newSelection = false;
-        var COPIED_STATE = ['data-mixed', 'placeholder', 'disabled', 'selected', 'aria-pressed', 'aria-checked'];
+        /* An attribute the new markup has is copied, and one it lacks is taken away, so a state that comes and goes, such as disabled,
+           checked or selected, needs no list. What the page or PUDL owns is the exception. The class, the label target, the id and the
+           descriptions are never copied. The style is copied where the markup has one and never taken away, since the page sizes a
+           text area, PUDL places a menu and a colour field is styled after it is drawn. Never taken away either are a request's mark
+           and the side a menu opens on. PUDL gives a disclosure's toggle its name and hides its summary while it is open. */
         var NOT_COPIED = ['class', 'for', 'id', 'aria-describedby', 'aria-invalid'];
+        var NOT_REMOVED = NOT_COPIED.concat(['style', 'data-sending', 'data-menu-side']);
+        function ownedByPudl(node, name) { return (name === 'aria-labelledby' && node.classList.contains('card-toggle')) || (name === 'aria-hidden' && node.classList.contains('card-summary')) || (name === 'hidden' && node.tagName === 'INPUT' && node.parentNode && node.parentNode.classList.contains('number-field')); }
+        function copyAttributes(live, fresh, typing) {
+            Array.prototype.forEach.call(fresh.attributes, function (a) {
+                if (NOT_COPIED.indexOf(a.name) >= 0 || (a.name === 'style' && live.tagName === 'TEXTAREA') || (a.name === 'value' && typing && live.tagName !== 'BUTTON')) { return; }
+                if (live.getAttribute(a.name) !== a.value) { live.setAttribute(a.name, a.value); }
+            });
+            Array.prototype.slice.call(live.attributes).forEach(function (a) {
+                if (fresh.hasAttribute(a.name) || NOT_REMOVED.indexOf(a.name) >= 0 || ownedByPudl(live, a.name) || (a.name === 'value' && typing)) { return; }
+                live.removeAttribute(a.name);
+            });
+        }
         function isRefusal(node) { return node.nodeType === 1 && node.classList.contains('form-error'); }
         function fontKey(node) {
             if (node.hasAttribute('data-font-place')) { return 'font:' + node.getAttribute('data-font-place'); }
@@ -1470,8 +1486,7 @@
         function morphNumber(live, fresh) {
             var input = live.querySelector('input[type="number"]'), want = fresh.querySelector('input');
             if (!input || !want) { return; }
-            Array.prototype.forEach.call(want.attributes, function (a) { if (NOT_COPIED.indexOf(a.name) < 0 && input.getAttribute(a.name) !== a.value) { input.setAttribute(a.name, a.value); } });
-            ['data-mixed', 'placeholder'].forEach(function (name) { if (!want.hasAttribute(name) && input.hasAttribute(name)) { input.removeAttribute(name); } });
+            copyAttributes(input, want, false);
             var visible = live.querySelector('input[type="text"]');
             if (!newSelection && (document.activeElement === input || (visible && document.activeElement === visible))) { return; }
             input.value = want.getAttribute('value') || '';
@@ -1483,11 +1498,7 @@
             /* A button PUDL fills from its command, and the commands it shows, are PUDL's to update. */
             if (fontKey(live) || live.hasAttribute('data-command') || live.hasAttribute('data-command-choice')) { return; }
             var typing = live === document.activeElement && !newSelection;
-            Array.prototype.forEach.call(fresh.attributes, function (a) {
-                if (NOT_COPIED.indexOf(a.name) >= 0 || (a.name === 'style' && live.tagName === 'TEXTAREA') || (a.name === 'value' && typing && live.tagName !== 'BUTTON')) { return; }
-                if (live.getAttribute(a.name) !== a.value) { live.setAttribute(a.name, a.value); }
-            });
-            COPIED_STATE.forEach(function (name) { if (!fresh.hasAttribute(name) && live.hasAttribute(name)) { live.removeAttribute(name); } });
+            copyAttributes(live, fresh, typing);
             morphChildren(live, fresh);
             /* A choice has no caret to keep, so it is always given the value it has. */
             if (live.tagName === 'SELECT') { live.value = fresh.value; return; }

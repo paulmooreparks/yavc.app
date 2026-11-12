@@ -162,6 +162,14 @@ const served={'home.svg':Buffer.from(house),'plain.svg':Buffer.from(house),'move
    await group('paddingSides').locator('[data-parts-clear]').click();
    await p.waitForFunction(()=>document.querySelector('#two [data-parts="paddingSides"] .card-summary').textContent==='Not set');
    assert.deepEqual((await source()).nodes[0].yavc,{style:'key',fontSize:30,padding:2,outlineSides:['top','bottom']});
+   // An attribute the new markup does not have is taken away at the next update, whatever the control, and what PUDL gave an element stays.
+   await p.evaluate(()=>{const i=document.querySelector('#two .dg-inspector');
+    ['select[data-set="fontWeight"]','input[type="number"][data-set="fontSize"]','[data-parts="paddingSides"]','[data-parts="paddingSides"] .card-body','[data-parts="paddingSides"] button[data-parts-clear]'].forEach(q=>i.querySelector(q).setAttribute('data-stale','1'));});
+   await part('paddingSides',0).fill('5');await part('paddingSides',0).press('Enter');
+   await p.waitForFunction(()=>document.querySelector('#two [data-parts="paddingSides"] .card-summary').textContent==='5, 2, 2, 2');
+   assert.deepEqual(await p.evaluate(()=>[document.querySelectorAll('#two .dg-inspector [data-stale]').length,!!document.querySelector('#two [data-parts="paddingSides"] .card-toggle[aria-labelledby]'),document.querySelector('#two [data-parts="paddingSides"] .card-toggle').getAttribute('aria-expanded')]),[0,true,'true']);
+   await group('paddingSides').locator('[data-parts-clear]').click();
+   await p.waitForFunction(()=>document.querySelector('#two [data-parts="paddingSides"] .card-summary').textContent==='Not set');
    // A change is still being applied when the person has tabbed on and begun typing. The Inspector is given its new values around the field they are in, and what they have typed stays.
    await p.evaluate(()=>{fixture.pictures.delay=700;window.dispatchEvent(new Event('focus'));});
    await part('paddingSides',0).focus();await p.keyboard.type('9');await p.keyboard.press('Tab');await p.keyboard.type('7');
