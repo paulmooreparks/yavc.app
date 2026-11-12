@@ -101,6 +101,9 @@ const types={'.html':'text/html','.js':'text/javascript','.css':'text/css','.jso
     await p.waitForFunction(()=>fixture.readPending&&fixture.releaseRead);
     await p.evaluate(async()=>{fixture.removed=document.querySelector('#one');pudlApplets.destroy(fixture.removed);fixture.removed.remove();fixture.releaseRead();await new Promise(requestAnimationFrame);});
     assert.equal(await p.evaluate(()=>fixture.removed.querySelector('.cm-editor')===null),true,'A disposed initial read must not restart the editor');
+    // In Firefox this navigation crashed the page, about one run in six, when it followed at once the page whose applet had just been destroyed.
+    // Firefox gives no sign of when that teardown is finished, so the test lets the page go quiet first (docs/review.md has the measurements).
+    await p.waitForLoadState('networkidle');
     await p.goto(`http://127.0.0.1:${server.address().port}${prefix}lab/index.html?resourceRecovery=1`);
     await p.locator('#one .dg-canvas img').waitFor();
     const recoveredSource=p.locator('#one .cm-content');await recoveredSource.click();await p.keyboard.press('ControlOrMeta+End');await p.keyboard.type('\nrecovery: Unsaved draft');
