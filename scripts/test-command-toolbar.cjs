@@ -23,11 +23,17 @@ async function docsAlias(context, engine) {
         // preference contract used by a deployed parent-domain cookie.
         const cookies = await context.cookies(`http://docs.localhost:${port}/`);
         await context.addCookies(cookies.filter(c => c.name === 'yavc').map(c => ({ ...c, domain: 'editor.localhost' })));
+        // Docs and Editor keep separate toolbar preferences (DESIGN.md decision 75), so
+        // the choice made in Docs shows in Docs and never reaches Editor, even for one session.
+        await docs.locator('.yavc-command-toolbar [data-command="toggle-files"]').waitFor();
         await editor.goto(`http://editor.localhost:${port}/`);
-        await editor.locator('.yavc-command-toolbar [data-command="toggle-files"]').waitFor();
+        await editor.waitForFunction(() => { const b = document.querySelector('.yavc-command-toolbar [data-command="common-toolbar-customize"]'); return b && !b.disabled; });
+        assert.equal(await editor.locator('.yavc-command-toolbar [data-command="toggle-files"]').count(), 0);
+        await docs.reload(); await docs.locator('.cm-editor').waitFor({ state: 'attached' });
+        await docs.locator('.yavc-command-toolbar [data-command="toggle-files"]').waitFor();
         await docs.screenshot({ path: path.join(evidence, engine + '-docs-toolbar.png') });
         await docs.evaluate(() => typeof window.yavcMdEngine === 'function' ? yavcMdEngine().then(() => true) : true);
-        console.log(engine + ': Docs toolbar label and same-session Editor preferences across origins passed');
+        console.log(engine + ': Docs toolbar label, its saved customization and its separation from Editor passed');
     } finally { await docs.close(); await editor.close(); }
 }
 async function dialogReview(context, engine) {
