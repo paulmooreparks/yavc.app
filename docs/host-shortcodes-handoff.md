@@ -1,5 +1,18 @@
 # Host shortcode integration handoff
 
+## v0.2.81: the toolbar a person can change, and text and fonts in Diagrams
+
+[v0.2.81](https://github.com/paulmooreparks/yavc.app/releases/tag/v0.2.81) ([PR #125](https://github.com/paulmooreparks/yavc.app/pull/125)) followed on 2026-11-12 from what Paul found in GK Companion that morning. The package now has the controller of the shared toolbar as `support/command-toolbar.js` with its rules in `support/command-toolbar.css` (DESIGN.md decision 133), and a host offers `pudlHost.commandToolbar` by passing that controller its config service (`docs/command-toolbar-design.md`, decision 9). The control at the end of the bar is a pencil. In Diagrams the Inspector's Text field and the editor over a shape grow with their text, and the Font fields are PUDL combo boxes whose list starts with the fonts the canvas uses (decision 134). A host should load `pudl/pudl-combo.js` where Diagrams runs; without it the browser draws the list.
+
+| Item | v0.2.81 |
+| --- | --- |
+| Commit | `bf1a4aaae99278783b15ed1701187eb90bb58259` |
+| Archive sha256 | `f1f14f73aac120940d497c32aa56d938a7ee7b97be0955a3f1be3ecc34b6de07` |
+| Manifest sha256 | `2bac8545069b051fe55e99137903dd28228117fc28394dee8b642a884d20da95` |
+| Content digest | `64c3b9e6e3065f9883ea321117d120622b6cd78e0a3a35c05524c0b44b8339b8` |
+| Files | 492 |
+| Applets | Editor 46.37.0, Docs 1.37.0, Slides 0.65.0, Diagrams 0.44.0 |
+
 ## v0.2.79 and v0.2.80: the Editor as a text editor, and Browse writing a reference from the document's folder
 
 [v0.2.79](https://github.com/paulmooreparks/yavc.app/releases/tag/v0.2.79) ([PR #121](https://github.com/paulmooreparks/yavc.app/pull/121)) followed on 2026-11-12 from Paul's proposal to sharpen the split between the two applications (DESIGN.md decision 131). The Editor shows every file as text and has no Visual, Split or Preview. A Markdown document chosen in the Editor is handed to Docs through `fileResolution.open`, and one sent to the Editor by name opens there as text. A receiving host has to open `.md` and `.markdown` files in Docs before it takes this release, which the receiving product did first. The standalone Editor application loses Visual for Markdown until its host does the same.
