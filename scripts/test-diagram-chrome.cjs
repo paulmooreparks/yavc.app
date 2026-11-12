@@ -154,8 +154,11 @@ async function run(engine) {
         assert.equal(await page.getByRole('tab', { name: 'Diagram', exact: true }).count(), 0);
         await page.getByRole('tab', { name: 'Edit', exact: true }).click();
         await page.locator('.menubar-ribbon').getByRole('button', { name: 'Select Items…', exact: true }).focus(); await page.keyboard.press('Enter');
-        await page.getByRole('checkbox', { name: 'Node a', exact: true }).focus(); await page.keyboard.press('Space');
-        await page.getByRole('checkbox', { name: 'Node b', exact: true }).focus(); await page.keyboard.press('Space');
+        /* The dialog lists items in a PUDL multi-select listbox. Focus rests on the list, the arrow keys move the active row and Space toggles it. */
+        const items = page.getByRole('listbox', { name: 'Diagram Items', exact: true });
+        await items.focus(); await page.keyboard.press('ArrowDown'); await page.keyboard.press('Space');
+        await page.keyboard.press('ArrowDown'); await page.keyboard.press('Space');
+        assert.deepEqual(await items.getByRole('option').evaluateAll(rows => rows.map(r => r.getAttribute('aria-selected'))), ['false', 'true', 'true', 'false']);
         await page.locator('dialog').getByRole('button', { name: 'Select', exact: true }).focus(); await page.keyboard.press('Enter');
         assert.equal(await page.locator('.dg-inspector-title').innerText(), '2 Items');
         await divider.focus(); await page.keyboard.press('End');
@@ -185,7 +188,10 @@ async function run(engine) {
         await page.getByRole('group', { name: 'Line Style', exact: true }).getByRole('button', { name: 'Dotted', exact: true }).click();
         await page.waitForFunction(() => /stroke-dash:\s*2/.test(window.CM.EditorView.findFromDOM(document.querySelector('.cm-editor')).state.doc.toString()));
         await page.waitForFunction(() => Array.from(document.querySelectorAll('.dg-inspector .seg button')).some(b => b.textContent === 'Dotted' && b.getAttribute('aria-pressed') === 'true'));
-        await page.getByLabel('Line Color Picker', { exact: true }).waitFor();
+        /* A browser without a native colour input falls back to a text field, and the inspector hides the swatch then and keeps the text field. */
+        const nativeColour = await page.evaluate(() => { const probe = document.createElement('input'); probe.type = 'color'; return probe.type === 'color'; });
+        await page.getByLabel('Line Color Picker', { exact: true }).waitFor({ state: nativeColour ? 'visible' : 'hidden' });
+        assert.equal(await page.locator('.dg-inspector input[data-set="a.style.stroke"]').isVisible(), true);
         await action('new', { kind: 'mermaid', text: 'graph TD\n a --> b' });
         await page.waitForFunction(() => !Array.from(document.querySelectorAll('.menubar-ribbon button')).some(e => e.textContent.trim() === 'Drawing Tool'));
         assert.deepEqual(errors, []);
