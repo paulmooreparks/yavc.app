@@ -1,5 +1,18 @@
 # Host shortcode integration handoff
 
+## v0.2.84: padding and corners in the Inspector, Tab in the Inspector, and the fallback toolbar
+
+[v0.2.84](https://github.com/paulmooreparks/yavc.app/releases/tag/v0.2.84) is the first release built by the yavc.app team (`docs/team.md`), from pull requests 134, 135, 137 and 139 on 2026-11-12. In Diagrams a text node's Inspector sets padding for each side and a radius for each corner (DESIGN.md decision 138), and Tab after typing in an Inspector number field keeps the keyboard in the next field, which in Firefox had saved a wrong number (decision 140). Editor and Docs draw their own toolbar in a host that has no `commandToolbar` service (decision 139). A host that offers the service changes nothing.
+
+| Item | v0.2.84 |
+| --- | --- |
+| Commit | `00f240c79423bf57ee9bf49df403804375c752ec` |
+| Archive sha256 | `1803cff95af187e1958908d75b35e1ec1da97480a4a7402758bd49f70c57dc06` |
+| Manifest sha256 | `d12c05085e401ce797293547c35a6ac3f46440fb6dc04fd0cacd41ed1c138dc8` |
+| Content digest | `209ea31e97d8b1f952ce7862de820cdf043dbcfdc3f1511f2d9b4e1a374a8c0b` |
+| Files | 492 |
+| Applets | Editor 46.37.3, Docs 1.37.3, Slides 0.65.2, Diagrams 0.45.1 |
+
 ## v0.2.83: a D2 picture states its size
 
 [v0.2.83](https://github.com/paulmooreparks/yavc.app/releases/tag/v0.2.83) ([PR #131](https://github.com/paulmooreparks/yavc.app/pull/131)) followed on 2026-11-12 from Paul's report that D2 diagrams were drawn small in Docs in GK Companion, and from the receiving product's measurements. A D2 drawing shown in a document or returned by `yavcDiagramPicture.draw` now has its width and height written into it (DESIGN.md decision 137), so a browser reports its real size as the picture's natural size. A host changes nothing. A host that frames a picture is safer reading the `img` element's width and height where they are given.
