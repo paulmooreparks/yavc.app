@@ -1,0 +1,54 @@
+# The site tests drive the real pages in Chromium (document-styles starts all three browsers, and page-keeps reads a PDF with pdftotext) against a freshly built server. check.yml runs the checks and the unit tests,
+# and nothing else ran these, so they could fail for weeks unseen. The tests that pass today are listed in scripts/site-tests.txt,
+# which scripts/run-site-tests.mjs reads, and a test is added to that file when it is repaired. A failing test fails this workflow.
+name: site tests
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: site-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  site:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Build the server and the two engines the pages load
+        run: |
+          go build -trimpath -o yavc ./cmd/yavc
+          GOOS=js GOARCH=wasm go build -trimpath -o apps/md-engine/yavc-md.wasm ./cmd/yavc-md
+          GOOS=js GOARCH=wasm go build -trimpath -o apps/diagram-kit/yavc-d2.wasm ./cmd/yavc-d2
+          cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" apps/md-engine/wasm_exec.js
+          cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" apps/diagram-kit/wasm_exec.js
+      - name: Install Playwright, the browsers and pdftotext
+        run: |
+          npm install --prefix "$RUNNER_TEMP/playwright" playwright@1.63.0
+          "$RUNNER_TEMP/playwright/node_modules/.bin/playwright" install --with-deps chromium firefox webkit
+          sudo apt-get install -y --no-install-recommends poppler-utils
+      - name: Site tests
+        env:
+          NODE_PATH: ${{ runner.temp }}/playwright/node_modules
+          SITE_SERVER: ${{ github.workspace }}/yavc
+          SITE_JOBS: '2'
+        run: node scripts/run-site-tests.mjs
+      - name: Logs of the tests
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: site-test-logs
+          path: ${{ runner.temp }}/yavc-site-test-logs
+          retention-days: 7
