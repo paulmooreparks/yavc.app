@@ -5,7 +5,7 @@ name: site tests
 
 on:
   push:
-    branches: [main, builder/package-tests-ci]
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
