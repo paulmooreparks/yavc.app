@@ -10,6 +10,13 @@ const action = (p, app, name, input = {}) => p.evaluate(({app, name, input}) => 
             for (const app of ['editor', 'docs', 'slides', 'diagrams']) {
                 const p = await browser.newPage({viewport: {width: 1400, height: 1000}}), errors = [];
                 p.setDefaultTimeout(20000); p.on('pageerror', error => errors.push(error.message));
+                // These checks need the documents grouped as tabs in one window. The default is one document per window (DESIGN.md, decision 82),
+                // so the page is served with the tabbed policy, the way test-document-grouping chooses its policy.
+                await p.route('**/*', async route => {
+                    if (!route.request().isNavigationRequest()) return route.continue();
+                    const response = await route.fetch();
+                    await route.fulfill({response, body: (await response.text()).replace(/name="yavc-document-grouping" content="[^"]*"/, 'name="yavc-document-grouping" content="tabbed"')});
+                });
                 try {
                     await p.goto(`http://localhost:${port}/?open=${app}&top=${app}`);
                     await p.locator(`[data-applet="${app}"][data-applet-state="running"]`).waitFor();
