@@ -1,5 +1,18 @@
 # Host shortcode integration handoff
 
+## v0.2.83: a D2 picture states its size
+
+[v0.2.83](https://github.com/paulmooreparks/yavc.app/releases/tag/v0.2.83) ([PR #131](https://github.com/paulmooreparks/yavc.app/pull/131)) followed on 2026-11-12 from Paul's report that D2 diagrams were drawn small in Docs in GK Companion, and from the receiving product's measurements. A D2 drawing shown in a document or returned by `yavcDiagramPicture.draw` now has its width and height written into it (DESIGN.md decision 137), so a browser reports its real size as the picture's natural size. A host changes nothing. A host that frames a picture is safer reading the `img` element's width and height where they are given.
+
+| Item | v0.2.83 |
+| --- | --- |
+| Commit | `5767f339cadd712ac236d59d2a07741e7b59d732` |
+| Archive sha256 | `6103dd9f67176e36ef5e62b3a8139ad2e69405cad9e946d5669658b4585a6c98` |
+| Manifest sha256 | `daa6427715e507718db989e61f29a8f6dcfa83b14f845b737ad2b530651672c1` |
+| Content digest | `3fc1f626ee8fa5cc12af7621639db11cde663d521d1f99c997d1dd3f423ed791` |
+| Files | 492 |
+| Applets | Editor 46.37.2, Docs 1.37.2, Slides 0.65.2, Diagrams 0.44.2 |
+
 ## v0.2.82: no Diagram Contents button
 
 [v0.2.82](https://github.com/paulmooreparks/yavc.app/releases/tag/v0.2.82) ([PR #129](https://github.com/paulmooreparks/yavc.app/pull/129)) followed on 2026-11-12 from Paul's request. A canvas drawn in a document or a slide no longer has the Diagram Contents button under it (DESIGN.md decision 136). The list of the drawing's contents stays in the page for a screen reader. A host changes nothing.
