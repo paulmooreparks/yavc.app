@@ -76,7 +76,13 @@
     }
     function read(){return transaction('readonly',function(record){return validate(record);});}
     async function commit(expected,data,current,addition){var prepared=await prepare(data,addition);return transaction('readwrite',function(record,stores){validate(record);if(record.generation!==expected)throw new Error('Files changed in another tab. Your operation was not saved; retry against the current files.');return apply(record,prepared,stores,current);});}
-    async function update(change,addition){var before=await read(),data=await change(before);return commit(before.generation,data,null,addition);}
+    /* The bytes are copied at the call, before the first await, because the caller may reuse its array as soon as the call returns a
+       promise. The copy is made without the array's own slice, which a subclass may answer with a view of the same memory. */
+    function owned(addition){
+        if(!addition)return addition;var bytes=addition.bytes,view=bytes instanceof Uint8Array?bytes:bytes instanceof ArrayBuffer?new Uint8Array(bytes):null;
+        if(!view)return addition;var copy=new Uint8Array(view.byteLength);copy.set(view);return Object.assign({},addition,{bytes:copy});
+    }
+    async function update(change,addition){addition=owned(addition);var before=await read(),data=await change(before);return commit(before.generation,data,null,addition);}
     function oldDatabase(name){return new Promise(function(resolve,reject){var request=indexedDB.open(name);request.onupgradeneeded=function(){request.transaction.abort();};request.onerror=function(){if(request.error&&request.error.name==='AbortError')resolve(null);else reject(request.error);};request.onsuccess=function(){resolve(request.result);};});}
     async function oldHome(){var db=await oldDatabase('yavc-home');if(!db)return null;try{return await new Promise(function(resolve,reject){var tx=db.transaction('state','readonly'),r=tx.objectStore('state').get('home');tx.oncomplete=function(){resolve(r.result||null);};tx.onabort=tx.onerror=function(){reject(tx.error);};});}finally{db.close();}}
     async function initialize(options){
