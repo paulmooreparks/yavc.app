@@ -132,6 +132,13 @@ const served={'home.svg':Buffer.from(house),'plain.svg':Buffer.from(house),'move
    await group('radiusCorners').locator('[data-parts-clear]').click();
    await p.waitForFunction(()=>document.querySelector('#two [data-parts="radiusCorners"] .card-summary').textContent==='Not set');
    assert.ok((await source()).nodes.every(n=>!n.yavc||n.yavc.radiusCorners===undefined));
+   // A choice that is Mixed is resolved by choosing a value, and shows it once the Inspector is updated, and shows Mixed again when that is undone.
+   const outline=inspector.locator('select[data-set="outlineSides"]'),outlineNow=()=>p.evaluate(()=>{const s=document.querySelector('#two select[data-set="outlineSides"]');return [s.value,Array.from(s.options).some(o=>o.value==='__mixed__')];});
+   assert.deepEqual(await outlineNow(),['__mixed__',true]);
+   await outline.selectOption('top,bottom');
+   await p.waitForFunction(()=>{const s=document.querySelector('#two select[data-set="outlineSides"]');return s.value==='top,bottom'&&!Array.from(s.options).some(o=>o.value==='__mixed__');});
+   await p.evaluate(()=>{document.activeElement.blur();pudlCommands.run('undo',null,document.querySelector('#two'));});
+   await p.waitForFunction(()=>{const s=document.querySelector('#two select[data-set="outlineSides"]');return s.value==='__mixed__'&&Array.from(s.options).some(o=>o.value==='__mixed__');});
    // Clear on one node takes the sides back to the single value, which the node keeps.
    await run('canvas-view',{op:'select',key:'key',kind:'node'});
    await group('paddingSides').locator('[data-parts-clear]').click();
@@ -155,6 +162,20 @@ const served={'home.svg':Buffer.from(house),'plain.svg':Buffer.from(house),'move
    await group('paddingSides').locator('[data-parts-clear]').click();
    await p.waitForFunction(()=>document.querySelector('#two [data-parts="paddingSides"] .card-summary').textContent==='Not set');
    assert.deepEqual((await source()).nodes[0].yavc,{style:'key',fontSize:30,padding:2,outlineSides:['top','bottom']});
+   // A change is still being applied when the person has tabbed on and begun typing. The Inspector is given its new values around the field they are in, and what they have typed stays.
+   await p.evaluate(()=>{fixture.pictures.delay=700;window.dispatchEvent(new Event('focus'));});
+   await part('paddingSides',0).focus();await p.keyboard.type('9');await p.keyboard.press('Tab');await p.keyboard.type('7');
+   await p.evaluate(()=>{document.activeElement.__typing=true;});
+   await p.waitForFunction(()=>document.querySelector('#two [data-parts="paddingSides"] .card-summary').textContent==='9, 2, 2, 2',null,{timeout:10000});
+   // The field is the same element, still holds what was typed, and nothing was stored for it before the person left it.
+   assert.deepEqual(await p.evaluate(()=>{const a=document.activeElement,own=a&&a.closest('.number-field')&&a.closest('.number-field').querySelector('input[data-part]');return own?[own.dataset.index,a.value,a.__typing===true]:[a&&a.tagName,null,false];}),['1','7',true]);
+   assert.deepEqual((await source()).nodes[0].yavc.paddingSides,[9,2,2,2]);
+   await p.keyboard.press('Tab');
+   await p.waitForFunction(()=>document.querySelector('#two [data-parts="paddingSides"] .card-summary').textContent==='9, 7, 2, 2',null,{timeout:10000});
+   assert.deepEqual((await source()).nodes[0].yavc.paddingSides,[9,7,2,2]);
+   await p.evaluate(()=>{fixture.pictures.delay=0;});
+   await group('paddingSides').locator('[data-parts-clear]').click();
+   await p.waitForFunction(()=>document.querySelector('#two [data-parts="paddingSides"] .card-summary').textContent==='Not set');
    // A side emptied again goes back to the single value, and the single fields are still there.
    await part('paddingSides',0).fill('5');await part('paddingSides',0).press('Enter');
    await p.waitForFunction(()=>document.querySelector('#two [data-parts="paddingSides"] .card-summary').textContent==='5, 2, 2, 2');
