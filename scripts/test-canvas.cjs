@@ -116,8 +116,12 @@ async function run(engine) {
         d = await doc(); assert.equal(d.edges.length, 2); assert.equal(d.edges[1].fromSide, 'right'); assert.equal(d.edges[1].toSide, 'left');
         await page.getByRole('group', { name: 'Route', exact: true }).getByRole('button', { name: 'Curve', exact: true }).click(); await idle();
         assert.equal((await doc()).edges[1].yavc.route, 'curve');
+        // The Inspector is updated in place: the buttons PUDL fills from their commands keep their words and names.
+        await page.waitForFunction(() => { const b = Array.from(document.querySelectorAll('.dg-inspector [data-command^="cv-reconnect-"]')); return b.length === 2 && b.every(x => x.textContent.trim() && x.getAttribute('aria-label')); });
         await page.locator('.dg-property-picker[popovertarget$="-toHead-menu"]').click();
         await page.getByRole('menu', { name: 'End Head', exact: true }).getByRole('menuitemradio', { name: 'Many', exact: true }).click(); await idle();
+        // The glyph on the picker follows the choice, since a style is copied with the rest.
+        await page.waitForFunction(() => /cf-many/.test(document.querySelector('.dg-property-picker[popovertarget$="-toHead-menu"] .glyph').getAttribute('style')));
         assert.equal((await doc()).edges[1].toEnd, 'arrow');
         await page.locator('.dg-property-picker[popovertarget$="-toHead-menu"]').click();
         await page.getByRole('menu', { name: 'End Head', exact: true }).getByRole('menuitemradio', { name: 'None', exact: true }).click(); await idle();

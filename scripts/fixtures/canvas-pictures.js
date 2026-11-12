@@ -7,10 +7,12 @@
 (function(){
     'use strict';
     var pictures=new URL('../fixture-pictures/',location.href).href,known=['icons/home.svg','icons/plain.svg','icons/logo.png','icons/fake.png','icons/large.svg','icons/moved.svg'];
-    fixture.pictures={asked:[]};
+    // delay is how long, in milliseconds, the host takes to answer for a picture, so that a test can make a drawing slow.
+    fixture.pictures={asked:[],delay:0};
     var workspace=pudlHost.contentWorkspace||(pudlHost.contentWorkspace={version:1});
     workspace.resources={resolve:async function(request){
         fixture.pictures.asked.push({resource:request.resource,href:request.href,kind:request.kind});
+        if(fixture.pictures.delay)await new Promise(function(resolve){setTimeout(resolve,fixture.pictures.delay);});
         if(request.href==='icons/outside.svg')return {url:'https://example.com/outside.svg'};
         return known.indexOf(request.href)>=0?{url:pictures+request.href.replace('icons/','')}:null;
     }};
