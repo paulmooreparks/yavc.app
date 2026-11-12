@@ -58,14 +58,14 @@ const evidence = path.join(os.tmpdir(), 'yavc-launcher-review'); fs.mkdirSync(ev
             await pin.waitFor({ state: 'detached' });
             await page.waitForFunction(async () => !(await pudlHost.config.load('desktop-taskbar', {})).pins?.includes('editor'));
             await open(); await root.locator('[data-launcher-pin]').click();
-            await page.waitForFunction(() => pudlLauncher.state(document.querySelector('#site-start')).presentation === 'pane');
+            await page.waitForFunction(() => pudlLauncher.state(document.querySelector('#site-start'))?.presentation === 'pane');
             assert.equal(new URL(page.url()).searchParams.get('start-mode'), 'pane');
             await page.waitForFunction(async () => (await (await fetch('/config/site-launcher')).json()).presentation === 'pane');
             // A fresh address uses the saved presentation and must canonicalize it for Back.
             await page.goto(`http://localhost:${port}/?open=dice&top=dice`);
             await page.waitForFunction(() => new URL(location.href).searchParams.get('start-mode') === 'pane');
             await root.locator('[data-start-category-key="games"]').click(); await page.goBack();
-            await page.waitForFunction(() => pudlLauncher.state(document.querySelector('#site-start')).presentation === 'pane' && pudlStart.state(document.querySelector('#site-start')).category === '');
+            await page.waitForFunction(() => pudlLauncher.state(document.querySelector('#site-start'))?.presentation === 'pane' && pudlStart.state(document.querySelector('#site-start'))?.category === '');
             await page.screenshot({ path: path.join(evidence, engine + '-pane.png') });
             await root.locator('[data-launcher-pin]').click();
             if (await root.isHidden()) await open();
@@ -80,7 +80,8 @@ const evidence = path.join(os.tmpdir(), 'yavc-launcher-review'); fs.mkdirSync(ev
             await root.locator('header').getByRole('link', { name: 'Settings', exact: true }).click();
             await page.locator('.win[data-win="settings"]').waitFor({ state: 'visible' });
             assert.equal(new URL(page.url()).hostname, 'diagrams.localhost');
-            assert.equal(new URL(page.url()).searchParams.get('file'), '~/Documents/example.canvas');
+            /* The address names the file again once the page has opened it; until then the page may have left it out. */
+            await page.waitForFunction(() => new URL(location.href).searchParams.get('file') === '~/Documents/example.canvas');
             assert.deepEqual(errors, []);
             console.log(engine + ': Launcher header, Settings, About, dormant pins, activation, persistence, unpin, pane and Back passed');
         } catch (error) { await page.screenshot({ path: path.join(evidence, engine + '-failure.png') }); throw error; }

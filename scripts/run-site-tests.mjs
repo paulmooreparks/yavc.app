@@ -10,7 +10,7 @@
 // it passes, and it is taken off only by deciding that it is wrong.
 //
 // Environment: SITE_SERVER is the built server (default ./yavc), SITE_ENGINE the browser (default chromium), SITE_JOBS how many
-// tests run at once (default 2), SITE_TIMEOUT the seconds one test may take (default 600). Playwright must be resolvable,
+// tests run at once (default 2), SITE_TIMEOUT the seconds one test may take (default 600), SITE_LOGS where each test's full output is kept. Playwright must be resolvable,
 // by NODE_PATH or by an install beside the repository.
 import { spawn } from 'node:child_process';
 import { mkdtempSync, readFileSync, readdirSync, rmSync, mkdirSync, writeFileSync } from 'node:fs';
@@ -91,7 +91,7 @@ async function worker() {
         for (let again = 0; again < 2 && result.status !== 'pass' && result.output.startsWith('The server did not start.'); again++) { result = await runOne(test, await freePort()); }
         results.push(result);
         console.log((result.status === 'pass' ? 'PASS ' : 'FAIL ') + result.name + ' (' + result.seconds + ' s)');
-        if (result.status !== 'pass') { console.log(result.output.split(/\r?\n/).filter(l => l.trim() && !/^\s+at /.test(l)).slice(-12).map(l => '    ' + l.slice(0, 300)).join('\n')); }
+        if (result.status !== 'pass') { console.log(result.output.split(/\r?\n/).filter(l => l.trim() && !/^\s+at .*node:/.test(l)).slice(-14).map(l => '    ' + l.slice(0, 300)).join('\n')); }
     }
 }
 await Promise.all(Array.from({ length: Math.min(jobs, tests.length) }, worker));
