@@ -8,19 +8,20 @@ const command=(page,id)=>page.evaluate(id=>pudlCommands.run(id,null,document.que
  const p=await b.newPage({viewport:{width:1500,height:1000}}),errors=[];p.on('pageerror',err=>errors.push(err.message));p.setDefaultTimeout(20000);let phase='boot';try{
   await p.goto(`http://${app}.localhost:${port}/`);await p.locator('.cm-content').waitFor({state:'attached'});assert.match(await p.title(),app==='docs'?/Docs/:/Editor/);
   phase='fixed identity and native creation';await action(p,app,'new',{path:'~/split.md',text:'# Shared workspace\n\nAn **editable** document.\n\n## Section\n\nText.'});
-  await p.waitForFunction(app=>document.querySelector('[data-command="view-'+'visual'+'"]')?.getAttribute('aria-pressed')==='true',app);
-  const views=await p.locator('[data-command-choice="ed-view"] button').allTextContents();assert.deepEqual(views,app==='docs'?['Document','Visual','Text','Split','Preview']:['Visual','Text','Split','Preview']);
+  // The Editor is a text editor with one view and draws no view choice. Docs opens a plain Markdown file in its Visual view (DESIGN.md, decision 131).
+  if(app==='docs')await p.waitForFunction(()=>document.querySelector('[data-command="view-visual"]')?.getAttribute('aria-pressed')==='true');
+  const views=await p.locator('[data-command-choice="ed-view"] button').allTextContents();assert.deepEqual(views,app==='docs'?['Document','Visual','Text','Split','Preview']:[]);
   assert.equal(await p.locator('[data-applet="'+app+'"]').count(),1);
-  phase='editable Markdown split';await action(p,app,'view',{mode:'split'});await p.locator('.doc-page [contenteditable="true"]').waitFor({state:'visible'});assert.equal(await p.locator('.doc-page [contenteditable="true"]').count(),1);await action(p,app,'view',{mode:'text'});
+  phase='editable Markdown split';if(app==='docs'){await action(p,app,'view',{mode:'split'});await p.locator('.doc-page [contenteditable="true"]').waitFor({state:'visible'});assert.equal(await p.locator('.doc-page [contenteditable="true"]').count(),1);}else await assert.rejects(()=>action(p,app,'view',{mode:'split'}),/invalid input to yavc\.editor\/view@1/);await action(p,app,'view',{mode:'text'});
   if(app==='editor'){
-   await assert.rejects(()=>action(p,app,'view',{mode:'document'}),/unavailable/);await assert.rejects(()=>action(p,app,'page-setup',{page:'a4'}),/moved/);
-   await action(p,app,'new',{path:'~/code.go',text:'package main\n'});await p.waitForFunction(()=>document.querySelector('[data-command="view-text"]')?.getAttribute('aria-pressed')==='true');
+   await assert.rejects(()=>action(p,app,'view',{mode:'document'}),/invalid input to yavc\.editor\/view@1/);await assert.rejects(()=>action(p,app,'page-setup',{page:'a4'}),/moved/);
+   await action(p,app,'new',{path:'~/code.go',text:'package main\n'});assert.equal((await action(p,app,'document')).path,'~/code.go');
   }else{
    const before=await action(p,app,'documents');await assert.rejects(()=>action(p,app,'new',{path:'~/code.go',text:'package main'}),/Docs opens/);assert.equal((await action(p,app,'documents')).documents.length,before.documents.length);
    await assert.rejects(()=>action(p,app,'new',{path:'~/deck.slides.md',text:'# Deck'}),/Docs opens/);
    await action(p,app,'view',{mode:'document'});await p.locator('.doc-paginated .ProseMirror').waitFor();await command(p,'new-markdown');await p.locator('.ProseMirror').waitFor();
   }
-  phase='save and reopen';await action(p,app,'save',{path:app==='docs'?'~/new.md':'~/code.go'});await p.reload();await p.locator('.cm-content').waitFor({state:'attached'});const docs=await action(p,app,'documents');assert.ok(docs.documents.some(d=>d.path===(app==='docs'?'~/new.md':'~/code.go')));assert.deepEqual(errors,[]);
+  phase='save and reopen';await action(p,app,'save',{path:app==='docs'?'~/new.md':'~/code.go'});await p.evaluate(()=>typeof window.yavcMdEngine==='function'?yavcMdEngine().then(()=>true):true);await p.reload();await p.locator('.cm-content').waitFor({state:'attached'});const docs=await action(p,app,'documents');assert.ok(docs.documents.some(d=>d.path===(app==='docs'?'~/new.md':'~/code.go')));assert.deepEqual(errors,[]);
   await p.screenshot({path:path.join(out,engine+'-'+app+'.png')});console.log(engine+' '+app+': identity, views, native boundaries, source access, saves and independent recovery passed');
  }catch(err){console.error(app,phase,await p.evaluate(async()=>({body:document.body.innerText,problems:await window.pudlActions.problems()})));throw err;}finally{await p.close();}
  }}finally{await b.close();}

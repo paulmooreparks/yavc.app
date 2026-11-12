@@ -13,8 +13,14 @@ async function run(engine) {
     const dg = (name, input) => action('diagrams', name, input);
     const ed = (name, input) => action('editor', name, input);
     const holdWrites = () => page.evaluate(() => {
-        window.realWrite = pcSiteFs.write; window.held = []; window.calls = [];
-        pcSiteFs.write = (...args) => { calls.push([args[1], args[2]]); return new Promise(resolve => held.push(() => realWrite(...args).then(resolve))); };
+        // Saves go through the host's content resource adapter (DESIGN.md, decision 75), so that is the write to hold.
+        const adapter = pudlHost.contentResourceAdapter; window.realWrite = adapter.write; window.realCreate = adapter.create; window.held = []; window.calls = [];
+        adapter.write = request => { calls.push(['write', request.resource]); return new Promise((resolve, reject) => held.push(() => realWrite(request).then(resolve, reject))); };
+        // A save to a new name creates the file, and that is held the same way. Other creations, such as a new document with a path, go through.
+        adapter.create = (...args) => {
+            if (!args[0] || args[0].resource !== '~/renamed.json') return realCreate(...args);
+            calls.push(['create', args[0].resource]); return new Promise((resolve, reject) => held.push(() => realCreate(...args).then(resolve, reject)));
+        };
     });
     const command = (id, root = '.dg') => page.evaluate(({ id, root }) => pudlCommands.run(id, null, document.querySelector(root)), { id, root });
     const idle = () => page.waitForFunction(() => document.querySelector('.dg-cv-editor') && !document.querySelector('.sc-diagram-stale'));
@@ -45,7 +51,7 @@ async function run(engine) {
         await fill('Background', '#654321'); await page.getByRole('button', { name: 'Theme Default', exact: true }).click(); await idle();
         assert.equal(await background(), dark); assert.equal((await doc()).yavc.background, undefined);
         phase = 'Outline and arrangement'; await command('toggle-outline');
-        const outline = page.getByRole('complementary', { name: 'Canvas Outline', exact: true }); await outline.waitFor();
+        const outline = page.getByRole('complementary', { name: 'Diagram Outline', exact: true }); await outline.waitFor();
         await outline.getByRole('button', { name: 'Start', exact: true }).click();
         assert.equal(await outline.getByRole('button', { name: 'Start', exact: true }).getAttribute('aria-pressed'), 'true');
         await outline.getByRole('button', { name: 'Process', exact: true }).click({ modifiers: ['Control'] });
@@ -108,9 +114,9 @@ async function run(engine) {
         assert.equal((await ed('document')).lang, 'text');
         assert.equal(await page.locator('.cm-editor').evaluate(e => CM.EditorView.findFromDOM(e).state.doc.toString()), 'Other');
         phase = 'Editor failure recovery';
-        await page.evaluate(() => { pcSiteFs.write = async () => ({ error: 'Synthetic write failure' }); });
+        await page.evaluate(() => { const adapter = pudlHost.contentResourceAdapter, fail = async () => { throw new Error('Synthetic write failure'); }; adapter.write = fail; adapter.create = fail; });
         await assert.rejects(() => ed('save'), /Synthetic write failure/); assert.equal((await ed('document')).modified, true);
-        await page.evaluate(() => { pcSiteFs.write = realWrite; }); await ed('save'); assert.equal((await ed('document')).modified, false);
+        await page.evaluate(() => { { const adapter = pudlHost.contentResourceAdapter; adapter.write = realWrite; adapter.create = realCreate; } }); await ed('save'); assert.equal((await ed('document')).modified, false);
         phase = 'Editor closed-instance acknowledgement';
         await ed('set-text', { text: 'Old instance submission' }); await holdWrites();
         await page.evaluate(() => { window.pending = pudlActions.run('yavc.editor/save@1', {}, { grant: 'all' }).then(() => 'saved', e => e.message); });
@@ -118,7 +124,7 @@ async function run(engine) {
         await page.evaluate(() => { window.pendingClose = pudlActions.run('yavc.editor/close@1', {}, { grant: 'all' }); });
         await page.getByRole('button', { name: "Don't Save", exact: true }).click(); await page.evaluate(() => pendingClose);
         await ed('open-file', { path: '~/other.txt' }); await ed('set-text', { text: 'Reopened draft' });
-        await page.evaluate(async () => { held.shift()(); await pending; pcSiteFs.write = realWrite; });
+        await page.evaluate(async () => { held.shift()(); await pending; { const adapter = pudlHost.contentResourceAdapter; adapter.write = realWrite; adapter.create = realCreate; } });
         assert.equal((await ed('document')).text, 'Reopened draft'); assert.equal((await ed('document')).modified, true);
         await page.reload(); await page.locator('.cm-editor').waitFor({ state: 'attached' });
         assert.ok((await ed('documents')).documents.some(d => d.path === '~/renamed.json'));

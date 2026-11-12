@@ -6,6 +6,8 @@ const rect=p=>p.locator('.ed-scroll').evaluate(n=>{const r=n.getBoundingClientRe
  const b=await pw[engine].launch({headless:true});try{
   const p=await b.newPage({viewport:{width:1500,height:1050}});await p.goto(`http://docs.localhost:${port}/`);await p.locator('.cm-editor').waitFor({state:'attached'});
   await p.evaluate(async()=>{await pudlActions.run('yavc.docs/new@1',{path:'~/kept.docs.md',text:'# Keep this document\n'},{grant:'all'});const F=await yavcUtil.siteFs();await F.write(F.home(),'unsupported.go','package main\n',false);await document.fonts.ready;});
+  // The Files pane is hidden at first (DESIGN.md, decision 74), and this test clicks a file in it.
+  await p.evaluate(()=>pudlCommands.run('toggle-files',null,document.querySelector('[data-applet]')));await p.locator('.ed-files-panel a[data-file]').filter({hasText:'unsupported.go'}).first().waitFor({state:'visible'});
   const before=await rect(p),original=await p.evaluate(()=>pudlActions.run('yavc.docs/documents@1',{}, {grant:'all'}));
   await p.locator('.ed-files-panel a[data-file]').filter({hasText:'unsupported.go'}).first().click();
   await p.locator('.toast.danger').filter({hasText:'Docs opens Markdown'}).waitFor();assert.deepEqual(await rect(p),before);assert.equal(await p.locator('.yavc-notice:visible').count(),0);
