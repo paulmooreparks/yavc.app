@@ -9,13 +9,18 @@ const types={'.html':'text/html','.js':'text/javascript','.css':'text/css','.jso
   const browser=await pw[engine].launch({headless:true}),p=await browser.newPage({viewport:{width:1550,height:1600}}),errors=[];p.setDefaultTimeout(20000);p.on('pageerror',e=>errors.push(e.message));
   const action=(app,name,input={})=>p.evaluate(({app,name,input})=>pudlActions.run('yavc.'+app+'/'+name+'@1',input,{grant:'all'}),{app,name,input});
   try{await p.goto(`http://127.0.0.1:${server.address().port}${prefix}workspace-lab/index.html`);await p.locator('#document .ProseMirror').waitFor();
-   for(const [app,root,modes] of [['docs','document',['document','visual','preview']],['editor','source',['visual','preview']]]){
+   // Only Docs draws a document's shortcodes. The Editor is a text editor (DESIGN.md, decision 131) and has the one view, so it is checked below.
+   for(const [app,root,modes] of [['docs','document',['document','visual','preview']]]){
     for(const mode of modes){await action(app,'view',{mode});await p.locator('#'+root+' [data-host-shortcode="ticket"] [data-host-drawn],#'+root+' [data-host-shortcode="ticket"][data-host-drawn]').first().waitFor();
      assert.equal(await p.locator('#'+root+' .sc-host script,#'+root+' .sc-host [onclick],#'+root+' .sc-host [data-command]').count(),0);assert.equal(await p.evaluate(()=>!!window.hostAttack),false);
      assert.match(await p.locator('#'+root+' [data-host-shortcode="person"]').innerText(),/person: alex/);assert.match(await p.locator('#'+root+' [data-host-shortcode="panel"] .sc-host-body').innerText(),/Editable body/);assert.match(await p.locator('#'+root+' [data-host-shortcode="target"]').innerText(),/marked words/);
      assert.equal((await action(app,'document')).text,await p.evaluate(()=>fixture.hostShortcodes.source));
     }
    }
+   // The Editor shows the same source as text, with the shortcodes as the text they are and nothing drawn, and it refuses the views it no longer has.
+   await action('editor','view',{mode:'text'});assert.equal((await action('editor','document')).text,await p.evaluate(()=>fixture.hostShortcodes.source));
+   assert.equal(await p.locator('#source [data-host-shortcode], #source [data-host-drawn]').count(),0);
+   for(const mode of ['visual','preview'])await assert.rejects(action('editor','view',{mode}),/invalid input to yavc\.editor\/view@1/);
    await action('docs','view',{mode:'visual'});await p.locator('#document .pm-sc [data-host-shortcode="ticket"]').click();const dialog=p.getByRole('dialog',{name:'Change Ticket',exact:true});await dialog.waitFor();await dialog.getByLabel('Key',{exact:true}).fill('wrong');await dialog.getByRole('button',{name:'Change',exact:true}).click();await dialog.getByText('Use an EX issue key.',{exact:true}).waitFor();await dialog.getByLabel('Key',{exact:true}).fill('EX-2');await dialog.getByRole('button',{name:'Change',exact:true}).click();await dialog.waitFor({state:'hidden'});assert.match((await action('docs','document')).text,/\{\{ticket:EX-2\}\}/);
    await p.evaluate(()=>pudlCommands.run('undo',null,document.querySelector('#document')));assert.match((await action('docs','document')).text,/\{\{ticket:EX-1\}\}/);
    await p.evaluate(()=>pudlCommands.run('insert-ticket',null,document.querySelector('#document')));const insert=p.getByRole('dialog',{name:'Insert Ticket',exact:true});await insert.waitFor();await insert.getByLabel('Key',{exact:true}).fill('EX-3');await insert.getByRole('button',{name:'Insert',exact:true}).click();await insert.waitFor({state:'hidden'});assert.match((await action('docs','document')).text,/\{\{ticket:EX-3\}\}/);

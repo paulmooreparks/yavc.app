@@ -9,7 +9,7 @@ async function ready(p){await p.locator('.cm-content').waitFor({state:'attached'
         const p=await browser.newPage(),errors=[];p.on('pageerror',err=>errors.push(err.message));
         await p.goto(`http://localhost:${port}/applet/${app}`);await ready(p);
         await p.evaluate(async text=>{const F=await yavcUtil.siteFs();await F.write(F.home(),'endings.md',text,false);},original);
-        await call(p,app,'open-file',{path:'~/endings.md'});await call(p,app,'view',{mode:'text'});
+        await call(p,app,'open-file',app==='editor'?{path:'~/endings.md',view:'text'}:{path:'~/endings.md'});await call(p,app,'view',{mode:'text'});
         const source=p.locator('.cm-content');await source.focus();await p.keyboard.press('ControlOrMeta+Home');await p.keyboard.press('ArrowDown');await p.keyboard.press('Home');await p.keyboard.type('X');
         const edited='First\r\nXsame\nsame\rtail\r\n';await call(p,app,'save');
         assert.equal(await p.evaluate(()=>pcSiteFs.readHome(pcSiteFs.resolve(pcSiteFs.home(),'endings.md'))),edited);

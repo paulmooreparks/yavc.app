@@ -11,7 +11,7 @@ const action=(p,app,name,input={})=>p.evaluate(({app,name,input})=>pudlActions.r
  for(const encoding of formats){
   const resource='~/source-'+encoding+suffix,name='download-'+encoding+suffix;
   await p.evaluate(async({resource,text,encoding})=>{const F=await yavcUtil.siteFs();await F.contentResources.create({resource,text,encoding,bom:encoding!=='utf-8'});},{resource,text,encoding});
-  await action(p,app,app==='slides'?'open':'open-file',{path:resource});
+  await action(p,app,app==='slides'?'open':'open-file',app==='editor'&&resource.endsWith('.md')?{path:resource,view:'text'}:{path:resource});
   await action(p,app,'set-text',{text:app==='diagrams'?'a: Captured\n':'# Captured\n\nUnicode café.\n'});
   const readAction=app==='diagrams'?'diagram':app==='slides'?'text':'document',captured=(await action(p,app,readAction)).text;
   await p.evaluate(()=>{window.downloadCopy=pudlCommands.run('save-as',null,document.querySelector('[data-applet]'));});const dialog=p.locator('.fb-picker[open]');await dialog.waitFor();await dialog.getByLabel('File Name',{exact:true}).fill(name);

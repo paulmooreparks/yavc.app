@@ -8,7 +8,7 @@ async function ready(p){await p.locator('.cm-content').waitFor({state:'attached'
     const b=await pw[engine].launch({headless:true});try{for(const missingBaseline of [false,true]){
         const p=await b.newPage(),errors=[];p.on('pageerror',err=>errors.push(err.message));await p.goto(`http://localhost:${port}/applet/${app}`);await ready(p);
         const actual=missingBaseline?source:'\ufeff'+source,recovered=missingBaseline?source:draft;
-        await p.evaluate(async source=>{const F=await yavcUtil.siteFs();await F.write(F.home(),'legacy.md',source,false);},actual);await call(p,app,'open-file',{path:'~/legacy.md'});await call(p,app,'view',{mode:'text'});
+        await p.evaluate(async source=>{const F=await yavcUtil.siteFs();await F.write(F.home(),'legacy.md',source,false);},actual);await call(p,app,'open-file',app==='editor'?{path:'~/legacy.md',view:'text'}:{path:'~/legacy.md'});await call(p,app,'view',{mode:'text'});
         await p.evaluate(()=>yavcSnapshot.keepAll());
         await p.waitForFunction(app=>Object.keys(localStorage).filter(key=>key.startsWith('pc-resume:'+app+':')).some(key=>JSON.parse(localStorage.getItem(key))?.v?.tabs?.some(tab=>tab.name==='legacy.md')),app);
         await p.evaluate(()=>pudlApplets.destroy(document.querySelector('[data-applet]')));
