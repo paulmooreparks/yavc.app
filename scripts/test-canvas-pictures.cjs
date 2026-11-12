@@ -89,6 +89,9 @@ const served={'home.svg':Buffer.from(house),'plain.svg':Buffer.from(house),'move
    assert.deepEqual(await inspector.locator('[data-parts="paddingSides"] input[data-part]').evaluateAll(l=>l.map(i=>[i.min,i.max])),[['0','64'],['0','64'],['0','64'],['0','64']]);
    assert.deepEqual(await inspector.locator('[data-parts-clear]').evaluateAll(l=>l.map(b=>b.getAttribute('aria-label'))),['Clear Radius by Corner','Clear Padding by Side']);
    await group('paddingSides').locator('.card-toggle').click();await part('paddingSides',0).waitFor();
+   // An empty side shows the value it will take, which is the single Text Padding, and the help says that setting one fixes the rest.
+   assert.deepEqual(await Promise.all([0,1,2,3].map(i=>part('paddingSides',i).getAttribute('placeholder'))),['2','2','2','2']);
+   assert.match(await group('paddingSides').locator('.form-help').textContent(),/shows the value it will use.*Setting one side fixes the others at those values until Clear\./);
    // A side typed alone is set, and the others take the single Text Padding, which is 2.
    await part('paddingSides',0).fill('10');await part('paddingSides',0).press('Enter');
    await p.waitForFunction(()=>document.querySelector('#two [data-parts="paddingSides"] .card-summary').textContent==='10, 2, 2, 2');
@@ -110,6 +113,7 @@ const served={'home.svg':Buffer.from(house),'plain.svg':Buffer.from(house),'move
    assert.deepEqual((await source()).nodes[0].yavc.paddingSides,[10,2,2,30]);
    // The corners work the same way, and a corner left empty is 0 where there is no Corner Radius.
    await group('radiusCorners').locator('.card-toggle').click();await part('radiusCorners',2).waitFor();
+   assert.deepEqual(await Promise.all([0,1,2,3].map(i=>part('radiusCorners',i).getAttribute('placeholder'))),['0','0','0','0']);
    await part('radiusCorners',0).fill('12');await part('radiusCorners',0).press('Enter');
    await p.waitForFunction(()=>document.querySelector('#two [data-parts="radiusCorners"] .card-summary').textContent==='12, 0, 0, 0');
    assert.deepEqual((await source()).nodes[0].yavc.radiusCorners,[12,0,0,0]);
@@ -130,6 +134,24 @@ const served={'home.svg':Buffer.from(house),'plain.svg':Buffer.from(house),'move
    assert.ok((await source()).nodes.every(n=>!n.yavc||n.yavc.radiusCorners===undefined));
    // Clear on one node takes the sides back to the single value, which the node keeps.
    await run('canvas-view',{op:'select',key:'key',kind:'node'});
+   await group('paddingSides').locator('[data-parts-clear]').click();
+   await p.waitForFunction(()=>document.querySelector('#two [data-parts="paddingSides"] .card-summary').textContent==='Not set');
+   assert.deepEqual((await source()).nodes[0].yavc,{style:'key',fontSize:30,padding:2,outlineSides:['top','bottom']});
+   // A person fills the four sides in a row, with Tab between them. Each Tab stores the side just typed, and the keyboard
+   // arrives in the next field ready to type over it. The Inspector is drawn again after each change, and that must not
+   // take the keyboard from the field the person has just tabbed into.
+   const typedSides=[5,6,7,8],summaryOf=()=>p.evaluate(()=>document.querySelector('#two [data-parts="paddingSides"] .card-summary').textContent);
+   await part('paddingSides',0).focus();
+   for(let i=0;i<4;i++){
+    await p.keyboard.type(String(typedSides[i]));await p.keyboard.press('Tab');
+    const want=typedSides.map((v,j)=>j<=i?v:2).join(', ');
+    await p.waitForFunction(w=>document.querySelector('#two [data-parts="paddingSides"] .card-summary').textContent===w,want,{timeout:5000}).catch(()=>{});
+    assert.equal(await summaryOf(),want,'Tab out of side '+(i+1)+' did not store the number typed in it');
+    const where=await p.evaluate(()=>{const a=document.activeElement,field=a&&a.closest('.number-field'),own=field&&field.querySelector('input[data-part]');
+     return own?'side '+(Number(own.dataset.index)+1):a&&a.hasAttribute('data-parts-clear')?'Clear':a?a.tagName:'nothing';});
+    assert.equal(where,i<3?'side '+(i+2):'Clear','After Tab out of side '+(i+1)+' the keyboard is in '+where);
+   }
+   assert.deepEqual((await source()).nodes[0].yavc.paddingSides,typedSides);
    await group('paddingSides').locator('[data-parts-clear]').click();
    await p.waitForFunction(()=>document.querySelector('#two [data-parts="paddingSides"] .card-summary').textContent==='Not set');
    assert.deepEqual((await source()).nodes[0].yavc,{style:'key',fontSize:30,padding:2,outlineSides:['top','bottom']});
