@@ -1018,3 +1018,9 @@ Decision 138. `scripts/test-canvas-pictures.cjs`, in the Inspector phase, checks
 ## Tabbing through the four sides of Padding by Side (2026-11-12)
 
 `scripts/test-canvas-pictures.cjs` now types the four sides in a row with Tab between them, and checks after each Tab that the number typed was stored and that the keyboard is in the next field. It fails on purpose until the Inspector's redraw stops taking the keyboard from the field a person has tabbed into. Chromium and WebKit end with the keyboard on the page after the first Tab. Firefox keeps the keyboard in the next field, but the typed 6 lands after the 2 already there and stores 26. The fix and this test are merged together.
+
+## Editor and Docs without the toolbar service (2026-11-12)
+
+Decision 139. The legacy host phase of `scripts/test-command-toolbar.cjs` now includes Docs. Without the fix it fails in Chromium at the first wait, because neither Editor nor Docs draws a bar. With it the phase passes in Chromium, Firefox and WebKit, and the rest of the test passes unchanged, which shows a host that has the service gets what it did before. The phase also checks that the bar has more than three buttons, that PUDL has given each visible one a name, and that destroying the applets takes the workspace's bar away. Not tested: a host that gains the toolbar service after the workspace has started, the bar's folding at a very narrow width beyond what the existing legacy host phase draws, whether the ribbon takes the bar's place while it shows, the segmented view choice, and the keyboard staying on a button when the bar is drawn again.
+
+PUDL's `pudl-commands.js` fills a control that names a command from that command and returns without touching it when there is no such command. It documents only that a group whose commands are all hidden leaves the row. The workspace therefore draws a button only for a command that is in its table, and does not rely on what an unfilled control shows.
