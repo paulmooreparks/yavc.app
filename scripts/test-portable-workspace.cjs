@@ -121,15 +121,31 @@ const types={'.html':'text/html','.js':'text/javascript','.css':'text/css','.jso
    await rich.getByText('ACME Retail').waitFor();
    await p.evaluate(text=>{delete pudlHost.contentWorkspace.resolvePath;return pudlActions.run('yavc.docs/set-text@1',{text:text},{grant:'all'});},beforeShared);await rich.locator('p').filter({hasText:'Editable words.'}).waitFor();
    assert.deepEqual(await p.evaluate(()=>pudlActions.problems()),[]);assert.match((await p.evaluate(()=>pudlActions.run('yavc.docs/document@1',{}, {grant:'all'}))).text,/Changed document/);
+   // Edit Shared Stylesheet opens the file the host said, which is the file that was installed, and not one worked out again from the document's folder. An answer that is not a usable path is ignored by every application, and the folder rule applies.
+   const sharedSheet=async(answer,want)=>{
+    await p.evaluate(answer=>{fixture.resolved=[];pudlHost.contentWorkspace.resolvePath=function(request){fixture.resolved.push(request);return request.kind==='stylesheet'?answer:null;};},answer);
+    await p.evaluate(()=>pudlActions.run('yavc.docs/set-text@1',{text:'---\nstylesheet: theme.css\n---\n# Styled\n\nWords.\n'},{grant:'all'}));
+    await p.waitForFunction(()=>{const c=pudlCommands.list(document.querySelector('#document')).find(c=>c.id==='shared-stylesheet');return c&&!c.disabled;});
+    await p.evaluate(()=>{fixture.sharedEdit=pudlCommands.run('shared-stylesheet',null,document.querySelector('#document'));});
+    const sheet=p.getByRole('dialog',{name:'Shared Stylesheet',exact:true});await sheet.waitFor();
+    assert.ok((await sheet.innerText()).includes(want.path),want.path+' is not the file the dialog opened: '+(await sheet.innerText()).slice(0,300));await sheet.locator('.cm-content').getByText(want.words).waitFor();
+    await p.keyboard.press('Escape');await sheet.waitFor({state:'hidden'});await p.evaluate(()=>fixture.sharedEdit).catch(()=>{});
+   };
+   await p.evaluate(()=>{pudlHost.fs.writeText=async function(){return null;};});
+   await p.evaluate(()=>{fixture.records.set('~/hostplace/theme.css',{text:'/* the host answer */\n',revision:1,name:'theme.css'});fixture.records.set('~/portable/theme.css',{text:'/* the folder rule */\n',revision:1,name:'theme.css'});});
+   await sharedSheet('~/hostplace/theme.css',{path:'~/hostplace/theme.css',words:'the host answer'});
+   assert.ok(await p.evaluate(()=>fixture.resolved.some(r=>r.kind==='stylesheet'&&r.reference==='theme.css'&&r.resource==='memory:document.docs.md')));
+   await sharedSheet('/workspaces/bad\u0001.css',{path:'~/portable/theme.css',words:'the folder rule'});
+   await p.evaluate(text=>{delete pudlHost.fs.writeText;delete pudlHost.contentWorkspace.resolvePath;return pudlActions.run('yavc.docs/set-text@1',{text:text},{grant:'all'});},beforeShared);await p.locator('#document .ProseMirror p',{hasText:'Editable words.'}).waitFor();
    // A deck asks the host where each file it refers to is, as a document does: a shared definitions file, a stylesheet and a diagram, each by its kind and as written. Where the host says null, or offers no such service, the deck's own folder rule applies.
    await p.evaluate(()=>{fixture.resolved=[];fixture.read=[];const read=pudlHost.fs.readText;fixture.restoreRead=()=>{pudlHost.fs.readText=read;};pudlHost.fs.readText=function(path){fixture.read.push(path);return read.apply(this,arguments);};
     fixture.records.set('/workspaces/Shared/Files/codes.md',{text:'{{define:brand}}\nACME Retail\n{{/define}}\n',revision:1,name:'codes.md'});fixture.records.set('/workspaces/Shared/Files/deck.css',{text:'.stand-in { color: red; }\n',revision:1,name:'deck.css'});
     fixture.records.set('/workspaces/Shared/Files/plan.canvas',{text:JSON.stringify({nodes:[{id:'a',type:'text',x:0,y:0,width:200,height:80,text:'Shared plan'}],edges:[]}),revision:1,name:'plan.canvas'});
-    pudlHost.contentWorkspace.resolvePath=function(request){fixture.resolved.push(request);return {shortcodes:'/workspaces/Shared/Files/codes.md',stylesheet:'/workspaces/Shared/Files/deck.css',diagram:'/workspaces/Shared/Files/plan.canvas'}[request.kind]||null;};});
+    pudlHost.contentWorkspace.resolvePath=function(request){fixture.resolved.push(request);if(request.resource!=='memory:deck.slides.md')return null;return {shortcodes:'/workspaces/Shared/Files/codes.md',stylesheet:'/workspaces/Shared/Files/deck.css',diagram:'/workspaces/Shared/Files/plan.canvas'}[request.kind]||null;};});
    await p.evaluate(()=>pudlActions.run('yavc.slides/set-deck@1',{stylesheet:'../shared/deck.css',properties:{shortcodes:'../shared/codes.md'}},{grant:'all'}));
    await p.evaluate(()=>pudlActions.run('yavc.slides/set-text@1',{index:1,text:'# Slide one\n\nMade by {{brand}}.\n\n{{diagram:../shared/plan.canvas}}\n'},{grant:'all'}));
    await p.locator('#deck .deck-canvas',{hasText:'ACME Retail'}).waitFor();
-   await p.waitForFunction(()=>fixture.read.includes('/workspaces/Shared/Files/deck.css')&&fixture.read.includes('/workspaces/Shared/Files/plan.canvas')&&fixture.read.includes('/workspaces/Shared/Files/codes.md'));
+   await p.waitForFunction(()=>fixture.read.includes('/workspaces/Shared/Files/deck.css')&&fixture.read.includes('/workspaces/Shared/Files/plan.canvas')&&fixture.read.includes('/workspaces/Shared/Files/codes.md')&&fixture.resolved.some(r=>r.resource==='memory:deck.slides.md'&&r.kind==='diagram'));
    const asked=await p.evaluate(()=>fixture.resolved.filter(r=>r.resource==='memory:deck.slides.md').map(r=>r.kind+':'+r.reference));
    for(const want of ['shortcodes:../shared/codes.md','stylesheet:../shared/deck.css','diagram:../shared/plan.canvas'])assert.ok(asked.includes(want),want+' was not asked for: '+asked.join(', '));
    // The host says null, so the deck's own rule reads an absolute path as written.
@@ -138,6 +154,11 @@ const types={'.html':'text/html','.js':'text/javascript','.css':'text/css','.jso
    await p.evaluate(()=>pudlActions.run('yavc.slides/set-text@1',{index:1,text:'# Slide one\n\nA drawing.\n\n{{diagram:~/portable/plan.canvas}}\n'},{grant:'all'}));
    await p.waitForFunction(()=>fixture.read.includes('~/portable/plan.canvas'));
    assert.ok(await p.evaluate(()=>fixture.resolved.some(r=>r.kind==='diagram'&&r.reference==='~/portable/plan.canvas'&&r.resource==='memory:deck.slides.md')));
+   // An answer that is not a usable path is not read, by the deck any more than by a document: it has a control character, so the deck's own rule applies.
+   await p.evaluate(()=>{fixture.read=[];fixture.resolved=[];pudlHost.contentWorkspace.resolvePath=function(request){fixture.resolved.push(request);return '/workspaces/Shared/Files/bad\u0001.canvas';};});
+   await p.evaluate(()=>pudlActions.run('yavc.slides/set-text@1',{index:1,text:'# Slide one\n\nAn answer to refuse.\n\n{{diagram:../shared/plan.canvas}}\n'},{grant:'all'}));
+   await p.waitForFunction(()=>fixture.resolved.some(r=>r.resource==='memory:deck.slides.md'&&r.kind==='diagram'));await p.waitForTimeout(400);
+   assert.deepEqual(await p.evaluate(()=>fixture.read.filter(r=>/bad/.test(r))),[]);
    await p.evaluate(()=>{delete pudlHost.contentWorkspace.resolvePath;fixture.restoreRead();return pudlActions.run('yavc.slides/set-text@1',{index:1,text:'# Slide one\n\nFirst.\n'},{grant:'all'});});
    assert.deepEqual(await p.evaluate(()=>pudlActions.problems()),[]);
    await p.evaluate(()=>{fixture.reviewPromise=pudlCommands.run('review-changes',null,document.querySelector('#document'));});const review=p.getByRole('dialog',{name:'Review Changes',exact:true});await review.waitFor();assert.equal(await p.evaluate(()=>typeof pudlListbox.refresh),'function');await review.getByRole('button',{name:'Close',exact:true}).click();await p.evaluate(()=>fixture.reviewPromise);

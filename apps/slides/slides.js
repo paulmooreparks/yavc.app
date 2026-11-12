@@ -902,7 +902,7 @@
             if (typeof service === 'function') {
                 var given = null;
                 try { given = service.call(H.contentWorkspace, { resource: path || null, reference: String(reference || ''), kind: kind }); } catch (err) { given = null; }
-                if (typeof given === 'string' && given.length <= 4096 && /^(~\/|\/(?!\/))/.test(given) && !/[\u0000-\u001f\u007f\\]/.test(given)) { return given; }
+                if (window.yavcUtil.hostPath(given) !== null) { return given; }
             }
             return window.yavcStyleTools.resolve(reference, styleDirectory());
         }
