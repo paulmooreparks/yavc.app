@@ -996,3 +996,7 @@ A patch script written in a quoted heredoc lost the backslashes of a regular exp
 The PUDL review of this work found that each drawing of the Inspector left a combo box behind: PUDL keeps a list in the page and two window listeners for every combo box it takes in, and has no call that gives one back. The two font fields are therefore made once for each Diagrams window and put into each drawing of the Inspector. The review also found that choosing a font with Enter could send the change twice, so a field now sends one value once. A disposal call in PUDL would let the fields be drawn the ordinary way, and that has been asked of the PUDL team.
 
 `scripts/test-command-toolbar.cjs` had stopped at the Editor since decision 131, because it added the Split view to each bar and the Editor has none. It now adds Outline to the Editor's bar. Its last phase, a host with no toolbar capability, still fails for the Editor, and fails the same way at v0.2.78, so it was not looked into here. `scripts/test-diagram-chrome.cjs` fails on main as well, waiting for a row of the outline.
+
+## The Diagram Contents button (2026-11-12)
+
+Decision 136. `scripts/test-canvas-embed.cjs` checks that a canvas in a document has no such button and still has the labelled list of its contents.
