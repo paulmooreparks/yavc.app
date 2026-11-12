@@ -1,0 +1,11 @@
+# The package tests, one per line. scripts/run-package-tests.mjs runs each in Chromium, Firefox and WebKit against the built content
+# package, and the package tests job of the site tests workflow fails if one fails. A line may end with " | " and the browsers
+# that test is run in. A test is added here when it is repaired, in the same pull request.
+test-portable-workspace.cjs
+test-portable-diagrams.cjs
+test-portable-toolbar.cjs
+test-canvas-pictures.cjs
+test-diagram-picture.cjs
+test-host-overlays.cjs
+test-detached-show.cjs
+test-html-tables.cjs
