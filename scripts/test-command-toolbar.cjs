@@ -220,13 +220,18 @@ async function run(engine) {
         assert.equal(await second.locator('.yavc-command-toolbar img').count(), 0); assert.equal(await page.evaluate(() => window.toolbarAttack), undefined);
         assert.deepEqual(desktopErrors, []); await page.close();
         console.log(engine + ': desktop command isolation, preference notifications, overflow focus, disposal and hostile preferences passed');
-        for (const app of ['diagrams', 'editor', 'slides']) {
+        for (const app of ['diagrams', 'docs', 'editor', 'slides']) {
+            // Diagrams and Slides have PUDL's own holder, and Docs and Editor draw their bar into the workspace's slot.
             phase = app + ' legacy host'; page = await context.newPage(); page.setDefaultTimeout(12000);
             await page.addInitScript(() => { let host; Object.defineProperty(window, 'pudlHost', { configurable: true, get: () => host, set: value => { delete value.commandToolbar; host = value; } }); });
-            await page.goto(`http://${app}.localhost:${port}/`); await page.locator('.applet-toolbars .toolbar').waitFor({ state: 'attached' });
-            await page.evaluate(() => pudlMenubar.ribbon(false)); await page.locator('.applet-toolbars .toolbar').waitFor();
+            await page.goto(`http://${app}.localhost:${port}/`); await page.locator('.applet-toolbars .toolbar, .yavc-fallback-toolbar').waitFor({ state: 'attached' });
+            await page.evaluate(() => pudlMenubar.ribbon(false)); await page.locator('.applet-toolbars .toolbar, .yavc-fallback-toolbar').waitFor();
             assert.equal(await page.locator('.yavc-command-toolbar').count(), 0);
             assert.equal(await page.evaluate(() => pudlCommands.list(document.querySelector('[data-applet]')).some(c => c.id === 'common-toolbar-customize')), false);
+            // The bar has buttons that PUDL has filled in, and a workspace's own bar is taken away with the workspace.
+            assert.ok(await page.locator('.applet-toolbars [data-command], .yavc-fallback-toolbar [data-command]').count() > 3);
+            await page.waitForFunction(() => { const l = Array.from(document.querySelectorAll('.applet-toolbars [data-command], .yavc-fallback-toolbar [data-command]')).filter(b => !b.hidden); return l.length > 0 && l.every(b => b.getAttribute('aria-label')); });
+            if (app === 'docs' || app === 'editor') { await page.evaluate(() => pudlApplets.destroy(document)); assert.equal(await page.locator('.yavc-fallback-toolbar').count(), 0); }
             await page.close();
         }
         console.log(engine + ': all three applets retain their legacy host toolbars');
