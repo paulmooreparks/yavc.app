@@ -952,29 +952,34 @@
            the single value it takes the place of. A group is closed until a person
            opens it, and stays as they left it while the Inspector is drawn again. */
         var PARTS = {
-            paddingSides: { title: 'Padding by Side', single: 'padding', fallback: 8, min: 0, max: 64, whole: true, names: ['Top', 'Right', 'Bottom', 'Left'], help: 'A side left empty uses Text Padding, or 8 where that is empty.' },
-            radiusCorners: { title: 'Radius by Corner', single: 'radius', fallback: 0, min: 0, max: 1000, whole: false, names: ['Top Left', 'Top Right', 'Bottom Right', 'Bottom Left'], help: 'A corner left empty uses Corner Radius, or 0 where that is empty.' }
+            paddingSides: { title: 'Padding by Side', single: 'padding', fallback: 8, min: 0, max: 64, whole: true, names: ['Top', 'Right', 'Bottom', 'Left'], help: function (base) { return 'An empty side shows the value it will use, ' + base + ', which is Text Padding or 8 where that is empty. Setting one side fixes the others at those values until Clear.'; } },
+            radiusCorners: { title: 'Radius by Corner', single: 'radius', fallback: 0, min: 0, max: 1000, whole: false, names: ['Top Left', 'Top Right', 'Bottom Right', 'Bottom Left'], help: function (base) { return 'An empty corner shows the value it will use, ' + base + ', which is Corner Radius or 0 where that is empty. Setting one corner fixes the others at those values until Clear.'; } }
         };
         var partsOpen = {};
         function partsOf(item, group) { var a = item && item.yavc && item.yavc[group]; return Array.isArray(a) && a.length === 4 ? a : null; }
-        function partField(id, group, index, label, value, mixed, def, helpId) {
-            return field(id, label, '<span class="number-field"><input class="form-input" type="number" step="' + (def.whole ? '1' : 'any') + '" min="' + def.min + '" max="' + def.max + '" id="' + id + '" data-part="' + group + '" data-index="' + index + '" data-was="' + esc(mixed ? '' : value) + '" value="' + esc(mixed ? '' : value) + '" aria-describedby="' + helpId + '"' + (mixed ? ' data-mixed="true" placeholder="Mixed"' : '') + '></span>');
+        function partAllowed(def, v) { return Number.isFinite(v) && v >= def.min && v <= def.max && (!def.whole || Number.isInteger(v)); }
+        function partField(id, group, index, label, value, mixed, def, helpId, base) {
+            return field(id, label, '<span class="number-field"><input class="form-input" type="number" step="' + (def.whole ? '1' : 'any') + '" min="' + def.min + '" max="' + def.max + '" id="' + id + '" data-part="' + group + '" data-index="' + index + '" data-was="' + esc(mixed ? '' : value) + '" value="' + esc(mixed ? '' : value) + '" aria-describedby="' + helpId + '"' + (mixed ? ' data-mixed="true" placeholder="Mixed"' : value === '' ? ' placeholder="' + esc(base) + '"' : '') + '></span>');
         }
         function partsHtml(group, entries, prefix) {
             var def = PARTS[group], arrays = entries.map(function (e) { return partsOf(e.item, group); });
             var same = arrays.every(function (a) { return JSON.stringify(a) === JSON.stringify(arrays[0]); });
+            /* What an empty field will take, which it shows: the single value where every item has one, else the default. */
+            var singles = entries.map(function (e) { var v = e.item.yavc && e.item.yavc[def.single]; return v == null ? NaN : v; });
+            var base = String(singles.every(function (v) { return v === singles[0]; }) && partAllowed(def, singles[0]) ? singles[0] : def.fallback);
             var summary = same ? (arrays[0] ? arrays[0].join(', ') : 'Not set') : 'Mixed', bodyId = prefix + group + '-body', titleId = prefix + group + '-title', helpId = prefix + group + '-help';
             var fields = def.names.map(function (name, i) {
                 var cells = arrays.map(function (a) { return a ? String(a[i]) : ''; });
                 var mixed = cells.some(function (c) { return c !== cells[0]; });
-                return partField(prefix + group + '-' + i, group, i, name, cells[0], mixed, def, helpId);
+                return partField(prefix + group + '-' + i, group, i, name, cells[0], mixed, def, helpId, base);
             }).join('');
             return '<section class="card disclosure dg-parts" data-parts="' + group + '" aria-labelledby="' + titleId + '"><div class="card-head"><button type="button" class="card-toggle" aria-expanded="' + !!partsOpen[group] + '" aria-controls="' + bodyId + '"></button>' +
                 '<h4 class="card-title" id="' + titleId + '">' + def.title + '</h4><span class="card-summary">' + esc(summary) + '</span></div>' +
-                '<div class="card-body" id="' + bodyId + '" role="group" aria-labelledby="' + titleId + '">' + fields + '<p class="form-help" id="' + helpId + '">' + def.help + '</p></div>' +
+                '<div class="card-body" id="' + bodyId + '" role="group" aria-labelledby="' + titleId + '">' + fields + '<p class="form-help" id="' + helpId + '">' + esc(def.help(base)) + '</p></div>' +
                 '<div class="card-actions"><button type="button" class="btn btn-sm" id="' + prefix + group + '-clear" aria-label="Clear ' + def.title + '" data-parts-clear="' + group + '"' + (arrays.every(function (a) { return !a; }) ? ' disabled' : '') + '>Clear</button></div></section>';
         }
         function renderCanvasInspector(t) {
+            if (holdFocus()) { return; }
             renderOutline();
             var selected = canvasSelections(), show = !!(settings.inspector && t.cv);
             inspectorPresentation(show);
@@ -986,7 +991,7 @@
             var entries = selected.map(function (s) { return { kind: s.kind, item: (s.kind === 'node' ? t.cvDoc.nodes : t.cvDoc.edges).find(function (x) { return x.id === s.id; }) }; });
             if (entries.some(function (e) { return !e.item; })) { return; }
             var properties = entries.map(function (e) { return window.yavcCanvasModel.properties(e.item, e.kind); }).reduce(function (a, b) { return a.filter(function (k) { return b.indexOf(k) >= 0; }); });
-            var p = 'dg-cv-in-' + n + '-', had = el.inspector.contains(document.activeElement) ? document.activeElement.id : null;
+            var p = 'dg-cv-in-' + n + '-', restoreKeyboard = holdKeyboard();
             var html = '<h3 class="dg-inspector-title">' + (selected.length > 1 ? selected.length + ' Items' : selected[0].kind === 'node' ? 'Node' : 'Connector') + '</h3><p class="dg-inspector-id">' + esc(selected.map(function (s) { return s.id; }).join(', ')) + '</p>';
             var defaults = { shape: 'rectangle', line: 'solid', lineWidth: 2, route: 'elbow' };
             function value(e, k) {
@@ -1051,11 +1056,11 @@
             if (blocked) { el.inspector.insertAdjacentHTML('afterbegin', '<p class="form-help">Put the canvas text right before changing these settings.</p>'); }
             if (window.pudlFields) { window.pudlFields.enhance(el.inspector); }
             placeFonts(t); growFields();
-            if (had) { var back = document.getElementById(had); if (back && !back.disabled) { back.focus({ preventScroll: true }); } }
+            restoreKeyboard();
         }
         function renderDocumentInspector(t, blocked) {
             var id = 'dg-doc-' + n + '-', settings = t.cvDoc.yavc || {}, palette = canvasPalette(t.place, window.yavcCanvas);
-            var had = el.inspector.contains(document.activeElement) ? document.activeElement.id : null;
+            var restoreKeyboard = holdKeyboard();
             var value = settings.background || '', resolved = /^[1-6]$/.test(value) ? palette.presets[Number(value) - 1] : /^#[a-f0-9]{3}$/i.test(value) ? value.replace(/([a-f0-9])/ig, '$1$1') : value;
             var color = colourField(id + 'background', 'background', 'Background', value, resolved || palette.bg).replace(/ data-set=/g, ' data-document data-set=');
             var html = '<h3 class="dg-inspector-title">Diagram</h3><p class="form-help">Canvas settings are saved in this diagram.</p>' + color +
@@ -1067,7 +1072,7 @@
             html += '<p class="form-help">Grid spacing is 8 pixels. Hold Alt while dragging to bypass snapping. The grid is not exported.</p>';
             el.inspector.innerHTML = '<fieldset class="dg-inspector-fields"' + (blocked ? ' disabled' : '') + '>' + html + '</fieldset>';
             placeFonts(t);
-            if (had) { var back = document.getElementById(had); if (back && !back.disabled) { back.focus({ preventScroll: true }); } }
+            restoreKeyboard();
         }
         async function canvasInspectorChanged(f) {
             if (!canvasSelections().length && f.hasAttribute('data-document')) {
@@ -1115,7 +1120,7 @@
             if (canvasWhy(true)) { return; }
             var box = f.closest('[data-parts]'), group = box.dataset.parts, def = PARTS[group], inputs = Array.from(box.querySelectorAll('input[data-part]'));
             var owner = current(), s = canvasSelection(), value = null;
-            function allowed(v) { return Number.isFinite(v) && v >= def.min && v <= def.max && (!def.whole || Number.isInteger(v)); }
+            function allowed(v) { return partAllowed(def, v); }
             if (!clear) {
                 if (!f.hasAttribute('data-mixed') && f.value === f.dataset.was) { return; }
                 inputs.forEach(function (i) { markField(i, null); });
@@ -1382,6 +1387,38 @@
            field. While the text has a mistake the fields are disabled, with
            the reason above them (decision 5). */
         var inspected = null;
+        /* The Inspector is drawn again after every change, and the fields it had are replaced. Tab out of a field makes the change while
+           the field is still being left, so the keyboard is nowhere yet when an edit that finishes at once draws the Inspector again: the
+           field the person is moving to does not exist when focus arrives, and the keyboard falls to the page. A drawing asked for while a
+           change is being made is therefore held until the focus has settled, which is by the end of the task that made the change. */
+        var focusSettling = false, drawAfterFocus = false;
+        function holdFocus() {
+            if (!focusSettling) { return false; }
+            drawAfterFocus = true;
+            return true;
+        }
+        el.inspector.addEventListener('change', function () {
+            focusSettling = true;
+            setTimeout(function () {
+                focusSettling = false;
+                if (drawAfterFocus && !destroyed) { drawAfterFocus = false; inspected = null; renderInspector(); }
+            }, 0);
+        }, true);
+        /* Where the keyboard is, to put it back after the fields are replaced: the field by its id, and the caret or the text that was
+           selected in it, as the browser left them when it arrived. */
+        function holdKeyboard() {
+            var a = document.activeElement, id = a && el.inspector.contains(a) && a.id ? a.id : null, from = null, to = null, direction = 'none', top = 0, was = null;
+            if (id) { try { from = a.selectionStart; to = a.selectionEnd; direction = a.selectionDirection || 'none'; top = a.scrollTop; was = a.value; } catch (err) { from = null; } }
+            return function () {
+                var back = id && document.getElementById(id);
+                if (!back || back.disabled) { return; }
+                back.focus({ preventScroll: true });
+                if (from == null) { return; }
+                /* A field the change has given a different value, such as an empty one that now shows what it takes, is arrived at as the
+                   browser arrives at any field with text in it, with all of the text selected. Otherwise the selection is as it was. */
+                try { if (back.value !== was) { back.select(); } else { back.setSelectionRange(from, to, direction); back.scrollTop = top; } } catch (err) { /* A field with no caret. */ }
+            };
+        }
         function field(id, label, control, help) {
             return '<div class="form-group"><label class="form-label" for="' + id + '">' + esc(label) + '</label>' + control +
                 (help ? '<p class="form-help" id="' + id + '-help">' + esc(help) + '</p>' : '') + '</div>';
@@ -1465,6 +1502,7 @@
             renderOutline();
             var t = current(), key = selection();
             if (t && t.kind === 'canvas') { renderCanvasInspector(t); return; }
+            if (holdFocus()) { return; }
             var show = !!(settings.inspector && t && t.kind === 'd2' && t.canvas);
             inspectorPresentation(show);
             if (!show) { inspected = null; return; }
@@ -1473,7 +1511,7 @@
             inspected = state;
             /* Where the keyboard was, to put it back: the fields' ids last
                across a change of key, such as a new direction. */
-            var had = el.inspector.contains(document.activeElement) ? document.activeElement.id : null;
+            var restoreKeyboard = holdKeyboard();
             var p = 'dg-in-' + n + '-';
             if (!key) {
                 el.inspector.innerHTML = '<p class="dg-inspector-empty">Select a shape or a connection to see its settings here.</p>';
@@ -1517,7 +1555,7 @@
                 : html;
             window.yavcMdEditor.wireColours(el.inspector);
             if (window.pudlFields && window.pudlFields.enhance) { window.pudlFields.enhance(el.inspector); }
-            if (had) { var back = document.getElementById(had); if (back && !back.disabled) { back.focus({ preventScroll: true }); } }
+            restoreKeyboard();
         }
         /* A field's name, for what the status line says it did. */
         function labelOf(f) {

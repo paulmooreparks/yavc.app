@@ -89,6 +89,9 @@ const served={'home.svg':Buffer.from(house),'plain.svg':Buffer.from(house),'move
    assert.deepEqual(await inspector.locator('[data-parts="paddingSides"] input[data-part]').evaluateAll(l=>l.map(i=>[i.min,i.max])),[['0','64'],['0','64'],['0','64'],['0','64']]);
    assert.deepEqual(await inspector.locator('[data-parts-clear]').evaluateAll(l=>l.map(b=>b.getAttribute('aria-label'))),['Clear Radius by Corner','Clear Padding by Side']);
    await group('paddingSides').locator('.card-toggle').click();await part('paddingSides',0).waitFor();
+   // An empty side shows the value it will take, which is the single Text Padding, and the help says that setting one fixes the rest.
+   assert.deepEqual(await Promise.all([0,1,2,3].map(i=>part('paddingSides',i).getAttribute('placeholder'))),['2','2','2','2']);
+   assert.match(await group('paddingSides').locator('.form-help').textContent(),/shows the value it will use.*Setting one side fixes the others at those values until Clear\./);
    // A side typed alone is set, and the others take the single Text Padding, which is 2.
    await part('paddingSides',0).fill('10');await part('paddingSides',0).press('Enter');
    await p.waitForFunction(()=>document.querySelector('#two [data-parts="paddingSides"] .card-summary').textContent==='10, 2, 2, 2');
@@ -110,6 +113,7 @@ const served={'home.svg':Buffer.from(house),'plain.svg':Buffer.from(house),'move
    assert.deepEqual((await source()).nodes[0].yavc.paddingSides,[10,2,2,30]);
    // The corners work the same way, and a corner left empty is 0 where there is no Corner Radius.
    await group('radiusCorners').locator('.card-toggle').click();await part('radiusCorners',2).waitFor();
+   assert.deepEqual(await Promise.all([0,1,2,3].map(i=>part('radiusCorners',i).getAttribute('placeholder'))),['0','0','0','0']);
    await part('radiusCorners',0).fill('12');await part('radiusCorners',0).press('Enter');
    await p.waitForFunction(()=>document.querySelector('#two [data-parts="radiusCorners"] .card-summary').textContent==='12, 0, 0, 0');
    assert.deepEqual((await source()).nodes[0].yavc.radiusCorners,[12,0,0,0]);
