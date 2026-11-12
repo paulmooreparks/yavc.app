@@ -85,6 +85,19 @@ const CANVAS = JSON.stringify({ yavc: { version: 1 }, nodes: [
             assert.ok(!asked.some(name => /yavc-d2\.wasm|mermaid/.test(name)), 'No engine is fetched before a diagram of its kind is asked for.');
             const d2 = await p.evaluate(async () => { const out = await yavcDiagramPicture.draw({ kind: 'd2', text: 'till -> drawer: opens\n' }); return { width: out.width, height: out.height, svg: /^\s*(<\?xml[^>]*>\s*)?<svg[\s>]/.test(out.svg), words: /till/.test(out.svg) && /drawer/.test(out.svg) }; });
             assert.ok(d2.svg && d2.words && d2.width > 20 && d2.height > 20);
+            // A drawing states its own size, so a picture made from it has that size and not a browser's default for a picture with none
+            // (decision 137). That holds for each kind, and for the picture D2 draws into a document.
+            const natural = await p.evaluate(async () => {
+                const size = async svg => { const img = new Image(); img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg); await img.decode(); return [img.naturalWidth, img.naturalHeight]; }, out = [];
+                for (const request of [{ kind: 'd2', text: 'client -> screen: a function\nscreen -> cashier: what changed\ncashier -> client: a receipt\n' }, { kind: 'mermaid', text: 'flowchart TD\n  a[Scan] --> b[Pay]\n  b --> c[Receipt]\n' }, { kind: 'canvas', text: '{"nodes":[{"id":"a","type":"text","x":0,"y":0,"width":200,"height":60,"text":"A"}],"edges":[]}' }]) {
+                    const made = await yavcDiagramPicture.draw(request); out.push([request.kind, [made.width, made.height], await size(made.svg)]);
+                }
+                const place = document.createElement('div'); document.body.append(place);
+                await yavcD2Engine.draw(place, 'client -> screen: a function\nscreen -> cashier: what changed\n');
+                const img = place.querySelector('img'); await img.decode(); out.push(['d2 in a document', [img.width, img.height], [img.naturalWidth, img.naturalHeight]]); place.remove();
+                return out;
+            });
+            for (const [kind, stated, shown] of natural) { assert.ok(stated[1] > 150 || kind !== 'd2', kind); assert.ok(Math.abs(stated[0] - shown[0]) <= 1 && Math.abs(stated[1] - shown[1]) <= 1, kind + ': ' + JSON.stringify([stated, shown])); }
             const mermaid = await p.evaluate(async () => {
                 const out = await yavcDiagramPicture.draw({ kind: 'mermaid', text: 'flowchart LR\n  scan[Scan item] --> pay[Take payment]\n' }), doc = new DOMParser().parseFromString(out.svg, 'image/svg+xml');
                 return { width: out.width, height: out.height, bad: !!doc.querySelector('parsererror'), words: /Scan item/.test(doc.documentElement.textContent) && /Take payment/.test(doc.documentElement.textContent), script: !!doc.querySelector('script'), left: document.querySelectorAll('body > div').length };
