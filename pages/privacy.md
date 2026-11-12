@@ -28,7 +28,7 @@ Every page is served from yavc.app, and the fonts come with the site. The one sc
 
 Cloudflare passes all traffic between your browser and the server, so it sees each request, including your IP address, as any network carrier does. The site uses Cloudflare under its standard data protection terms, which require it to protect your data to a standard comparable to Singapore's.
 
-Plausible Analytics counts visits, so Paul can see which pages and applications people use. Each page loads its script from plausible.io, which records the page's address, the site that linked to it, the browser, operating system and kind of device, and the country the visit came from. It sets no cookie, stores nothing in your browser, does not keep your IP address, and does not follow you from one site to another, so the counts cannot be tied to you. Plausible keeps the counts on servers in the European Union. A content blocker that stops the script stops the counting, and the site works the same either way.
+Plausible Analytics counts visits, so Paul can see which pages and applications people use. Each page loads its script from plausible.io, which records the page's address, the site that linked to it, the browser, operating system and kind of device, and the country the visit came from. It sets no cookie, stores nothing in your browser, does not keep your IP address, and does not follow you from one site to another, so the counts cannot be tied to you. Plausible keeps the counts on servers in the European Union. A content blocker that stops the script stops the counting, and the site works the same either way. A copy of the server that is run without HTTPS, as on a person's own computer, loads no analytics script and sends no analytics at all.
 
 ## Accounts
 

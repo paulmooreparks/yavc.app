@@ -13,16 +13,32 @@ import "net/http"
 // script; a document's own styles are filtered by apps/md-engine/safe-html.js.
 // Pictures may come from anywhere on the web, as a document's pictures do,
 // and frames only from the two video players the video shortcode knows.
-const contentSecurityPolicy = "default-src 'self'; " +
-	"script-src 'self' 'wasm-unsafe-eval' https://plausible.io; " +
-	"style-src 'self' 'unsafe-inline'; " +
-	"img-src 'self' data: blob: https:; " +
-	"media-src 'self' data: blob:; " +
-	"font-src 'self' data:; " +
-	"connect-src 'self' https://plausible.io; " +
-	"frame-src https://www.youtube-nocookie.com https://player.vimeo.com; " +
-	"worker-src 'self' blob:; " +
-	"object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'self'"
+//
+// Analytics are sent only when the site is reached over HTTPS, which is the
+// public site (DESIGN.md, decision 147). A copy run without it neither loads
+// the script nor names Plausible's host in its policy, so the policy never
+// allows a host the page does not use, and no page waits on a host outside
+// the machine.
+func contentSecurityPolicy(analytics bool) string {
+	host := ""
+	if analytics {
+		host = " " + analyticsHost
+	}
+	return "default-src 'self'; " +
+		"script-src 'self' 'wasm-unsafe-eval'" + host + "; " +
+		"style-src 'self' 'unsafe-inline'; " +
+		"img-src 'self' data: blob: https:; " +
+		"media-src 'self' data: blob:; " +
+		"font-src 'self' data:; " +
+		"connect-src 'self'" + host + "; " +
+		"frame-src https://www.youtube-nocookie.com https://player.vimeo.com; " +
+		"worker-src 'self' blob:; " +
+		"object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'self'"
+}
+
+// analyticsHost is the one host a page may load a script from or send to
+// besides its own, on the public site.
+const analyticsHost = "https://plausible.io"
 
 // workerPolicy is the policy of the D2 engine's worker
 // (apps/diagram-kit/worker.js; docs/diagrams-design.md, decision 3). A
@@ -41,7 +57,7 @@ const engineWorker = "diagram-kit/worker.js"
 // securityHeaders sets the headers every response carries. secure says the
 // site is reached over HTTPS, so browsers are told to keep to it.
 func securityHeaders(h http.Header, secure bool) {
-	h.Set("Content-Security-Policy", contentSecurityPolicy)
+	h.Set("Content-Security-Policy", contentSecurityPolicy(secure))
 	h.Set("X-Content-Type-Options", "nosniff")
 	h.Set("X-Frame-Options", "SAMEORIGIN")
 	h.Set("Referrer-Policy", "same-origin")
