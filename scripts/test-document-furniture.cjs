@@ -29,7 +29,10 @@ const source='---\n# Keep this comment.\ntitle: "A <literal> title"\nauthor: Tes
   await page.waitForFunction(()=>getComputedStyle(document.querySelector('.doc-page')).fontSize==='16px');
   phase='zoom';const before=(await action(page,'document')).text;const count=await page.locator('[data-page-count]').getAttribute('data-page-count');
   for(const value of [50,150,100]) {await action(page,'document-zoom',{value});await page.waitForTimeout(200);assert.equal(await page.locator('[data-page-count]').getAttribute('data-page-count'),count);assert.equal(Math.round(await page.locator('.doc-paginated').evaluate(n=>n.getBoundingClientRect().width)),Math.round(816*value/100));}
-  await action(page,'document-zoom',{value:'width'});await page.setViewportSize({width:1100,height:900});await page.waitForTimeout(200);assert.ok(await page.locator('.doc-paginated').evaluate(n=>n.getBoundingClientRect().width<816));
+  // Fit Width scales the page to the pane in both directions. The Files pane is hidden at first (DESIGN.md, decision 74), so the pane is nearly as wide
+  // as the window: a window of 1100 grows the page past 816 and a window of 700 shrinks it below.
+  await action(page,'document-zoom',{value:'width'});await page.setViewportSize({width:1100,height:900});await page.waitForTimeout(200);assert.ok(await page.locator('.doc-paginated').evaluate(n=>n.getBoundingClientRect().width>816));
+  await page.setViewportSize({width:700,height:900});await page.waitForTimeout(200);assert.ok(await page.locator('.doc-paginated').evaluate(n=>n.getBoundingClientRect().width<816));
   await action(page,'document-zoom',{value:'page'});await page.waitForTimeout(200);assert.ok(await page.locator('.doc-paginated').evaluate(n=>n.getBoundingClientRect().height/+n.dataset.pageCount<950));assert.equal((await action(page,'document')).text,before);
   await action(page,'view',{mode:'visual'});assert.equal(await page.locator('.doc-furniture').count(),0);assert.equal(await page.locator('.doc-page').evaluate(n=>n.style.zoom),'1');
   await action(page,'view',{mode:'document'});await page.locator('.doc-footer').first().waitFor();await action(page,'document-zoom',{value:100});await page.setViewportSize({width:1500,height:1000});

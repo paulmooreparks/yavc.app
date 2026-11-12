@@ -9,6 +9,7 @@ const sources=[
  '# Mixed first\r\n\r\n---  \n\n# Mixed second  \r\n\r\n---\r\n\n# Final without newline',
  '# Legacy CR\r\r--- \r\r# Second\r'
 ];
+const firstBytes=(p,name)=>p.evaluate(async name=>Array.from(new Uint8Array((await pcSiteFs.contentBytes.read({resource:'~/'+name,maxBytes:1024*1024})).bytes)).slice(0,3),name);
 (async()=>{for(const engine of process.argv.slice(2).length?process.argv.slice(2):['chromium','firefox','webkit']){
  const browser=await pw[engine].launch({headless:true}),p=await browser.newPage({viewport:{width:1450,height:1000}});p.setDefaultTimeout(25000);let phase='boot';const errors=[];p.on('pageerror',e=>errors.push(e.message));
  try{
@@ -36,9 +37,9 @@ const sources=[
   await p.goto(`http://slides.localhost:${port}/`);await action(p,'deck');
   for(let i=0;i<sources.length;i++){
    phase='unchanged source '+i;const name='preserve-'+i+'.slides.md',source=sources[i];await p.evaluate(async({name,source})=>{const F=await yavcUtil.siteFs();await F.write(F.home(),name,source,false);},{name,source});await action(p,'open',{path:'~/'+name});
-   assert.equal((await action(p,'text')).text,source);for(const mode of ['text','visual','split'])await action(p,'view',{mode});await action(p,'save');assert.equal(await p.evaluate(name=>pcSiteFs.readHome(pcSiteFs.resolve(pcSiteFs.home(),name)),name),source);
+   assert.equal((await action(p,'text')).text,source.replace(/^\ufeff/,''));for(const mode of ['text','visual','split'])await action(p,'view',{mode});await action(p,'save');assert.equal(await p.evaluate(name=>pcSiteFs.readHome(pcSiteFs.resolve(pcSiteFs.home(),name)),name),source);assert.deepEqual(await firstBytes(p,name),source.startsWith('\ufeff')?[239,187,191]:[...Buffer.from(source.slice(0,3))]);
   }
-  phase='one slide edit';await action(p,'open',{path:'~/preserve-2.slides.md'});await action(p,'set-text',{index:1,text:'# Edited first\n'});const edited=(await action(p,'text')).text;assert.match(edited,/^\ufeff---\r\n# keep this front comment\r\ntitle: "Preserved title"\r\ncustom: untouched\r\n---\r\n/);assert.ok(edited.endsWith('--- \t\r\n\r\n## Two\r\n\r\n```md\r\n---\r\n```\r\n'));await action(p,'save');
+  phase='one slide edit';await action(p,'open',{path:'~/preserve-2.slides.md'});await action(p,'set-text',{index:1,text:'# Edited first\n'});const edited=(await action(p,'text')).text;assert.match(edited,/^---\r\n# keep this front comment\r\ntitle: "Preserved title"\r\ncustom: untouched\r\n---\r\n/);assert.ok(edited.endsWith('--- \t\r\n\r\n## Two\r\n\r\n```md\r\n---\r\n```\r\n'));await action(p,'save');
   phase='metadata edit';await action(p,'set-deck',{title:'Changed title'});const changed=(await action(p,'text')).text;assert.match(changed,/custom: untouched/);assert.match(changed,/# keep this front comment/);assert.ok(changed.endsWith('--- \t\r\n\r\n## Two\r\n\r\n```md\r\n---\r\n```\r\n'));
   phase='plan-only host';const windows=await p.locator('.win').count();const plan=await p.evaluate(()=>pudlHost.fileResolution.resolve({name:'intro.slides.md',mime:'text/plain',verifiedText:true,writable:true}));assert.equal(plan.plan.applet,'slides');assert.equal(plan.plan.view,'visual');assert.equal(await p.locator('.win').count(),windows);
   const missing=await p.evaluate(()=>pudlHost.fileResolution.resolve({name:'notes.md',verifiedText:true}));assert.equal(missing.status,'resolved');assert.equal(missing.plan.applet,'docs');assert.equal(missing.plan.view,'visual');

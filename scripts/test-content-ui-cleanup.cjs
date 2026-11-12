@@ -12,9 +12,9 @@ async function menu(p,id) { await p.locator('.menubar-title[data-menu-id="'+id+'
   const browser = await pw[engine].launch({headless:true}); const p = await browser.newPage({viewport:{width:1500,height:1000}}); p.setDefaultTimeout(15000);
   let phase = 'start'; const errors=[]; p.on('pageerror',e=>errors.push(e.message));
   try {
-   for (const app of ['editor','slides','diagrams']) {
+   for (const app of ['docs','slides','diagrams']) { // Page Setup belongs to Docs, not the Editor (DESIGN.md, decision 131).
     phase = app + ' menus'; await p.goto(`http://${app}.localhost:${port}/`, {waitUntil:'domcontentloaded'}); await p.waitForFunction(()=>{const b=document.querySelector('.yavc-command-toolbar [data-command="save"]');return b&&!b.disabled;});
-    if (app === 'editor') {
+    if (app === 'docs') {
      await action(p,app,'new',{path:'~/review.docs.md',text:'# Review\n\nBody.'});
      assert.match(await menu(p,'format'),/Page Setup/); assert.doesNotMatch(await menu(p,'file'),/Page Setup/);
      await command(p,'page-setup'); await p.locator('dialog[open]').waitFor(); await p.getByRole('button',{name:'Cancel',exact:true}).click(); continue;
@@ -35,9 +35,13 @@ async function menu(p,id) { await p.locator('.menubar-title[data-menu-id="'+id+'
      phase='Slides rich history'; await action(p,app,'view',{mode:'visual'}); const rich=p.locator('.ProseMirror[aria-busy="false"]'); await rich.waitFor(); await rich.click(); await p.keyboard.press('ControlOrMeta+End'); await p.keyboard.type('Rich marker'); await p.waitForFunction(()=>document.querySelector('.ProseMirror').textContent.includes('Rich marker')); await command(p,'undo'); await p.waitForFunction(()=>!document.querySelector('.ProseMirror').textContent.includes('Rich marker')); await command(p,'redo'); await p.waitForFunction(()=>document.querySelector('.ProseMirror').textContent.includes('Rich marker'));
      phase='Slides isolated history'; await action(p,app,'load',{text:'# First slide\n\nFirst body.\n\n---\n\n# Second slide\n\nSecond body.\n'}); await action(p,app,'view',{mode:'text'});
      await cm.click(); await p.keyboard.press('ControlOrMeta+End'); await p.keyboard.type('First edit');
-     await action(p,app,'go',{index:2}); await p.waitForFunction(()=>document.querySelector('.yavc-command-toolbar [data-command=undo]').disabled); assert.match((await action(p,app,'text')).text,/# Second slide\n\nSecond body/);
-     await cm.click(); await p.keyboard.press('ControlOrMeta+End'); await p.keyboard.type('Second edit'); await action(p,app,'go',{index:1}); await command(p,'undo'); await p.waitForFunction(()=>!CM.EditorView.findFromDOM(document.querySelector('.cm-editor')).state.doc.toString().includes('First edit'));
-     assert.match((await action(p,app,'text')).text,/Second edit/); await action(p,app,'go',{index:2}); await command(p,'undo'); await p.waitForFunction(()=>!CM.EditorView.findFromDOM(document.querySelector('.cm-editor')).state.doc.toString().includes('Second edit')); await action(p,app,'view',{mode:'visual'});
+     // Slides has one editing history for the whole deck (DESIGN.md, decision 84), so going to the second slide keeps the first slide's edit undoable,
+     // and Undo takes back the latest edit first, wherever it was made, whichever slide is showing.
+     const deckText=()=>action(p,app,'text').then(r=>r.text);
+     await action(p,app,'go',{index:2}); await p.waitForFunction(()=>!document.querySelector('.yavc-command-toolbar [data-command=undo]').disabled); assert.match(await deckText(),/# Second slide\n\nSecond body/);
+     await cm.click(); await p.keyboard.press('ControlOrMeta+End'); await p.keyboard.type('Second edit'); assert.match(await deckText(),/Second edit/); await command(p,'undo');
+     await p.waitForFunction(async()=>!(await pudlActions.run('yavc.slides/text@1',{},{grant:'all'})).text.includes('Second edit')); assert.match(await deckText(),/First edit/); await command(p,'undo');
+     await p.waitForFunction(async()=>!(await pudlActions.run('yavc.slides/text@1',{},{grant:'all'})).text.includes('First edit')); await action(p,app,'view',{mode:'visual'});
      for (const id of ['deck-colours','slide-colours','deck-title']) {
       phase='Slides dialog '+id; await command(p,id); const d=p.locator('dialog[open]'); await d.waitFor();
       assert.deepEqual(await d.evaluate(d=>Array.from(d.querySelectorAll('input,select,textarea')).filter(n=>n.type!=='hidden'&&n.getClientRects().length&&!n.disabled&&!n.labels?.length&&!n.getAttribute('aria-label')&&!n.getAttribute('aria-labelledby')).map(n=>n.outerHTML)),[]);

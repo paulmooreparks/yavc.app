@@ -21,7 +21,7 @@ const evidence = path.join(os.tmpdir(), 'yavc-start-review'); fs.mkdirSync(evide
             await page.locator('.site-menubar .menubar-title[data-menu-id=site]').click();
             const root = page.locator('#site-start');
             await root.waitFor({ state: 'visible' });
-            assert.equal(await root.locator('[data-start-item]').count(), 17);
+            assert.equal(await root.locator('[data-start-item]').count(), 18); // Docs became an application of its own when it was split from the Editor.
             await root.locator('[data-start-category-key="games"]').click();
             await page.waitForFunction(() => pudlStart.state(document.querySelector('#site-start')).count === 5);
             assert.equal(new URL(page.url()).searchParams.get('start-category'), 'games');
@@ -29,12 +29,12 @@ const evidence = path.join(os.tmpdir(), 'yavc-start-review'); fs.mkdirSync(evide
             assert.equal(await root.locator('[data-start-heading]').textContent(), 'Games');
             const query = root.locator('[data-start-query]');
             await query.fill('Docs');
-            await page.waitForFunction(() => pudlStart.state(document.querySelector('#site-start')).count === 1);
-            assert.equal(await root.locator('[data-start-item]:not([data-start-filtered]) .start-name').innerText(), 'Editor');
+            await page.waitForFunction(() => pudlStart.state(document.querySelector('#site-start')).count === 2);
+            assert.deepEqual(await root.locator('[data-start-item]:not([data-start-filtered]) .start-name').allInnerTexts(), ['Docs', 'Editor']); // Docs is an application of its own, and the Editor also matches the word.
             await query.fill('no-such-application');
             await root.locator('[data-start-empty]').waitFor({ state: 'visible' });
             await root.locator('[data-start-empty] [data-start-clear]').click();
-            await page.waitForFunction(() => pudlStart.state(document.querySelector('#site-start')).count === 17);
+            await page.waitForFunction(() => pudlStart.state(document.querySelector('#site-start')).count === 18);
             await query.focus(); await page.keyboard.press('ArrowDown');
             assert.equal(await root.locator('[data-start-items] a').first().evaluate(e => e === document.activeElement), true);
             await page.keyboard.press('ArrowUp');
@@ -56,9 +56,13 @@ const evidence = path.join(os.tmpdir(), 'yavc-start-review'); fs.mkdirSync(evide
             }
             await page.keyboard.press('Escape');
             await root.waitFor({ state: 'hidden' });
-            await page.waitForFunction(() => pudlMenubar.launcherButton({ visible: true }) === document.activeElement);
+            // PUDL decides where the keyboard goes when the launcher closes (DESIGN.md, decision 80). In the narrow window the loop ended in, that is the
+            // taskbar's launcher button, and in a wide one the menu bar's. Either is a launcher the person can see.
+            await page.waitForFunction(() => { const active = document.activeElement, bar = document.querySelector('.win-bar-launcher'), menu = pudlMenubar.launcherButton({ visible: true }); return !!active && (active === menu || (active === bar && bar.getClientRects().length > 0)); });
             await page.setViewportSize({ width: 1280, height: 900 });
-            await page.locator('.site-menubar .menubar-title[data-menu-id=site]').click();
+            // Closing the launcher in the narrow window does not close it on the desktop (DESIGN.md, decision 80: compact visibility does not
+            // replace the desktop presentation), so the wide window shows it open again, and a click on the menu would close it.
+            await root.waitFor({ state: 'visible' });
             const editor = root.locator('a[data-site-start-app="editor"]');
             const target = new URL(await editor.getAttribute('href'));
             assert.ok(target.searchParams.get('open').split(',').includes('dice'));
