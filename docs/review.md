@@ -1076,3 +1076,11 @@ Decision 107, which pull request 69 made, moved the guest files into individual 
 ## The window title test and one document per window (2026-11-12)
 
 `scripts/test-document-titles.cjs` creates a second document and expects its tab in the same window. Since decision 82 the default is one document per window, so the second document opened a second window and the test found two tab bars, and it failed the same way at v0.2.83. The test now serves the page with the tabbed policy, which is how `test-document-grouping.cjs` chooses its policy, because its checks of the inactive dirty tab, switching and closing a tab need documents grouped in one window. It passes in Chromium, Firefox and WebKit. The title and dirty marker of a window that holds one document are covered by the first half of the same test, and the one-document-per-window behaviour is covered by `test-document-grouping.cjs`.
+
+## The D2 Inspector updates in place (2026-11-12)
+
+The D2 Inspector had the same first and third findings as the canvas Inspector had before decision 142. It returned early when the keyboard was inside it, so a change from elsewhere did not show, and it gave the keyboard to the page when its field was replaced. Its second finding, a click kept after typing, does not apply, because only canvas diagrams restore a selection after an edit.
+
+Removing the early return would have replaced the focused field at every draw, so the Inspector first moved to the in-place update that the canvas Inspector uses, which is decision 143. The lead approved that order. `scripts/test-d2-inspector.cjs` checks, in Chromium, Firefox and WebKit, that a change written to the text shows in a field that is not the one in use while the keyboard stays in the same element, that the text being typed and its caret are kept, and that the keyboard goes to the Connection heading when the selection moves to a connection with no such field. It fails on main at the first of those, and with only the heading step taken out it fails at the last.
+
+The existing D2 tests for the outline, the pickers, the resources and the chrome pass in Chromium, and the canvas pictures test passes in all three, since the refusal-clearing code is now shared. Not tested: the empty selection line taking the keyboard, and the blocked state with the keyboard inside a field.
