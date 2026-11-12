@@ -28,7 +28,9 @@ if (!/^\d+$/.test(port)) throw new Error('Use a disposable localhost port.');
                     await page.locator('.cm-editor').evaluate(e => {const v=CM.EditorView.findFromDOM(e);v.dispatch({changes:{from:0,to:v.state.doc.length,insert:'p{color:red;}'},annotations:CM.isolateHistory.of('full')});});
                     await page.keyboard.press('Shift+Alt+f');
                     await page.waitForFunction(() => CM.EditorView.findFromDOM(document.querySelector('.cm-editor')).state.doc.toString().includes('\n'));
-                    await page.locator('.cm-editor').evaluate(e=>CM.undo(CM.EditorView.findFromDOM(e)));
+                    // Undo is what a person presses. The editor keeps its history in the workspace, so CodeMirror's own undo function finds none.
+                    await page.locator('.cm-content').click(); await page.keyboard.press('ControlOrMeta+z');
+                    await page.waitForFunction(() => CM.EditorView.findFromDOM(document.querySelector('.cm-editor')).state.doc.toString() === 'p{color:red;}');
                     assert.equal(await page.locator('.cm-content').innerText(),'p{color:red;}');
                 }
                 await context.setOffline(false);

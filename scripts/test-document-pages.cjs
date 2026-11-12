@@ -51,7 +51,8 @@ const margin = page => page.locator('[data-measure="all"]').locator('..').getByR
                 assert.equal(await text(page),source);
             }
             await action(page,'view',{mode:'document'}); await page.waitForFunction(() => +document.querySelector('[data-page-count]')?.dataset.pageCount > 1);
-            await command(page,'hide-navigation');
+            // Hide Side Panes is offered only while a side pane shows, and Files and Outline are hidden at first (DESIGN.md, decision 74), so there may be nothing to hide.
+            if(await page.evaluate(() => { const c = pudlCommands.find('hide-navigation',document.querySelector('[data-applet]')); return !!c && !pudlCommands.value(c,'hidden'); })) await command(page,'hide-navigation');
             await page.setViewportSize({width:600,height:800}); await page.waitForTimeout(250);
             assert.equal(await page.locator('.doc-paginated').evaluate(el => el.getBoundingClientRect().width),816);
             await page.screenshot({path:path.join(evidence,engine+'-narrow.png')});
