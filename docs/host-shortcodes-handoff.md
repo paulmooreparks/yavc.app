@@ -1,5 +1,18 @@
 # Host shortcode integration handoff
 
+## v0.2.85: Slides asks where a referenced file is, and the Inspector updates in place
+
+[v0.2.85](https://github.com/paulmooreparks/yavc.app/releases/tag/v0.2.85) comes from pull requests 141, 142 and 143 on 2026-11-12. Slides now asks `contentWorkspace.resolvePath` for a deck's diagrams, stylesheet and shared shortcodes file, as Editor and Docs do, so a deck kept on a wiki page can find files attached to it. Docs' Edit Shared Stylesheet opens the file the host named. All three applications test a host's answer with one function, `yavcUtil.hostPath`. The canvas Inspector in Diagrams updates its controls in place, so a redraw cannot replace what a person has begun typing (DESIGN.md decision 141). A host that answers `resolvePath` should check that it answers for decks as well as documents.
+
+| Item | v0.2.85 |
+| --- | --- |
+| Commit | `4171d1e0bafed6986aa32a22be87ed8f1a6ce2e4` |
+| Archive sha256 | `9434cbdecc13ca5705302a746bd7e70a7750efe78f4b0f3096c9a965df4a482e` |
+| Manifest sha256 | `4cf452a2acd7887c3da47d2a586cba867696fd5858e8612922f1f73b5408b5c5` |
+| Content digest | `6e824927b3bffe7596e0375224eeaec2f2b7a44c72e2149598c8cf8585c8eb67` |
+| Files | 492 |
+| Applets | Editor 46.37.4, Docs 1.37.4, Slides 0.65.4, Diagrams 0.46.1 |
+
 ## v0.2.84: padding and corners in the Inspector, Tab in the Inspector, and the fallback toolbar
 
 [v0.2.84](https://github.com/paulmooreparks/yavc.app/releases/tag/v0.2.84) is the first release built by the yavc.app team (`docs/team.md`), from pull requests 134, 135, 137 and 139 on 2026-11-12. In Diagrams a text node's Inspector sets padding for each side and a radius for each corner (DESIGN.md decision 138), and Tab after typing in an Inspector number field keeps the keyboard in the next field, which in Firefox had saved a wrong number (decision 140). Editor and Docs draw their own toolbar in a host that has no `commandToolbar` service (decision 139). A host that offers the service changes nothing.
