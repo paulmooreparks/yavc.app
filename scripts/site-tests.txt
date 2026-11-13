@@ -6,6 +6,7 @@ test-block-dialogs.cjs
 test-canvas-auto-projection.cjs
 test-canvas-batch.cjs
 test-canvas-embed.cjs
+test-canvas-pan.cjs
 test-command-toolbar.cjs
 test-container-pages.cjs
 test-content-dialogs.cjs
