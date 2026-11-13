@@ -56,6 +56,12 @@ const RICH='The Document, as Its Page',MARKDOWN='Text of Document.docs.md';
     // 5. A dialog is found by its role and name, and closed by its button.
     await command('Link','Format');const dialog=page.getByRole('dialog',{name:'Link',exact:true});await dialog.waitFor();
     await dialog.getByRole('button',{name:'Cancel',exact:true}).click();await dialog.waitFor({state:'hidden'});
+    // Two more dialogs, so the general promise has examples: Text Color is a dialog with Cancel and Apply, and Find and Replace is a search region with named buttons.
+    await command('Text Color','Format');const colour=page.getByRole('dialog',{name:'Text Color',exact:true});await colour.waitFor();
+    await colour.getByRole('button',{name:'Apply',exact:true}).waitFor();await colour.getByRole('button',{name:'Cancel',exact:true}).click();await colour.waitFor({state:'hidden'});
+    await command('Find and Replace','Edit');const find=page.getByRole('search',{name:'Find and Replace',exact:true});await find.waitFor();
+    for(const name of ['Next Match','Previous Match','Replace','Replace All','Close'])await find.getByRole('button',{name,exact:true}).waitFor();
+    await find.getByRole('button',{name:'Close',exact:true}).click();await find.waitFor({state:'hidden'});
     // 6. The menus have their names where they are visible.
     if(width<1000)for(const name of ['File','Edit','Format','View'])if(!await page.getByRole('button',{name,exact:true}).isVisible())failures.push(`${label}: the ${name} menu is not there`);
    }catch(error){failures.push(`${label}: ${String(error.message).split('\n').slice(0,3).join(' ').slice(0,300)}`);}finally{await page.close();}
