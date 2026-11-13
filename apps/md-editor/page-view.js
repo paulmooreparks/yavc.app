@@ -497,6 +497,7 @@ var schemaCache = null;
       if (!view) return;
       if ((!on || sourceStale || frozen) && tr.docChanged && !tr.getMeta('fromText')) return;
       view.updateState(view.state.apply(tr));
+      seenSelection = domSelection();
       var edited = tr.docChanged && !tr.getMeta('fromText');
       if (edited) {
         var editAt = tr.time || Date.now();
@@ -2239,13 +2240,24 @@ var schemaCache = null;
        and can be several frames after the selection was made when the page is busy. A command that reads the page's selection in that
        time acts on the one before. So each entry of the API that reads or changes the selection first reads the browser's own selection
        (view.root.getSelection and posAtDOM, both documented) and, when it differs from the state's, makes it the state's. Only a text
-       selection is replaced, and only while the page has the focus, which is where ProseMirror would take the browser's selection too. */
+       selection outside a table is replaced (Firefox moves the browser's selection out of a table cell when the table is drawn again, and the state's is then the right one), and only while the page has the focus, which is where ProseMirror would take the browser's selection too. */
+    var seenSelection = null;
+    function domSelection() {
+      var dom = view && view.root && view.root.getSelection ? view.root.getSelection() : null;
+      return dom && dom.anchorNode ? { anchorNode: dom.anchorNode, anchorOffset: dom.anchorOffset, focusNode: dom.focusNode, focusOffset: dom.focusOffset } : null;
+    }
+    function sameDomSelection(a, b) {
+      return !!a && !!b && a.anchorNode === b.anchorNode && a.anchorOffset === b.anchorOffset && a.focusNode === b.focusNode && a.focusOffset === b.focusOffset;
+    }
     function syncSelection() {
       if (!view || !on || view.composing || !view.hasFocus()) return;
       var current = view.state.selection;
-      if (!(current instanceof PM.TextSelection)) return;
-      var dom = view.root && view.root.getSelection ? view.root.getSelection() : null;
-      if (!dom || !dom.anchorNode || !view.dom.contains(dom.anchorNode) || !view.dom.contains(dom.focusNode)) return;
+      if (!(current instanceof PM.TextSelection) || PM.isInTable(view.state)) return;
+      var dom = domSelection();
+      if (!dom || !view.dom.contains(dom.anchorNode) || !view.dom.contains(dom.focusNode)) return;
+      /* The state's selection is the page's own unless the browser's has changed since the state last took or set it: a selection the page set
+         itself may not be in the browser's yet, and the browser's then says nothing new. */
+      if (sameDomSelection(dom, seenSelection)) return;
       var anchor, head;
       try { anchor = view.posAtDOM(dom.anchorNode, dom.anchorOffset); head = view.posAtDOM(dom.focusNode, dom.focusOffset); } catch (err) { return; }
       if (anchor === current.anchor && head === current.head) return;
