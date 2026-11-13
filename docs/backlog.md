@@ -20,6 +20,10 @@ This page lists the defects and gaps the yavc.app team has found and not yet fix
 
 - **The inspector can stay disabled after a click on a shape made just after typing.** In Diagrams (a D2 diagram, with the text and the drawing both open), typing at the end of the text and then clicking a shape at once can leave the inspector's fields disabled, and they stay so until another click; the shape's selection seems to be lost when the drawing is redrawn from the typed text. Found while running `test-portable-diagrams.cjs` in WebKit with 14 runs at once: 3 failures in 140 runs (about 2 %), at the step that clicks `#one .dg-hit-shape` after typing and expects `.dg-inspector-fields:not([disabled])`; two timed out at 30 seconds and one found none. Not seen in Chromium or Firefox, which were not run under load. It does not depend on the page view. The next task is to find the cause.
 
+## Other applets
+
+- **Barcode Tool can drop a layout that was just saved.** It reloads its layout library whenever anything in the home folder changes, and a reload that read the library before a save and answers after it puts the older library back and clears the selection, so "Remove this layout…" is disabled and the saved layout is no longer chosen. A person meets it when a settings file or any other file in the home folder is written as they save. `scripts/test-barcode-library-reload.cjs` reproduces it in every browser. Found by Yavc.App Tester on 2026-11-14 from a CI failure of `test-authored-dialogs.cjs`.
+
 ## Tests
 
 - `test-files-dialogs.cjs` failed in CI without a cause in the logs. Look again when a run keeps its logs. `test-editor-visual-defaults.cjs` is repaired (see review.md, "Waits that ran once"); the same fault is in nine more tests, listed there.
