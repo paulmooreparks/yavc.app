@@ -48,7 +48,8 @@ async function textOnly(p,text){
   for(const preference of ['text','split','preview','visual']){
    await p.evaluate(preference=>pudlCommands.run('md-default-'+preference,null,document.querySelector('[data-applet]')),preference);
    await docs(p,'new',{path:'~/preference-'+preference+'.md',text:'# Preference\n\nBody.'});await mode(p,preference);
-   await p.waitForFunction(async preference=>(await pudlHost.config.stored('docs')).markdownView===preference,preference);
+   // The choice is kept when the settings file holds it. A wait function that is async runs once and its answer is not tested, so this polls inside the page. Saves go one at a time, so a reload before the file holds the choice reads an older one.
+   await p.evaluate(async preference=>{const F=await yavcUtil.siteFs(),limit=Date.now()+15000;for(;;){const file=F.resolve(F.home(),'~/.config/docs.json');if(file&&!file.children){try{if(JSON.parse(await F.read(file)).markdownView===preference)return;}catch{}}if(Date.now()>limit)throw new Error('The settings file never held '+preference);await new Promise(resolve=>setTimeout(resolve,50));}},preference);
    if(preference==='preview')assert.equal(await p.locator('.ed-page [contenteditable="true"]').count(),0);
   }
   // A .docs.md document has its own default, the page, which the Markdown choice does not move.

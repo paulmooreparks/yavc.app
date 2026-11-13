@@ -43,10 +43,10 @@ const action = (p, app, name, input = {}) => p.evaluate(({app, name, input}) => 
                     if (app === 'docs' || app === 'slides') {
                         // Verify the pending rich marker first, then synchronize through the public view operation.
                         await action(p, app, 'view', {mode: 'text'});
-                        await p.waitForFunction(async app => {
+                        await p.evaluate(async (app)=>{const condition=async()=>{
                             const result = await pudlActions.run('yavc.' + app + '/' + (app === 'docs' ? 'document' : 'deck') + '@1', {}, {grant: 'all'});
                             return result.modified;
-                        }, app);
+                        };const limit=Date.now()+20000;while(!(await condition())){if(Date.now()>limit)throw new Error('The condition never held');await new Promise(resolve=>setTimeout(resolve,50));}},app);
                     }
                     await create(second); await action(p, app, 'save', {path: '~/' + second});
                     assert.equal(await tabs.isVisible(), true);

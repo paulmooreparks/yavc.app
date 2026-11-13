@@ -15,4 +15,4 @@ This page lists the defects and gaps the yavc.app team has found and not yet fix
 
 ## Tests
 
-- `test-editor-visual-defaults.cjs` and `test-files-dialogs.cjs` failed in CI without a cause in the logs. Look again when a run keeps its logs.
+- `test-files-dialogs.cjs` failed in CI without a cause in the logs. Look again when a run keeps its logs. `test-editor-visual-defaults.cjs` is repaired (see review.md, "Waits that ran once"); the same fault is in nine more tests, listed there.

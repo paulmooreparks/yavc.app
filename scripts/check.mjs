@@ -74,6 +74,19 @@ rules.push({ id: 'js-syntax', run() {
 
 // Paul's standing style rule: no em-dash in anything committed
 // (C:\Users\paul\.claude\CLAUDE.md, "Output style: no em-dashes").
+// A test does not wait with waitForFunction(async ...). Playwright's documentation says waitForFunction returns when the function returns a
+// truthy value, and says nothing about a function that is async, which returns a promise, and a promise is always truthy. Measured with
+// Playwright 1.63.0 (2026-11-14): the call waits for the first run to finish, returns, and never runs the function again, whatever it
+// answered, so the wait is one check that tests nothing. Two site tests failed intermittently because of it. The rule exists because that
+// behaviour is not documented and could change either way. A test that needs to wait on an async condition polls inside the page with
+// page.evaluate until the condition is true, and fails with its own message after a limit.
+rules.push({ id: 'no-async-wait-function', run() {
+  for (const f of files) {
+    if (!/^scripts\/test-[^/]*\.cjs$/.test(f)) continue;
+    each(/\.waitForFunction\(\s*async\b/g, text.get(f), (m) => report('no-async-wait-function', f, m.index, 'waitForFunction given an async function runs it once and does not test its answer; poll inside the page with page.evaluate'));
+  }
+} });
+
 rules.push({ id: 'no-em-dash', run() {
   for (const f of files) each(/\u2014/g, text.get(f), (m) => report('no-em-dash', f, m.index, 'an em-dash; use a comma, colon, semicolon or parentheses'));
 } });

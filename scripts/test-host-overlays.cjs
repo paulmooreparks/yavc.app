@@ -64,7 +64,7 @@ const types={'.html':'text/html','.js':'text/javascript','.css':'text/css','.jso
             assert.equal(await page.evaluate(()=>fixture.overlays.calls[0].resource),'memory:document.docs.md');
             await page.evaluate(()=>{var resource='memory:document.docs.md',record=fixture.records.get(resource);record.text=record.text.replace('Original','Improved');record.revision++;fixture.overlays.publish(resource,{revision:String(record.revision),text:record.text,items:[]});fixture.overlays.remount('docs');});
             await page.locator('#document .cm-content').waitFor({state:'attached'});
-            await page.waitForFunction(async()=>{try{return (await pudlActions.run('yavc.docs/document@1',{}, {grant:'all'})).text.includes('Improved');}catch{return false;}});
+            await page.evaluate(async ()=>{const condition=async()=>{try{return (await pudlActions.run('yavc.docs/document@1',{}, {grant:'all'})).text.includes('Improved');}catch{return false;}};const limit=Date.now()+20000;while(!(await condition())){if(Date.now()>limit)throw new Error('The condition never held');await new Promise(resolve=>setTimeout(resolve,50));}});
             assert.equal(await page.locator('#document [data-host-suggestion]').count(),0);
             assert.ok(await page.evaluate(()=>fixture.overlays.unsubscribed())>0);
             await page.evaluate(()=>{var resource='memory:document.docs.md',record=fixture.records.get(resource),start=record.text.indexOf('Improved');fixture.overlays.publish(resource,{revision:String(record.revision),text:record.text,items:[{id:'replacement',start,end:start+8,before:'Improved',after:'Clearer',author:'Agent',reason:'A reason',group:'same'}]});});

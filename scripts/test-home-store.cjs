@@ -102,7 +102,7 @@ async function run(engine, base) {
             window.deletedBlob=F.resolve(F.home(),'new-picture').blob;
             await F.remove(F.resolve(F.home(),'new-picture'),false);
         });
-        await a.waitForFunction(async()=>!(await yavcHomeStore.blobGet(window.deletedBlob)));
+        await a.evaluate(async ()=>{const condition=async()=>!(await yavcHomeStore.blobGet(window.deletedBlob));const limit=Date.now()+20000;while(!(await condition())){if(Date.now()>limit)throw new Error('The condition never held');await new Promise(resolve=>setTimeout(resolve,50));}});
         await b.evaluate(()=>localStorage.setItem('pc-terminal-home',JSON.stringify({files:{'/legacy.md':{t:'f',c:'older tab'}}})));
         await a.waitForFunction(()=>document.querySelector('[data-home-fork]'));
         assert.equal((await read(a)).text,'accepted');
