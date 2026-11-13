@@ -54,7 +54,8 @@ const types={'.html':'text/html','.js':'text/javascript','.css':'text/css','.jso
    // 4b. If the engine that converts the page is not ready, take() returns the text without the page's latest edit, and the host is told again once the conversion succeeds.
    if(view==='visual'){const {page,errors}=await open(view);
     await page.evaluate(()=>{const engine=window.yavcMdEngine,real=engine.current;fixture.engineDown=true;engine.current=function(){if(fixture.engineDown)throw new Error('The engine is not ready.');return real.apply(engine,arguments);};});
-    await page.keyboard.type('4242');const calls=await count(page),without=await draft(page);
+    const before=await count(page);await page.keyboard.type('4242');const calls=await count(page),without=await draft(page);
+    if(calls-before<4)failures.push(`${label}: with the engine not ready, changed() was called ${calls-before} times for four keys, and not once for each.`);
     if(typeof without==='string'&&without.includes('4242'))failures.push(`${label}: with the engine not ready, take() returned the page's latest edit.`);
     await page.evaluate(()=>{fixture.engineDown=false;});
     await page.waitForFunction(()=>(fixture.changes.document||0)>0&&fixture.takes.document().tabs.some(t=>typeof t.draft==='string'&&t.draft.includes('4242')),null,{timeout:10000}).catch(()=>failures.push(`${label}: after the engine was ready again, take() still lacked the edit that was waiting.`));
