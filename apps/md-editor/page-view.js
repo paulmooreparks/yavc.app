@@ -350,7 +350,7 @@ var schemaCache = null;
        hostTitle(name)          optional: the title of one of the host's shortcodes, or ''
        hostInline(src)          optional: a promise of { html } when src is one of the
                                 host's inline shortcodes, and of null when it is not
-       changed()                the Editor's commands may have changed
+       changed(edited)          the Editor's commands may have changed; edited is true when the text of the document did
        failed(text)             the page could not be built; the Editor leaves Page view
      } */
   function attach(o) {
@@ -463,6 +463,15 @@ var schemaCache = null;
             dispatchTransaction: dispatch,
             attributes: o.spellcheck === false ? { 'aria-label': 'The Document, as Its Page', spellcheck: 'false' } : { 'aria-label': 'The Document, as Its Page' }
           });
+          /* A composition that is about to begin starts from a page already written
+             into the text, so that a host asking for the draft while it lasts gets the
+             text as it was before it. When it ends the host is told of the edit.
+             The listener is added after ProseMirror's own, so view.composing is already
+             false when it runs, and the last of the composition's changes has been read. */
+          view.dom.addEventListener('compositionstart', function () { flush(); }, true);
+          view.dom.addEventListener('compositionend', function () {
+            setTimeout(function () { if (view && !view.composing) { if (dirty) schedule(); o.changed(true); } }, 0);
+          });
         }
         shown = text;
         dirty = false;
@@ -483,12 +492,25 @@ var schemaCache = null;
       if (!view) return;
       if ((!on || sourceStale || frozen) && tr.docChanged && !tr.getMeta('fromText')) return;
       view.updateState(view.state.apply(tr));
-      if (tr.docChanged && !tr.getMeta('fromText')) {
+      var edited = tr.docChanged && !tr.getMeta('fromText');
+      if (edited) {
         dirty = true;
-        clearTimeout(syncTimer);
-        syncTimer = setTimeout(function () { sync().catch(function () { /* sync reports the failure beside the page. */ }); }, 300);
+        schedule();
       }
-      o.changed();
+      /* The host is told of an edit at once, so that its copy of the draft is asked for
+         when it was made, and not 300 milliseconds later when the text is written. While
+         an input method is composing the host is told when it ends instead. */
+      o.changed(edited && !view.composing);
+    }
+    /* Writes the page's text into the Editor's text after a pause in typing, and
+       not while an input method is composing, since converting then can break the
+       composition. */
+    function schedule() {
+      clearTimeout(syncTimer);
+      syncTimer = setTimeout(function () {
+        if (view && view.composing) { schedule(); return; }
+        sync().catch(function () { /* sync reports the failure beside the page. */ });
+      }, 300);
     }
 
     /* ---- The clipboard ---------------------------------------------------
@@ -587,17 +609,51 @@ var schemaCache = null;
       if (syncing) return syncing.then(sync);
       if (!dirty || !view) return Promise.resolve();
       dirty = false;
-      var original = shown;
-      syncing = Promise.resolve(o.markdownOf(syncJSON())).then(function (text) {
-        if (o.text() !== original || shown !== original) throw new Error('The source changed while the page was being saved. The page draft was retained; copy it before reloading.');
-        shown = text;
-        o.setText(text);
+      var original = shown, mine = ++syncTicket;
+      var running = Promise.resolve(o.markdownOf(syncJSON())).then(function (text) {
+        // flush() has written a newer page since, and this one is no longer wanted.
+        if (mine !== syncTicket) return;
+        place(text, original);
       }).catch(function (err) {
+        if (mine !== syncTicket) return;
         dirty = true;
         o.say(String(err && err.message || err), true);
         throw err;
-      }).finally(function () { syncing = null; });
-      return syncing;
+      }).finally(function () { if (syncing === running) syncing = null; });
+      syncing = running;
+      return running;
+    }
+    /* Puts text the page was converted to into the Editor's text, as sync and flush both do. */
+    function place(text, original) {
+      if (o.text() !== original || shown !== original) throw new Error('The source changed while the page was being saved. The page draft was retained; copy it before reloading.');
+      shown = text;
+      o.setText(text);
+    }
+    var syncTicket = 0;
+    /* The same as sync, at once and without a promise, for a host that asks for the
+       draft and needs it now (the snapshot's take). The engine converts the page in
+       one synchronous call, so this is the conversion the timer runs, not another.
+       It leaves the page, the selection and the undo history as they are. It does
+       nothing while an input method is composing, so the text is then what it was
+       before the composition began, which flush() made current when it began.
+       Returns whether the Editor's text is now the page's. */
+    function flush() {
+      clearTimeout(syncTimer);
+      if (!view || (!dirty && !syncing)) return true;
+      if (view.composing) { schedule(); return false; }
+      var original = shown, ticket = ++syncTicket;
+      try {
+        var text = o.markdownNow(syncJSON());
+        dirty = false;
+        place(text, original);
+        return true;
+      } catch (err) {
+        // A failed conversion leaves the draft on the page and the timer to try again.
+        syncTicket = ticket - 1;
+        dirty = true;
+        schedule();
+        return false;
+      }
     }
 
     /* The page as the engine writes it back, with each block still as it
@@ -2210,6 +2266,7 @@ var schemaCache = null;
       },
       // Changes on the page not yet in the Editor's text.
       pending: function () { return dirty || !!syncing; },
+      flush: flush,
       formatSelection: function (name) {
         if (!view || !on || sourceStale || frozen) return null;
         var target = view, doc = view.state.doc, selection = view.state.selection, stored = view.state.storedMarks, type = view.state.schema.marks[name];
