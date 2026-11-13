@@ -16,10 +16,6 @@ This page lists the defects and gaps the yavc.app team has found and not yet fix
 - **In Firefox, Control+End in a table at the end of a document stays in the last cell.** There is then no evident way to the end of the document to type after the table. Found by Yavc.App Tester on 2026-11-13.
 - **An undo in the page view sometimes takes back nothing.** In one of 60 WebKit runs of `test-docs-draft-notification.cjs` at 14 runs at once, after typing 12345678 into the page without a `take()` and pressing Ctrl+Z, the text still had 12345678. Not traced; it was seen once with the fix of decision 159 and before it was not told apart from the failures that fix removed. The next step is to log the page's transactions and the Editor's history in a run that does it. Found by Yavc.App Builder on 2026-11-14.
 
-## Diagrams
-
-- **The inspector can stay disabled after a click on a shape made just after typing.** In Diagrams (a D2 diagram, with the text and the drawing both open), typing at the end of the text and then clicking a shape at once can leave the inspector's fields disabled, and they stay so until another click; the shape's selection seems to be lost when the drawing is redrawn from the typed text. Found while running `test-portable-diagrams.cjs` in WebKit with 14 runs at once: 3 failures in 140 runs (about 2 %), at the step that clicks `#one .dg-hit-shape` after typing and expects `.dg-inspector-fields:not([disabled])`; two timed out at 30 seconds and one found none. Not seen in Chromium or Firefox, which were not run under load. It does not depend on the page view. The next task is to find the cause.
-
 ## Other applets
 
 - **A change to a settings file that arrives while a save of it is under way is dropped.** `config.js` `watch()` returns when `saving` is set and does not read the file again afterwards, so a change made elsewhere during a save is not seen until the next change. Barcode Tool (decision 161) reads such a change when the save is done, and `config.js` should too. Found by Yavc.App Builder on 2026-11-14.
