@@ -40,8 +40,8 @@ async function menu(p,id) { await p.locator('.menubar-title[data-menu-id="'+id+'
      const deckText=()=>action(p,app,'text').then(r=>r.text);
      await action(p,app,'go',{index:2}); await p.waitForFunction(()=>!document.querySelector('.yavc-command-toolbar [data-command=undo]').disabled); assert.match(await deckText(),/# Second slide\n\nSecond body/);
      await cm.click(); await p.keyboard.press('ControlOrMeta+End'); await p.keyboard.type('Second edit'); assert.match(await deckText(),/Second edit/); await command(p,'undo');
-     await p.waitForFunction(async()=>!(await pudlActions.run('yavc.slides/text@1',{},{grant:'all'})).text.includes('Second edit')); assert.match(await deckText(),/First edit/); await command(p,'undo');
-     await p.waitForFunction(async()=>!(await pudlActions.run('yavc.slides/text@1',{},{grant:'all'})).text.includes('First edit')); await action(p,app,'view',{mode:'visual'});
+     await p.evaluate(async ()=>{const condition=async()=>!(await pudlActions.run('yavc.slides/text@1',{},{grant:'all'})).text.includes('Second edit');const limit=Date.now()+20000;while(!(await condition())){if(Date.now()>limit)throw new Error('The condition never held');await new Promise(resolve=>setTimeout(resolve,50));}}); assert.match(await deckText(),/First edit/); await command(p,'undo');
+     await p.evaluate(async ()=>{const condition=async()=>!(await pudlActions.run('yavc.slides/text@1',{},{grant:'all'})).text.includes('First edit');const limit=Date.now()+20000;while(!(await condition())){if(Date.now()>limit)throw new Error('The condition never held');await new Promise(resolve=>setTimeout(resolve,50));}}); await action(p,app,'view',{mode:'visual'});
      for (const id of ['deck-colours','slide-colours','deck-title']) {
       phase='Slides dialog '+id; await command(p,id); const d=p.locator('dialog[open]'); await d.waitFor();
       assert.deepEqual(await d.evaluate(d=>Array.from(d.querySelectorAll('input,select,textarea')).filter(n=>n.type!=='hidden'&&n.getClientRects().length&&!n.disabled&&!n.labels?.length&&!n.getAttribute('aria-label')&&!n.getAttribute('aria-labelledby')).map(n=>n.outerHTML)),[]);

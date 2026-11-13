@@ -2,7 +2,7 @@
 const assert=require('node:assert/strict'),pw=require('playwright'),fs=require('node:fs'),os=require('node:os'),path=require('node:path');
 const port=process.env.YAVC_CHROME_TEST_PORT||'8448',out=path.join(os.tmpdir(),'yavc-pudl105-evidence');fs.mkdirSync(out,{recursive:true});
 const state=p=>p.evaluate(()=>pudlLauncher.state(document.getElementById('site-start')));
-const committed=(p,name,key,value)=>p.waitForFunction(async({name,key,value})=>(await(await fetch('/config/'+name)).json())[key]===value,{name,key,value});
+const committed=(p,name,key,value)=>p.evaluate(async ({name,key,value})=>{const condition=async()=>(await(await fetch('/config/'+name)).json())[key]===value;const limit=Date.now()+20000;while(!(await condition())){if(Date.now()>limit)throw new Error('The condition never held');await new Promise(resolve=>setTimeout(resolve,50));}},{name,key,value});
 async function seed(p,name,value){const error=await p.evaluate(({name,value})=>pudlHost.config.set(name,value),{name,value});assert.equal(error,null);}
 async function settle(p){await p.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))));}
 (async()=>{for(const engine of process.argv.slice(2).length?process.argv.slice(2):['chromium','firefox','webkit']){
@@ -21,7 +21,7 @@ async function settle(p){await p.evaluate(()=>new Promise(r=>requestAnimationFra
   assert.ok(Math.abs((await p.locator('#site-launcher-slot').boundingBox()).width-360)<2);
   assert.equal(await p.evaluate(()=>document.querySelector('.win-bar').closest('#site-launcher-layout')),null);
   await p.locator('.win[data-win="docs"] .ProseMirror').waitFor();await p.locator('.win-bar [data-win-pin="docs"]').waitFor();
-  phase='complete pin preferences';await p.evaluate(()=>pudlWindows.pinTaskbar('dice',true));await p.waitForFunction(async()=> (await(await fetch('/config/desktop-taskbar')).json()).pins.includes('dice'));
+  phase='complete pin preferences';await p.evaluate(()=>pudlWindows.pinTaskbar('dice',true));await p.evaluate(async ()=>{const condition=async()=>(await(await fetch('/config/desktop-taskbar')).json()).pins.includes('dice');const limit=Date.now()+20000;while(!(await condition())){if(Date.now()>limit)throw new Error('The condition never held');await new Promise(resolve=>setTimeout(resolve,50));}});
   let saved=await p.evaluate(async()=> (await(await fetch('/config/desktop-taskbar')).json()));for(const id of pins){assert.ok(saved.pins.includes(id));assert.ok(saved.references.some(ref=>ref.id===id));}
   await p.locator('.win-bar [data-win-pin="'+ids.view+'"]').click();await p.getByRole('menuitem',{name:'Mode',exact:true}).hover();await p.getByRole('menuitemradio',{name:'Dark',exact:true}).click();
   await p.waitForFunction(()=>document.documentElement.getAttribute('data-theme')==='dark');await p.reload();await p.locator('.win[data-win="settings"] [data-mode="dark"][aria-pressed="true"]').waitFor();

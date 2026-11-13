@@ -20,7 +20,7 @@ const action = (p, name, input = {}) => p.evaluate(({name,input}) => pudlActions
     for (const key of Object.keys(localStorage).filter(k=>k.startsWith('pc-resume:editor'))) localStorage.removeItem(key);
    },sample);
    await page.reload();await page.locator('.cm-content').waitFor({state:'attached'});
-   await page.waitForFunction(async () => (await pudlActions.run('yavc.editor/documents@1',{}, {grant:'all'})).documents.length === 3);
+   await page.evaluate(async ()=>{const condition=async()=>(await pudlActions.run('yavc.editor/documents@1',{}, {grant:'all'})).documents.length === 3;const limit=Date.now()+20000;while(!(await condition())){if(Date.now()>limit)throw new Error('The condition never held');await new Promise(resolve=>setTimeout(resolve,50));}});
    await page.waitForFunction(() => Object.keys(localStorage).filter(k=>k.startsWith('pc-resume:editor:')).some(k=>JSON.parse(localStorage.getItem(k))?.v.tabs.length === 3));
    await action(page,'close',{index:1});
    assert.equal((await action(page,'documents')).documents.length,2);
@@ -30,14 +30,14 @@ const action = (p, name, input = {}) => p.evaluate(({name,input}) => pudlActions
    await page.evaluate(() => pudlApplets.destroy(document.querySelector('[data-applet]')));
    await page.evaluate(() => {for(const key of Object.keys(sessionStorage).filter(k=>k.startsWith('pc-snap:')))sessionStorage.removeItem(key);});
    await page.reload();await page.locator('.cm-content').waitFor({state:'attached'});
-   await page.waitForFunction(async () => (await pudlActions.run('yavc.editor/documents@1',{}, {grant:'all'})).documents.length === 2);
+   await page.evaluate(async ()=>{const condition=async()=>(await pudlActions.run('yavc.editor/documents@1',{}, {grant:'all'})).documents.length === 2;const limit=Date.now()+20000;while(!(await condition())){if(Date.now()>limit)throw new Error('The condition never held');await new Promise(resolve=>setTimeout(resolve,50));}});
    const docs=(await action(page,'documents')).documents;
    assert.ok(docs.every(d=>!d.path.endsWith('/one.txt')));
    assert.ok(docs.every(d=>d.modified===false));
    await action(page,'set-text',{text:'# Kept unsaved draft\n'});
    await page.evaluate(() => pudlApplets.destroy(document.querySelector('[data-applet]')));
    await page.reload();await page.locator('.cm-content').waitFor({state:'attached'});
-   await page.waitForFunction(async()=> (await pudlActions.run('yavc.editor/document@1',{}, {grant:'all'})).text.includes('Kept unsaved draft'));
+   await page.evaluate(async ()=>{const condition=async()=>(await pudlActions.run('yavc.editor/document@1',{}, {grant:'all'})).text.includes('Kept unsaved draft');const limit=Date.now()+20000;while(!(await condition())){if(Date.now()>limit)throw new Error('The condition never held');await new Promise(resolve=>setTimeout(resolve,50));}});
    // Showing the restored view used to clear this message before anyone could read it.
    await page.waitForFunction(()=>/Your unsaved changes to .+ are back\./.test(document.querySelector('[data-role=message]').textContent),null,{timeout:8000});
    await page.waitForTimeout(1500);assert.match(await page.locator('[data-role=message]').textContent(),/are back\./);
@@ -51,7 +51,7 @@ const action = (p, name, input = {}) => p.evaluate(({name,input}) => pudlActions
    assert.equal(await desktop.locator('dialog[open]').count(),0);
    await desktop.evaluate(()=>pudlWindows.open('editor'));
    await desktop.locator('.win[data-win="editor"] .cm-content').waitFor({state:'attached'});
-   await desktop.waitForFunction(async()=> (await pudlActions.run('yavc.editor/document@1',{}, {grant:'all'})).text === 'Desktop unsaved draft');
+   await desktop.evaluate(async ()=>{const condition=async()=>(await pudlActions.run('yavc.editor/document@1',{}, {grant:'all'})).text === 'Desktop unsaved draft';const limit=Date.now()+20000;while(!(await condition())){if(Date.now()>limit)throw new Error('The condition never held');await new Promise(resolve=>setTimeout(resolve,50));}});
    assert.equal((await action(desktop,'document')).modified,true);
    await desktop.close();
    console.log(engine + ': closed tabs stay closed, saved pages stay clean, unsaved drafts survive reopening');
