@@ -123,6 +123,32 @@ func copyTreeExcept(source, target string, skip func(path string) bool) error {
 	})
 }
 
+// omissionsLine is the line of yavc-util.js that a reduced package replaces. A full package keeps it as it is, with null, so its
+// loader asks for nothing when a file is missing.
+const omissionsLine = "var omittedByBuild = null; // yavc-content: omissions"
+
+// writeUtilWithOmissions copies yavc-util.js with the package's list of omissions written in place of null, so that the loader
+// knows from its own text that the package leaves features out and has no request to make to find out.
+func writeUtilWithOmissions(source, target string, omit []feature) error {
+	data, err := os.ReadFile(source)
+	if err != nil {
+		return err
+	}
+	if strings.Count(string(data), omissionsLine) != 1 {
+		return fmt.Errorf("%s must have the line %q exactly once", source, omissionsLine)
+	}
+	// json.Marshal writes <, > and & as unicode escapes, so the list cannot close a script or a comment.
+	list, err := json.Marshal(map[string]any{"version": 1, "omitted": omit})
+	if err != nil {
+		return err
+	}
+	text := strings.Replace(string(data), omissionsLine, "var omittedByBuild = "+string(list)+"; // yavc-content: omissions", 1)
+	if err = os.MkdirAll(filepath.Dir(target), 0755); err != nil {
+		return err
+	}
+	return os.WriteFile(target, []byte(text), 0644)
+}
+
 func copyFile(source, target string) error {
 	info, err := os.Lstat(source)
 	if err != nil {
@@ -228,6 +254,12 @@ func assemble(root, out, md, d2, profileName string) error {
 		}
 	}
 	for _, name := range []string{"yavc-util.js", "dialogs.js", "doc-tabs.js", "pudl-host-kit.js", "snapshot.js", "command-toolbar.js"} {
+		if name == "yavc-util.js" && len(prof.omit) > 0 {
+			if err = writeUtilWithOmissions(filepath.Join(root, "internal", "web", "static", name), filepath.Join(out, "support", name), prof.omit); err != nil {
+				return err
+			}
+			continue
+		}
 		if err = copyFile(filepath.Join(root, "internal", "web", "static", name), filepath.Join(out, "support", name)); err != nil {
 			return err
 		}

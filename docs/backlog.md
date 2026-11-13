@@ -13,6 +13,10 @@ This page lists the defects and gaps the yavc.app team has found and not yet fix
 - **A caret placed before a diagram has drawn is lost when it draws.** A click made while the page is still loading can be lost. Found with the previous item.
 - **In Firefox, Control+End in a table at the end of a document stays in the last cell.** There is then no evident way to the end of the document to type after the table. Found by Yavc.App Tester on 2026-11-13.
 
+## Diagrams
+
+- **The inspector can stay disabled after a click on a shape made just after typing.** In Diagrams (a D2 diagram, with the text and the drawing both open), typing at the end of the text and then clicking a shape at once can leave the inspector's fields disabled, and they stay so until another click; the shape's selection seems to be lost when the drawing is redrawn from the typed text. Found while running `test-portable-diagrams.cjs` in WebKit with 14 runs at once: 3 failures in 140 runs (about 2 %), at the step that clicks `#one .dg-hit-shape` after typing and expects `.dg-inspector-fields:not([disabled])`; two timed out at 30 seconds and one found none. Not seen in Chromium or Firefox, which were not run under load. It does not depend on the page view. The next task is to find the cause.
+
 ## Tests
 
 - `test-files-dialogs.cjs` failed in CI without a cause in the logs. Look again when a run keeps its logs. `test-editor-visual-defaults.cjs` is repaired (see review.md, "Waits that ran once"); the same fault is in nine more tests, listed there.
