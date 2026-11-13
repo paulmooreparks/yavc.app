@@ -196,7 +196,7 @@ PUDL keeps theme and skin in local storage under `pudl-theme` and `pudl-skin`, p
 
 The retention period is 90 days, set by the engine's `-retain` flag. A session that has not been seen for that long is deleted with its state, and reading counts as being seen (decision 20). The privacy page says so in plain words.
 
-The administrator signs in to a separate session. Privileged operations use the pattern parkscomputing.com settled on, passkeys with a fresh tap for a change to the live site, reimplemented in Go.
+The administrator signs in to a separate session. Privileged operations use the pattern parkscomputing.com settled on, passkeys with a fresh tap for a change to the live site, reimplemented in Go. Before the administrator's mount is built, the server-file branch of the Editor's `onFsChange` in `workspace.js` must ignore a read that began before a save, with the version and saving counters of decision 161, since it takes the answer of a read without checking that the tab was saved while it ran.
 
 ## The engine
 

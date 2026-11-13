@@ -20,10 +20,6 @@ This page lists the defects and gaps the yavc.app team has found and not yet fix
 
 - **The inspector can stay disabled after a click on a shape made just after typing.** In Diagrams (a D2 diagram, with the text and the drawing both open), typing at the end of the text and then clicking a shape at once can leave the inspector's fields disabled, and they stay so until another click; the shape's selection seems to be lost when the drawing is redrawn from the typed text. Found while running `test-portable-diagrams.cjs` in WebKit with 14 runs at once: 3 failures in 140 runs (about 2 %), at the step that clicks `#one .dg-hit-shape` after typing and expects `.dg-inspector-fields:not([disabled])`; two timed out at 30 seconds and one found none. Not seen in Chromium or Firefox, which were not run under load. It does not depend on the page view. The next task is to find the cause.
 
-## Other applets
-
-- **The Editor's watcher of server files can bring back older text after a save.** When a file on the server changes, `onFsChange` in `workspace.js` reads it and, for a server file, takes the answer without checking that the tab was not saved while the read ran (a file in the home folder is checked against its revision, a server file is not). A read begun before a save and answered after it could put the older text into a tab that has no edits. Not reproduced. Found by Yavc.App Builder on 2026-11-14 while looking for the same pattern as in Barcode Tool. The file lists (`filebrowser.js` `refresh`, the Files app) read the in-memory tree and do not wait for an answer, so they do not have it.
-
 ## Tests
 
 - `test-files-dialogs.cjs` failed in CI without a cause in the logs. Look again when a run keeps its logs. `test-editor-visual-defaults.cjs` is repaired (see review.md, "Waits that ran once"); the same fault is in nine more tests, listed there.
