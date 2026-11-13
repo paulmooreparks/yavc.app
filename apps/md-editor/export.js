@@ -107,6 +107,8 @@
         var S = window.yavcDocumentSettings, values = S.properties(front), page = settings(values), rendered = engine.exportPreview(source), fragment = window.yavcHTML.fragment(rendered.blocks.map(function (b) { return b.html; }).join(''));
         page.furniture = S.furniture(values, await window.yavcMdEngine()); S.check(page);
         if ((rendered.problems || []).length) { throw new Error('Fix the document warnings before exporting.'); }
+        // Each block takes its direction from its own first strong character, as the page does, so print follows the page.
+        fragment.querySelectorAll('p,h1,h2,h3,h4,h5,h6,li,blockquote,td,th,dt,dd').forEach(function (e) { if (!e.hasAttribute('dir')) { e.setAttribute('dir', 'auto'); } });
         // The HTML cleaner uses an inert template, so omitted assets have not loaded.
         fragment.querySelectorAll('[data-export="omit"],.sc-draft-note').forEach(function (node) { node.remove(); });
         if (fragment.querySelector('[data-host-shortcode]')) { throw new Error('This document contains host-rendered shortcodes. This host must provide their export representation before printing or Office export.'); }
@@ -204,12 +206,12 @@
                     var imgs = node.querySelectorAll('img');
                     if (imgs.length && !node.textContent.trim() && imgs.length === 1) { target.push(images.get(imgs[0])); return; }
                     var runs = inline(node); if (!runs.length && !node.matches('pre')) { return; }
-                    target.push({ kind: 'paragraph', runs: runs, level: /^H[1-6]$/.test(node.tagName) ? +node.tagName[1] : 0, code: node.matches('pre'), style: typography(node), id: node.id || undefined }); return;
+                    target.push({ kind: 'paragraph', runs: runs, level: /^H[1-6]$/.test(node.tagName) ? +node.tagName[1] : 0, code: node.matches('pre'), style: typography(node), id: node.id || undefined, rtl: getComputedStyle(node).direction === 'rtl' }); return;
                 }
                 if (node.matches('table')) {
                     var rows = Array.from(node.rows).map(function (row) { return Array.from(row.cells).map(function (cell) {
                         if (cell.colSpan !== 1 || cell.rowSpan !== 1) { throw new Error('Merged table cells are not supported by document export.'); }
-                        return { runs: inline(cell), style: typography(cell) };
+                        return { runs: inline(cell), style: typography(cell), rtl: getComputedStyle(cell).direction === 'rtl' };
                     }); });
                     if (rows.length && rows.some(function (r) { return r.length !== rows[0].length; })) { throw new Error('Export tables must be rectangular.'); }
                     if (rows.length) { target.push({ kind: 'table', rows: rows }); } return;
@@ -217,7 +219,7 @@
                 if (node.matches('ul,ol')) {
                     var items = Array.from(node.children).filter(function (li) { return li.tagName === 'LI'; }).map(function (li) {
                         var item = [], run = [];
-                        function flush() { if (run.length) { item.push({ kind: 'paragraph', runs: run, style: typography(li) }); run = []; } }
+                        function flush() { if (run.length) { item.push({ kind: 'paragraph', runs: run, style: typography(li), rtl: getComputedStyle(li).direction === 'rtl' }); run = []; } }
                         li.childNodes.forEach(function (child) { if (child.nodeType === 3 || child.nodeType === 1 && !/^(P|UL|OL|BLOCKQUOTE|DIV|PRE)$/.test(child.tagName)) { var holder = document.createElement('span'); if (child.nodeType === 3) { run.push(Object.assign({ text: child.textContent }, typography(li))); } else { holder = child; if (child.matches('input')) { run.push({ text: child.checked ? '[x] ' : '[ ] ' }); } else { run = run.concat(inline(holder)); } } } else { flush(); block(child, item); } }); flush(); return item;
                     });
                     if (items.length) { target.push({ kind: 'list', ordered: node.tagName === 'OL', start: Math.max(1, Number(node.getAttribute('start')) || 1), items: items }); } return;
@@ -235,9 +237,9 @@
     function docxDocument(model, D) {
         var numbering = [], listCount = 0, bookmarks = new Map(),notes=new Map((model.footnotes||[]).map(function(note){return [note.label,note];})),referenced=new Set();
         function bookmark(id) { if (!bookmarks.has(id)) { bookmarks.set(id, 'yavc_' + (bookmarks.size + 1)); } return bookmarks.get(id); }
-        function runs(items) {
+        function runs(items, rtl) {
             return items.flatMap(function (r) {
-                var options = { bold: r.bold, italics: r.italic, underline: r.underline ? {} : undefined, strike: r.strike, superScript: r.sup, subScript: r.sub, highlight: r.mark ? 'yellow' : undefined, size: (r.size || 11) * 2, color: r.color || '202124', font: r.font || 'Arial' };
+                var options = { rightToLeft: rtl || undefined, bold: r.bold, italics: r.italic, underline: r.underline ? {} : undefined, strike: r.strike, superScript: r.sup, subScript: r.sub, highlight: r.mark ? 'yellow' : undefined, size: (r.size || 11) * 2, color: r.color || '202124', font: r.font || 'Arial' };
                 if(r.footnote){var note=notes.get(r.footnote);if(!note)throw new Error('A footnote reference has no exported definition.');var id='yavc_note_'+note.number;if(referenced.has(r.footnote))return [new D.SimpleField('NOTEREF '+id+' \\h \\f',String(note.number))];referenced.add(r.footnote);return [new D.Bookmark({id:id,children:[new D.FootnoteReferenceRun(note.number)]})];}
                 if (r.field) { return [new D.TextRun(Object.assign({}, options, { children: [r.field === 'page' ? D.PageNumber.CURRENT : D.PageNumber.TOTAL_PAGES] }))]; }
                 var children = String(r.text).split('\n').map(function (text, i) { return new D.TextRun(Object.assign({}, options, { text: text, break: i ? 1 : undefined })); });
@@ -249,9 +251,9 @@
         function write(blocks, depth, list) {
             return blocks.flatMap(function (b, index) {
                 if (b.kind === 'paragraph') {
-                    var content = runs(b.runs), style = b.style || {};
+                    var content = runs(b.runs, b.rtl), style = b.style || {};
                     if (b.id) { content = [new D.Bookmark({ id: bookmark(b.id), children: content })]; }
-                    return [new D.Paragraph({ children: content, heading: b.level ? D.HeadingLevel['HEADING_' + b.level] : undefined, alignment: style.align,
+                    return [new D.Paragraph({ children: content, bidirectional: b.rtl || undefined, heading: b.level ? D.HeadingLevel['HEADING_' + b.level] : undefined, alignment: style.align,
                         numbering: list && index === 0 ? { reference: list, level: 0 } : undefined,
                         indent: depth ? { left: depth * 360 } : undefined, spacing: { after: Math.round((style.after || 0) * 20), line: Math.round((style.leading || 1.5) * 240) }, keepNext: !!style.keepNext })];
                 }
@@ -261,7 +263,7 @@
                     return b.items.flatMap(function (item) { return write(item, depth + 1, reference); });
                 }
                 if (b.kind === 'quote') { return write(b.blocks, depth + 1); }
-                if (b.kind === 'table') { return [new D.Table({ width: { size: 100, type: D.WidthType.PERCENTAGE }, rows: b.rows.map(function (row, i) { return new D.TableRow({ tableHeader: i === 0, children: row.map(function (cell) { return new D.TableCell({ children: [new D.Paragraph({ children: runs(cell.runs), alignment: cell.style.align })] }); }) }); }) })]; }
+                if (b.kind === 'table') { return [new D.Table({ width: { size: 100, type: D.WidthType.PERCENTAGE }, rows: b.rows.map(function (row, i) { return new D.TableRow({ tableHeader: i === 0, children: row.map(function (cell) { return new D.TableCell({ children: [new D.Paragraph({ children: runs(cell.runs, cell.rtl), bidirectional: cell.rtl || undefined, alignment: cell.style.align })] }); }) }); }) })]; }
                 if (b.kind === 'image') { return [new D.Paragraph({ children: [new D.ImageRun({ type: 'png', data: Uint8Array.from(atob(b.data.split(',')[1]), function (c) { return c.charCodeAt(0); }), transformation: { width: b.width / 0.75, height: b.height / 0.75 }, altText: { title: b.alt, description: b.alt, name: b.alt } })] })]; }
                 if (b.kind === 'break') { return [new D.Paragraph({ children: [new D.PageBreak()] })]; }
                 if (b.kind === 'rule') { return [new D.Paragraph({ border: { bottom: { color: '808080', style: D.BorderStyle.SINGLE, size: 6 } } })]; }

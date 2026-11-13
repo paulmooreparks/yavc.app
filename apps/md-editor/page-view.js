@@ -142,7 +142,7 @@ var schemaCache = null;
     ['table_cell', 'table_header'].forEach(function (name) {
       var tag = name === 'table_cell' ? 'td' : 'th';
       table[name].toDOM = function (n) {
-        var attrs = {};
+        var attrs = { dir: 'auto' };
         safeAttrs(n.attrs.xattrs).forEach(function (a) { attrs[a[0]] = a[1]; });
         delete attrs.colspan; delete attrs.rowspan;
         if (n.attrs.colspan !== 1) attrs.colspan = n.attrs.colspan;
@@ -174,10 +174,10 @@ var schemaCache = null;
            read; where it could not, the engine writes text in brackets
            without an escape (decision 118). The default is the careful one. */
         doc: { content: 'block+', attrs: { front: { default: '' }, tail: { default: '\n' }, crlf: { default: false }, refs: { default: true } } },
-        paragraph: { group: 'block', content: 'inline*', attrs: withPlace(), parseDOM: [{ tag: 'p' }], toDOM: function () { return ['p', 0]; } },
+        paragraph: { group: 'block', content: 'inline*', attrs: withPlace(), parseDOM: [{ tag: 'p' }], toDOM: function () { return ['p', { dir: 'auto' }, 0]; } },
         heading: { group: 'block', content: 'inline*', defining: true, attrs: withPlace({ level: { default: 1 }, attributes: { default: null } }), parseDOM: headings,
-          toDOM: function (n) { return ['h' + n.attrs.level, blockAttr(n.attrs.attributes), 0]; } },
-        blockquote: { group: 'block', content: 'block+', defining: true, attrs: withPlace(), parseDOM: [{ tag: 'blockquote' }], toDOM: function () { return ['blockquote', 0]; } },
+          toDOM: function (n) { return ['h' + n.attrs.level, Object.assign({ dir: 'auto' }, blockAttr(n.attrs.attributes)), 0]; } },
+        blockquote: { group: 'block', content: 'block+', defining: true, attrs: withPlace(), parseDOM: [{ tag: 'blockquote' }], toDOM: function () { return ['blockquote', { dir: 'auto' }, 0]; } },
         bullet_list: { group: 'block', content: 'list_item+', attrs: withPlace({ tight: { default: true }, marker: { default: '-' } }), parseDOM: [{ tag: 'ul' }],
           toDOM: function (n) { return ['ul', n.attrs.tight ? { class: 'pm-tight' } : {}, 0]; } },
         ordered_list: { group: 'block', content: 'list_item+', attrs: withPlace({ order: { default: 1 }, tight: { default: true } }),
@@ -198,10 +198,10 @@ var schemaCache = null;
               return { checked: box ? box.checked : null };
             } }],
           toDOM: function (n) {
-            if (n.attrs.checked === null) return ['li', 0];
+            if (n.attrs.checked === null) return ['li', { dir: 'auto' }, 0];
             var box = { type: 'checkbox', tabindex: '0', 'aria-label': n.attrs.checked ? 'Done' : 'Not Done' };
             if (n.attrs.checked) box.checked = '';
-            return ['li', { class: 'pm-task' }, ['span', { class: 'pm-check', contenteditable: 'false' }, ['input', box]], ['div', { class: 'pm-task-body' }, 0]];
+            return ['li', { class: 'pm-task', dir: 'auto' }, ['span', { class: 'pm-check', contenteditable: 'false' }, ['input', box]], ['div', { class: 'pm-task-body' }, 0]];
           } },
         table: table.table,
         table_row: table.table_row,

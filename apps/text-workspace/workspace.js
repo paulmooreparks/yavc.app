@@ -458,6 +458,8 @@
                     lspComp.of(languageAssistance(tab)),
                     roComp.of([CM.EditorState.readOnly.of(!!tab.readOnly), CM.EditorView.editable.of(!tab.readOnly), CM.EditorView.contentAttributes.of({ 'aria-readonly': String(!!tab.readOnly), tabindex: '0' })]),
                     CM.EditorState.transactionFilter.of(function (tr) { return tr.docChanged && tab.readOnly ? [] : tr; }),
+                    // Each line takes its direction from its own first strong character, so a Hebrew or Arabic line sits at the right (docs: CodeMirror's perLineTextDirection).
+                    CM.EditorView.perLineTextDirection.of(true),
                     CM.EditorView.contentAttributes.of(spellcheckOff ? { 'aria-label': 'Text of ' + tab.name, spellcheck: 'false' } : { 'aria-label': 'Text of ' + tab.name }),
                     CM.EditorView.updateListener.of(function (u) {
                         if(u.docChanged&&u.startState.field(longLineField)!==u.state.field(longLineField))refreshWrap();
