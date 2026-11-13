@@ -2722,9 +2722,21 @@ var qrcodegen;
             });
         }
 
+        /* version counts the saves begun and saving the ones not yet done, as
+           the settings' reload does (config.js, watch). A read of the library
+           that began before a save, or while one ran, would bring back the
+           library the save replaced, so onLibraryChange lets it count only if
+           no save began while it ran, and a change that comes while a save
+           runs is read once the save is done. */
+        var libraryVersion = 0, librarySaving = 0, libraryReread = false;
+        function savedLibrary(list) {
+            libraryVersion++; librarySaving++;
+            function done() { librarySaving--; if (!librarySaving && libraryReread) { libraryReread = false; onLibraryChange(); } }
+            return Lib.save(B, list).then(function (err) { done(); return err; }, function (err) { done(); throw err; });
+        }
         function saveLibrary(list) {
             writeLinked(list);
-            return Lib.save(B, list).then(function (err) {
+            return savedLibrary(list).then(function (err) {
                 if (err) { notify('Your layouts were not saved: ' + err + '.'); }
                 return err;
             });
@@ -2736,8 +2748,10 @@ var qrcodegen;
            library that can no longer be read is said so, and the tool
            keeps the layouts it has until it is put right. */
         function onLibraryChange() {
+            if (librarySaving) { libraryReread = true; return; }
+            var version = libraryVersion;
             Lib.load(B).then(function (fresh) {
-                if (instance.destroyed) { return; }
+                if (instance.destroyed || librarySaving || version !== libraryVersion) { return; }
                 if (fresh.error) { notify(fresh.error); return; }
                 if (JSON.stringify(fresh.layouts) === JSON.stringify(library)) { return; }
                 library = fresh.layouts;
@@ -2766,7 +2780,7 @@ var qrcodegen;
                 var inFile = res.layouts.filter(function (L) { return !isDemo(L.id); }).length;
                 mergeLayouts(res.layouts);
                 linked = handle; pendingHandle = null;
-                Lib.save(B, library).then(function (err) { if (err) { notify('Your layouts were not saved: ' + err + '.'); } });
+                savedLibrary(library).then(function (err) { if (err) { notify('Your layouts were not saved: ' + err + '.'); } });
                 /* Layouts that were only in the library go into the file. */
                 if (library.length !== inFile) { return writeHandle(handle, library); }
             }).then(function () {

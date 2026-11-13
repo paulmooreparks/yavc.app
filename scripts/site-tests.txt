@@ -2,6 +2,7 @@
 # site tests workflow fails if any of them fails. When a test that is not here is repaired, add it here in the same pull request.
 # A line may end with " | " and the server flags the test needs.
 test-authored-dialogs.cjs
+test-barcode-library-reload.cjs
 test-block-dialogs.cjs
 test-canvas-auto-projection.cjs
 test-canvas-batch.cjs
