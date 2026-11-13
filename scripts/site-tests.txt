@@ -17,6 +17,7 @@ test-diagram-chrome.cjs
 test-diagram-conversion.cjs
 test-diagram-outline.cjs
 test-diagram-pickers.cjs
+test-diagram-press-redraw.cjs
 test-diagram-references.cjs
 test-diagram-resources.cjs
 test-dialog-overhaul.cjs
