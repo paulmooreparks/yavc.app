@@ -48,6 +48,13 @@ const types={'.html':'text/html','.js':'text/javascript','.css':'text/css','.jso
     await q.close();return {caret,after,caretAfter};};
    const plain=await run(false),asked=await run(true);
    assert.deepEqual(asked,plain,`${engine}: asking for the draft changed the text, the caret or the undo history`);
+   // 3b. A host whose changed() asks for the draft at once reaches take(), flush(), setText() and changed() again, and that stops.
+   p=await open();await p.evaluate(()=>{fixture.takeInChanged=true;fixture.nested=0;});
+   await p.keyboard.type(' nested');await p.waitForTimeout(600);
+   const nest=await p.evaluate(()=>({nested:fixture.nested,changes:fixture.changes.document}));
+   assert.ok(nest.nested>0&&nest.nested<=40,`${engine}: a take() inside changed() settled (it ran ${nest.nested} times for 7 keys)`);
+   assert.match((await draft(p)).text,/Editable words\. nested\n?$/);assert.deepEqual(p.errors,[]);
+   await p.close();
    // 4. A composition (Chromium): the draft is what it was before it began, and the host is told when it ends.
    if(engine==='chromium'){
     p=await open();const client=await p.context().newCDPSession(p);
