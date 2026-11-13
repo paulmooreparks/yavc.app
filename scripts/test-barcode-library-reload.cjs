@@ -23,7 +23,7 @@ const port=process.env.YAVC_CHROME_TEST_PORT||'8442';
   await p.waitForFunction(()=>window.held.length===1);await p.evaluate(()=>{window.holding=false;});
   // The person saves the layout. The save is written, and the tool's own reload after it has answered.
   await json.getByRole('button',{name:'Save layout',exact:true}).click();await json.waitFor({state:'hidden'});
-  await p.evaluate(async()=>{const limit=Date.now()+15000;for(;;){const text=await pudlHost.fs.readText('~/barcode-layouts.json');if(String(text).includes('My layout')&&window.readsOut===1)return;if(Date.now()>limit)throw new Error('The save was not written and read back');await new Promise(resolve=>setTimeout(resolve,50));}});
+  await p.evaluate(async()=>{const limit=Date.now()+15000;for(;;){let text='';try{text=await pudlHost.fs.readText('~/barcode-layouts.json');}catch(e){}if(String(text).includes('My layout')&&window.readsOut===1)return;if(Date.now()>limit)throw new Error('The save was not written and read back');await new Promise(resolve=>setTimeout(resolve,50));}});
   // Now the read from before the save answers, and every read has answered.
   await p.evaluate(()=>window.held.shift()());await p.waitForFunction(()=>window.readsOut===0);
   await p.locator('.menubar-title').filter({hasText:/^Layout$/}).click();
