@@ -110,9 +110,13 @@ async function sourceContains(page, fragment) { await page.waitForFunction(fragm
             const conflict = await page.evaluate(async () => {
                 const api = yavcMdEditor._page, engine = await yavcMdEngine();
                 const cm = CM.EditorView.findFromDOM(document.querySelector('.cm-editor')), original = cm.state.doc.toString();
-                // The Source changes in the same turn as the page is converted, so the page's draft meets a changed Source when it is placed. Nothing waits on a timer or on the engine, and the engine is not replaced:
-                // the host's own request for the draft (the snapshot's take) converts through the same engine, and a stand-in for one call held up the other.
-                api.run('quote'); const saving = api.sync().then(() => false, () => true);
+                // An input method composing holds back the page's conversion, and so the host's request for the draft (the snapshot's take) cannot convert the quote before the Source changes. While it is held the page's edit stays
+                // pending however slow the machine is, and the Source then changes in the same turn as the page is asked to be written, so the draft meets a changed Source when it is placed. The engine is not replaced.
+                const surface = document.querySelector('.ProseMirror');
+                surface.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }));
+                api.run('quote');
+                while (!api.pending()) { await new Promise(resolve => setTimeout(resolve, 5)); }
+                const saving = api.sync().then(() => false, () => true);
                 cm.dispatch({ changes: { from: 0, to: cm.state.doc.length, insert: original + '\nNew source edit.\n' } });
                 const refused = await saving;
                 const revision = engine.outlineState(cm.state.doc.toString()).revision;
@@ -122,6 +126,7 @@ async function sourceContains(page, fragment) { await page.waitForFunction(fragm
                 const retained = api.active() && api.pending() && !!document.querySelector('.ProseMirror blockquote');
                 const sourceKept = cm.state.doc.toString() === original + '\nNew source edit.\n';
                 cm.dispatch({ changes: { from: 0, to: cm.state.doc.length, insert: original } });
+                surface.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true, data: '' }));
                 await api.sync();
                 return { refused, moveRefused, reloadRefused, closeRefused, retained, sourceKept, recovered: cm.state.doc.toString() !== original && /^>/m.test(cm.state.doc.toString()) };
             });
