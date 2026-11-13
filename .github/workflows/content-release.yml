@@ -32,6 +32,12 @@ jobs:
           cp "$RUNNER_TEMP/content-release/manifest.json" "$RUNNER_TEMP/release-assets/yavc-content-$GITHUB_REF_NAME.manifest.json"
           cd "$RUNNER_TEMP/release-assets"
           sha256sum "yavc-content-$GITHUB_REF_NAME.zip" "yavc-content-$GITHUB_REF_NAME.manifest.json" > "yavc-content-$GITHUB_REF_NAME.sha256"
+      - name: Assemble the Docs-only content archive
+        run: |
+          go run ./cmd/yavc-content -profile docs -out "$RUNNER_TEMP/content-release-docs" -zip "$RUNNER_TEMP/release-assets/yavc-content-docs-$GITHUB_REF_NAME.zip"
+          cp "$RUNNER_TEMP/content-release-docs/manifest.json" "$RUNNER_TEMP/release-assets/yavc-content-docs-$GITHUB_REF_NAME.manifest.json"
+          cd "$RUNNER_TEMP/release-assets"
+          sha256sum "yavc-content-docs-$GITHUB_REF_NAME.zip" "yavc-content-docs-$GITHUB_REF_NAME.manifest.json" > "yavc-content-docs-$GITHUB_REF_NAME.sha256"
       - name: Publish immutable download assets
         env:
           GH_TOKEN: ${{ github.token }}

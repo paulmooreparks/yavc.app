@@ -9,14 +9,14 @@ import (
 
 func TestOutputRefusesCheckoutAndExistingDirectory(t *testing.T) {
 	root := t.TempDir()
-	if err := assemble(root, filepath.Join(root, "output"), "", ""); err == nil {
+	if err := assemble(root, filepath.Join(root, "output"), "", "", ""); err == nil {
 		t.Fatal("accepted output within source checkout")
 	}
 	if _, err := os.Stat(filepath.Join(root, "output")); !os.IsNotExist(err) {
 		t.Fatal("created rejected output")
 	}
 	sibling := t.TempDir()
-	if err := assemble(root, sibling, "", ""); err == nil {
+	if err := assemble(root, sibling, "", "", ""); err == nil {
 		t.Fatal("accepted an existing output directory")
 	}
 }

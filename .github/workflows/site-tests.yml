@@ -75,6 +75,7 @@ jobs:
           cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" apps/md-engine/wasm_exec.js
           cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" apps/diagram-kit/wasm_exec.js
           go run ./cmd/yavc-content -out "$RUNNER_TEMP/package"
+          go run ./cmd/yavc-content -profile docs -out "$RUNNER_TEMP/docs-package"
       - name: Install Playwright and the browsers
         run: |
           npm install --prefix "$RUNNER_TEMP/playwright" playwright@1.63.0
@@ -84,6 +85,13 @@ jobs:
           NODE_PATH: ${{ runner.temp }}/playwright/node_modules
           PACKAGE_LOGS: ${{ runner.temp }}/yavc-package-test-logs
         run: node scripts/run-package-tests.mjs "$RUNNER_TEMP/package"
+      # The docs profile, served as PFO serves its pages (docs/content-release-downloads.md, "Profiles"). If Docs starts to need a file the
+      # profile leaves out, or an omitted feature stops saying so, this fails.
+      - name: Docs profile test
+        env:
+          NODE_PATH: ${{ runner.temp }}/playwright/node_modules
+          PACKAGE_LOGS: ${{ runner.temp }}/yavc-package-test-logs
+        run: node scripts/run-package-tests.mjs "$RUNNER_TEMP/docs-package" test-docs-profile.cjs
       - name: Logs of the tests
         if: failure()
         uses: actions/upload-artifact@v4
