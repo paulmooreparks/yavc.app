@@ -22,7 +22,7 @@ This page lists the defects and gaps the yavc.app team has found and not yet fix
 
 ## Other applets
 
-- **Barcode Tool can drop a layout that was just saved.** It reloads its layout library whenever anything in the home folder changes, and a reload that read the library before a save and answers after it puts the older library back and clears the selection, so "Remove this layout…" is disabled and the saved layout is no longer chosen. A person meets it when a settings file or any other file in the home folder is written as they save. `scripts/test-barcode-library-reload.cjs` reproduces it in every browser. Found by Yavc.App Tester on 2026-11-14 from a CI failure of `test-authored-dialogs.cjs`.
+- **Barcode Scanner reads its layout library on every change with no check for a save.** It shares the library code of Barcode Tool, and its `readLibrary` (barcode-scanner.js, run on each change of the home folder) replaces the layouts with whatever the read answers, so a read that began before a save and answers after it can put the older library back, as in Barcode Tool before decision 161. Not reproduced. Found by Yavc.App Builder on 2026-11-14 while fixing Barcode Tool.
 
 ## Tests
 
