@@ -46,11 +46,24 @@ const types={'.html':'text/html','.js':'text/javascript','.css':'text/css','.jso
     if(before.text!==after.text||before.caret!==after.caret)failures.push(`${label}: take() changed what the page shows or where the caret is (${JSON.stringify(before.caret)} then ${JSON.stringify(after.caret)}).`);
     await page.keyboard.type('77');const tail=await draft(page);if(typeof tail!=='string'||!tail.endsWith(sofar+burst+'77')&&!tail.includes(sofar+burst+'77'))failures.push(`${label}: after a take() the next keys did not land where the person was typing (${JSON.stringify(typeof tail==='string'?tail.slice(-40):tail)}).`);
     if(errors.length)failures.push(`${label}: page errors ${errors.join(' | ')}`);await page.close();}
-   // 4. Undo is the same with a take() in the middle of typing as without one.
-   {const results=[];for(const withTake of [false,true]){const {page}=await open(view);await page.keyboard.type('1234');await page.waitForTimeout(0);
-     if(withTake)await draft(page);await page.keyboard.type('5678');await page.keyboard.press('ControlOrMeta+z');await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
-     results.push((await shape(page,view)).text.replace(/\s+/g,' '));await page.close();}
-    if(results[0]!==results[1])failures.push(`${label}: undo gave different text with a take() in the middle of typing: without ${JSON.stringify(results[0].slice(-40))}, with ${JSON.stringify(results[1].slice(-40))}.`);}
+   // 4. Undo is the same with a take() in the middle of typing as without one. Undo groups typing by the time between key presses (the
+   //    source history and CodeMirror both merge edits less than 500 ms apart), so two runs are comparable only if no gap between their
+   //    keys came near that. The gaps are measured in the page. A pair in which any gap passed 400 ms is discarded and the pair run again,
+   //    at most five times; a test that finds no such pair fails and says why, and one that discards a pair says it compared fewer.
+   {const attempts=5;let compared=0,discarded=0,different=null;
+    for(let attempt=0;attempt<attempts&&!compared;attempt++){const results=[],gaps=[];
+     for(const withTake of [false,true]){const {page}=await open(view);
+      await page.evaluate(()=>{window.__keys=[];document.addEventListener('keydown',e=>{if(/^[0-9]$/.test(e.key))window.__keys.push(performance.now());},true);});
+      await page.keyboard.type('1234');await page.waitForTimeout(0);
+      if(withTake)await draft(page);await page.keyboard.type('5678');
+      gaps.push(await page.evaluate(()=>{const k=window.__keys;let widest=0;for(let i=1;i<k.length;i++)widest=Math.max(widest,k[i]-k[i-1]);return {keys:k.length,widest:Math.round(widest)};}));
+      await page.keyboard.press('ControlOrMeta+z');await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+      results.push((await shape(page,view)).text.replace(/\s+/g,' '));await page.close();}
+     if(gaps.some(g=>g.keys!==8||g.widest>400)){discarded++;continue;}
+     compared++;if(results[0]!==results[1])different=`${label}: undo gave different text with a take() in the middle of typing: without ${JSON.stringify(results[0].slice(-40))}, with ${JSON.stringify(results[1].slice(-40))}.`;}
+    if(!compared)failures.push(`${label}: no pair of runs had every gap between its key presses under 400 ms in ${attempts} tries, so undo could not be compared (undo groups typing by time).`);
+    else if(different)failures.push(different);
+    if(discarded)console.log(`${label}: discarded ${discarded} pair${discarded===1?'':'s'} of runs in which a gap between key presses reached 400 ms, so undo was compared in fewer runs than planned.`);}
    // 4b. If the engine that converts the page is not ready, take() returns the text without the page's latest edit, and the host is told again once the conversion succeeds.
    if(view==='visual'){const {page,errors}=await open(view);
     await page.evaluate(()=>{const engine=window.yavcMdEngine,real=engine.current;fixture.engineDown=true;engine.current=function(){if(fixture.engineDown)throw new Error('The engine is not ready.');return real.apply(engine,arguments);};});
