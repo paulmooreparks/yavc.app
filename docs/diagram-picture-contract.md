@@ -19,7 +19,7 @@ Both come from the same release, and a pinned release is a directory whose files
 | `mermaid` | `content/md-editor/kit.js`, `content/md-editor/vendor/mermaid/mermaid.min.js`, `content/md-engine/safe-html.js` |
 | `d2` | `content/diagram-kit/d2.js`, `content/diagram-kit/wasm_exec.js`, `content/diagram-kit/worker.js`, `content/diagram-kit/yavc-d2.wasm` |
 
-A page that only draws canvases and Mermaid diagrams never fetches the D2 files, and the example checks that nothing of an engine is requested before a diagram of its kind is.
+A page that only draws canvases and Mermaid diagrams never fetches the D2 files. The example checks it: no Mermaid or D2 engine file is requested before a diagram of that kind is drawn, and each engine file is requested once at most however many diagrams of its kind are drawn.
 
 ### Browsers and policy
 
@@ -91,7 +91,7 @@ A canvas whose picture the host did not give is still drawn, with a box showing 
 
 `signal` is an `AbortSignal`. The function looks at it when the request begins, after the engine has drawn, and after a PNG has been made, and then rejects with a `DOMException` named `AbortError` and the message `The picture was cancelled.` It does not look inside a step that has begun. An abort given while Mermaid is being loaded or is drawing therefore takes effect when that step ends, not at the moment it was given, and a step that never ends is not ended by the signal.
 
-What the function releases when it is aborted or fails is checked by the example, in each browser, for a Mermaid drawing aborted in the turn after it was started on a page that had not yet loaded Mermaid: the hidden element Mermaid draws into is removed in a `finally`, and the page has no timer, interval, worker or object URL that it did not have before, counted straight after the rejection and two seconds later. The check wraps `setTimeout`, `setInterval`, `Worker` and `URL.createObjectURL` before the page's own scripts run and counts those not yet run, cleared, terminated or revoked. The engine's scripts stay loaded in the page after the abort, which lets the next drawing be quick; nothing else about them is released. A page that draws again after an abort works.
+What the function releases when it is aborted or fails is checked by the example, in each browser, for a Mermaid drawing aborted while its engine is being loaded. The page has not loaded Mermaid, the driver holds the request for Mermaid's script and sees that it was made, aborts the drawing, and only then lets the request go. After that: the hidden element Mermaid draws into is removed in a `finally`, and the page has no timer, interval, worker or object URL that it did not have before, counted straight after the rejection and two seconds later. The check wraps `setTimeout`, `setInterval`, `Worker` and `URL.createObjectURL` before the page's own scripts run and counts those not yet run, cleared, terminated or revoked. The engine's scripts stay loaded in the page after the abort, which lets the next drawing be quick; nothing else about them is released. A page that draws again after an abort works.
 
 To end a drawing that has to stop at once, or that does not finish in the time the host allows, the host closes the page or the browser context it opened for the work, which a browser automation library documents, and starts another for the next job. The signal is a way to say that a result is no longer wanted, and not a way to interrupt a step.
 

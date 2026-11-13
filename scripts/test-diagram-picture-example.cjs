@@ -7,5 +7,5 @@ const path = require('node:path');
 const { run } = require(path.join(__dirname, '..', 'examples', 'diagram-picture', 'driver.cjs'));
 if (!process.argv[2]) { console.error('usage: node scripts/test-diagram-picture-example.cjs <extracted package> [engines]'); process.exit(2); }
 run(process.argv[2], process.argv.slice(3).length ? process.argv.slice(3) : ['chromium', 'firefox', 'webkit'], () => {}).then(report => {
-    for (const engine of Object.keys(report)) { console.log(engine + ': a page with no applet draws a canvas and a Mermaid diagram as PNGs, reports a missing picture, refuses an invalid diagram, and ends an aborted drawing with nothing left behind'); }
+    for (const engine of Object.keys(report)) { console.log(engine + ': a page with no applet draws a canvas and a Mermaid diagram as PNGs, reports a missing picture, refuses an invalid diagram, and ends an aborted drawing with nothing left behind, and fetches no engine before its kind is drawn'); }
 }).catch(error => { console.error(error); process.exitCode = 1; });

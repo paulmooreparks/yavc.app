@@ -91,6 +91,10 @@ async function serve(artifact) {
     return { server, asked, port: server.address().port };
 }
 
+// The files of an engine, which a page asks for only when a diagram of that kind is first drawn.
+const ENGINE = { mermaid: ['/package/content/md-editor/vendor/mermaid/mermaid.min.js'], d2: ['/package/content/diagram-kit/d2.js', '/package/content/diagram-kit/yavc-d2.wasm', '/package/content/diagram-kit/worker.js', '/package/content/diagram-kit/wasm_exec.js'] };
+const isEngine = kind => name => ENGINE[kind].includes(name);
+
 // Runs the checks in each browser and returns what it found, for a report or for a test to assert on.
 async function run(artifact, engines, log = () => {}) {
     const pw = require('playwright'), report = {};
@@ -98,6 +102,7 @@ async function run(artifact, engines, log = () => {}) {
     const { server, asked, port } = await serve(artifact);
     try {
         for (const engine of engines) {
+            asked.length = 0;
             const browser = await pw[engine].launch({ headless: true }), found = report[engine] = {};
             try {
                 const page = await browser.newPage(), errors = []; page.setDefaultTimeout(60000);
@@ -116,6 +121,8 @@ async function run(artifact, engines, log = () => {}) {
                 assert.equal(found.canvas.width, canvas.width); assert.equal(found.canvas.height, canvas.height); assert.deepEqual(canvas.problems, []);
                 assert.ok(canvas.width > 500 && canvas.height > 200, engine + ': canvas size');
                 found.canvasFiles = asked.slice(from).filter(name => name.startsWith('/package/') || name.startsWith('/pictures/'));
+                // Nothing of the Mermaid or D2 engine has been asked for by a page that has drawn only a canvas.
+                assert.deepEqual(asked.filter(isEngine('mermaid')).concat(asked.filter(isEngine('d2'))), [], engine + ': an engine was requested before a diagram of its kind');
 
                 // A Mermaid diagram gives a PNG with its size.
                 from = asked.length;
@@ -124,6 +131,8 @@ async function run(artifact, engines, log = () => {}) {
                 found.mermaid = Object.assign({ width: mermaid.width, height: mermaid.height, problems: mermaid.problems }, pngSize(mermaid.png));
                 assert.equal(found.mermaid.width, mermaid.width); assert.equal(found.mermaid.height, mermaid.height);
                 found.mermaidFiles = asked.slice(from).filter(name => name.startsWith('/package/'));
+                assert.ok(asked.some(isEngine('mermaid')), engine + ': Mermaid was drawn without its engine being requested');
+                assert.deepEqual(asked.filter(isEngine('d2')), [], engine + ': D2 was requested before a D2 diagram');
 
                 // A D2 diagram, which needs no picture, gives a PNG too.
                 from = asked.length;
@@ -132,6 +141,9 @@ async function run(artifact, engines, log = () => {}) {
                 found.d2 = Object.assign({ width: d2.width, height: d2.height, problems: d2.problems }, pngSize(d2.png));
                 assert.equal(found.d2.width, d2.width); assert.equal(found.d2.height, d2.height);
                 found.d2Files = asked.slice(from).filter(name => name.startsWith('/package/'));
+                assert.ok(asked.some(isEngine('d2')), engine + ': D2 was drawn without its engine being requested');
+                // Each engine file was requested once at most, however many diagrams of its kind were drawn.
+                for (const name of new Set(asked.filter(file => isEngine('mermaid')(file) || isEngine('d2')(file)))) { assert.equal(asked.filter(file => file === name).length, 1, engine + ': ' + name + ' was requested more than once'); }
 
                 // A picture the host does not supply is a problem in the answer, and the drawing is still made.
                 await page.evaluate(() => { window.hostPictures = {}; });
@@ -149,18 +161,24 @@ async function run(artifact, engines, log = () => {}) {
                     found.invalid[kind] = refused.message;
                 }
 
-                // A drawing that is stopped while Mermaid is making it rejects with AbortError, and leaves no timer, interval, worker or
-                // object URL, and no hidden page it made, that was not there before. The count is taken before and at two later times, since
-                // a timer may be one that has not yet run.
-                // It is done on a page of its own, where Mermaid has not been loaded yet, so that the abort comes while the engine is still
-                // being fetched and started, and then again on this page, where the engine is loaded and the drawing is quick.
+                // A drawing that is stopped while Mermaid is being loaded rejects with AbortError, and leaves no timer, interval, worker or
+                // object URL, and no hidden element, that was not there before. It is done on a page of its own, where Mermaid has not been
+                // loaded. The request for the engine's script is held: the test sees that it was made, aborts the drawing, and only then lets
+                // the request go, so the abort comes while the engine is still being loaded. The counts are taken before, right after the
+                // rejection and two seconds later, since a timer may be one that has not yet run.
                 const fresh = await browser.newPage(); fresh.setDefaultTimeout(60000); fresh.on('pageerror', e => errors.push(e.message));
                 await fresh.addInitScript(tracker);
+                let held = null, requested;
+                const seen = new Promise(resolve => { requested = resolve; });
+                await fresh.route('**/package/content/md-editor/vendor/mermaid/mermaid.min.js', route => { held = route; requested(); });
                 await fresh.goto('http://127.0.0.1:' + port + '/');
                 await fresh.waitForFunction(() => window.yavcDiagramPicture && window.hostDraw);
                 const before = await fresh.evaluate(() => window.hostResources());
-                // The abort is given in the turn after the request, before the engine could have drawn anything.
-                await fresh.evaluate(spec => { window.hostStart('stop', spec); window.hostAbort('stop'); }, { kind: 'mermaid', text: MERMAID, format: 'png', scale: 1 });
+                await fresh.evaluate(spec => { window.hostStart('stop', spec); }, { kind: 'mermaid', text: MERMAID, format: 'png', scale: 1 });
+                await seen;
+                assert.ok(held, engine + ': the engine request was not seen');
+                await fresh.evaluate(() => window.hostAbort('stop'));
+                await held.continue();
                 const stopped = await fresh.evaluate(() => window.hostResult('stop'));
                 const after = await fresh.evaluate(() => window.hostResources());
                 await fresh.waitForTimeout(2000);
