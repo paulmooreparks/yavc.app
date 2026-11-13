@@ -15,3 +15,4 @@ test-portable-draft.cjs
 test-portable-export-picture.cjs
 test-docs-draft-notification.cjs
 test-docs-unicode.cjs
+test-portable-strict-policy.cjs
