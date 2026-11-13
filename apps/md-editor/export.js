@@ -68,25 +68,35 @@
             var reader=response.body.getReader(),chunks=[],size=0;
             try{while(true){var part=await reader.read();if(part.done)break;size+=part.value.length;if(size>IMAGE_LIMIT||options.current&&!options.current())throw new Error('The picture exceeds its limit or the document changed.');chunks.push(part.value);}}
             catch(error){await reader.cancel().catch(function(){});throw error;}
-            return URL.createObjectURL(new Blob(chunks,{type:response.headers.get('Content-Type')}));
+            return new Blob(chunks,{type:response.headers.get('Content-Type')});
         }finally{clearTimeout(timer);if(signal)signal.removeEventListener('abort',abort);}
     }
+    /* A picture as the page's own PNG data. It is decoded from its bytes by createImageBitmap, which needs no address, so
+       no content security policy directive is asked about it: a host's policy need not allow blob: for this. src is a
+       data: address or the picture's bytes as a Blob. */
     async function image(src, width, height) {
-        if (!/^(data:image\/(png|jpe?g|gif|webp);base64,|blob:)/i.test(src) || src.length > IMAGE_LIMIT * 1.4) { throw new Error('Export pictures must be embedded raster images or local home-folder pictures, at most 16 MiB.'); }
-        var url = src, owned = false;
-        if (src.startsWith('data:')) {
+        var blob = src;
+        if (typeof src === 'string') {
+            if (!/^data:image\/(png|jpe?g|gif|webp);base64,/i.test(src) || src.length > IMAGE_LIMIT * 1.4) { throw new Error('Export pictures must be embedded raster images or local home-folder pictures, at most 16 MiB.'); }
             var bytes = Uint8Array.from(atob(src.split(',')[1]), function (c) { return c.charCodeAt(0); });
             if (bytes.length > IMAGE_LIMIT) { throw new Error('A picture exceeds the 16 MiB export limit.'); }
-            url = URL.createObjectURL(new Blob([bytes], { type: src.slice(5, src.indexOf(';')) })); owned = true;
-        }
+            blob = new Blob([bytes], { type: src.slice(5, src.indexOf(';')) });
+        } else if (!(src instanceof Blob) || src.size > IMAGE_LIMIT) { throw new Error('Export pictures must be embedded raster images or local home-folder pictures, at most 16 MiB.'); }
+        var bitmap;
+        try { bitmap = await createImageBitmap(blob); } catch (err) { throw new Error('A picture could not be decoded.'); }
         try {
-            var img = await new Promise(function (resolve, reject) { var i = new Image(); i.onload = function () { resolve(i); }; i.onerror = function () { reject(new Error('A picture could not be decoded.')); }; i.src = url; });
-            if (!img.naturalWidth || img.naturalWidth * img.naturalHeight > 24000000) { throw new Error('A decoded export picture exceeds 24 megapixels.'); }
-            var canvas = document.createElement('canvas'); canvas.width = img.naturalWidth; canvas.height = img.naturalHeight;
-            canvas.getContext('2d').drawImage(img, 0, 0);
-            var scale = Math.min(1, width / img.naturalWidth, height / img.naturalHeight);
-            return { kind: 'image', data: canvas.toDataURL('image/png'), width: img.naturalWidth * scale, height: img.naturalHeight * scale };
-        } finally { if (owned) { URL.revokeObjectURL(url); } }
+            if (!bitmap.width || bitmap.width * bitmap.height > 24000000) { throw new Error('A decoded export picture exceeds 24 megapixels.'); }
+            var canvas = document.createElement('canvas'); canvas.width = bitmap.width; canvas.height = bitmap.height;
+            canvas.getContext('2d').drawImage(bitmap, 0, 0);
+            var scale = Math.min(1, width / bitmap.width, height / bitmap.height);
+            return { kind: 'image', data: canvas.toDataURL('image/png'), width: bitmap.width * scale, height: bitmap.height * scale };
+        } finally { bitmap.close(); }
+    }
+    /* A picture the document names, as the address of one the host resolved, the bytes of one in the home folder, or ''. The bytes
+       are not given an address of their own, which a policy would have to allow. */
+    async function homePicture(path, pictures) {
+        var found = await window.yavcMdEditor.pictureData(path, pictures);
+        return !found ? '' : found.url ? found.url : new Blob([found.bytes]);
     }
     async function prepare(options) {
         var source = String(options.text || ''), K = window.yavcMdEditor, engine = options.engine;
@@ -151,11 +161,10 @@
             var images = new Map(), totalImageBytes = 0;
             for (var pair of pictures) {
                 if (options.current && !options.current()) { throw new Error('The document changed during export.'); }
-                var spec = pair[1], siteImage = spec.source && /^\/(?!\/)/.test(spec.source), local = spec.path || (spec.source && !siteImage && !/^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(spec.source) ? spec.source : null), src = local ? await K.pictureFor(local, options.pictures) : siteImage ? await K.sitePicture(spec.source, options.pictures) : spec.source;
-                var owned=null,picture;
-                try{if(siteImage || local&&/^https?:/i.test(src||'')){owned=await hostRaster(src,options);src=owned;}
-                    picture=await image(src||'',(page.width-page.margins[0]-page.margins[2])/.75,(page.height-page.margins[1]-page.margins[3]-12)/.75);
-                }finally{if(owned)URL.revokeObjectURL(owned);}
+                var spec = pair[1], siteImage = spec.source && /^\/(?!\/)/.test(spec.source), local = spec.path || (spec.source && !siteImage && !/^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(spec.source) ? spec.source : null), src = local ? await homePicture(local, options.pictures) : siteImage ? await K.sitePicture(spec.source, options.pictures) : spec.source;
+                var picture;
+                if(siteImage || local&&/^https?:/i.test(src||''))src=await hostRaster(src,options);
+                picture=await image(src||'',(page.width-page.margins[0]-page.margins[2])/.75,(page.height-page.margins[1]-page.margins[3]-12)/.75);
                 totalImageBytes += picture.data.length;
                 if (totalImageBytes > 32 * 1024 * 1024) { throw new Error('Export pictures exceed the combined 32 MiB limit.'); }
                 picture.width *= 0.75; picture.height *= 0.75;
