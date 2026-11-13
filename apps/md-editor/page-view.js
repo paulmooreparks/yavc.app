@@ -1165,6 +1165,10 @@ var schemaCache = null;
         return true;
       }
       return [
+        /* A key is handled with the selection the browser has now. A caret moved by the browser's own key (End, an arrow, a click) reaches the
+           state on a later selectionchange event, and a key that follows it at once, as a script sends them, found the old selection and
+           typed or broke a line there (docs/backlog.md; syncSelection). This runs before every other key handler of the page. */
+        new PM.Plugin({ props: { handleKeyDown: function () { syncSelection(); return false; } } }),
         listShortcuts(schema),
         taskBoxes(schema),
         footnoteNumbers(),
