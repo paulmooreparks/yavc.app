@@ -13,3 +13,4 @@ test-host-shortcodes.cjs
 test-portable-spellcheck.cjs
 test-portable-draft.cjs
 test-portable-export-picture.cjs
+test-docs-draft-notification.cjs
