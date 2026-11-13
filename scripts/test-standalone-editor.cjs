@@ -70,8 +70,6 @@ async function startService(work) {
         try {
             fs.writeFileSync(file('notes.txt'), 'First line.\n'); fs.writeFileSync(file('other.txt'), 'Another file.\n');
             fs.writeFileSync(file('notes.md'), '# Heading {#top}\n\nA paragraph with [a link](https://example.com/){target="_blank" rel="noopener"}.\n\n![Chart](/images/chart.png)\n');
-            // One black pixel, at a path from the root of the document's web site.
-            fs.mkdirSync(file('images')); fs.writeFileSync(file(path.join('images', 'chart.png')), Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYGD4DwABBAEAX+XDSwAAAABJRU5ErkJggg==', 'base64'));
 
             phase = 'open, edit and save a real file';
             const first = await open('notes.txt');
@@ -172,22 +170,17 @@ async function startService(work) {
             await shows(stale.id, 'rescued.txt', false); assert.equal(disk('rescued.txt'), 'Another program wrote this.\nDraft words.\nSecond draft.\n'); assert.equal(disk('notes.txt'), 'Changed while closed.\n');
             await warning.waitFor({state: 'hidden'});
 
-            phase = 'a Markdown file opens for rich editing and saves, with its attribute blocks kept';
-            const rich = await open('notes.md');
-            await rich.page.locator('#document .ProseMirror').waitFor();
-            assert.equal(await rich.page.locator('#document .ProseMirror h1[data-md-attributes="#top"]').innerText(), 'Heading');
-            assert.equal(await rich.page.locator('#document .ProseMirror a[data-md-attributes]').innerText(), 'a link');
-            await rich.page.locator('#document .ProseMirror p').filter({hasText: 'A paragraph'}).click(); await rich.page.keyboard.press('End'); await rich.page.keyboard.type(' More.');
-            assert.deepEqual(await run(rich.page, 'save'), {value: true});
+            // The Editor is a text editor and Markdown's page views are Docs' (DESIGN.md decision 131), so in this host a Markdown file
+            // opens as its text, with no View choice. The rich view of a Markdown file, and with it the web root's pictures at a site
+            // path (Set Web Root), return to this test when the host hands Markdown files to Docs.
+            phase = 'a Markdown file opens as its text and saves, with its attribute blocks kept';
+            const markdown = await open('notes.md');
+            assert.equal(await markdown.page.locator('#document .ProseMirror').count(), 0, 'the Editor draws no page view');
+            assert.equal(await markdown.page.evaluate(() => pudlCommands.run('view-visual', null, document.querySelector('#document')).then(() => 'ran', error => error.message)), 'there is no command view-visual');
+            assert.equal(await text(markdown.page), '# Heading {#top}\n\nA paragraph with [a link](https://example.com/){target="_blank" rel="noopener"}.\n\n![Chart](/images/chart.png)\n');
+            await markdown.page.locator('#document .cm-line').filter({hasText: 'A paragraph'}).click(); await markdown.page.keyboard.press('End'); await markdown.page.keyboard.type(' More.');
+            assert.deepEqual(await run(markdown.page, 'save'), {value: true});
             assert.equal(disk('notes.md'), '# Heading {#top}\n\nA paragraph with [a link](https://example.com/){target="_blank" rel="noopener"}. More.\n\n![Chart](/images/chart.png)\n');
-
-            phase = 'a picture at a site path is found once the person chooses the web root';
-            const chart = rich.page.locator('#document img[data-site-picture="/images/chart.png"]').first(); await chart.waitFor({state: 'attached'});
-            assert.equal(await chart.getAttribute('src'), '/images/chart.png');
-            await control('POST', '/dialogs', {folder: [folder]});
-            await rich.page.evaluate(() => document.getElementById('document-set-web-root').click());
-            await rich.page.waitForFunction(() => document.querySelector('#document img[data-site-picture="/images/chart.png"]').getAttribute('src') !== '/images/chart.png');
-            await rich.page.waitForFunction(() => { const image = document.querySelector('#document img[data-site-picture="/images/chart.png"]'); return image.complete && image.naturalWidth > 0; });
 
             phase = 'another program acts on a document only with the person\'s leave';
             const act = request => control('POST', '/documents/' + first.id + '/invoke', {request, from: 'package test'}).then(value => ({value}), error => ({error: error.message}));
@@ -202,7 +195,7 @@ async function startService(work) {
 
             phase = 'a file outside what the person chose is refused';
             fs.writeFileSync(path.join(work, 'private.txt'), 'Not chosen.\n');
-            const reach = await rich.page.evaluate(async target => {
+            const reach = await markdown.page.evaluate(async target => {
                 const read = await pudlHost.contentResources.read({resource: target}).then(() => 'read', () => 'refused');
                 const beside = await Promise.resolve(pudlHost.fs.readText(target)).then(value => value == null ? 'refused' : 'read', () => 'refused');
                 return [read, beside];
@@ -210,7 +203,7 @@ async function startService(work) {
             assert.deepEqual(reach, ['refused', 'refused']);
 
             assert.deepEqual(errors, []); assert.deepEqual(outside, []);
-            console.log(engine + ': a standalone Editor opens, saves, refuses a stale save, saves elsewhere, routes New and Open to other windows, raises an open file, and keeps drafts across reload and close passed');
+            console.log(engine + ': a standalone Editor opens, saves, refuses a stale save, saves elsewhere, routes New and Open to other windows, raises an open file, keeps drafts across reload and close, keeps a Markdown file\'s text, and asks before another program acts passed');
         } catch (error) {
             console.error(engine + ' failed in: ' + phase, errors, outside, JSON.stringify(await control('GET', '/documents').catch(() => null)));
             throw error;
