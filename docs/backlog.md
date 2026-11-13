@@ -23,7 +23,6 @@ This page lists the defects and gaps the yavc.app team has found and not yet fix
 ## Other applets
 
 - **Barcode Scanner reads its layout library on every change with no check for a save.** It shares the library code of Barcode Tool, and its `readLibrary` (barcode-scanner.js, run on each change of the home folder) replaces the layouts with whatever the read answers, so a read that began before a save and answers after it can put the older library back, as in Barcode Tool before decision 161. Not reproduced. Found by Yavc.App Builder on 2026-11-14 while fixing Barcode Tool.
-
 - **A change to a settings file that arrives while a save of it is under way is dropped.** `config.js` `watch()` returns when `saving` is set and does not read the file again afterwards, so a change made elsewhere during a save is not seen until the next change. Barcode Tool (decision 161) reads such a change when the save is done, and `config.js` should too. Found by Yavc.App Builder on 2026-11-14.
 
 ## Tests
