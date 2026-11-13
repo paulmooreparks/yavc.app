@@ -99,3 +99,4 @@ test-typography-focus.cjs
 test-late-focus.cjs
 test-slides-presenter.cjs
 test-editing-surface-roles.cjs
+test-hard-break.cjs

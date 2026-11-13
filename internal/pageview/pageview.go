@@ -394,7 +394,17 @@ func (p parser) walk(n ast.Node, marks []Mark, out *[]*Node) error {
 		case *ast.Text:
 			run.Write(node.Segment.Value(p.src))
 			if node.HardLineBreak() {
-				return ErrNotEditable
+				// A hard break keeps the form it was written in: a backslash,
+				// which CommonMark defines and which survives an editor that
+				// trims whitespace, or two spaces, which a file may already use.
+				if err := flush(); err != nil {
+					return err
+				}
+				br := &Node{Type: "hard_break", Marks: append([]Mark(nil), marks...)}
+				if stop := node.Segment.Stop; stop >= len(p.src) || p.src[stop] != '\\' {
+					br.Attrs = map[string]any{"form": "spaces"}
+				}
+				*out = append(*out, br)
 			}
 			if node.SoftLineBreak() {
 				if err := flush(); err != nil {
@@ -676,13 +686,20 @@ func Serialize(doc *Node) (string, error) {
 func serializeBlock(n *Node, indent string) (string, error) {
 	switch n.Type {
 	case "paragraph":
-		s, err := serializeInline(n.Content, false)
+		spaces := map[int]bool{}
+		s, err := serializeInline(n.Content, false, spaces)
 		if err != nil {
 			return "", err
 		}
 		lines := strings.Split(s, "\n")
 		for i, line := range lines {
-			lines[i] = escapeLineStart(line)
+			// A break written as two spaces keeps them, which escapeLineStart
+			// would take off the end of a line.
+			if spaces[i] {
+				lines[i] = escapeLineStart(line) + "  "
+			} else {
+				lines[i] = escapeLineStart(line)
+			}
 		}
 		// A paragraph that starts as a link reference definition, whose
 		// label may run over several lines, would be taken out of the text.
@@ -695,7 +712,7 @@ func serializeBlock(n *Node, indent string) (string, error) {
 		if level < 1 || level > 6 {
 			return "", fmt.Errorf("a heading's level is 1 to 6, not %d", level)
 		}
-		s, err := serializeInline(n.Content, false)
+		s, err := serializeInline(n.Content, false, nil)
 		if err != nil {
 			return "", err
 		}
@@ -822,7 +839,7 @@ func serializeTable(n *Node) (string, error) {
 			} else if cells > len(alignment) || alignment[cells-1] != align {
 				return "", fmt.Errorf("table column alignment must agree across rows")
 			}
-			s, err := serializeInline(cell.Content, true)
+			s, err := serializeInline(cell.Content, true, nil)
 			if err != nil {
 				return "", err
 			}
@@ -937,7 +954,10 @@ func isAuto(m Mark) bool {
 
 // serializeInline writes inline content, opening and closing marks around
 // runs of nodes that share them.
-func serializeInline(nodes []*Node, cell bool) (string, error) {
+// A hard break read as two spaces is written as two spaces. When spaces is not nil, the number of each line that ends in one is
+// put in it, so that the paragraph's writer, which trims the end of every line, can give those lines their spaces back. Nothing
+// in the text is used to mark them.
+func serializeInline(nodes []*Node, cell bool, spaces map[int]bool) (string, error) {
 	var b strings.Builder
 	var open []Mark
 	has := func(marks []Mark, m Mark) bool {
@@ -1057,6 +1077,11 @@ func serializeInline(nodes []*Node, cell bool) (string, error) {
 		case "hard_break":
 			if cell {
 				b.WriteString(" ")
+			} else if stringAttr(n, "form") == "spaces" {
+				if spaces != nil {
+					spaces[strings.Count(b.String(), "\n")] = true
+				}
+				b.WriteString("  \n")
 			} else {
 				b.WriteString("\\\n")
 			}

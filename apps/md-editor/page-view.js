@@ -272,7 +272,7 @@ var schemaCache = null;
             return span;
           } },
         // A line break, as HTML pasted from another program can hold one.
-        hard_break: { group: 'inline', inline: true, selectable: false, parseDOM: [{ tag: 'br' }], toDOM: function () { return ['br']; } },
+        hard_break: { group: 'inline', inline: true, selectable: false, attrs: { form: { default: null } }, parseDOM: [{ tag: 'br' }], toDOM: function () { return ['br']; } },
         // A line break inside a paragraph, which the page shows as a space.
         soft_break: { group: 'inline', inline: true, selectable: false, parseDOM: [{ tag: 'span.pm-soft' }], toDOM: function () { return ['span', { class: 'pm-soft' }, ' ']; } }
       },
@@ -1104,6 +1104,18 @@ var schemaCache = null;
         var current = PM.keymap(Object.fromEntries((o.keys() || []).map(function (k) { return [k.key, function () { return k.run(); }]; })));
         return current.props.handleKeyDown(v, event);
       } } });
+      /* Shift+Enter breaks the line inside the paragraph. The break is written as a backslash before the newline, which CommonMark
+         defines and which is visible in the text. A table's cell and a heading have no such break in Markdown, so there the key
+         says so and writes nothing. */
+      function lineBreak(state, d) {
+        var parent = state.selection.$from.parent;
+        if (parent.type !== n.paragraph || inCell(state)) {
+          if (d) o.say('A line break can be typed inside a paragraph only.', true);
+          return true;
+        }
+        if (d) d(state.tr.replaceSelectionWith(n.hard_break.create()).scrollIntoView());
+        return true;
+      }
       function sink(state, d) { return PM.sinkListItem(n.list_item)(state, d); }
       function lift(state, d) { return PM.liftListItem(n.list_item)(state, d); }
       // Tab in a table's last cell adds a row and moves into it.
@@ -1156,6 +1168,7 @@ var schemaCache = null;
           'Tab': PM.chainCommands(PM.goToNextCell(1), addRowAtEnd, sink),
           'Shift-Tab': PM.chainCommands(PM.goToNextCell(-1), lift),
           'Enter': PM.chainCommands(exitBox, splitItem),
+          'Shift-Enter': lineBreak,
           'Mod-z': PM.undo, 'Mod-y': PM.redo, 'Mod-Shift-z': PM.redo
         }),
         PM.keymap(PM.baseKeymap),
