@@ -7,6 +7,7 @@ Editor and Docs accept an optional `pudlHost.editing` capability, version 1. It 
 | Member | Contract |
 | --- | --- |
 | `version` | The number 1. |
+| `documentName` | A boolean. When it is `false`, Docs and Editor leave the document's name out of the status line. Any other value, including `true`, leaves it shown. A host that shows the name itself, or whose names are not for people, uses it. |
 | `spellcheck` | A boolean. When it is `false`, the applet sets the HTML `spellcheck` attribute to `false` on each area where a person types the text of a document. What a browser does with that attribute is the browser's business. Any other value, including `true`, a string or a missing member, changes nothing, so the setting can turn the attribute off and cannot turn anything on. |
 
 ## When it is read
