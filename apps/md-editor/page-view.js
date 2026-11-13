@@ -354,7 +354,12 @@ var schemaCache = null;
        failed(text)             the page could not be built; the Editor leaves Page view
      } */
   function attach(o) {
+    /* The page's edits reach the Editor's text in placements, at times that depend on the host and the load (the timer, a host's take, an
+       undo), and the Editor's undo history merges typing that is less than 500 ms apart. So that the placements do not change what one
+       undo takes back, each placement says whether the typing it carries went on from the typing of the placement before it with no
+       gap of 500 ms or more, as the page's own history would group it, and the Editor's history then joins the two. */
     var PM = null, view = null, on = false, shown = null, loading = 0;
+    var lastEdit = 0, batchFirst = 0, batchBroke = false, batchLinked = false, placedEdit = 0;
     var footnoteNamespace='yavc-notes-'+crypto.randomUUID();
     var dirty = false, syncTimer = 0, syncing = null, reloadTimer = 0, sourceStale = false, refreshFocus = null, frozen = false;
     /* Whether the next page built takes its place from the text's caret
@@ -494,6 +499,10 @@ var schemaCache = null;
       view.updateState(view.state.apply(tr));
       var edited = tr.docChanged && !tr.getMeta('fromText');
       if (edited) {
+        var editAt = tr.time || Date.now();
+        if (!batchFirst) { batchFirst = editAt; batchLinked = !!placedEdit && editAt - placedEdit < 500; }
+        else if (editAt - lastEdit >= 500) batchBroke = true;
+        lastEdit = editAt;
         dirty = true;
         schedule();
       }
@@ -627,7 +636,8 @@ var schemaCache = null;
     function place(text, original) {
       if (o.text() !== original || shown !== original) throw new Error('The source changed while the page was being saved. The page draft was retained; copy it before reloading.');
       shown = text;
-      o.setText(text);
+      o.setText(text, false, !!(batchFirst && batchLinked && !batchBroke));
+      placedEdit = lastEdit; batchFirst = 0; batchBroke = false; batchLinked = false;
     }
     var syncTicket = 0;
     /* The same as sync, at once and without a promise, for a host that asks for the

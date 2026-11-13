@@ -2048,14 +2048,14 @@
         /* The page's edit, as text: the least change that turns the text into
            the new text, so the cursor and the undo history in Split keep
            their sense. */
-        function takeVisualText(text, isolate) {
+        function takeVisualText(text, isolate, joined) {
             var old = view.state.doc.toString();
             if (old === text) { return; }
             var a = 0, b = 0;
             while (a < old.length && a < text.length && old[a] === text[a]) { a++; }
             while (b < old.length - a && b < text.length - a && old[old.length - 1 - b] === text[text.length - 1 - b]) { b++; }
             visual.fromVisual = true;
-            try { view.dispatch({ changes: { from: a, to: old.length - b, insert: text.slice(a, text.length - b) }, userEvent: 'input.visual',annotations:isolate?CM.isolateHistory.of('full'):[] }); }
+            try { view.dispatch({ changes: { from: a, to: old.length - b, insert: text.slice(a, text.length - b) }, userEvent: 'input.visual',annotations:isolate?CM.isolateHistory.of('full'):[],effects:joined?[sourceHistory.join.of(true)]:[] }); }
             finally { visual.fromVisual = false; }
         }
 

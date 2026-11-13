@@ -14,6 +14,7 @@ This page lists the defects and gaps the yavc.app team has found and not yet fix
 - **The page view takes the browser's selection a frame late.** A key pressed within a frame or two of a click acts at the old caret. Found by Yavc.App Tester on 2026-11-13. A person rarely does that, but a script does. Under load the delay can pass two frames: `test-document-review.cjs` set a selection on a heading and gave Comment, and the comment went on the old selection, in about one run in forty with a one-frame wait and one in sixty with two (2026-11-14). A command given in the same turn as the selection goes wrong every time.
 - **A caret placed before a diagram has drawn is lost when it draws.** A click made while the page is still loading can be lost. Found with the previous item.
 - **In Firefox, Control+End in a table at the end of a document stays in the last cell.** There is then no evident way to the end of the document to type after the table. Found by Yavc.App Tester on 2026-11-13.
+- **An undo in the page view sometimes takes back nothing.** In one of 60 WebKit runs of `test-docs-draft-notification.cjs` at 14 runs at once, after typing 12345678 into the page without a `take()` and pressing Ctrl+Z, the text still had 12345678. Not traced; it was seen once with the fix of decision 159 and before it was not told apart from the failures that fix removed. The next step is to log the page's transactions and the Editor's history in a run that does it. Found by Yavc.App Builder on 2026-11-14.
 
 ## Diagrams
 

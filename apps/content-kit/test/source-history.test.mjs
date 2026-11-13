@@ -67,3 +67,22 @@ test('live history trims its aggregate memory while retaining current provenance
     assert.equal(h.endings(view.state),'L'.repeat(131072));const raw=h.raw(view.state),json=view.state.toJSON({sourceHistory:h.field});
     view.state=CM.EditorState.fromJSON(JSON.parse(JSON.stringify(json)),{extensions:h.extension('')},{sourceHistory:h.field});assert.equal(h.raw(view.state),raw);
 });
+test('the page says that a placement goes on from the one before it, whatever the time between the placements',()=>{
+    const real=Date.now;let clock=1000000;Date.now=()=>clock;
+    try{
+        for(const joined of [false,true]){
+            const {h,view}=fixture('start');
+            view.dispatch({changes:{from:5,insert:' 1234'},userEvent:'input.visual'});
+            clock+=800;
+            view.dispatch({changes:{from:10,insert:' 5678'},userEvent:'input.visual',effects:joined?[h.join.of(true)]:[]});
+            h.run('undo',view);
+            assert.equal(h.raw(view.state),joined?'start':'start 1234',joined?'a joined placement is one undo':'two placements 800 ms apart are two');
+        }
+        // A join does nothing to an edit of another kind, which stays its own step.
+        const {h,view}=fixture('start');
+        view.dispatch({changes:{from:5,insert:' typed'},userEvent:'input.type'});
+        clock+=800;
+        view.dispatch({changes:{from:11,insert:' page'},userEvent:'input.visual',effects:[h.join.of(true)]});
+        h.run('undo',view);assert.equal(h.raw(view.state),'start typed');
+    }finally{Date.now=real;}
+});
