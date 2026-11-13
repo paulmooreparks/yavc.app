@@ -89,6 +89,12 @@ func TestDocsProfileIsTheFullPackageLessWhatItSays(t *testing.T) {
 		switch path {
 		case "manifest.json", "content/omitted.json":
 			continue
+		case "support/yavc-util.js":
+			// The one file that differs: the line that takes the list of omissions. Everything else in it is the full package's text.
+			if strings.Replace(body, omissionsLineWith(t, body), omissionsLine, 1) != full.files[path] {
+				t.Error("support/yavc-util.js differs from the full package's in more than the omissions line")
+			}
+			continue
 		}
 		if full.files[path] != body {
 			t.Errorf("%s differs from the full package or is not in it", path)
@@ -151,6 +157,52 @@ func TestDocsProfileIsTheFullPackageLessWhatItSays(t *testing.T) {
 			}
 		}
 	}
+}
+
+// A reduced package says in its own loader that it has omissions, so the loader asks for nothing to find out. The full package keeps
+// null there, and the loader makes no request when a file is missing.
+func TestLoaderKnowsTheOmissionsWithoutAsking(t *testing.T) {
+	full, docs := build(t, "full"), build(t, "docs")
+	if !strings.Contains(full.files["support/yavc-util.js"], omissionsLine) {
+		t.Error("the full package's loader does not have null for its omissions")
+	}
+	body := docs.files["support/yavc-util.js"]
+	if strings.Contains(body, omissionsLine) {
+		t.Fatal("the docs package's loader still has null for its omissions")
+	}
+	line := omissionsLineWith(t, body)
+	var list struct {
+		Version int       `json:"version"`
+		Omitted []feature `json:"omitted"`
+	}
+	if err := json.Unmarshal([]byte(strings.TrimSuffix(strings.TrimPrefix(line, "var omittedByBuild = "), "; // yavc-content: omissions")), &list); err != nil {
+		t.Fatalf("the omissions in the loader are not JSON: %v", err)
+	}
+	var fromFile struct{ Omitted []feature }
+	if err := json.Unmarshal([]byte(docs.files["content/omitted.json"]), &fromFile); err != nil {
+		t.Fatal(err)
+	}
+	a, _ := json.Marshal(list.Omitted)
+	b, _ := json.Marshal(fromFile.Omitted)
+	if list.Version != 1 || len(list.Omitted) == 0 || !bytes.Equal(a, b) {
+		t.Errorf("the loader lists %s and omitted.json %s", a, b)
+	}
+	if strings.Contains(full.files["support/yavc-util.js"], "content/omitted.json") || strings.Contains(body, "content/omitted.json") {
+		t.Error("the loader asks for content/omitted.json")
+	}
+}
+
+// omissionsLineWith is the line of a reduced package's loader that holds the list.
+func omissionsLineWith(t *testing.T, body string) string {
+	t.Helper()
+	for _, line := range strings.Split(body, "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "var omittedByBuild = ") && strings.HasSuffix(line, "; // yavc-content: omissions") {
+			return line
+		}
+	}
+	t.Fatal("the loader has no line with the omissions")
+	return ""
 }
 
 func TestUnknownProfileIsRefused(t *testing.T) {

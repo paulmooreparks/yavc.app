@@ -28,7 +28,7 @@ const types={'.html':'text/html','.js':'text/javascript','.css':'text/css','.jso
  try{
   for(const engine of process.argv.slice(3).length?process.argv.slice(3):['chromium','firefox','webkit']){
    const browser=await pw[engine].launch({headless:true});const p=await browser.newPage({viewport:{width:1280,height:1400}});p.setDefaultTimeout(30000);
-   const errors=[],badRequests=[];p.on('pageerror',e=>errors.push(e.stack));p.on('request',r=>{const u=new URL(r.url());if(u.protocol.startsWith('http')&&!u.pathname.startsWith(prefix))badRequests.push(r.url());});
+   const errors=[],badRequests=[];p.on('pageerror',e=>errors.push(e.stack));p.on('request',r=>{const u=new URL(r.url());if(u.protocol.startsWith('http')&&!u.pathname.startsWith(prefix))badRequests.push(r.url());if(u.pathname.endsWith('/omitted.json'))badRequests.push('the loader asked for '+r.url());});
    try{
     await p.goto(`http://127.0.0.1:${server.address().port}${prefix}lab/index.html?file=unrelated-query.d2`);
     await p.locator('#one .cm-editor').waitFor({state:'attached'});await p.locator('#two .cm-editor').waitFor({state:'attached'});
@@ -160,8 +160,11 @@ const types={'.html':'text/html','.js':'text/javascript','.css':'text/css','.jso
     await p.evaluate(()=>{fixture.nextCopy={resource:'opaque:editable-copy',name:'Editable.d2',expectedRevision:null};});await p.evaluate(()=>pudlCommands.run('save-as',null,document.querySelector('#one')));
     assert.equal(await p.locator('#one .cm-content').getAttribute('contenteditable'),'true');await p.locator('#one .cm-content').click();await p.keyboard.press('ControlOrMeta+End');await p.keyboard.type('\ncopy: Editable');await p.evaluate(()=>pudlCommands.run('save',null,document.querySelector('#one')));
     assert.match(await p.evaluate(()=>fixture.records.get('opaque:editable-copy').text),/Editable/);assert.doesNotMatch(await p.evaluate(()=>fixture.records.get('memory:first.d2').text),/Editable/);
-    await p.locator('#one .cm-content').click();await p.keyboard.press('ControlOrMeta+End');await p.keyboard.type('\nlast: Before revoke');await p.locator('#one .dg-hit-shape').first().click();assert.equal(await p.locator('#one .dg-inspector-fields:not([disabled])').count(),1);await p.evaluate(()=>{fixture.revokeOnWrite=true;});await p.evaluate(()=>pudlCommands.run('save',null,document.querySelector('#one')));
+    await p.locator('#one .cm-content').click();await p.keyboard.press('ControlOrMeta+End');await p.keyboard.type('\nlast: Before revoke');for(let attempt=0;attempt<10&&!(await p.locator('#one .dg-inspector-fields:not([disabled])').count());attempt++){await p.locator('#one .dg-hit-shape').first().click();await p.waitForTimeout(400);}assert.equal(await p.locator('#one .dg-inspector-fields:not([disabled])').count(),1);await p.evaluate(()=>{fixture.revokeOnWrite=true;});await p.evaluate(()=>pudlCommands.run('save',null,document.querySelector('#one')));
     assert.equal(await p.locator('#one .cm-content').getAttribute('contenteditable'),'false');assert.equal(await p.locator('#one .cm-content').getAttribute('aria-readonly'),'true');assert.equal(await p.locator('#one .dg-handle').count(),0);assert.equal(await p.locator('#one [data-command="save"]').isDisabled(),true);assert.equal(await p.locator('#one .dg-inspector-fields').evaluate(n=>n.disabled),true);
+    // A script of a full package that fails to load is a fault and is reported as one, with no request to find out whether the package leaves features out.
+    const failed=await p.evaluate(src=>window.yavcUtil.loadScript(src).then(()=>'loaded',e=>({message:e.message,omitted:!!e.omitted})),prefix+'content/md-engine/not-in-this-package.js');
+    assert.equal(failed.omitted,false);assert.match(failed.message,/did not load/);
     assert.deepEqual(badRequests,[]);assert.deepEqual(errors,[]);
     console.log(engine+': extracted assets, conditional saves, disposal, matching/stale/legacy recovery, quota refusal and future snapshot retention passed');
    }catch(e){console.error(engine,e);try{await p.screenshot({path:path.join(evidence,engine+'-failure.png'),fullPage:true});}catch(capture){console.error('Failure screenshot unavailable:',capture.message);}throw e;}finally{await browser.close();}

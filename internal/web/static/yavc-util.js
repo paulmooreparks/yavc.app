@@ -27,19 +27,17 @@
 
     var loading = {};
     /* The sentence for a file that a reduced package leaves out on purpose (docs/content-release-downloads.md, "Profiles"), or
-       null. It reads content/omitted.json beside the package's content folder, which only a reduced package has, and only after a
-       load has failed. A full package has no such file, so its missing file stays a fault. */
-    var omissions = {};
+       null. The list is in this script: the package build for a reduced profile writes it in place of null on the next line, so a
+       reduced package says it has omissions before anything is asked, and a full package, which leaves the line as it is, makes no
+       request at all. A missing file in a full package is a fault and is reported as one. */
+    var omittedByBuild = null; // yavc-content: omissions
     function omission(src) {
         var url;
         try { url = new URL(src, document.baseURI); } catch (err) { return Promise.resolve(null); }
         var at = url.pathname.lastIndexOf('/content/');
-        if (at < 0) { return Promise.resolve(null); }
-        var root = url.pathname.slice(0, at + 1), inside = url.pathname.slice(at + 1);
-        if (!omissions[root]) {
-            omissions[root] = fetch(url.origin + root + 'content/omitted.json', { credentials: 'same-origin' }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; });
-        }
-        return omissions[root].then(function (list) {
+        if (at < 0 || !omittedByBuild) { return Promise.resolve(null); }
+        var inside = url.pathname.slice(at + 1);
+        return Promise.resolve(omittedByBuild).then(function (list) {
             if (!list || list.version !== 1 || !Array.isArray(list.omitted)) { return null; }
             for (var i = 0; i < list.omitted.length; i++) {
                 var f = list.omitted[i], paths = f && Array.isArray(f.paths) ? f.paths : [];
