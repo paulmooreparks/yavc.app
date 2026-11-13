@@ -1988,9 +1988,15 @@
             function refresh() { if (window.pudlMenubar) { window.pudlMenubar.refresh(); } }
             /* The reader's layouts, which the Barcode Tool keeps; until they
                have loaded, the demonstrations alone. */
+            /* version counts the imports begun and saving the ones not yet done, as the settings' reload does (config.js, watch). A read
+               of the library that began before an import, or while one ran, would bring back the library the import replaced, so it
+               counts only if no import began while it ran, and a change that comes while one runs is read when the import is done. */
+            var libraryVersion = 0, librarySaving = 0, libraryReread = false;
             function readLibrary() {
+                if (librarySaving) { libraryReread = true; return Promise.resolve(); }
+                var version = libraryVersion;
                 return Lib.load(B).then(function (got) {
-                    if (destroyed) { return; }
+                    if (destroyed || librarySaving || version !== libraryVersion) { return; }
                     library = got.layouts;
                     if (got.error) { status(got.error, true); }
                     fillLayouts(); render();
@@ -2138,6 +2144,7 @@
             }
             async function importFile(file) {
                 if (!file) { return; }
+                libraryVersion++; librarySaving++;
                 try {
                     if (file.size > 2 * 1024 * 1024) { throw new Error('Choose a layout file smaller than 2 MB.'); }
                     var imported = B.layouts.validateFile(JSON.parse(await file.text()));
@@ -2153,6 +2160,7 @@
                     library = Array.from(merged.values()); fillLayouts(); render();
                     status('Layouts imported into ' + Lib.where() + '. The Barcode Tool uses the same library.');
                 } catch (e) { status('Layouts were not imported: ' + e.message, true); }
+                finally { librarySaving--; if (!librarySaving && libraryReread && !destroyed) { libraryReread = false; readLibrary(); } }
             }
             async function copy() {
                 if (!capture) { return; }
