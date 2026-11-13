@@ -133,18 +133,25 @@
             if (node.classList.contains('doc-page-gap')) return;
             if(noteNodes.indexOf(node)>=0)return;
             var rect = node.getBoundingClientRect(), css = getComputedStyle(node), content=node;
-            while(content.matches('.doc-block,.pm-source,.dinah-src,.dinah-block')&&content.childElementCount===1)content=content.firstElementChild;
+            while((content.matches('.doc-block,.pm-source,.dinah-src,.dinah-block,[data-host-shortcode]')||content.matches('div:not([class])')&&!!content.querySelector(':scope > .doc-block > [data-host-flow]'))&&content.childElementCount===1)content=content.firstElementChild;
             var boxBody=content.matches('.pm-box')&&content.querySelector('.pm-box-frame:not(.sc-columns) .pm-box-body');
             if(boxBody&&!/^(avoid|avoid-page)$/.test(getComputedStyle(boxBody.parentElement).breakInside))content=boxBody;
             var contentCSS=getComputedStyle(content),previous=blocks[blocks.length-1];
             var shortcodeBody=content.matches('div,section,aside,article,details,figure')&&Array.from(content.classList).some(function(name){return name.startsWith('sc-');})&&/^(block|flow-root)$/.test(contentCSS.display)&&content.childElementCount>0;
-            var container = shortcodeBody || content.matches('ul,ol,blockquote,.pm-task-body,.pm-box-body,.sc-notice,.notice-content,.notice-body,table,thead,tbody') || content.matches('li') && !!content.querySelector(':scope > p,:scope > ul,:scope > ol,:scope > blockquote,:scope > .pm-task-body');
-            if (!node.matches('.pm-source') && !/^(avoid|avoid-page)$/.test(contentCSS.breakInside) && container) {
+            /* A host's drawing is broken between its children when the host marked its frame or body (data-sc-frame, data-sc-body), or said that it is flowing content (the host's answer, kept as data-host-flow on its place), as a built-in container is. */
+            var hostFlow = content.matches('[data-sc-frame],[data-sc-body]') || !!(content.parentElement && content.parentElement.matches('[data-host-flow]') && content.childElementCount > 0);
+            var container = hostFlow || shortcodeBody || content.matches('ul,ol,blockquote,.pm-task-body,.pm-box-body,.sc-notice,.notice-content,.notice-body,table,thead,tbody') || content.matches('li') && !!content.querySelector(':scope > p,:scope > ul,:scope > ol,:scope > blockquote,:scope > .pm-task-body');
+            /* A block the host drew as flowing content is a source block of the page, which the page does not enter, and its own children are laid out
+               as the units of its pages all the same: the gaps that break it go into its drawing as elements (applyFlowGaps), since the page cannot
+               hold a widget inside a node it does not enter. */
+            var flowHost = node.matches('.pm-source') && !!(content.parentElement && content.parentElement.matches('[data-host-flow]')) && content.childElementCount > 0;
+            if ((!node.matches('.pm-source') || flowHost) && !/^(avoid|avoid-page)$/.test(contentCSS.breakInside) && container) {
                 var firstBlock = blocks.length;
                 Array.from(content.children).forEach(function (child) {
                     var before = position ? position(child.parentNode, Array.prototype.indexOf.call(child.parentNode.childNodes, child)) : 0;
                     emit(child, before);
                 });
+                if (flowHost) { for (var fi = firstBlock; fi < blocks.length; fi++) { blocks[fi].flow = true; } }
                 if (blocks.length > firstBlock) {
                     blocks[firstBlock].breakBefore = blocks[firstBlock].breakBefore || /^(page|always)$/.test(contentCSS.breakBefore);
                     var lastBlock = blocks[blocks.length - 1];
@@ -207,6 +214,16 @@
             }
         }
         node.setAttribute('aria-hidden', 'true'); node.contentEditable = 'false'; return node;
+    }
+    /* The gaps inside the drawings of the host's flowing blocks: put in as elements before the child they come before, and put in again each time
+       the page is laid out, since a drawing the page redraws has lost them. The page does not enter these nodes, so nothing of the editor sees them. */
+    function applyFlowGaps(dom, layout, blocks) {
+        dom.querySelectorAll('.doc-page-gap[data-flow-gap]').forEach(function (node) { node.remove(); });
+        layout.gaps.slice().reverse().forEach(function (gap) {
+            var block = blocks[gap.index];
+            if (!block || !block.flow || !block.node || !block.node.parentNode) { return; }
+            var node = spacer(gap.height, false, block, gap.header); node.setAttribute('data-flow-gap', ''); block.node.before(node);
+        });
     }
     function rowSpacer(gap,block,column){
         var node=spacer(gap.height,true,null);node.setAttribute('data-page-gap-key','body:'+gap.index);
@@ -303,7 +320,7 @@
                     if (next !== signature) {
                         signature = next;
                         if (window.yavcDocumentSettings) { window.yavcDocumentSettings.decorate(o.page, page, layout.count); }
-                        var scale=Number(o.page.style.zoom)||1,widgets=tableDecorations(v,scale);layout.gaps.forEach(function(gap){var block=blocks[gap.index];
+                        var scale=Number(o.page.style.zoom)||1,widgets=tableDecorations(v,scale);layout.gaps.forEach(function(gap){var block=blocks[gap.index];if(block.flow)return;
                             var identity=gapIdentity(block)+':'+gap.index+':'+gap.height+':'+gap.header+':'+(gap.header?headerIdentity(block):'');
                             if(block.rowNode&&block.band){block.anchors.forEach(function(anchor,column){if(anchor)widgets.push(PM.Decoration.widget(anchor.pos,function(){return rowSpacer(gap,block,column);},{side:gap.index,key:'cell:'+identity+':'+column+':'+gap.rowHeaderTop+':'+!!anchor.exhausted,ignoreSelection:true}));});}
                             else widgets.push(PM.Decoration.widget(gap.pos,function(){return spacer(gap.height,!!block.anchor,block,gap.header);},{side:-1,key:'gap:'+identity+':'+!!block.anchor,ignoreSelection:true}));
@@ -312,6 +329,7 @@
                         noteGaps(layout,blocks).forEach(function(gap){widgets.push(PM.Decoration.widget(gap.block.pos,function(){return spacer(gap.height,!!gap.block.anchor,gap.block);},{side:-1,key:'note:'+gap.key+':'+gap.height,ignoreSelection:true}));});
                         v.dispatch(v.state.tr.setMeta(key, PM.DecorationSet.create(v.state.doc, widgets)).setMeta('addToHistory', false));
                     }
+                    applyFlowGaps(v.dom, layout, blocks);
                 } catch (err) { if (o.paginationProblem) { o.paginationProblem(err.message); } }
             });
         }

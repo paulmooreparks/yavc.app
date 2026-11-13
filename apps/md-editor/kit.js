@@ -1274,11 +1274,17 @@
             /* A document that has closed keeps nothing new. */
             if (out === gone || !hostLive(pictures)) { if (entry.html == null && store.get(key) === entry) { store.delete(key); } return entry.html; }
             var html = out && typeof out.html === 'string' && !out.error && out.html.length <= HOST_HTML_LIMIT ? out.html : null;
-            if (html != null) { entry.html = html; entry.at = Date.now(); }
+            if (html != null) { entry.html = html; entry.flow = out.flow === true; entry.at = Date.now(); }
             else { entry.at = entry.html == null ? Date.now() : Date.now() - HOST_FILL_AGE + HOST_FILL_RETRY; }
             trimHostCache(store); return entry.html;
         });
         return entry.promise;
+    }
+    /* Whether the host said that the drawing kept for a host shortcode is flowing content, which a page may break between its children and between
+       the rows of its tables. Only the host's own answer, a boolean true, says so. */
+    function hostFlowing(pictures, request) {
+        var entry = hostService(pictures) && request ? pictures.hostFills.get(hostKey(pictures, request)) : null;
+        return !!(entry && entry.html != null && entry.flow === true);
     }
     /* The drawing kept for a host shortcode, or null. */
     function hostDrawn(pictures, request) {
@@ -1290,7 +1296,8 @@
        is, and nothing in it is read as a placeholder of its own. */
     function hostFragment(html) {
         var drawing = window.yavcHTML.fragment(html);
-        drawing.querySelectorAll('*').forEach(function (n) { Array.from(n.attributes).forEach(function (a) { if (/^data-(?:host-|command|action|applet|choice)/.test(a.name)) n.removeAttribute(a.name); }); });
+        /* data-sc-frame, data-sc-body and data-sc-repeat are the host's to give (docs/host-shortcodes-contract.md); data-sc-piece is the page's, so a host's is taken away. */
+        drawing.querySelectorAll('*').forEach(function (n) { Array.from(n.attributes).forEach(function (a) { if (/^data-(?:host-|command|action|applet|choice|sc-piece)/.test(a.name)) n.removeAttribute(a.name); }); });
         drawing.querySelectorAll('.sc-host-body').forEach(function (n) { n.classList.remove('sc-host-body'); });
         return drawing;
     }
@@ -1301,7 +1308,8 @@
        says where the body goes with <slot name="content">, and the body
        that is on the page is moved there, so what is being edited in it is
        kept. False when the drawing has no place for the body. */
-    function placeHost(el, html) {
+    function placeHost(el, html, flowing) {
+        if (flowing) { el.setAttribute('data-host-flow', 'true'); } else { el.removeAttribute('data-host-flow'); }
         if (el.__hostHtml === html) { return true; }
         var drawing = hostFragment(html), kind = el.getAttribute('data-host-kind');
         if (kind === 'container' || kind === 'span') {
@@ -1327,11 +1335,11 @@
             var request = hostRequest(el);
             if (!request) { return; }
             var kept = hostDrawn(pictures, request);
-            if (kept != null && !placeHost(el, kept)) { el.classList.add('sc-host-failed'); }
+            if (kept != null && !placeHost(el, kept, hostFlowing(pictures, request))) { el.classList.add('sc-host-failed'); }
             if (cachedOnly) { return; }
             hostDrawing(pictures, request).then(function (html) {
                 if (el.getAttribute('data-host-source') !== request.source || !hostLive(pictures)) { return; }
-                if (html == null || !placeHost(el, html)) { if (!el.hasAttribute('data-host-drawn')) { el.classList.add('sc-host-failed'); } }
+                if (html == null || !placeHost(el, html, hostFlowing(pictures, request))) { if (!el.hasAttribute('data-host-drawn')) { el.classList.add('sc-host-failed'); } }
             });
         });
     }
