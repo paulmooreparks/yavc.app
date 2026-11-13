@@ -14,6 +14,7 @@ This page lists the defects and gaps the yavc.app team has found and not yet fix
 - **A caret placed before a diagram has drawn is lost when it draws.** A click made while the page is still loading can be lost. Found with the previous item.
 - **In Firefox, Control+End in a table at the end of a document stays in the last cell.** There is then no evident way to the end of the document to type after the table. Found by Yavc.App Tester on 2026-11-13.
 - **An undo in the page view sometimes takes back nothing.** In one of 60 WebKit runs of `test-docs-draft-notification.cjs` at 14 runs at once, after typing 12345678 into the page without a `take()` and pressing Ctrl+Z, the text still had 12345678. Not traced; it was seen once with the fix of decision 159 and before it was not told apart from the failures that fix removed. The next step is to log the page's transactions and the Editor's history in a run that does it. Found by Yavc.App Builder on 2026-11-14.
+- **A download of an exported document is named after the resource's ID and not the document's name.** `workspace.js` (line 920 in v0.2.88) builds the name of a Word or PDF download from `tab.path`, where `tab.name` is the display name. Under a host whose resource IDs are opaque, such as `memory:export.docs.md`, a person gets the ID as the file name (`memory_export.docx` in Chromium and Firefox, `memory:export.docx` in WebKit). It affects Dinah and GK Companion as well. Found by Yavc.App Tester on 2026-11-14 (message 7240). To fix as a small pull request with a test.
 
 ## Other applets
 
