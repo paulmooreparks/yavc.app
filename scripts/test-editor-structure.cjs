@@ -108,26 +108,22 @@ async function sourceContains(page, fragment) { await page.waitForFunction(fragm
             await page.locator('.ProseMirror[aria-busy="false"] p').first().click();
             await page.waitForFunction(() => yavcMdEditor._page.outlineIndex() === 0);
             const conflict = await page.evaluate(async () => {
-                const api = yavcMdEditor._page, engine = await yavcMdEngine(), markdown = engine.markdown;
+                const api = yavcMdEditor._page, engine = await yavcMdEngine();
                 const cm = CM.EditorView.findFromDOM(document.querySelector('.cm-editor')), original = cm.state.doc.toString();
-                let release; engine.markdown = doc => new Promise(resolve => { release = () => resolve(markdown(doc)); });
-                try {
-                    api.run('quote'); const saving = api.sync().then(() => false, () => true);
-                    while (!release) { await new Promise(resolve => setTimeout(resolve, 0)); }
-                    cm.dispatch({ changes: { from: 0, to: cm.state.doc.length, insert: original + '\nNew source edit.\n' } });
-                    release(); const refused = await saving;
-                    engine.markdown = markdown;
-                    document.querySelector('[data-outline-index="0"]').click();
-                    const revision = engine.outlineState(cm.state.doc.toString()).revision;
-                    const moveRefused = await pudlActions.run('yavc.docs/move-section@1', { from: 0, direction: 'down', revision }, { grant: 'all' }).then(() => false, () => true);
-                    const reloadRefused = await api.reload().then(() => false, () => true);
-                    const closeRefused = await api.enable(false).then(() => false, () => true);
-                    const retained = api.active() && api.pending() && !!document.querySelector('.ProseMirror blockquote');
-                    const sourceKept = cm.state.doc.toString() === original + '\nNew source edit.\n';
-                    cm.dispatch({ changes: { from: 0, to: cm.state.doc.length, insert: original } });
-                    await api.sync();
-                    return { refused, moveRefused, reloadRefused, closeRefused, retained, sourceKept, recovered: cm.state.doc.toString() !== original && /^>/m.test(cm.state.doc.toString()) };
-                } finally { engine.markdown = markdown; }
+                // The Source changes in the same turn as the page is converted, so the page's draft meets a changed Source when it is placed. Nothing waits on a timer or on the engine, and the engine is not replaced:
+                // the host's own request for the draft (the snapshot's take) converts through the same engine, and a stand-in for one call held up the other.
+                api.run('quote'); const saving = api.sync().then(() => false, () => true);
+                cm.dispatch({ changes: { from: 0, to: cm.state.doc.length, insert: original + '\nNew source edit.\n' } });
+                const refused = await saving;
+                const revision = engine.outlineState(cm.state.doc.toString()).revision;
+                const moveRefused = await pudlActions.run('yavc.docs/move-section@1', { from: 0, direction: 'down', revision }, { grant: 'all' }).then(() => false, () => true);
+                const reloadRefused = await api.reload().then(() => false, () => true);
+                const closeRefused = await api.enable(false).then(() => false, () => true);
+                const retained = api.active() && api.pending() && !!document.querySelector('.ProseMirror blockquote');
+                const sourceKept = cm.state.doc.toString() === original + '\nNew source edit.\n';
+                cm.dispatch({ changes: { from: 0, to: cm.state.doc.length, insert: original } });
+                await api.sync();
+                return { refused, moveRefused, reloadRefused, closeRefused, retained, sourceKept, recovered: cm.state.doc.toString() !== original && /^>/m.test(cm.state.doc.toString()) };
             });
             assert.deepEqual(conflict, { refused: true, moveRefused: true, reloadRefused: true, closeRefused: true, retained: true, sourceKept: true, recovered: true });
             phase = 'Slides shared editing';
