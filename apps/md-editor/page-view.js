@@ -461,7 +461,7 @@ var schemaCache = null;
             transformPastedHTML: function (html) { return window.yavcHTML.clean(html); },
             transformPasted: safeReviewPaste,
             dispatchTransaction: dispatch,
-            attributes: o.spellcheck === false ? { 'aria-label': 'The Document, as Its Page', spellcheck: 'false' } : { 'aria-label': 'The Document, as Its Page' }
+            attributes: Object.assign({ 'aria-label': 'The Document, as Its Page', role: 'textbox', 'aria-multiline': 'true' }, o.spellcheck === false ? { spellcheck: 'false' } : {})
           });
           /* A composition that is about to begin starts from a page already written
              into the text, so that a host asking for the draft while it lasts gets the
