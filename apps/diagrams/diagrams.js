@@ -1204,7 +1204,7 @@
                 c('zoom-in', 'Zoom In', function () { current().cv.zoom(1.25); }, '+', false, 'plus'),
                 c('zoom-out', 'Zoom Out', function () { current().cv.zoom(0.8); }, '-', false, 'minus'),
                 c('actual', 'Actual Size', function () { current().cv.actual(); }, '1', false),
-                Object.assign(c('pan', 'Pan', function () { setCanvasPan(!canvasPan); }, 'h', false, 'move'), { checked: function () { return canvasPan; }, shortcut: 'Space+Drag', detail: 'H turns the Pan tool on and off. Holding Space or the middle button and dragging pans without it.' })
+                Object.assign(c('pan', 'Pan', function () { setCanvasPan(!canvasPan); }, 'h', false, 'move'), { checked: function () { return canvasPan; }, detail: 'Holding Space or the middle button and dragging pans without the tool.' })
             ];
             [['left', 'Left', -1, 0], ['right', 'Right', 1, 0], ['up', 'Up', 0, -1], ['down', 'Down', 0, 1]].forEach(function (d) {
                 commands.push(c(d[0], 'Move ' + d[1], function () { canvasRequest({ op: 'move', dx: d[2], dy: d[3] }); }, 'Arrow' + d[1], 'nodes'));
