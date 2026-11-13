@@ -26,13 +26,41 @@
     function versioned(path) { return path + (path.indexOf('?') < 0 ? '?' : '&') + 'v=' + encodeURIComponent(V); }
 
     var loading = {};
+    /* The sentence for a file that a reduced package leaves out on purpose (docs/content-release-downloads.md, "Profiles"), or
+       null. It reads content/omitted.json beside the package's content folder, which only a reduced package has, and only after a
+       load has failed. A full package has no such file, so its missing file stays a fault. */
+    var omissions = {};
+    function omission(src) {
+        var url;
+        try { url = new URL(src, document.baseURI); } catch (err) { return Promise.resolve(null); }
+        var at = url.pathname.lastIndexOf('/content/');
+        if (at < 0) { return Promise.resolve(null); }
+        var root = url.pathname.slice(0, at + 1), inside = url.pathname.slice(at + 1);
+        if (!omissions[root]) {
+            omissions[root] = fetch(url.origin + root + 'content/omitted.json', { credentials: 'same-origin' }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; });
+        }
+        return omissions[root].then(function (list) {
+            if (!list || list.version !== 1 || !Array.isArray(list.omitted)) { return null; }
+            for (var i = 0; i < list.omitted.length; i++) {
+                var f = list.omitted[i], paths = f && Array.isArray(f.paths) ? f.paths : [];
+                for (var j = 0; j < paths.length; j++) {
+                    if (typeof paths[j] === 'string' && (inside === paths[j] || paths[j].endsWith('/') && inside.startsWith(paths[j]))) { return typeof f.message === 'string' ? f.message.slice(0, 200) : null; }
+                }
+            }
+            return null;
+        });
+    }
     function loadScript(src) {
         if (!loading[src]) {
             loading[src] = new Promise(function (resolve, reject) {
                 var s = document.createElement('script');
                 s.src = src;
                 s.onload = function () { resolve(); };
-                s.onerror = function () { delete loading[src]; reject(new Error(src + ' did not load')); };
+                s.onerror = function () {
+                    delete loading[src];
+                    // A package built for one applet leaves some features out and says so, so a missing file is reported as the choice it was.
+                    omission(src).then(function (said) { var err = new Error(said || src + ' did not load'); if (said) { err.omitted = true; } reject(err); });
+                };
                 document.head.appendChild(s);
             });
         }

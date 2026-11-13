@@ -29,5 +29,7 @@
  function fileServices(){return {files:{read:pudlHost.fs.readText}};}
  pudlActions.capability('files.read',fileServices);pudlActions.capability('files.write',fileServices);
  document.addEventListener('pudl:applet-state',function (event) {event.detail.state='file='+encodeURIComponent(event.target.id==='source'?'memory:source.md':event.target.id==='document'?'memory:document.docs.md':'memory:deck.slides.md');});
- Promise.all(['editor','docs','slides'].map(function (app) {return pudlHostKit.install(new URL('../content/'+app+'/applet.json',location.href).href);})).catch(function (err) {document.body.textContent=err.message;});
+ // ?apps=docs starts only the applets named, for a package that holds only those (docs/content-release-downloads.md, "Profiles").
+ var only=new URLSearchParams(location.search).get('apps');
+ Promise.all(['editor','docs','slides'].filter(function (app) {return !only||only.split(',').indexOf(app)>=0;}).map(function (app) {return pudlHostKit.install(new URL('../content/'+app+'/applet.json',location.href).href);})).catch(function (err) {document.body.textContent=err.message;});
 })();

@@ -2756,7 +2756,7 @@
                     reason: function () { var s = ready && hostCommands.standIn(); return s ? s.reason : 'This host cannot save this draft safely, or its recovered revision no longer matches. Use a supported Save As or download the source.'; } }),
                 cmd('save-as', 'Save As…', 'yavc-save-as', function () { return saveAs(); }, { label: function () { var t = current(); return t && t.readOnly ? 'Save a Copy…' : 'Save As…'; }, disabled: function () { return !ready || !current() || !!(resources && !resources.canSaveAs()); } }),
                 cmd('save-encoded-copy','Save Encoded Copy…','yavc-save-as',encodedCopy,{disabled:function(){return !ready||!current()||!resources||!resources.canSaveAs();}}),
-                cmd('import-docx','Import Word…','upload',importWord,{hidden:function(){return !isDocs;},disabled:function(){return !ready;}}),
+                cmd('import-docx','Import Word…','upload',function(){return importWord().catch(function(err){if(!destroyed&&!(err&&err.name==='AbortError'))say('The Word document could not be imported: '+((err&&err.message)||err),true);return false;});},{hidden:function(){return !isDocs;},disabled:function(){return !ready;}}),
                 cmd('close-document', 'Close Document', null, function () { COMMANDS['close-document'](); }, { disabled: function () { return !ready || !current(); } }),
                 /* glyphOnly: a glyph every reader knows shows alone on the
                    menu bar's ribbon (PUDL 0.79.0), its words its tooltip. */

@@ -26,9 +26,73 @@ type asset struct {
 	SHA256 string `json:"sha256"`
 }
 
-var packages = []string{"content-kit", "diagrams", "diagram-kit", "md-editor", "md-engine", "text-workspace", "editor", "docs", "slides"}
+// A feature a profile leaves out whole. Paths are in the package, a folder when it ends in a slash. Message is the
+// sentence an applet shows when something asks for the feature (docs/content-release-downloads.md, "Profiles").
+type feature struct {
+	Feature string   `json:"feature"`
+	Message string   `json:"message"`
+	Paths   []string `json:"paths"`
+}
+
+// A profile is the applets and shared code a package holds and the features it leaves out. The full profile is the
+// package as it was before profiles existed, and its manifest has no members for profiles.
+type profile struct {
+	name     string
+	packages []string
+	fixtures bool
+	d2       bool
+	entry    string
+	entries  []string
+	omit     []feature
+}
+
+var profiles = map[string]profile{
+	"full": {
+		name:     "full",
+		packages: []string{"content-kit", "diagrams", "diagram-kit", "md-editor", "md-engine", "text-workspace", "editor", "docs", "slides"},
+		fixtures: true,
+		d2:       true,
+		entry:    "content/diagrams/applet.json",
+		entries:  []string{"content/editor/applet.json", "content/docs/applet.json", "content/diagrams/applet.json", "content/slides/applet.json"},
+	},
+	"docs": {
+		name:     "docs",
+		packages: []string{"content-kit", "md-editor", "md-engine", "text-workspace", "docs"},
+		entry:    "content/docs/applet.json",
+		entries:  []string{"content/docs/applet.json"},
+		omit: []feature{
+			{"export-word", "Export to Word is not part of this build of Docs.", []string{"content/md-editor/vendor/docx-9.15.2/"}},
+			{"export-pdf", "Export to PDF is not part of this build of Docs.", []string{"content/md-editor/vendor/pdfmake-0.2.23/", "content/md-editor/vendor/fontkit-1.1.1/", "content/md-editor/vendor/pdf-lib-1.17.1/", "content/md-editor/pdf-notes.js"}},
+			{"import-office", "Opening a Word document is not part of this build of Docs.", []string{"content/md-editor/import/", "content/md-editor/import-images.js", "content/md-editor/import-word.js", "content/md-editor/import-word-worker.js", "content/md-editor/office-input.js", "content/md-editor/vendor/mammoth-1.13.0/", "content/md-editor/vendor/office-NOTICE.md"}},
+			{"mermaid", "Mermaid diagrams are not part of this build of Docs.", []string{"content/md-editor/vendor/mermaid/"}},
+			{"diagrams", "Diagrams are not part of this build of Docs.", []string{"content/diagram-kit/", "content/diagrams/"}},
+			{"language-service", "Checking and completion for JSON, CSS and HTML are not part of this build of Docs.", []string{
+				"content/md-editor/language-service/WORKER-LICENSES.txt", "content/md-editor/language-service/build.mjs", "content/md-editor/language-service/canvas-schema.mjs",
+				"content/md-editor/language-service/json-server.mjs", "content/md-editor/language-service/licenses/", "content/md-editor/language-service/manifest.json",
+				"content/md-editor/language-service/package-lock.json", "content/md-editor/language-service/package.json", "content/md-editor/language-service/worker-entry.mjs",
+				"content/md-editor/language-service/worker.js"}},
+		},
+	},
+}
+
+// omitted says whether a package path belongs to a feature the profile leaves out.
+func (p profile) omitted(path string) bool {
+	for _, f := range p.omit {
+		for _, prefix := range f.Paths {
+			if path == prefix || path+"/" == prefix || strings.HasSuffix(prefix, "/") && strings.HasPrefix(path, prefix) {
+				return true
+			}
+		}
+	}
+	return false
+}
 
 func copyTree(source, target string) error {
+	return copyTreeExcept(source, target, nil)
+}
+
+// copyTreeExcept copies a tree except the files and folders skip refuses, which it is given as paths in the package.
+func copyTreeExcept(source, target string, skip func(path string) bool) error {
 	return filepath.WalkDir(source, func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -42,6 +106,12 @@ func copyTree(source, target string) error {
 		rel, err := filepath.Rel(source, path)
 		if err != nil {
 			return err
+		}
+		if skip != nil && rel != "." && skip(filepath.ToSlash(filepath.Join(target, rel))) {
+			if entry.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
 		}
 		if entry.IsDir() {
 			return os.MkdirAll(filepath.Join(target, rel), 0755)
@@ -99,7 +169,14 @@ func wasm(root, output, name, prebuilt, goroot string) error {
 	return copyFile(filepath.Join(goroot, "lib", "wasm", "wasm_exec.js"), filepath.Join(output, "wasm_exec.js"))
 }
 
-func assemble(root, out, md, d2 string) error {
+func assemble(root, out, md, d2, profileName string) error {
+	if profileName == "" {
+		profileName = "full"
+	}
+	prof, known := profiles[profileName]
+	if !known {
+		return fmt.Errorf("unknown profile %q", profileName)
+	}
 	root, err := filepath.Abs(root)
 	if err != nil {
 		return err
@@ -132,12 +209,20 @@ func assemble(root, out, md, d2 string) error {
 			return err
 		}
 	}
-	for _, name := range packages {
-		if err = copyTree(filepath.Join(root, "apps", name), filepath.Join(out, "content", name)); err != nil {
+	skip := func(path string) bool {
+		inside, err := filepath.Rel(out, path)
+		return err == nil && prof.omitted(filepath.ToSlash(inside))
+	}
+	for _, name := range prof.packages {
+		if err = copyTreeExcept(filepath.Join(root, "apps", name), filepath.Join(out, "content", name), skip); err != nil {
 			return err
 		}
 	}
-	for _, pair := range [][2]string{{"web/pudl", "pudl"}, {"scripts/fixtures/portable-diagrams", "lab"}, {"scripts/fixtures/portable-workspace", "workspace-lab"}} {
+	trees := [][2]string{{"web/pudl", "pudl"}}
+	if prof.fixtures {
+		trees = append(trees, [2]string{"scripts/fixtures/portable-diagrams", "lab"}, [2]string{"scripts/fixtures/portable-workspace", "workspace-lab"})
+	}
+	for _, pair := range trees {
 		if err = copyTree(filepath.Join(root, filepath.FromSlash(pair[0])), filepath.Join(out, pair[1])); err != nil {
 			return err
 		}
@@ -194,8 +279,21 @@ func assemble(root, out, md, d2 string) error {
 	if err = wasm(root, filepath.Join(out, "content", "md-engine"), "yavc-md", md, goroot); err != nil {
 		return err
 	}
-	if err = wasm(root, filepath.Join(out, "content", "diagram-kit"), "yavc-d2", d2, goroot); err != nil {
-		return err
+	if prof.d2 {
+		if err = wasm(root, filepath.Join(out, "content", "diagram-kit"), "yavc-d2", d2, goroot); err != nil {
+			return err
+		}
+	}
+	// A package that leaves features out says which, where an applet looks when something it needs is missing
+	// (docs/content-release-downloads.md, "Profiles"). The full package has no such file.
+	if len(prof.omit) > 0 {
+		omitted, err := json.MarshalIndent(map[string]any{"version": 1, "omitted": prof.omit}, "", "  ")
+		if err != nil {
+			return err
+		}
+		if err = os.WriteFile(filepath.Join(out, "content", "omitted.json"), append(omitted, '\n'), 0644); err != nil {
+			return err
+		}
 	}
 	files := []asset{}
 	err = filepath.WalkDir(out, func(path string, entry fs.DirEntry, err error) error {
@@ -226,7 +324,11 @@ func assemble(root, out, md, d2 string) error {
 		return err
 	}
 	sum := sha256.Sum256(encoded)
-	manifest := map[string]any{"version": 1, "kind": "portable-content-release-set", "entry": "content/diagrams/applet.json", "entries": []string{"content/editor/applet.json", "content/docs/applet.json", "content/diagrams/applet.json", "content/slides/applet.json"}, "requirements": map[string]any{"scriptKind": "classic", "resourceContract": 1, "workspaceContract": 1, "snapshotContract": 2}, "files": files, "digest": hex.EncodeToString(sum[:])}
+	manifest := map[string]any{"version": 1, "kind": "portable-content-release-set", "entry": prof.entry, "entries": prof.entries, "requirements": map[string]any{"scriptKind": "classic", "resourceContract": 1, "workspaceContract": 1, "snapshotContract": 2}, "files": files, "digest": hex.EncodeToString(sum[:])}
+	if prof.name != "full" {
+		manifest["profile"] = prof.name
+		manifest["omits"] = prof.omit
+	}
 	data, err := json.MarshalIndent(manifest, "", "  ")
 	if err != nil {
 		return err
@@ -245,12 +347,13 @@ func main() {
 	md := flag.String("md", "", "prebuilt Markdown WASM directory")
 	d2 := flag.String("d2", "", "prebuilt D2 WASM directory")
 	archive := flag.String("zip", "", "new ZIP archive outside the assembled output")
+	profileName := flag.String("profile", "full", "full, or docs for Docs alone (docs/content-release-downloads.md)")
 	flag.Parse()
 	if *out == "" {
 		fmt.Fprintln(os.Stderr, "-out is required")
 		os.Exit(1)
 	}
-	if err := assemble(*root, *out, *md, *d2); err != nil {
+	if err := assemble(*root, *out, *md, *d2, *profileName); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

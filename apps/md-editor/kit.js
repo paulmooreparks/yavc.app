@@ -1938,7 +1938,7 @@
         /* The engine reports a fault in the diagram itself; what reaches
            this catch is the engine failing to load. */
         return d2Ready.then(function (engine) { return engine.draw(place, source); })
-            .catch(function () { diagramFailed(place, 'the diagram engine did not load. Reloading the page tries again.'); });
+            .catch(function (error) { diagramFailed(place, error && error.omitted ? error : 'the diagram engine did not load. Reloading the page tries again.'); });
     }
     /* Draws the engine's preview blocks into an element. A block whose
        HTML is the same as one already there keeps its element, with its
