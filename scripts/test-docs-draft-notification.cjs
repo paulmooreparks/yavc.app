@@ -51,6 +51,15 @@ const types={'.html':'text/html','.js':'text/javascript','.css':'text/css','.jso
      if(withTake)await draft(page);await page.keyboard.type('5678');await page.keyboard.press('ControlOrMeta+z');await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
      results.push((await shape(page,view)).text.replace(/\s+/g,' '));await page.close();}
     if(results[0]!==results[1])failures.push(`${label}: undo gave different text with a take() in the middle of typing: without ${JSON.stringify(results[0].slice(-40))}, with ${JSON.stringify(results[1].slice(-40))}.`);}
+   // 4b. If the engine that converts the page is not ready, take() returns the text without the page's latest edit, and the host is told again once the conversion succeeds.
+   if(view==='visual'){const {page,errors}=await open(view);
+    await page.evaluate(()=>{const engine=window.yavcMdEngine,real=engine.current;fixture.engineDown=true;engine.current=function(){if(fixture.engineDown)throw new Error('The engine is not ready.');return real.apply(engine,arguments);};});
+    await page.keyboard.type('4242');const calls=await count(page),without=await draft(page);
+    if(typeof without==='string'&&without.includes('4242'))failures.push(`${label}: with the engine not ready, take() returned the page's latest edit.`);
+    await page.evaluate(()=>{fixture.engineDown=false;});
+    await page.waitForFunction(()=>(fixture.changes.document||0)>0&&fixture.takes.document().tabs.some(t=>typeof t.draft==='string'&&t.draft.includes('4242')),null,{timeout:10000}).catch(()=>failures.push(`${label}: after the engine was ready again, take() still lacked the edit that was waiting.`));
+    if(await count(page)<=calls)failures.push(`${label}: the host was not told again with changed() when the waiting edit was written into the text.`);
+    if(errors.length)failures.push(`${label}: page errors ${errors.join(' | ')}`);await page.close();}
    // 5. Composition, in Chromium.
    if(engine!=='chromium'){notes.push(`${label}: composition not run, ${engine} has no way to drive an input method from a test.`);continue;}
    {const {page,errors}=await open(view);const client=await page.context().newCDPSession(page);
