@@ -471,6 +471,8 @@
                         if (u.docChanged && tabs[active] === tab && !visual.fromVisual) { textChangedForPage(); }
                         /* The paragraph style shows the line the cursor is on. */
                         if (u.selectionSet || u.docChanged) { showPos(); showCount(); commandsChanged(); }
+                        /* In Split, the page shows where the text's caret is. */
+                        if (u.selectionSet && !u.docChanged && tabs[active] === tab && mirror.text === null) { mirrorToPage(); }
                         if (tabs[active] === tab && (u.selectionSet || u.docChanged ||
                             CM.searchPanelOpen(u.state) !== CM.searchPanelOpen(u.startState))) { keep(); }
                     })
@@ -1647,6 +1649,7 @@
                 pagination: function () { return pagedView(viewMode) ? pageSettings : null; },
                 paginated: pageLayout,
                 paginationProblem: pageNotice,
+                selected: function () { mirrorToText(); },
                 customName: function (name) { return customShortcodes().some(function (item) { return item.name === name; }); },
                 text: function () { return view.state.doc.toString(); },
                 /* The text's caret, for the page to open at the block it
@@ -1684,6 +1687,38 @@
                 keys.push({key:key,run:function(){if(name!==null){try{Promise.resolve(COMMANDS[name]()).catch(function(err){say(err.message,true);});}catch(err){say(err.message,true);}}return true;}});
             });
             return keys;
+        }
+        /* Split shows the caret of one pane in the other (decision 168), without moving the keyboard and without a change to the document. A caret
+           moved in the text is shown on the page, and one moved on the page is shown in the text, a moment after it stops moving. The page's
+           selection is mapped to the text exactly or not at all, and the text's selection is mapped to the page the same way, so no other
+           place stands in for one that cannot be mapped. A move that one pane makes in the other is not told back, so the two cannot chase each other. */
+        var mirror = { text: null, page: null, timer: 0, turn: 0 };
+        function mirrorOn() { return viewMode === 'split' && pageActive() && !!view; }
+        function mirrorToPage() {
+            if (!mirrorOn() || editingPane !== 'text') { return; }
+            clearTimeout(mirror.timer); var turn = ++mirror.turn, tab = current();
+            mirror.timer = setTimeout(async function () {
+                if (turn !== mirror.turn || destroyed || !mirrorOn() || current() !== tab) { return; }
+                var main = view.state.selection.main;
+                mirror.page = turn;
+                try { await visual.api.selectAtText(main.from, main.to); } finally { if (mirror.page === turn) { mirror.page = null; } }
+            }, 120);
+        }
+        function mirrorToText() {
+            if (!mirrorOn() || editingPane !== 'visual') { return; }
+            clearTimeout(mirror.timer); var turn = ++mirror.turn, tab = current();
+            mirror.timer = setTimeout(async function () {
+                if (turn !== mirror.turn || destroyed || !mirrorOn() || current() !== tab) { return; }
+                try {
+                    await visual.api.sync();
+                    if (turn !== mirror.turn || !mirrorOn() || current() !== tab) { return; }
+                    var range = await visual.api.sourceSelection();
+                    if (!range || turn !== mirror.turn || !mirrorOn() || current() !== tab) { return; }
+                    var at = Math.max(0, Math.min(range.from, view.state.doc.length)), to = Math.max(at, Math.min(range.to, view.state.doc.length));
+                    mirror.text = turn;
+                    try { view.dispatch({ selection: { anchor: at, head: to }, effects: CM.EditorView.scrollIntoView(at, { y: 'nearest' }), userEvent: 'select.mirror' }); } finally { mirror.text = null; }
+                } catch (err) { /* the page changed while it was mapped; the next move maps again */ }
+            }, 120);
         }
         function textChangedForPage() {
             if (pageActive()) { visual.api.textChanged(); }
