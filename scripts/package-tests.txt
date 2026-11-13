@@ -17,3 +17,4 @@ test-docs-draft-notification.cjs
 test-docs-unicode.cjs
 test-portable-strict-policy.cjs
 test-docs-structure.cjs
+test-docs-person-routes.cjs
