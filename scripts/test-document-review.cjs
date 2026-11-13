@@ -30,6 +30,9 @@ const source='# Review sample\n\nKeep {++inserted++}, {--removed--}, {~~old~>new
         await page.evaluate(async()=>{const engine=await yavcMdEngine();const text='Visible\n\n{{no-export}}\n{++private++}\n{{/no-export}}\n';if(await yavcReviewTools.project({text,engine,interactive:false})!==text)throw new Error('Private review changed source');});
         await call('view',{mode:'visual'});await page.locator('.ProseMirror .pm-critic').first().waitFor();
         await page.locator('.ProseMirror h1').evaluate(el=>{el.closest('.ProseMirror').focus();const range=document.createRange();range.setStart(el.firstChild,0);range.setEnd(el.firstChild,6);const selection=getSelection();selection.removeAllRanges();selection.addRange(range);});
+        // The page view takes the browser's selection late (docs/backlog.md), and a command given before then comments on the old selection. A frame or two was not
+        // always enough under load, so the test waits until the page itself has the selected word.
+        await page.waitForFunction(()=>yavcMdEditor._page.selectionText()==='Review');
         await command('review-comment');await page.getByRole('textbox',{name:'Comment',exact:true}).fill('A selected heading comment.');await page.getByRole('button',{name:'Add Comment',exact:true}).click();
         await page.waitForFunction(()=>document.querySelectorAll('.ProseMirror .pm-critic').length===7);
         assert.ok((await call('document')).text.startsWith('# {==Review==}{>>A selected heading comment.<<} sample'));
