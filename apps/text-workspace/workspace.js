@@ -1648,6 +1648,8 @@
                 setText: takeVisualText,
                 docOf: function (text) { return documentEngine(text).then(function (m) { return withHostDrawings(m.doc(text)); }); },
                 markdownOf: function (doc) { return mdEngine().then(function (m) { return m.markdown(doc); }); },
+                /* The same conversion without waiting, for the snapshot's take. The engine is loaded once the page has been built. */
+                markdownNow: function (doc) { return window.yavcMdEngine.current().markdown(doc); },
                 sourceOf: function (src) { return documentEngine().then(function (m) { return withHostDrawings(m.source(src)); }); },
                 wrapOf: function (line) { return documentEngine().then(function (m) { return withHostDrawings(m.container(line)); }); },
                 inlineOf: function (src) { return documentEngine().then(function (m) { return withHostDrawings(m.inline(src)); }); },
@@ -1655,7 +1657,7 @@
                 draw: function (target, html, diagrams) { drawBlocks(target, [{ line: 0, html: html, diagrams: diagrams }]); },
                 keys: pageKeys,
                 say: say,
-                changed: function () { commandsChanged(); markOutline(); if (visualFind && !el.findPlace.hidden) { visualFind.refresh(); } },
+                changed: function (edited) { commandsChanged(); markOutline(); if (visualFind && !el.findPlace.hidden) { visualFind.refresh(); } if (edited) { keep(); } },
                 failed: function (text) { setView(viewMode === 'document' ? 'visual' : 'text').then(function () { say(text, true); }); }
             };
         }
@@ -2349,6 +2351,9 @@
             /* Until what was kept is all back, it is still the whole of it. */
             if (restoring) { return snap && snap.kept; }
             if (!view || !CM) { return null; }
+            /* A change made on the page is written into the text after a pause, so it is
+               written now, since a draft that leaves it out would be stale. */
+            if (pageActive()) { visual.api.flush(); }
             var front = current();
             if (front) { front.state = view.state; front.scroll = scrollAnchor(); }
             var list = [], frontAt = -1;
