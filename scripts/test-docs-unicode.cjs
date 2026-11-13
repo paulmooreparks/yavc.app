@@ -12,7 +12,13 @@ const nfc=s=>s.normalize('NFC'),nfd=s=>s.normalize('NFD');
 const tokensNfc=letters.map(l=>'a'+nfc(l)+'z'),tokensNfd=letters.map(l=>'a'+nfd(l)+'z');
 const english='Session with Siti Nurhaliza binti Ahmad and Wayan Suryadi about nǚ and Zhūngguó at Chennai (Tamil: ceṉṉai, tamiḻ).';
 const english2=english.normalize('NFC')+' '+english.normalize('NFD');
-const line='Notes '+tokensNfc.join(' ')+' '+tokensNfd.join(' ')+' '+english2;
+const pinyinLine='Notes '+tokensNfc.join(' ')+' '+tokensNfd.join(' ')+' '+english2;
+// Other scripts, by code point as well. Greek and Cyrillic have precomposed and decomposed forms; Hebrew, Arabic, Devanagari and Thai are mixed with Latin in one paragraph, right-to-left runs inside left-to-right text.
+const u=(...codes)=>String.fromCodePoint(...codes);
+const hebrew=u(0x5e9,0x5dc,0x5d5,0x5dd),hebrew2=u(0x5e2,0x5d5,0x5dc,0x5dd),arabic=u(0x645,0x631,0x62d,0x628,0x627),arabic2=u(0x628,0x627,0x644,0x639,0x627,0x644,0x645);
+const greek=u(0x39a,0x3b1,0x3bb,0x3b7,0x3bc,0x3ad,0x3c1,0x3b1),cyrillic=u(0x41f,0x440,0x438,0x432,0x435,0x442,0x20,0x43c,0x438,0x440,0x439),devanagari=u(0x928,0x92e,0x938,0x94d,0x924,0x947),thai=u(0xe2a,0xe27,0xe31,0xe2a,0xe14,0xe35);
+const otherLine='Notes Dr Siti said '+hebrew+' '+hebrew2+' then '+arabic+' '+arabic2+' and '+nfc(greek)+' '+nfd(greek)+' and '+nfc(cyrillic)+' '+nfd(cyrillic)+' and '+devanagari+' and '+thai+' before the end.';
+const corpora=[{name:'pinyin and Tamil',line:pinyinLine,bold:tokensNfc[21],italic:tokensNfd[21]},{name:'Hebrew, Arabic, Greek, Cyrillic, Devanagari and Thai',line:otherLine,bold:hebrew2,italic:arabic2}];
 const cps=s=>Array.from(s).map(c=>'U+'+c.codePointAt(0).toString(16).toUpperCase().padStart(4,'0'));
 function firstDifference(want,got){const a=Array.from(want),b=Array.from(got);for(let i=0;i<Math.max(a.length,b.length);i++){if(a[i]!==b[i])return `at code point ${i}: wanted ${cps(a.slice(i,i+4).join('')).join(' ')} but found ${cps(b.slice(i,i+4).join('')).join(' ')} (near "${a.slice(Math.max(0,i-6),i+3).join('')}")`;}return null;}
 (async()=>{
@@ -20,8 +26,8 @@ function firstDifference(want,got){const a=Array.from(want),b=Array.from(got);fo
  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const failures=[];let checked=0;
  try{for(const engine of process.argv.slice(3).length?process.argv.slice(3):['chromium','firefox','webkit']){
   const browser=await pw[engine].launch({headless:true});
-  try{for(const view of ['text','visual'])for(const route of ['typing','paste','format','switch']){
-   const label=`${engine} ${view==='text'?'Markdown view':'rich view'}, ${route}`,page=await browser.newPage({viewport:{width:1500,height:1600}});page.setDefaultTimeout(20000);const errors=[];page.on('pageerror',e=>errors.push(e.message));
+  try{for(const corpus of corpora)for(const view of ['text','visual'])for(const route of ['typing','paste','format','switch']){const line=corpus.line;
+   const label=`${engine} ${view==='text'?'Markdown view':'rich view'}, ${route}, ${corpus.name}`,page=await browser.newPage({viewport:{width:1500,height:1600}});page.setDefaultTimeout(20000);const errors=[];page.on('pageerror',e=>errors.push(e.message));
    try{
     await page.goto(`http://127.0.0.1:${server.address().port}${prefix}workspace-lab/index.html`);await page.locator('#document .ProseMirror').waitFor();
     const root=()=>document.querySelector('#document');
@@ -40,7 +46,7 @@ function firstDifference(want,got){const a=Array.from(want),b=Array.from(got);fo
     const wanted={};
     if(route==='format'){
      // Bold one precomposed word and italicise one decomposed word, selecting each as a person would with the pointer: by range.
-     const bold=tokensNfc[21],italic=tokensNfd[21];
+     const bold=corpus.bold,italic=corpus.italic;
      for(const [token,command] of [[bold,'bold'],[italic,'italic']]){
       await page.evaluate(({token,view})=>{
        // The word may sit across several text nodes once the editor has marked up the line, so map its place in the whole text back to nodes.
@@ -84,6 +90,6 @@ function firstDifference(want,got){const a=Array.from(want),b=Array.from(got);fo
    finally{await page.close();}
   }}finally{await browser.close();}
  }}finally{server.close();}
- console.log(`${checked} cases saved a line of ${Array.from(line).length} code points.`);
+ console.log(`${checked} cases saved lines of ${corpora.map(c=>Array.from(c.line).length).join(' and ')} code points.`);
  if(failures.length){console.error(failures.join('\n'));process.exitCode=1;}else console.log('Docs kept every code point in both views through typing, pasting, formatting and view switches.');
 })().catch(error=>{console.error(error);process.exitCode=1;});
