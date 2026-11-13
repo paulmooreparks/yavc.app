@@ -21,6 +21,7 @@ test-diagram-resources.cjs
 test-dialog-overhaul.cjs
 test-document-grouping.cjs
 test-document-review.cjs
+test-page-selection-now.cjs
 test-document-styles.cjs
 test-document-titles.cjs
 test-document-typing-stability.cjs
