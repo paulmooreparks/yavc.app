@@ -16,6 +16,10 @@ This page lists the defects and gaps the yavc.app team has found and not yet fix
 - **In Firefox, Control+End in a table at the end of a document stays in the last cell.** There is then no evident way to the end of the document to type after the table. Found by Yavc.App Tester on 2026-11-13.
 - **An undo in the page view sometimes takes back nothing.** In one of 60 WebKit runs of `test-docs-draft-notification.cjs` at 14 runs at once, after typing 12345678 into the page without a `take()` and pressing Ctrl+Z, the text still had 12345678. Not traced; it was seen once with the fix of decision 159 and before it was not told apart from the failures that fix removed. The next step is to log the page's transactions and the Editor's history in a run that does it. Found by Yavc.App Builder on 2026-11-14.
 
+## Docs in another host's page
+
+- **Docs has no menus on a page without a PUDL menu bar.** It offers menus() and not commands(), so PUDL's fallback Commands row does not appear (pudl-applets.js:286, :647). The Markdown view is then reachable only from the toolbar switch, and the editing settings contract (`docs/editing-settings-contract.md:27`) wrongly says it stays in the View menu. Found by Yavc.App Tester on 2026-11-14 in the one-page host with the v0.2.88 Docs-only package, for PFO.
+
 ## Other applets
 
 - **A change to a settings file that arrives while a save of it is under way is dropped.** `config.js` `watch()` returns when `saving` is set and does not read the file again afterwards, so a change made elsewhere during a save is not seen until the next change. Barcode Tool (decision 161) reads such a change when the save is done, and `config.js` should too. Found by Yavc.App Builder on 2026-11-14.
