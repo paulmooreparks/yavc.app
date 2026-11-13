@@ -171,6 +171,8 @@
         var CM = null, sourceHistory = null, F = null, view = null, destroyed = false, startupFailed = false, unsubscribe = null, unwatchPictures = null, styleLifetime = new AbortController();
         var tabs = [], active = -1, untitled = 0;
         var H = window.pudlHost || {}, resourceSession = null, resources = null, recovery = null;
+        /* The host's editing settings (docs/editing-settings-contract.md), read once here and used for every editing area for as long as this applet lives. Only a version 1 service whose spellcheck is the boolean false changes anything. */
+        var spellcheckOff = !!(H.editing && H.editing.version === 1 && H.editing.spellcheck === false);
         var documentWindows = H.documentWindows, documentReady = false, receivingDocument = false, unbindDocuments = null;
         /* Commands the host adds to the File menu, to publish a document
            somewhere of the host's say (docs/document-commands-contract.md).
@@ -456,7 +458,7 @@
                     lspComp.of(languageAssistance(tab)),
                     roComp.of([CM.EditorState.readOnly.of(!!tab.readOnly), CM.EditorView.editable.of(!tab.readOnly), CM.EditorView.contentAttributes.of({ 'aria-readonly': String(!!tab.readOnly), tabindex: '0' })]),
                     CM.EditorState.transactionFilter.of(function (tr) { return tr.docChanged && tab.readOnly ? [] : tr; }),
-                    CM.EditorView.contentAttributes.of({ 'aria-label': 'Text of ' + tab.name }),
+                    CM.EditorView.contentAttributes.of(spellcheckOff ? { 'aria-label': 'Text of ' + tab.name, spellcheck: 'false' } : { 'aria-label': 'Text of ' + tab.name }),
                     CM.EditorView.updateListener.of(function (u) {
                         if(u.docChanged&&u.startState.field(longLineField)!==u.state.field(longLineField))refreshWrap();
                         if(hostSuggestions&&tabs[active]===tab)hostSuggestions.update(u);
@@ -1634,7 +1636,7 @@
                 },
                 review:function(raw){reviewTools().then(function(controller){return controller.browse(raw);}).catch(function(err){say(err.message,true);});},
                 hostSuggestionWidget:hostSuggestions?function(item){return hostSuggestions.widget(item,true);}:null,
-                root: root, page: el.page, scroll: el.scroll,
+                root: root, page: el.page, scroll: el.scroll, spellcheck: spellcheckOff ? false : null,
                 pagination: function () { return pagedView(viewMode) ? pageSettings : null; },
                 paginated: pageLayout,
                 paginationProblem: pageNotice,

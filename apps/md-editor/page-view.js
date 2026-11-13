@@ -461,7 +461,7 @@ var schemaCache = null;
             transformPastedHTML: function (html) { return window.yavcHTML.clean(html); },
             transformPasted: safeReviewPaste,
             dispatchTransaction: dispatch,
-            attributes: { 'aria-label': 'The Document, as Its Page' }
+            attributes: o.spellcheck === false ? { 'aria-label': 'The Document, as Its Page', spellcheck: 'false' } : { 'aria-label': 'The Document, as Its Page' }
           });
         }
         shown = text;
