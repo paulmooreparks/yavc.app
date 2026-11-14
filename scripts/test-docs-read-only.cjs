@@ -61,6 +61,8 @@ const page = html => html.replace('<section><h2>Deck</h2>', '<section><h2>Notes<
                     assert.ok(s.commands.every(c => ['find', 'toggle-outline', 'print-document', 'copy', 'select-all'].includes(c)), engine + ' ' + s.id + ': only reading commands exist: ' + s.commands.join(', '));
                     assert.ok(s.link && s.table, engine + ' ' + s.id + ': the links and the table are drawn');
                 }
+                // The tab's tooltip is the name the host gave the document, as the status line shows it, and not the resource's ID.
+                const tips = await p.evaluate(() => Array.from(document.querySelectorAll('#note320 [role="tab"]')).map(t => t.title)); assert.deepEqual(tips, ['Note.docs.md'], engine + ': the tooltip is the name ' + JSON.stringify(tips));
                 assert.ok(shape[2].pages >= 1, engine + ': with data-docs-layout="pages" it is drawn in pages');
                 phase = 'the actions';
                 // Actions reach the instance that started last, so start a read-only one last.
@@ -135,6 +137,13 @@ const page = html => html.replace('<section><h2>Deck</h2>', '<section><h2>Notes<
                 await onRoot('document', 'yavc.docs/set-text@1', { text: '# Plain\n\nWords only.\n' });
                 const exported = await onRoot('document', 'yavc.docs/export@1', { format: 'docx' }); assert.ok(exported.ok, engine + ': export@1 on the editable root: ' + JSON.stringify(exported).slice(0, 200));
                 const where2 = await onRoot('note450', 'yavc.docs/position@1', {}); assert.ok(where2.ok && /^v1:/.test(where2.ok.position || ''), engine + ': position@1 on a read-only root: ' + JSON.stringify(where2));
+                // The host's own search lands on a match: Find opens with the words, the first match is selected, and no match refuses.
+                await p.evaluate(() => document.querySelectorAll('[data-role="find-place"]').forEach(f => { f.hidden = true; }));
+                const hit = await onRoot('note450', 'yavc.docs/find@1', { text: 'paragraph 7' }); assert.ok(hit.ok && hit.ok.matches === 1 && hit.ok.index === 1, engine + ': find@1 on a read-only root finds the match: ' + JSON.stringify(hit));
+                assert.match(await p.evaluate(() => String(getSelection())), /^Paragraph 7$/i, engine + ': and selects it');
+                assert.deepEqual(await p.evaluate(() => ['note320', 'note450', 'note600'].map(id => { const f = document.querySelector('#' + id + ' [data-role="find-place"]'); return !!f && !f.hidden && f.children.length > 0; })), [false, true, false], engine + ': and opens Find in that instance only');
+                const miss = await onRoot('note450', 'yavc.docs/find@1', { text: 'no such words here' }); assert.ok(miss.error && /no match/i.test(miss.error), engine + ': no match refuses with its reason: ' + JSON.stringify(miss));
+                const hitEditable = await onRoot('document', 'yavc.docs/find@1', { text: 'words' }); assert.ok(hitEditable.ok && hitEditable.ok.matches >= 1, engine + ': find@1 on the editable root: ' + JSON.stringify(hitEditable));
                 const alien = await onRoot('note450', 'yavc.other/anything@1', {}); assert.ok(alien.error, engine + ': a reference that is not a Docs action is refused');
                 phase = 'disposing leaves no observer';
                 const cycle = () => p.evaluate(async () => { const r = document.getElementById('note600'); pudlApplets.destroy(r.parentNode); await new Promise(f => setTimeout(f, 300)); pudlApplets.boot(r.parentNode); await new Promise(f => setTimeout(f, 1500)); pudlApplets.destroy(r.parentNode); await new Promise(f => setTimeout(f, 300)); return window.liveObservers.size; });
