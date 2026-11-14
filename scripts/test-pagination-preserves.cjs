@@ -25,6 +25,10 @@ const source='# Preservation\n\nIntro words.\n\n{{gkinfo}}\n'+paras('Info',24)+'
 // Known failures, each in docs/backlog.md. The check still runs and says what it found, but does not fail the test; the pull request
 // that fixes one sets it to false here, and a known failure that starts to pass says so, so that it is turned on.
 const KNOWN={
+    // Firefox only: a click after an edit in a host frame often does not move the caret (bus 7719). It blocks the checks that place the
+    // caret by a click after that edit and the selection and copy across the gap; in the other browsers those checks stay strict.
+    // The Firefox click defect (bus 7719) is fixed (decision 176), so its known failure is off and those checks are strict in every browser; a known failure goes here as its key and a reason.
+    firefoxClickAfterHostEdit:false,
 };
 const PAGE_MARKUP=/data-sc-piece|doc-gap|doc-page-gap|gap-cap|gap-cover|doc-page-break/;
 function settle({frames,limit}){
@@ -44,12 +48,29 @@ function settle({frames,limit}){
         const browser=await pw[engine].launch({headless:true}),p=await browser.newPage({viewport:{width:1500,height:1000}});p.setDefaultTimeout(60000);
         const errors=[];p.on('pageerror',e=>errors.push(e.message));let phase='start';const fail=m=>failures.push(engine+' '+phase+': '+m);
         const known=(key,failed,message)=>{if(KNOWN[key]){console.log(engine+' '+phase+': '+(failed?'known failure, not counted ('+KNOWN[key]+'): '+message:'a known failure passed; turn it on ('+KNOWN[key]+')'));}else if(failed)fail(message);};
+        // A failure of a click-placed caret or selection: the known Firefox defect in Firefox, a failure anywhere else.
+        let clickFailures=0;const clickFail=m=>{if(engine==='firefox'){clickFailures++;known('firefoxClickAfterHostEdit',true,m);}else fail(m);};
         const doc=()=>p.evaluate(()=>pudlActions.run('yavc.docs/document@1',{},{grant:'all'}));
         const run=c=>p.evaluate(c=>pudlCommands.run(c,null,document.querySelector('#document')),c);
         const view=mode=>p.evaluate(mode=>pudlActions.run('yavc.docs/view@1',{mode},{grant:'all'}),mode);
         const settled=async()=>{if(!(await p.evaluate(settle,{frames:60,limit:60000})))fail('the layout did not settle');};
         const changes=()=>p.evaluate(()=>fixture.changes.document||0);
         // A click on a paragraph of the page found by its first words: scrolled to the middle of the view first, since the page is long.
+        // Where the first or the last character of a paragraph or cell found by its first words is drawn, after it is scrolled to the middle of
+        // the view: the left edge of the first character, or the right edge of the last, half way down its line.
+        // The layout is let settle first (an edit lays the pages out again), the scroll is instant, and the place is measured until two frames
+        // agree, so that the click lands where the character is drawn when the click comes.
+        const edge=async(words,which)=>{await settled();return p.evaluate(async({words,which})=>{
+            const find=()=>[...document.querySelectorAll('#document .ProseMirror p, #document .ProseMirror td')].find(x=>!x.closest('.doc-page-gap')&&!x.closest('.doc-gap-cap')&&x.textContent.trim().startsWith(words));
+            find().scrollIntoView({block:'center',behavior:'instant'});
+            const measure=()=>{const el=find();
+                const walk=document.createTreeWalker(el,NodeFilter.SHOW_TEXT,{acceptNode:n=>n.parentElement.closest('.doc-page-gap,.doc-gap-cap')||!n.data.trim()?NodeFilter.FILTER_REJECT:NodeFilter.FILTER_ACCEPT});
+                const texts=[];while(walk.nextNode())texts.push(walk.currentNode);
+                const node=which==='start'?texts[0]:texts[texts.length-1],r=document.createRange();
+                if(which==='start'){r.setStart(node,0);r.setEnd(node,1);}else{const n=node.data.replace(/\s+$/,'').length;r.setStart(node,n-1);r.setEnd(node,n);}
+                const box=r.getClientRects()[0];return {x:Math.round(which==='start'?box.left+1:box.right-1),y:Math.round(box.top+box.height/2)};};
+            const frame=()=>new Promise(r=>requestAnimationFrame(r));let last=measure();
+            for(let i=0;i<60;i++){await frame();const now=measure();if(now.x===last.x&&now.y===last.y)return now;last=now;}return last;},{words,which});};
         const clickOn=async words=>{const at=await p.evaluate(words=>{const el=[...document.querySelectorAll('#document .ProseMirror p')].find(x=>!x.closest('.doc-page-gap')&&x.textContent.trim().startsWith(words));el.scrollIntoView({block:'center'});const r=el.getBoundingClientRect();return {x:r.left+10,y:r.top+r.height/2};},words);await p.mouse.click(at.x,at.y);};
         // The text, waited for: an edit reaches the source within a few frames, so the condition is the text itself.
         const textBecomes=(want,ms=10000)=>p.evaluate(async({want,ms})=>{const limit=Date.now()+ms;let t;for(;;){t=(await pudlActions.run('yavc.docs/document@1',{},{grant:'all'})).text;if(t===want||Date.now()>limit)return t;await new Promise(r=>setTimeout(r,50));}},{want,ms});
@@ -86,13 +107,14 @@ function settle({frames,limit}){
                 const at=expected.indexOf(target);if(at<0){fail('the source has no "'+target+'" for '+label);continue;}
                 const end=expected.slice(at).search(/ \||\n/)+at,mark=' ZQ'+places.findIndex(x=>x[0]===label);
                 // The page redraws its own elements, so the target is found again by its words each time it is needed.
-                const find='const el=[...document.querySelectorAll("#document .ProseMirror p, #document .ProseMirror td")].find(x=>!x.closest(".doc-page-gap")&&!x.closest(".doc-gap-cap")&&x.textContent.trim().startsWith(t));';
-                const point=await p.evaluate(new Function('t',find+'el.scrollIntoView({block:"center"});const r=el.getBoundingClientRect();return {x:r.left+20,y:r.top+8};'),target);
-                await p.mouse.click(point.x,point.y);
-                await p.evaluate(new Function('t',find+'const r=document.createRange();r.selectNodeContents(el);r.collapse(false);getSelection().removeAllRanges();getSelection().addRange(r);'),target);
+                // A person's click just after the last character puts the caret there; a selection set by script is not always taken in Firefox.
+                const last=await edge(target,'end');
+                const beforeClick=await p.evaluate(()=>{const pm=document.querySelector('#document .ProseMirror');return {editable:pm.getAttribute('contenteditable'),busy:pm.getAttribute('aria-busy')};});
+                await p.mouse.click(last.x,last.y);
                 // The page takes the browser's selection a frame or so late, so this waits until its own selection is at the end (or 3 s pass).
                 const caret=await p.evaluate(async end=>{const limit=Date.now()+3000;let s;for(;;){s=await window.yavcMdEditor._page.sourceSelection();if(s&&s.from===end&&s.to===end||Date.now()>limit)return s&&s.from;await new Promise(r=>setTimeout(r,30));}},end);
-                if(caret!==end){fail('the caret at the end of "'+target+'" in '+label+' maps to source offset '+caret+', not '+end);continue;}
+                if(caret!==end){const seen=await p.evaluate(({x,y})=>{const e=document.elementFromPoint(x,y),s=getSelection(),n=s.anchorNode,a=document.activeElement;return {under:e?e.tagName+'.'+String(e.className).slice(0,40)+' "'+(e.textContent||'').slice(0,20)+'"':null,dom:n?((n.nodeType===3?n.data:n.textContent)||'').slice(0,20)+'@'+s.anchorOffset:null,focus:a?a.tagName+'.'+String(a.className).slice(0,30):null,page:(pm=>pm&&{editable:pm.getAttribute('contenteditable'),busy:pm.getAttribute('aria-busy')})(document.querySelector('#document .ProseMirror'))};},last);
+                    clickFail('the caret at the end of "'+target+'" in '+label+' maps to source offset '+caret+', not '+end+'; at the click point '+JSON.stringify(last)+': '+JSON.stringify(seen)+'; just before the click: '+JSON.stringify(beforeClick));continue;}
                 const told=await changes();await p.keyboard.type(mark);expected=expected.slice(0,end)+mark+expected.slice(end);
                 if(await p.evaluate(async told=>{const limit=Date.now()+3000;while((fixture.changes.document||0)<=told&&Date.now()<limit)await new Promise(r=>setTimeout(r,30));return (fixture.changes.document||0)<=told;},told))fail('typing in '+label+' did not call changed()');
                 const got=await textBecomes(expected);if(got!==expected){const i=[...got].findIndex((c,k)=>c!==expected[k]);fail('typing in '+label+' changed the source wrongly at offset '+i+': '+JSON.stringify(got.slice(Math.max(0,i-30),i+40)));expected=got;}
@@ -107,15 +129,21 @@ function settle({frames,limit}){
             const drawn=await p.evaluate(()=>({marks:document.querySelectorAll('#document .ProseMirror .pm-critic').length,inGaps:document.querySelectorAll('#document .ProseMirror .doc-page-gap .pm-critic, #document .ProseMirror .doc-gap-cap .pm-critic').length}));
             if(drawn.inGaps)fail(drawn.inGaps+' review marks are drawn again in a gap, a cap or a repeated header');
             if(drawn.marks!==2)fail(drawn.marks+' review marks are drawn on the page, not 2');
-            // A selection from the paragraph before the note's first gap to the one after it, copied.
+            // A selection from the paragraph before the note's first gap to the one after it, made as a person makes it, with a click at the
+            // start of the first and a Shift+click at the end of the last, and copied. (A selection set by script is not always taken in Firefox.)
             const span=await p.evaluate(()=>{const note=document.querySelector('#document .ProseMirror [data-host-shortcode="gknote"]'),gap=note.querySelector('.doc-page-gap');
                 const ps=[...note.querySelectorAll('p')].filter(x=>/^Note paragraph \d+\./.test(x.textContent)&&!x.closest('.doc-page-gap')&&!x.closest('.doc-gap-cap'));
                 const before=ps.filter(x=>gap.compareDocumentPosition(x)&Node.DOCUMENT_POSITION_PRECEDING).pop(),after=ps.find(x=>gap.compareDocumentPosition(x)&Node.DOCUMENT_POSITION_FOLLOWING);
-                const r=document.createRange();r.setStart(before.firstChild,0);r.setEnd(after.lastChild,after.lastChild.length);before.closest('.ProseMirror').focus();getSelection().removeAllRanges();getSelection().addRange(r);
                 return [Number(before.textContent.match(/\d+/)[0]),Number(after.textContent.match(/\d+/)[0])];});
-            await p.evaluate(async()=>{const limit=Date.now()+3000;for(;;){const s=await window.yavcMdEditor._page.sourceSelection();if(s&&s.to>s.from||Date.now()>limit)return;await new Promise(r=>setTimeout(r,30));}});
+            const startAt=await edge('Note paragraph '+span[0]+'. ','start');await p.mouse.click(startAt.x,startAt.y);
+            const endAt=await edge('Note paragraph '+span[1]+'. ','end');await p.keyboard.down('Shift');await p.mouse.click(endAt.x,endAt.y);await p.keyboard.up('Shift');
+            // The page takes the browser's selection a little late, and in Firefox it can hold part of it first, so this waits until the
+            // page's own selection is the whole range in the source: from the start of the first paragraph to the end of the last.
+            const from=source.indexOf('Note paragraph '+span[0]+'. '),last=source.indexOf('Note paragraph '+span[1]+'. '),to=source.indexOf('\n',last);
+            const got=await p.evaluate(async({from,to})=>{const limit=Date.now()+5000;let s;for(;;){s=await window.yavcMdEditor._page.sourceSelection();if(s&&s.from===from&&s.to===to||Date.now()>limit)return s;await new Promise(r=>setTimeout(r,30));}},{from,to});
+            const clicked=!!got&&got.from===from&&got.to===to;if(!clicked)clickFail('the selection from Note paragraph '+span[0]+' to '+span[1]+' maps to '+JSON.stringify(got&&{from:got.from,to:got.to})+', not '+JSON.stringify({from,to}));
             const copied=await p.evaluate(()=>{const c=window.yavcMdEditor._page.clipboardSelection();return c&&{text:c.text,html:c.html};});
-            if(!copied)fail('the page gave nothing to copy');
+            if(!clicked){}else if(!copied)fail('the page gave nothing to copy');
             else{
                 for(let n=span[0];n<=span[1];n++){const count=copied.text.split('Note paragraph '+n+'. ').length-1;if(count!==1)fail('Note paragraph '+n+' is in the copy '+count+' times');}
                 if(/Mind the gap/.test(copied.text))fail('the copy holds the repeated title');
@@ -131,12 +159,12 @@ function settle({frames,limit}){
             await p.keyboard.press('ControlOrMeta+Home');
 
             phase='4. take(), Save, opening again, and printing';
-            // The caret put at the end of the last paragraph, and the page's own selection waited for there, so that nothing selected before is typed over.
-            await clickOn('Closing words.');
+            // The caret put at the end of the document, which is the end of its last paragraph, with Ctrl+End (a click after a host-frame edit is
+            // the known Firefox defect), and the page's own selection waited for there, so that nothing selected before is typed over.
             const closing=source.indexOf('Closing words.')+'Closing words.'.length;
-            await p.evaluate(()=>{const el=[...document.querySelectorAll('#document .ProseMirror p')].find(x=>x.textContent.trim().startsWith('Closing words.'));const r=document.createRange();r.selectNodeContents(el);r.collapse(false);getSelection().removeAllRanges();getSelection().addRange(r);});
+            await p.keyboard.press('ControlOrMeta+End');
             const at=await p.evaluate(async end=>{const limit=Date.now()+3000;let s;for(;;){s=await window.yavcMdEditor._page.sourceSelection();if(s&&s.from===end&&s.to===end||Date.now()>limit)return s;await new Promise(r=>setTimeout(r,30));}},closing);
-            if(!at||at.from!==closing||at.to!==closing)fail('the caret at the end of "Closing words." maps to '+JSON.stringify(at)+', not '+closing);
+            if(!at||at.from!==closing||at.to!==closing)fail('the caret at the end of the document maps to '+JSON.stringify(at)+', not '+closing);
             await p.keyboard.type(' Saved.');
             const saved=source.replace('Closing words.','Closing words. Saved.');
             {const got=await textBecomes(saved);if(got!==saved)fail('the last edit did not reach the source; the text is '+got.length+' characters: '+JSON.stringify(got.slice(0,80))+' … '+JSON.stringify(got.slice(-60)));}
@@ -164,6 +192,7 @@ function settle({frames,limit}){
             if(printed){const EDITING=/doc-page-gap|doc-gap-cap|doc-gap-cover/;if(EDITING.test(printed))fail('the printed page holds editing-page markup: '+printed.match(EDITING)[0]);
                 for(const n of [1,12,24]){const count=printed.split('Note paragraph '+n+'. ').length-1;if(count!==1)fail('Note paragraph '+n+' is printed '+count+' times');}}
             if(errors.length)fail('page errors '+errors.join(' | '));
+            if(engine==='firefox'&&!clickFailures)known('firefoxClickAfterHostEdit',false,'');
             console.log(engine+': checks done');
         }catch(error){failures.push(engine+' '+phase+': '+String(error.message).split('\n')[0]);}finally{await browser.close();}
     }}finally{server.close();}
