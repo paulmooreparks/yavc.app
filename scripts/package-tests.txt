@@ -35,3 +35,4 @@ test-docs-menus.cjs
 test-rule-input.cjs
 test-ref-definitions.cjs
 test-code-colouring.cjs
+test-doc-ends.cjs

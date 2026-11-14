@@ -1186,6 +1186,19 @@ var schemaCache = null;
         if (d) d(tr.scrollIntoView());
         return true;
       }
+      /* Control+End and Control+Home go to the ends of the document the same way in every browser. Left to the browser, Firefox kept the
+         caret in the last (or first) cell of a table that ends (or begins) the document, so a person could not get past it to type, while
+         Chromium and WebKit moved to the gap cursor beside the table. The gap cursor is ProseMirror's, made by the plugin's own
+         createSelectionBetween; where there is none to make, the end is the text's. */
+      var gaps = PM.gapCursor();
+      function toEnd(atStart) {
+        return function (state, dispatch, view) {
+          var at = state.doc.resolve(atStart ? 0 : state.doc.content.size);
+          var selection = gaps.props.createSelectionBetween(view, at, at) || (atStart ? PM.TextSelection.atStart(state.doc) : PM.TextSelection.atEnd(state.doc));
+          if (dispatch) dispatch(state.tr.setSelection(selection).scrollIntoView());
+          return true;
+        };
+      }
       return [
         /* A key is handled with the selection the browser has now. A caret moved by the browser's own key (End, an arrow, a click) reaches the
            state on a later selectionchange event, and a key that follows it at once, as a script sends them, found the old selection and
@@ -1207,10 +1220,11 @@ var schemaCache = null;
           'Shift-Tab': PM.chainCommands(PM.goToNextCell(-1), lift),
           'Enter': PM.chainCommands(ruleFromText, exitBox, splitItem),
           'Shift-Enter': lineBreak,
-          'Mod-z': PM.undo, 'Mod-y': PM.redo, 'Mod-Shift-z': PM.redo
+          'Mod-z': PM.undo, 'Mod-y': PM.redo, 'Mod-Shift-z': PM.redo,
+          'Mod-End': toEnd(false), 'Mod-Home': toEnd(true)
         }),
         PM.keymap(PM.baseKeymap),
-        PM.history(), PM.dropCursor(), PM.gapCursor(), PM.tableEditing(),
+        PM.history(), PM.dropCursor(), gaps, PM.tableEditing(),
         // A block copied or split from another takes none of its place, so
         // only the original is written back as the text it came from.
         new PM.Plugin({
