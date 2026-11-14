@@ -57,8 +57,10 @@ const types={'.html':'text/html','.js':'text/javascript','.css':'text/css','.jso
       await page.keyboard.type('1234');await page.waitForTimeout(0);
       if(withTake)await draft(page);await page.keyboard.type('5678');
       gaps.push(await page.evaluate(()=>{const k=window.__keys;let widest=0;for(let i=1;i<k.length;i++)widest=Math.max(widest,k[i]-k[i-1]);return {keys:k.length,widest:Math.round(widest)};}));
-      await page.keyboard.press('ControlOrMeta+z');await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
-      results.push((await shape(page,view)).text.replace(/\s+/g,' '));await page.close();}
+      await page.keyboard.press('ControlOrMeta+z');
+      // The undo is applied a moment after the key in a slow browser (WebKit's, under load), so the text is read once it has stopped changing: three samples 100 ms apart that agree.
+      let seen='',stable=0;for(let n=0;n<40&&stable<3;n++){await page.waitForTimeout(100);const now=(await shape(page,view)).text.replace(/\s+/g,' ');stable=now===seen?stable+1:0;seen=now;}
+      results.push(seen);await page.close();}
      if(gaps.some(g=>g.keys!==8||g.widest>400)){discarded++;continue;}
      compared++;if(results[0]!==results[1])different=`${label}: undo gave different text with a take() in the middle of typing: without ${JSON.stringify(results[0].slice(-40))}, with ${JSON.stringify(results[1].slice(-40))}.`;}
     if(!compared)failures.push(`${label}: no pair of runs had every gap between its key presses under 400 ms in ${attempts} tries, so undo could not be compared (undo groups typing by time).`);
