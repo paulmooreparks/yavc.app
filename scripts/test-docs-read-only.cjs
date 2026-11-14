@@ -78,6 +78,8 @@ const page = html => html.replace('<section><h2>Deck</h2>', '<section><h2>Notes<
                 phase = 'keys act on the focused instance';
                 await p.keyboard.press('Escape');
                 await p.locator('#note320 [data-ed-page] p').first().click();
+                // The instance has a key for Find once it is ready, which a slow machine reaches later than the click.
+                await p.waitForFunction(() => { const c = pudlCommands.find('find', document.getElementById('note320')); const k = c && (typeof c.shortcut === 'function' ? c.shortcut() : c.shortcut); return !!k; });
                 await p.keyboard.press('ControlOrMeta+s'); await p.keyboard.press('ControlOrMeta+f'); await p.waitForTimeout(500);
                 const keyed = await p.evaluate(() => ['note320', 'note450', 'note600', 'document'].map(id => { const f = document.getElementById(id).querySelector('[data-role="find-place"]'); return [id, !!f && !f.hidden && f.children.length > 0]; }));
                 assert.deepEqual(keyed.filter(k => k[1]).map(k => k[0]), ['note320'], engine + ': Ctrl+F opens Find only in the focused instance ' + JSON.stringify(keyed));

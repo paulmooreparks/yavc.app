@@ -2170,6 +2170,9 @@
             }
             el.findPlace.hidden = false; readFindBar.querySelector('input').focus(); readFindBar.querySelector('input').select();
         }
+        /* A read-only instance has no editing surface to carry the key for Find, so the key is taken at its root, and only for a press whose target is inside it. */
+        function onReadKey(event) { if ((event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey && String(event.key).toLowerCase() === 'f') { event.preventDefault(); openReadFind(); } }
+        if (readMode) { root.addEventListener('keydown', onReadKey); }
         function openFind() {
             if (readMode) { openReadFind(); return; }
             if (formatsThePage() && pageActive()) { openPageFind(); return; }
@@ -3424,7 +3427,7 @@ cmd('edit-diagram', 'Edit Diagram', 'new-window', function () { return openDiagr
                 keepSession();
                 if (snap) snap.flush();
                 destroyed = true;
-                root.removeEventListener('yavc-docs-position', onPositionRequest);
+                root.removeEventListener('yavc-docs-position', onPositionRequest); root.removeEventListener('keydown', onReadKey);
                 styleLifetime.abort();
                 styleRevision++; clearTimeout(styleTimer); if (documentStyles) { documentStyles.destroy(); }
                 if (unsubscribe) { unsubscribe(); }
