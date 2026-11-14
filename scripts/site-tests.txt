@@ -113,3 +113,4 @@ test-selection-scroll.cjs
 test-docs-menu-startup.cjs
 test-preview-wide-table.cjs
 test-config-watch.cjs
+test-language-session-end.cjs

@@ -7,7 +7,7 @@
     "canvas-schema.mjs": "64ab38651728eb8bc0118ed860069b982a769d38c11a1c4bac0e6a28457d3db3",
     "json-server.mjs": "08f1ca7f9b8b3ba8a4ea7a4279bcbee6229eb8ecb7dcbcb10d455cf4da6fc240",
     "worker-entry.mjs": "5916691ae2f3b403d41613a54a78e6a1c3fbb6a3adb1476f827384773150dc94",
-    "bridge.js": "4502e854089a2b435aeea1518aeb66647979a38c535c61947f9449370435487d",
+    "bridge.js": "25adb3bb82c2d805ee3bb6e01a47435c23259ecbe41872a85dc65425daf9e36f",
     "package-lock.json": "f124bd4e9d568c02300a4ada6b1ccd3419f8bfc8e2d705e8ee140cec37f591a2",
     "licenses/vscode-l10n-LICENSE.txt": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
   },
