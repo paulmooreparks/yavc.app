@@ -71,7 +71,7 @@
     var GLYPHS = { dir: 'folder', page: 'document', app: 'app', script: 'script', link: 'link', file: 'file', home: 'home', download: 'download', command: 'script' };
     var KIND_NAMES = { dir: 'Folder', page: 'Page', app: 'Applet', script: 'Script', link: 'Link', file: 'File', command: 'Command' };
     function glyph(kind) {
-        return '<span class="glyph" style="--glyph: var(--glyph-' + (GLYPHS[kind] || 'file') + ')" aria-hidden="true"></span>';
+        return '<span class="glyph" data-glyph="' + (GLYPHS[kind] || 'file') + '" aria-hidden="true"></span>';
     }
 
     var markup = {
@@ -611,7 +611,7 @@
               '<h3 class="dialog-title" id="' + id + '-title">' + esc(o.title || (save ? 'Save As' : 'Open')) + '</h3>' +
               '<div class="dialog-body fb-pick-body">' +
                 '<div class="fb-pick-bar">' +
-                  '<button type="button" class="icon-btn" data-pick="up" aria-label="Up One Folder" title="Up One Folder"><span class="glyph" style="--glyph: var(--glyph-arrow-up)" aria-hidden="true"></span></button>' +
+                  '<button type="button" class="icon-btn" data-pick="up" aria-label="Up One Folder" title="Up One Folder"><span class="glyph" data-glyph="arrow-up" aria-hidden="true"></span></button>' +
                   '<button type="button" class="icon-btn" data-pick="home" aria-label="Your Home Directory" title="Your Home Directory">' + glyph('home') + '</button>' +
                   markup.pathBar() +
                   '<button type="button" class="btn btn-sm" data-pick="newfolder" title="Make a Folder Here">New Folder</button>' +

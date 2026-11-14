@@ -109,6 +109,17 @@ function rootGlyphs() {
   }
   return defined;
 }
+// Docs runs under a host's Content-Security-Policy that may have style-src 'self' 'nonce-...' and no 'unsafe-inline' (docs/editing-settings-contract.md, "A nonce"). A style attribute in
+// markup, or set with setAttribute, is blocked by such a policy and a nonce does not cover it, so the code a Docs package carries writes styles with the style object, and a glyph is
+// markup with data-glyph (yavcUtil.glyph), which yavc-util.js paints. A line may opt out with a reason a reviewer can judge.
+rules.push({ id: 'no-style-attribute', run() {
+  const sources = js.filter((f) => /^(apps\/(text-workspace|md-editor|docs|content-kit)\/|internal\/web\/static\/(dialogs|yavc-util|filebrowser|command-toolbar|doc-tabs|pudl-host-kit)\.js)/.test(f));
+  for (const f of sources) {
+    each(/style=\\?["']|setAttribute\(\s*['"]style['"]/g, text.get(f), (m) => {
+      report('no-style-attribute', f, m.index, 'a style attribute is blocked by a Content-Security-Policy without unsafe-inline; use the style object, or data-glyph for a glyph');
+    });
+  }
+} });
 rules.push({ id: 'glyph-defined', run() {
   const defined = rootGlyphs();
   const sources = js.filter((f) => /^(apps|applets|internal\/web\/static)\//.test(f));
