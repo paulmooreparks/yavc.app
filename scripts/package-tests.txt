@@ -25,3 +25,4 @@ test-document-settles.cjs
 test-split-caret.cjs
 test-host-flow.cjs
 test-pagination-preserves.cjs
+test-host-shortcode-node.cjs
