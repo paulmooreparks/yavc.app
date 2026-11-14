@@ -4,7 +4,9 @@
    built in this repository (apps/md-editor/language-service/build.mjs) that records its CodeMirror legacy mode as
    window.yavcCodeModes[id]; it is loaded the first time a file or a code block of its language appears, from the package,
    and nothing comes from a document or a host. "editor" says that the Text view colours the language, and "page" that the
-   rendered page does (none does yet, which is separate work). */
+   rendered page does (none does yet, which is separate work). A language marked "bundled" has no script, because its grammar is
+   already inside the editor's CodeMirror, which the HTML and Markdown languages use for the script in a page: the Lezer grammar of
+   JavaScript is exported from the bundle and costs nothing more to load (DESIGN.md decision 190). */
 (function () {
     'use strict';
     var SELF = document.currentScript.src, BASE = new URL('.', SELF).href, STAMP = SELF.indexOf('?') >= 0 ? SELF.slice(SELF.indexOf('?')) : '';
@@ -12,6 +14,7 @@
         { id: 'c', name: 'C', extensions: ['c', 'h'], names: [], fences: ['c', 'h'], grammar: 'vendor/codemirror-6.43/lang/c.js', editor: true, page: false },
         { id: 'csharp', name: 'C#', extensions: ['cs', 'csx'], names: [], fences: ['csharp', 'cs', 'c#'], grammar: 'vendor/codemirror-6.43/lang/csharp.js', editor: true, page: false },
         { id: 'go', name: 'Go', extensions: ['go'], names: [], fences: ['go', 'golang'], grammar: 'vendor/codemirror-6.43/lang/go.js', editor: true, page: false },
+        { id: 'javascript', name: 'JavaScript', extensions: ['js', 'mjs', 'cjs'], names: [], fences: ['javascript', 'js', 'mjs', 'cjs'], bundled: true, editor: true, page: false },
         { id: 'python', name: 'Python', extensions: ['py', 'pyw'], names: [], fences: ['python', 'py', 'python3'], grammar: 'vendor/codemirror-6.43/lang/python.js', editor: true, page: false }
     ];
     var byId = {}, byExtension = {}, byName = {}, byFence = {};
@@ -26,7 +29,7 @@
     /* The grammar's mode, from its script, which is fetched once. A script that cannot be loaded leaves the language plain. */
     function mode(id) {
         var row = byId[id];
-        if (!row || !row.editor) { return Promise.reject(new Error('There is no grammar for ' + id + '.')); }
+        if (!row || !row.editor || row.bundled) { return Promise.reject(new Error('There is no grammar script for ' + id + '.')); }
         if (!modes[id]) {
             modes[id] = window.yavcUtil.loadScript(new URL(row.grammar, BASE).href + STAMP).then(function () {
                 var m = window.yavcCodeModes && window.yavcCodeModes[id];
@@ -38,6 +41,7 @@
     }
     /* A CodeMirror language support for the identifier, made once from the editor's own CodeMirror. */
     function supportOf(CM, id) {
+        if (byId[id] && byId[id].bundled) { return Promise.resolve(CM[id]()); }
         if (!support[id]) { support[id] = mode(id).then(function (m) { return new CM.LanguageSupport(CM.StreamLanguage.define(m)); }); }
         return support[id];
     }

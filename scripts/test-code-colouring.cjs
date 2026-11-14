@@ -111,13 +111,13 @@ const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/cs
                 }
 
                 // The other languages of the core set, each in a page of its own so that only its grammar can have been fetched.
-                for (const [id, file, name, words] of [['c', 'hello.c', 'C', ['return', '"hi"', '42', '/* Hello says hello. */']], ['csharp', 'hello.cs', 'C#', ['class', '"hi"', '42', '// Hello says hello.']], ['python', 'hello.py', 'Python', ['def', '"hi"', '42', '# Hello says hello.']]]) {
+                for (const [id, file, name, words] of [['javascript', 'hello.js', 'JavaScript', ['function', '"hi"', '42', '// Hello says hello.']], ['c', 'hello.c', 'C', ['return', '"hi"', '42', '/* Hello says hello. */']], ['csharp', 'hello.cs', 'C#', ['class', '"hi"', '42', '// Hello says hello.']], ['python', 'hello.py', 'Python', ['def', '"hi"', '42', '# Hello says hello.']]]) {
                     phase = 'a ' + name + ' file in the Editor';
                     const { page, errors, fetched } = await open('editor');
                     await page.locator('#source .cm-content').waitFor();
                     await page.evaluate(path => pudlActions.run('yavc.editor/open-file@1', { path }, { grant: 'all' }), 'memory:' + file);
                     await page.waitForFunction(w => Array.from(document.querySelectorAll('.cm-content span')).some(s => s.textContent === w), words[0]); await page.waitForTimeout(400);
-                    assert.deepEqual(fetched, [id], engine + ': opening a ' + name + ' file fetches its grammar and no other');
+                    assert.deepEqual(fetched, id === 'javascript' ? [] : [id], engine + ': opening a ' + name + ' file fetches its grammar and no other' + (id === 'javascript' ? ' (JavaScript is in the bundle, so there is nothing to fetch)' : ''));
                     const c = await colours(page, words);
                     for (const word of words) { assert.ok(c[word], engine + ' ' + name + ': ' + word + ' has its own span'); assert.notEqual(c[word].color, c.plain, engine + ' ' + name + ': ' + word + ' is coloured'); }
                     assert.notEqual(c[words[0]].color, c['"hi"'].color, engine + ' ' + name + ': a keyword and a string differ');
@@ -132,12 +132,12 @@ const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/cs
                     await page.locator('#document .ProseMirror').waitFor();
                     const call = (name, input = {}) => page.evaluate(({ name, input }) => pudlActions.run('yavc.docs/' + name + '@1', input, { grant: 'all' }), { name, input });
                     await call('view', { mode: 'text' });
-                    for (const [info, id, keyword, code] of [['golang', 'go', 'func', 'func main() {}'], ['c', 'c', 'return', 'int main() { return 0; }'], ['cs', 'csharp', 'class', 'class A {}'], ['c#', 'csharp', 'class', 'class B {}'], ['py', 'python', 'def', 'def f(): pass'], ['python3', 'python', 'def', 'def g(): pass']]) {
+                    for (const [info, id, keyword, code] of [['js', 'javascript', 'function', 'function f() {}'], ['javascript', 'javascript', 'function', 'function g() {}'], ['golang', 'go', 'func', 'func main() {}'], ['c', 'c', 'return', 'int main() { return 0; }'], ['cs', 'csharp', 'class', 'class A {}'], ['c#', 'csharp', 'class', 'class B {}'], ['py', 'python', 'def', 'def f(): pass'], ['python3', 'python', 'def', 'def g(): pass']]) {
                         await call('set-text', { text: '```' + info + '\n' + code + '\n```\n' }); await page.waitForTimeout(900);
                         const n = await colours(page, [keyword]);
                         assert.ok(n[keyword], engine + ': a fence called ' + info + ' has coloured words');
                         assert.notEqual(n[keyword].color, n.plain, engine + ': a fence called ' + info + ' is coloured');
-                        assert.ok(fetched.includes(id), engine + ': a fence called ' + info + ' fetched ' + id);
+                        assert.ok(id === 'javascript' ? !fetched.includes(id) : fetched.includes(id), engine + ': a fence called ' + info + (id === 'javascript' ? ' needs no fetch' : ' fetched ' + id));
                     }
                     assert.deepEqual([...new Set(fetched)].sort(), ['c', 'csharp', 'go', 'python'], engine + ': each grammar was fetched, and only those');
                     assert.equal(fetched.length, 4, engine + ': each grammar was fetched once');
