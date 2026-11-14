@@ -229,14 +229,12 @@
         layout.gaps.slice().reverse().forEach(function (gap) {
             var block = blocks[gap.index];
             if (!block || !block.flow || !block.node || !block.node.parentNode) { return; }
-            var node = spacer(gap.height, false, block, gap.header); node.setAttribute('data-flow-gap', ''); block.node.before(node);
+            /* A row cut inside, and a line of text cut, are given their gaps in the DOM, as the host's drawing is not the page's own content. */
+            if (block.rowNode && block.band) { block.anchors.forEach(function (anchor, column) { if (anchor) { var cell = rowSpacer(gap, block, column); cell.setAttribute('data-flow-gap', ''); window.yavcPageLines.insert(dom, anchor, cell); } }); return; }
+            var node = spacer(gap.height, !!block.anchor, block, gap.header); node.setAttribute('data-flow-gap', '');
+            if (block.anchor) { window.yavcPageLines.insert(dom, block, node); } else { block.node.before(node); }
         });
     }
-    /* A frame that a page gap runs through is drawn as pieces (docs/host-shortcodes-contract.md, "Long shortcodes across pages"). The frame stays one
-       element, marked data-sc-piece="first", with "only" on a frame no gap runs through. Each gap inside it holds two caps, shells cloned from the
-       frame with nothing in them and marked "first" or "middle" above the gap and "middle" or "last" below it, which carry the frame's own styling for
-       the foot of one piece and the head of the next, and a cover between them, painted as the page and its gutter are, which hides what the frame
-       draws behind the gap. The caps and the cover take no room of their own: the gap is as tall as it was. They are put in again at every layout. */
     /* Printing cuts a document into sheets with no gaps, so it marks the pieces of a frame itself, as applyPieces does on the page. tagFrames numbers the
        frames of the flow before it is cut, and keeps a copy of each one's repeated titles; printPieces marks the frames of one cut sheet first, middle, last
        or only by the edges the cut left open (page-lines.js, fragment), and puts a title copy at the head of a piece that continues. */
@@ -260,6 +258,11 @@
             });
         });
     }
+    /* A frame that a page gap runs through is drawn as pieces (docs/host-shortcodes-contract.md, "Long shortcodes across pages"). The frame stays one
+       element, marked data-sc-piece="first", with "only" on a frame no gap runs through. Each gap inside it holds two caps, shells cloned from the
+       frame with nothing in them and marked "first" or "middle" above the gap and "middle" or "last" below it, which carry the frame's own styling for
+       the foot of one piece and the head of the next, and a cover between them, painted as the page and its gutter are, which hides what the frame
+       draws behind the gap. The caps and the cover take no room of their own: the gap is as tall as it was. They are put in again at every layout. */
     function applyPieces(host, d) {
         host.querySelectorAll('.doc-gap-cap, .doc-gap-cover').forEach(function (node) { node.remove(); });
         var scale = Number((host.closest('.doc-paginated') || host).style.zoom) || 1, top = (host.closest('.doc-paginated') || host).getBoundingClientRect().top, period = d.height + GAP;
