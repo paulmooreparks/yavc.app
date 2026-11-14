@@ -112,3 +112,4 @@ test-split-mirror.cjs
 test-selection-scroll.cjs
 test-docs-menu-startup.cjs
 test-preview-wide-table.cjs
+test-config-watch.cjs
