@@ -41,7 +41,7 @@ Docs has File, Edit, Insert, Format, Review and View menus, and a first one for 
 
 Either way Docs has its menus somewhere, and the Markdown view is in a View menu on every page. In `"own"` the menus give the host's menu bar nothing. A read-only instance has no menus.
 
-A hint on a button of Docs' own bars, its toolbar and its menu bar, is PUDL's `data-tooltip`, which PUDL's tooltip script shows in PUDL's style, and not the browser's `title`, which PUDL's commands put on the buttons they fill. Docs moves each title to `data-tooltip` when the page has loaded PUDL's tooltip script (a script element whose address names `pudl-tooltip` when Docs starts), and keeps the title when it has not, so that no glyph-only button is left without a hint.
+A hint on a button of Docs' own bars, its toolbar and its menu bar, is given to PUDL as `data-tooltip`, as well as the `title` that PUDL's commands put on the buttons they fill. PUDL documents what follows (its README, "Tooltips"): when the page has loaded PUDL's tooltip script, a `title` on a control that has a `data-tooltip` is moved into it, so that the browser shows no second hint, and the script shows the hint in PUDL's style; when the page has not, the `title` is the hint. So no glyph-only button is left without one, and Docs asks the page nothing about the script.
 
 ## A nonce
 

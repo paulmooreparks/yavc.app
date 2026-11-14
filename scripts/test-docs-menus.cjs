@@ -44,13 +44,15 @@ const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/cs
                     p = await open(query); const found = !!(await bar(p)); assert.equal(found, expected, engine + ': ' + query + ' has own menus ' + found); assert.deepEqual(p.errors, []); await p.close();
                 }
                 phase = 'a hint on a button';
-                p = await open('&tooltips');
-                const withTip = await p.evaluate(() => Array.from(document.querySelectorAll('#document .ed-own-menubar [data-command], #document .yavc-fallback-toolbar [data-command]')).map(b => [b.hasAttribute('title'), b.getAttribute('data-tooltip') || '']));
-                assert.ok(withTip.length > 10 && withTip.every(([title]) => !title) && withTip.every(([, tip]) => tip), engine + ': with the tooltip script each button has data-tooltip and no title ' + JSON.stringify(withTip.filter(([t, tip]) => t || !tip)));
-                await p.close();
+                // Every button of Docs' bars has a data-tooltip of its hint and keeps its title. PUDL documents the rest (README, "Tooltips"): with its tooltip script a title on a control that has a data-tooltip is moved into it, and without the script the title is the hint.
+                const hints = p => p.evaluate(() => Array.from(document.querySelectorAll('#document .ed-own-menubar [data-command], #document .yavc-fallback-toolbar [data-command]')).map(b => [b.getAttribute('title') || '', b.getAttribute('data-tooltip') || '']));
                 p = await open('');
-                const noTip = await p.evaluate(() => Array.from(document.querySelectorAll('#document .ed-own-menubar [data-command], #document .yavc-fallback-toolbar [data-command]')).map(b => [b.getAttribute('title') || '', b.getAttribute('data-tooltip') || '']));
-                assert.ok(noTip.every(([title, tip]) => title && !tip), engine + ': without it each button keeps its title ' + JSON.stringify(noTip.filter(([t]) => !t)));
+                const plain = await hints(p); assert.ok(plain.length > 10 && plain.every(([title, tip]) => title && tip === title), engine + ': each button has a data-tooltip of its title, and keeps the title ' + JSON.stringify(plain.filter(([t, tip]) => !t || tip !== t)));
+                await p.close();
+                p = await open('&tooltips');
+                await p.locator('#document .ed-own-menubar [data-command="menu-file"]').hover(); await p.waitForTimeout(1500);
+                const shown = await p.evaluate(() => { const b = document.querySelector('#document .ed-own-menubar [data-command="menu-file"]'); return { title: b.hasAttribute('title'), tip: b.getAttribute('data-tooltip') }; });
+                assert.ok(!shown.title && shown.tip === 'File', engine + ': with the PUDL tooltip script the title is moved into the data-tooltip, as PUDL documents ' + JSON.stringify(shown));
                 await p.close();
                 console.log(engine + ': Docs has its menus on a page with no menu bar, the host can choose, and a hint is data-tooltip where PUDL shows it');
             } catch (err) { console.error(engine, phase); throw err; } finally { await browser.close(); }

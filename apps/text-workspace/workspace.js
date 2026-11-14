@@ -555,7 +555,7 @@
             var t = current();
             /* A document a host gave is shown by the name the host gave it, and not by the resource's ID, which a host need not make readable. */
             el.where.textContent = !t ? '' : shownName(t, true);
-            el.where.setAttribute('data-tooltip', el.where.textContent);
+            el.where.title = el.where.textContent; el.where.setAttribute('data-tooltip', el.where.textContent);
             el.lang.textContent = t ? LANG_NAMES[t.lang] : '';
             showCount();
             showFormat(viewMode);
@@ -3522,15 +3522,16 @@ cmd('edit-diagram', 'Edit Diagram', 'new-window', function () { return openDiagr
             document.addEventListener('pudl:commands-change', drawOwnMenus); drawOwnMenus();
         }
 
-        /* A hint on a control is PUDL's data-tooltip, which its tooltip script shows in its own style, and not the browser's title, which PUDL's commands put on the buttons they fill. Docs moves
-           each title on its bars to data-tooltip as it arrives, when the page loads PUDL's tooltip script; a page that does not keeps the title, so no glyph-only button is left without a hint. */
+        /* A hint on a control is PUDL's data-tooltip, which PUDL's tooltip script shows in its own style. The commands of PUDL put a title on every button they fill, so Docs gives each title on its
+           bars a data-tooltip of the same words and keeps the title. PUDL documents what follows (README, "Tooltips"): with its tooltip script on the page, a title on a control that has a data-tooltip is
+           moved into it so that the browser shows no second hint, and without the script the title is the hint, so no glyph-only button is left without one. Nothing is asked of the page about the script. */
         var tooltipObservers = [];
         function tooltipsOn(bar) {
-            if (!bar || !document.querySelector('script[src*="pudl-tooltip"]')) { return; }
+            if (!bar) { return; }
             function move(node) {
                 var list = node.matches && node.matches('[title]') ? [node] : [];
                 if (node.querySelectorAll) { list = list.concat(Array.from(node.querySelectorAll('[title]'))); }
-                list.forEach(function (n) { var t = n.getAttribute('title'); if (t) { n.setAttribute('data-tooltip', t); } n.removeAttribute('title'); });
+                list.forEach(function (n) { var t = n.getAttribute('title'); if (t && n.getAttribute('data-tooltip') !== t) { n.setAttribute('data-tooltip', t); } });
             }
             var observer = new MutationObserver(function (records) { records.forEach(function (r) { if (r.type === 'attributes') { move(r.target); } else { r.addedNodes.forEach(function (n) { if (n.nodeType === 1) { move(n); } }); } }); });
             observer.observe(bar, { subtree: true, childList: true, attributes: true, attributeFilter: ['title'] }); tooltipObservers.push(observer); move(bar);
