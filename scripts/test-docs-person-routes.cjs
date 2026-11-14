@@ -29,7 +29,7 @@ const RICH='The Document, as Its Page',MARKDOWN='Text of Document.docs.md';
    const notBusy=()=>page.locator('[aria-busy="true"]').waitFor({state:'detached'});
    const written=()=>page.evaluate(()=>fixture.writes.map(w=>w.text));
    try{
-    await page.goto(`http://127.0.0.1:${server.address().port}${prefix}workspace-lab/index.html`);
+    await page.goto(`http://127.0.0.1:${server.address().port}${prefix}workspace-lab/index.html?editing=menus-host`);
     // 1. The rich surface is a multiline textbox with its promised name, and it accepts typing when it is not busy.
     const rich=surface(RICH);await rich.waitFor();assert.equal(await rich.getAttribute('aria-multiline'),'true',`${label}: the rich surface is not aria-multiline`);
     await notBusy();
