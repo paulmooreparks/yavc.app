@@ -1156,7 +1156,7 @@
       },
       "capabilities": [],
       "changes": "none",
-      "replay": "once"
+      "replay": "pure"
     },
     {
       "ref": "yavc.docs/print@1",
