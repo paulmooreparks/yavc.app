@@ -25,3 +25,5 @@ test-document-settles.cjs
 test-split-caret.cjs
 test-host-flow.cjs
 test-host-shortcode-node.cjs
+test-docs-read-only.cjs
+test-docs-file-commands.cjs
