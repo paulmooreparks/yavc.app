@@ -24,10 +24,16 @@ const port = process.env.YAVC_CHROME_TEST_PORT || '8460';
                 const error = await saving; if (error) throw new Error(error);
                 await new Promise(res => setTimeout(res, 1500));
                 F.write = write;
-                return { heard, now: pcConfig.get('watch-test'), text: (await F.read(F.resolve(F.home(), '~/.config/watch-test.json'))) };
+                // An ordinary file saved in the home folder, as a document is at every save, makes the settings files read nothing.
+                let settingsReads = 0; const read = F.read.bind(F); F.read = async function (node, ...rest) { if (node && /\.config|watch-test/.test(String(node.name) + String(node.parent && node.parent.name))) settingsReads++; return read(node, ...rest); };
+                for (let i = 0; i < 5; i++) { const r = await write(F.home(), '~/ordinary-' + i + '.txt', 'text ' + i, false); if (r.error) throw new Error(r.error); await new Promise(res => setTimeout(res, 100)); }
+                F.read = read;
+                const ordinaryReads = settingsReads;
+                return { heard, ordinaryReads, now: pcConfig.get('watch-test'), text: (await F.read(F.resolve(F.home(), '~/.config/watch-test.json'))) };
             });
             assert.equal(result.now.b, 2, engine + ': the change made during the save is seen once the save is done: ' + JSON.stringify(result));
             assert.ok(result.heard.some(h => /"b":2/.test(h)), engine + ': listeners were told of it: ' + JSON.stringify(result.heard));
+            assert.equal(result.ordinaryReads, 0, engine + ': saving ordinary files reads no settings file');
             assert.deepEqual(errors, []);
             console.log(engine + ': a settings change that arrives during a save is read when the save is done');
         } finally { await browser.close(); }
