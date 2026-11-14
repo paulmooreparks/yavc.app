@@ -23,9 +23,8 @@
     if (window.pcConfig) { return; }
 
     /* The site file system (static/yavc-util.js), watched once it is here. */
-    var watching = null;
     function fs() {
-        return window.yavcUtil.siteFs().then(function (F) { if (!watching) { watching = true; watch(); } return F; });
+        return window.yavcUtil.siteFs().then(function (F) { watch(); return F; });
     }
 
     /* name -> { defaults, values, text, listeners: [] }, with no prototype,
@@ -76,24 +75,31 @@
        tab, or by hand in the Editor. Each loaded file is read again, and
        its listeners told if its text changed. */
     var watching = false;
+    /* Reads a settings file again and tells its listeners if its text changed. A read begun before a save here, or during one, would
+       bring back the text the save replaced, so it counts only if no save began while it ran. A change that arrives while a save is
+       under way, or whose read is thrown away for that reason, is not lost: it is marked, and the file is read again when the last
+       save is done (DESIGN.md, decision 193; Barcode Tool does the same, decision 161). */
+    async function refresh(name) {
+        var e0 = entries[name], version = e0 ? e0.version : 0;
+        if (!e0) { return; }
+        if (e0.saving) { e0.changed = true; return; }
+        var got = await readValues(window.pcSiteFs, name).catch(function () { return null; });
+        var e = entries[name];
+        if (!got || !e || !e.loaded) { return; }
+        if (e.saving || e.version !== version) { e.changed = true; return; }
+        if (got.text === e.text) { return; }
+        e.text = got.text;
+        e.values = got.values;
+        tell(name);
+    }
+    /* Called as a save ends: a change marked while it ran is read now. */
+    function saved(name, e) {
+        if (!e.saving && e.changed) { e.changed = false; refresh(name); }
+    }
     function watch() {
         if (watching) { return; }
         watching = true;
-        window.pcSiteFs.onChange(function () {
-            Object.keys(entries).forEach(async function (name) {
-                /* A read begun before a save here, or during one, would
-                   bring back the text the save replaced, so it counts only
-                   if no save began while it ran. */
-                var e0 = entries[name], version = e0 ? e0.version : 0;
-                if (e0 && e0.saving) { return; }
-                var got = await readValues(window.pcSiteFs, name).catch(function () { return null; });
-                var e = entries[name];
-                if (!got || !e || !e.loaded || e.saving || e.version !== version || got.text === e.text) { return; }
-                e.text = got.text;
-                e.values = got.values;
-                tell(name);
-            });
-        });
+        window.pcSiteFs.onChange(function () { Object.keys(entries).forEach(refresh); });
     }
 
     async function load(name, defaults) {
@@ -128,7 +134,7 @@
         var turn = (e.queue || Promise.resolve()).then(function () { return save(F, name, e, changes); });
         e.queue = turn.catch(function () { });
         try { return await turn; }
-        finally { e.saving--; }
+        finally { e.saving--; saved(name, e); }
     }
 
     async function save(F, name, e, changes) {
@@ -160,7 +166,7 @@
         pathOf(name);if(!plain(defaults))throw new TypeError('Migration defaults must be an object.');
         var F=await fs(),e=entry(name);if(!e.loaded)await load(name,{});e.version++;e.saving++;
         var turn=(e.queue || Promise.resolve()).then(async function () {var text=await F.adoptSettings(name,own(defaults),marker);e.text=text;e.values=own(JSON.parse(text));tell(name);return merged(e);});
-        e.queue=turn.catch(function () {});try{return await turn;}finally{e.saving--;}
+        e.queue=turn.catch(function () {});try{return await turn;}finally{e.saving--;saved(name,e);}
     }
 
     function onChange(name, fn) {
