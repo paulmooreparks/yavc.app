@@ -4,8 +4,6 @@ This page lists the defects and gaps the yavc.app team has found and not yet fix
 
 ## Docs and Editor, page view
 
-- **There is no line break inside a paragraph.** Shift+Enter does nothing in the page view, so an address or a short list of lines in one paragraph cannot be typed there. A paragraph that already has a hard break is shown as a block that opens as a Markdown box. Found by Yavc.App Tester on 2026-11-13 while checking that the page view keeps a person's words.
-- **A backslash hard break is drawn as a backslash.** A line ending in `\`, which CommonMark defines as a hard break, appears in the page view as a backslash and a space, and the break is lost from view. Found with the previous item, and best fixed with it.
 - **A link reference definition is drawn as text.** `[1]: https://example.org/ref` appears in the page view as a visible line. Found with the previous items.
 - **Typing `---` and Enter does not make a rule.** The three characters stay as text. Found with the previous items.
 - **PDF export has no right-to-left layout.** pdfmake has no such layout and the Roboto font it uses has no Hebrew or Arabic glyphs, so a PDF export refuses a document with such text. Left over from the right-to-left work (decision 155).
