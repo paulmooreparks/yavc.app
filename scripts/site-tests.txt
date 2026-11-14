@@ -106,3 +106,4 @@ test-editing-surface-roles.cjs
 test-hard-break.cjs
 test-rtl.cjs
 test-barcode-scanner-library-reload.cjs
+test-split-mirror.cjs
