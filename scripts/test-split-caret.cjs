@@ -10,12 +10,15 @@ const artifact=path.resolve(process.argv[2]),prefix='/split/assets/',fixture=pat
 const types={'.html':'text/html','.js':'text/javascript','.css':'text/css','.json':'application/json','.wasm':'application/wasm','.svg':'image/svg+xml','.woff2':'font/woff2'};
 const lines=['# Split sample',''];for(let i=1;i<=12;i++)lines.push('Paragraph '+i+' has *some* words and a [link](https://example.com/'+i+') in it.','');
 const source=lines.join('\n');
+// A host that supplies a suggestion for the words of paragraph 1 (docs/document-host-overlays-contract.md), so that Next Host Suggestion reveals it.
+const at9=source.indexOf('Paragraph 1 '),suggestionService='pudlHost.contentWorkspace.suggestions={subscribe:function(resource,callback){var items=[{id:"s1",start:'+at9+',end:'+(at9+11)+',before:"Paragraph 1",after:"Paragraph one",author:"Tester"}];Promise.resolve().then(function(){callback({revision:"r1",text:'+JSON.stringify(source)+',items:items});});return function(){};},decide:function(){return Promise.resolve();}};';
 (async()=>{
     const manifest=JSON.parse(await fs.readFile(path.join(artifact,'manifest.json'),'utf8')),allowed=new Set(manifest.files.map(f=>f.path));
     const server=http.createServer(async(req,res)=>{try{const u=new URL(req.url,'http://localhost');const name=decodeURIComponent(u.pathname.slice(prefix.length));
         const own=name.startsWith('workspace-lab/'),file=own?path.join(fixture,name.slice('workspace-lab/'.length)):allowed.has(name)?path.join(artifact,name):null;
         if(!file||/\.\./.test(name))return res.writeHead(404).end();
-        res.writeHead(200,{'Content-Type':types[path.extname(name)]||'application/octet-stream','Cache-Control':'no-store'}).end(await fs.readFile(file));}catch{if(!res.headersSent)res.writeHead(404).end();}});
+        let body=await fs.readFile(file);if(name==='workspace-lab/host.js')body=Buffer.from(body+String.fromCharCode(10)+suggestionService);
+        res.writeHead(200,{'Content-Type':types[path.extname(name)]||'application/octet-stream','Cache-Control':'no-store'}).end(body);}catch{if(!res.headersSent)res.writeHead(404).end();}});
     await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const failures=[];
     try{for(const engine of process.argv.slice(3).length?process.argv.slice(3):['chromium','firefox','webkit']){
         const browser=await pw[engine].launch({headless:true}),page=await browser.newPage({viewport:{width:1536,height:864}});page.setDefaultTimeout(20000);
@@ -54,6 +57,11 @@ const source=lines.join('\n');
             // And back to the page, which must not have kept a stale place of its own.
             await page.locator('#document .ProseMirror p').filter({hasText:'Paragraph 2 '}).click();
             await check('a click in the page again','paragraph 2','page');
+            // A host suggestion's reveal: the page goes to the suggestion and the text must show it too, with the keyboard where the reveal left it.
+            await page.locator('#document .ProseMirror p').filter({hasText:'Paragraph 2 '}).click();await check('a click in the page before a suggestion is revealed','paragraph 2','page');
+            await page.waitForFunction(()=>!!pudlCommands.find('suggestion-next',document.querySelector('#document')));
+            await page.evaluate(()=>pudlCommands.run('suggestion-next',null,document.querySelector('#document')));
+            await check('a host suggestion revealed by Next Host Suggestion','paragraph 1','page');
             // A change of one selection that no key and no click made, by an action: Go To, and Find Next, which a host and a person's menu use. The keyboard is wherever it was.
             await page.locator('#document .ProseMirror p').filter({hasText:'Paragraph 3 '}).click();await check('a click in the page before Go To','paragraph 3','page');
             const line=await page.evaluate(()=>{const doc=CM.EditorView.findFromDOM(document.querySelector('#document .cm-editor')).state.doc;for(let n=1;n<=doc.lines;n++)if(/^Paragraph 8 /.test(doc.line(n).text))return n;return 0;});
@@ -68,6 +76,11 @@ const source=lines.join('\n');
             await page.waitForTimeout(700);
             await page.evaluate(()=>window.yavcMdEditor._page.goToHeading(0));
             await check('the page set by a program (the outline goes to a heading)','heading','page');
+            // Find Next from the page's own bar: the page's selection moves to the match while the keyboard is in the bar, which is neither pane.
+            await page.locator('#document .ProseMirror p').filter({hasText:'Paragraph 2 '}).click();await check('a click in the page before its own Find','paragraph 2','page');
+            await page.evaluate(()=>pudlCommands.run('find',null,document.querySelector('#document')));
+            const pageBox=page.locator('#document [data-role="find-place"] input[aria-label="Find"]');await pageBox.waitFor();await pageBox.fill('Paragraph 12');await pageBox.press('Enter');
+            await check("Find Next from the page's own bar",'paragraph 12','INPUT');
             if(errors.length)failures.push(`${engine}: page errors ${errors.join(' | ')}`);
             console.log(engine+': Split checks done');
         }finally{await browser.close();}
