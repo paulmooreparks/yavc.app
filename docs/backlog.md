@@ -5,7 +5,6 @@ This page lists the defects and gaps the yavc.app team has found and not yet fix
 ## Docs and Editor, page view
 
 - **Typing `---` and Enter does not make a rule.** The three characters stay as text. Found with the previous items.
-- **PDF export has no right-to-left layout.** pdfmake has no such layout and the Roboto font it uses has no Hebrew or Arabic glyphs, so a PDF export refuses a document with such text. Left over from the right-to-left work (decision 155).
 - **Typing right-to-left text is not tested.** The right-to-left test reads a document and checks how it is drawn, printed and exported, and does not type Hebrew or Arabic into the page or the Text view. Left over from decision 155.
 - **A paragraph's direction cannot be set by hand.** Each block takes its direction from its first strong character, so a person cannot make a Hebrew paragraph left to right, or an English one right to left, and a mixed-script paragraph follows its first letter. Left over from decision 155.
 - **A caret placed before a diagram has drawn is lost when it draws.** I could not reproduce this on 2026-11-14. In Chromium, Firefox and WebKit, in the Visual and the Document view, a click before or after a diagram whose drawing was held back for 2.5 seconds kept the caret, and typing across the draw went in the right place. Only a click made before the page has finished converting the document is lost, since the click lands on the page that is replaced; that is the page's loading and not the diagram. Open until someone has a case.

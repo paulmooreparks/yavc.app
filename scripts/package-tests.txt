@@ -36,3 +36,4 @@ test-rule-input.cjs
 test-ref-definitions.cjs
 test-code-colouring.cjs
 test-doc-ends.cjs
+test-pdf-rtl-print.cjs

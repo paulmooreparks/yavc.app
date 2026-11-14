@@ -980,7 +980,12 @@
             window.yavcUtil.notice(el.tabs, '');
             say('Writing the ' + format.toUpperCase() + ' file…');
             try { var result = await exportDocument(format); download(result.name, result.blob); say('Downloaded ' + result.name + '. ' + result.warnings.join(' ')); }
-            catch (err) { if (err.refusal) { say('Download as ' + format.toUpperCase() + ': ' + err.message, 'warn'); retryButton(false); } else if(err.name!=='AbortError')say('The document could not be exported: ' + err.message, true);else say('Export cancelled.'); }
+            catch (err) { if (err.refusal) {
+                    /* A PDF that cannot be written for right-to-left text can be printed, and the browser's Save as PDF lays it out; a host that has taken Print away gets the plain refusal (decision 192). */
+                    var printable = err.rightToLeft && commandExists('print-document');
+                    say('Download as ' + format.toUpperCase() + ': ' + err.message + (printable ? ' Or print it and choose Save as PDF, which lays Hebrew and Arabic out correctly.' : ''), 'warn');
+                    retryButton(printable && function () { return printDocument(); }, 'Print');
+                } else if(err.name!=='AbortError')say('The document could not be exported: ' + err.message, true);else say('Export cancelled.'); }
         }
 
         /* === Dialogs ====================================================== */
@@ -1441,11 +1446,11 @@
             if(source!==null&&source!==undefined&&unchanged())return liveActions['new@1']({text:source});
         }
         /* A refusal that trying again could change has a Try Again button, which a refusal that it could not change does not. */
-        function retryButton(again) {
+        function retryButton(again, label) {
             var n = el.tabs.previousElementSibling; if (!n || !n.classList.contains('yavc-notice')) { return; }
             n.querySelectorAll('.notice-actions').forEach(function (x) { x.remove(); });
             if (!again) { return; }
-            var actions = document.createElement('div'), button = document.createElement('button'); actions.className = 'notice-actions'; button.type = 'button'; button.className = 'btn'; button.textContent = 'Try Again';
+            var actions = document.createElement('div'), button = document.createElement('button'); actions.className = 'notice-actions'; button.type = 'button'; button.className = 'btn'; button.textContent = label || 'Try Again';
             button.addEventListener('click', function () { again(); }); actions.append(button); n.querySelector('.notice-content').append(actions);
         }
         /* printProblem is the reason the last try printed nothing, for print@1, which must not answer as if it had printed. */
