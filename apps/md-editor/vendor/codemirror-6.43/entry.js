@@ -14,7 +14,7 @@ export {
     closeSearchPanel, findNext, findPrevious, replaceNext, replaceAll
 } from '@codemirror/search';
 export {
-    bracketMatching, indentOnInput, syntaxHighlighting, HighlightStyle, StreamLanguage,
+    bracketMatching, indentOnInput, syntaxHighlighting, HighlightStyle, StreamLanguage, LanguageDescription, LanguageSupport,
     foldGutter, foldKeymap, indentUnit
 } from '@codemirror/language';
 export { linter, lintGutter, lintKeymap, forceLinting } from '@codemirror/lint';
@@ -23,6 +23,7 @@ export { markdown } from '@codemirror/lang-markdown';
 export { json, jsonParseLinter } from '@codemirror/lang-json';
 export { css } from '@codemirror/lang-css';
 export { html } from '@codemirror/lang-html';
+export { javascript } from '@codemirror/lang-javascript';
 export { shell } from '@codemirror/legacy-modes/mode/shell';
 export { tags } from '@lezer/highlight';
 export { LSPClient, LSPPlugin, serverCompletion, serverCompletionSource, hoverTooltips, serverDiagnostics, formatDocument } from '@codemirror/lsp-client';

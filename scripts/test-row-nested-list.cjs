@@ -54,6 +54,13 @@ const SOURCE = '# Requirements\n\n{{gklist}}\n\nAfter the table.\n';
                 await p.waitForFunction(() => /indivisible block is taller than the page/.test(document.body.innerText), null, { timeout: 30000 });
                 const printNested = await p.evaluate(() => pudlActions.run('yavc.docs/print@1', {}, { grant: 'all' }).then(() => 'printed', e => 'refused: ' + e.message));
                 assert.match(printNested, /^refused: .*taller than the page/, engine + ': print refuses the row that is too tall, with the reason: ' + printNested);
+                // The reason print gave is a lasting notice beside the tabs, as the refusals for shortcodes are, and not a toast that goes away (decision 189).
+                await p.waitForTimeout(300);
+                const lasting = await p.evaluate(() => Array.from(document.querySelectorAll('.yavc-notice:not([hidden])')).map(n => n.textContent).filter(t => /Print: .*taller than the page/.test(t)));
+                assert.equal(lasting.length, 1, engine + ': a notice beside the tabs says why print refused: ' + JSON.stringify(lasting));
+                await p.waitForTimeout(6000);
+                assert.equal(await p.evaluate(() => Array.from(document.querySelectorAll('.yavc-notice:not([hidden])')).filter(n => /Print: .*taller than the page/.test(n.textContent)).length), 1, engine + ': the notice is still there after a toast would have gone');
+                assert.equal(await p.evaluate(() => Array.from(document.querySelectorAll('.pudl-toast, .toast')).filter(t => /taller than the page/.test(t.textContent)).length), 0, engine + ': the reason is not a toast');
                 console.log(engine + ': a row with a table in a cell is said to be too tall, on the page and in print');
             } catch (err) { console.error(engine, errors.length ? 'page errors: ' + errors.join(' / ') : ''); throw err; } finally { await browser.close(); }
         }

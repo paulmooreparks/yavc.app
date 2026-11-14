@@ -332,9 +332,11 @@
             if (/\.css$/i.test(p)) { return 'css'; }
             if (/\.html?$/i.test(p)) { return 'html'; }
             if (/^~\/bin\/|^\/bin\/|\.sh$/i.test(p)) { return 'script'; }
-            return 'text';
+            /* The other languages are in the table of apps/md-editor/languages.js, which has loaded with CodeMirror. */
+            return window.yavcLanguages && window.yavcLanguages.byPath(p) || 'text';
         }
         var LANG_NAMES = { markdown: 'Markdown', json: 'JSON', css: 'CSS', html: 'HTML', script: 'Script', text: 'Plain Text' };
+        function languageName(lang) { return LANG_NAMES[lang] || window.yavcLanguages && window.yavcLanguages.name(lang) || LANG_NAMES.text; }
         /* === Shortcodes in the text =========================================
            A {{shortcode}} is marked as one, its name and its arguments in
            their own colours; {{ offers the shortcodes' names and, inside a
@@ -427,8 +429,29 @@
             return [shortcodeHighlighting(), CM.autocompletion({ override: [shortcodeComplete], activateOnTyping: true, icons: false }), shortcodeHovering()];
         }
 
+        /* A language of the table is plain until its grammar has loaded, and then every tab of that language is coloured. A grammar that
+           cannot load leaves the file as plain text, which is how it was before. */
+        var colours = {}, colouring = {};
+        function colourWhenLoaded(lang) {
+            if (colouring[lang]) { return; }
+            colouring[lang] = true;
+            window.yavcLanguages.support(CM, lang).then(function (support) {
+                colours[lang] = support;
+                if (destroyed) { return; }
+                tabs.forEach(function (t) {
+                    if (t.lang !== lang) { return; }
+                    var effects = [langComp.reconfigure(support)];
+                    if (current() === t) { view.dispatch({ effects: effects }); } else { t.state = t.state.update({ effects: effects }).state; }
+                });
+            }, function () { colouring[lang] = false; });
+        }
         function langExtension(lang) {
-            if (lang === 'markdown') { return [CM.markdown(), shortcodeExtensions()]; }
+            if (window.yavcLanguages && window.yavcLanguages.has(lang)) {
+                if (!colours[lang]) { colourWhenLoaded(lang); }
+                return colours[lang] || [];
+            }
+            /* A fenced block is coloured in the language it says, when that grammar has loaded. */
+            if (lang === 'markdown') { return [CM.markdown(window.yavcLanguages ? { codeLanguages: window.yavcLanguages.descriptions(CM) } : {}), shortcodeExtensions()]; }
             if (lang === 'json') { return CM.json(); }
             if (lang === 'css') { return CM.css(); }
             if (lang === 'html') { return CM.html(); }
@@ -556,7 +579,7 @@
             /* A document a host gave is shown by the name the host gave it, and not by the resource's ID, which a host need not make readable. */
             el.where.textContent = !t ? '' : shownName(t, true);
             el.where.title = el.where.textContent; el.where.setAttribute('data-tooltip', el.where.textContent);
-            el.lang.textContent = t ? LANG_NAMES[t.lang] : '';
+            el.lang.textContent = t ? languageName(t.lang) : '';
             showCount();
             showFormat(viewMode);
             el.readonly.hidden = !(t && t.readOnly);
@@ -1446,8 +1469,8 @@
                         flow.append.apply(flow, Array.from(surface.childNodes)); surface.append(flow);
                         await document.fonts.ready;
                         var frameTitles = P.tagFrames(flow), blocks = P.blocks(flow), layout = P.plan(blocks, page);
-                        if(layout.problem)throw new Error(layout.problem);
-                        if (layout.oversized) { throw new Error('A block is taller than the page. Shorten it or enlarge the page before printing.'); }
+                        /* A page that cannot be laid out is a refusal the person can act on, shown as the other refusals are, in a notice that stays beside the tabs. */
+                        if (layout.problem || layout.oversized) { var tooTall = new Error(layout.problem || 'A block is taller than the page. Shorten it or enlarge the page before printing.'); tooTall.refusal = true; throw tooTall; }
                         var frame = document.createElement('iframe'); frame.className = 'ed-print-frame'; frame.title = 'Document Print'; frame.inert = true; frame.tabIndex = -1; frame.setAttribute('aria-hidden', 'true'); document.body.append(frame); printFrame = frame;
                         var doc = frame.contentDocument;
                         // A static standards-mode shell keeps table typography
