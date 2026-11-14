@@ -8,7 +8,9 @@
 // Usage: node scripts/test-portable-strict-policy.cjs <package folder> [browsers]
 const assert=require('node:assert/strict'),http=require('node:http'),fs=require('node:fs/promises'),path=require('node:path'),zlib=require('node:zlib'),pw=require('playwright');
 const artifact=path.resolve(process.argv[2]),prefix='/different-host/assets/release/';
-const policy="default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
+// With STRICT_NONCE set (scripts/test-portable-nonce-policy.cjs) the policy has no 'unsafe-inline' and gives style elements a nonce that the host hands Docs, as PFO's server does.
+const NONCE=process.env.STRICT_NONCE?'k3Yx9QpL7vWz2aBn':'';
+const policy="default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' "+(NONCE?"'nonce-"+NONCE+"'":"'unsafe-inline'")+"; font-src 'self'; img-src 'self' data:; connect-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
 const types={'.html':'text/html','.js':'text/javascript','.css':'text/css','.json':'application/json','.wasm':'application/wasm','.svg':'image/svg+xml','.woff2':'font/woff2'};
 const notes=['# Session notes','','A paragraph with a note.[^1]','','| Name | Role |','| --- | --- |','| Siti | Client |','','![Chart](chart.png)','','[^1]: The footnote text.',''].join('\n');
 // A 40 by 30 PNG made here, so no file is needed and the picture is a real raster image the host supplies.
@@ -36,7 +38,7 @@ const picture=(()=>{const w=40,h=30,row=w*3+1,raw=Buffer.alloc(row*h);for(let y=
   const frames=()=>page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
   const rich=async()=>{await run('view-visual');await page.waitForFunction(()=>document.querySelector('#document .ProseMirror').getAttribute('aria-busy')!=='true');};
   try{
-   await page.goto(`http://127.0.0.1:${server.address().port}${prefix}workspace-lab/index.html`);
+   await page.goto(`http://127.0.0.1:${server.address().port}${prefix}workspace-lab/index.html${NONCE?'?nonce='+NONCE:''}`);
    await during('open');await page.waitForFunction(()=>{const p=document.querySelector('#document .ProseMirror');return p&&p.textContent.includes('Session notes')&&p.textContent.includes('Siti');});
    // The host's picture is drawn: its own image element has loaded and has a size.
    await page.waitForFunction(()=>Array.from(document.querySelectorAll('#document .ProseMirror img[src]')).some(i=>i.complete&&i.naturalWidth>0));
@@ -52,6 +54,9 @@ const picture=(()=>{const w=40,h=30,row=w*3+1,raw=Buffer.alloc(row*h);for(let y=
    await during('print');page.evaluate(()=>pudlCommands.run('print-document',null,document.querySelector('#document'))).catch(()=>{});
    try{await page.waitForFunction(()=>window.__printCalled,null,{timeout:8000});}catch{failures.push(`${engine}: Print did not get as far as asking the browser to print`);}
    await during('end');
+   // Every glyph that Docs drew has its picture, set with the style object (a style attribute is what a policy without 'unsafe-inline' blocks).
+   const glyphs=await page.evaluate(()=>({all:document.querySelectorAll('[data-glyph]').length,bare:Array.from(document.querySelectorAll('[data-glyph]')).filter(g=>g.style.getPropertyValue('--glyph')==='').length}));
+   if(glyphs.bare)failures.push(`${engine}: ${glyphs.bare} of ${glyphs.all} glyphs have no picture`);
    const violations=await page.evaluate(()=>window.__violations);
    for(const v of violations)failures.push(`${engine}: ${v.directive} blocked ${v.blocked} (${v.file||'no file'}${v.line?':'+v.line:''}) during ${v.during}`);
    if(errors.length)failures.push(`${engine}: page errors ${errors.join(' | ')}`);
