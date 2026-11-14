@@ -16,7 +16,7 @@
    write:async function (request) {var record=records.get(request.resource);if(!record || request.expectedRevision!==String(record.revision))throw new Error('Resource conflict');writes.push(request);record.text=request.text;record.revision++;return {resource:request.resource,revision:String(record.revision),name:record.name,writable:true};}}
  });
  // The host's editing settings (docs/editing-settings-contract.md), offered when the address asks for them and set before the applets start, since they read the service once.
- {const settings={'no-spellcheck':{version:1,spellcheck:false},'wrong-version':{version:2,spellcheck:false},'not-a-boolean':{version:1,spellcheck:'false'},'no-name':{version:1,documentName:false}}[new URLSearchParams(location.search).get('editing')];if(settings)pudlHost.editing=settings;}
+ {const settings={'no-spellcheck':{version:1,spellcheck:false},'wrong-version':{version:2,spellcheck:false},'not-a-boolean':{version:1,spellcheck:'false'},'no-name':{version:1,documentName:false},'no-files':{version:1,fileCommands:false},'host-saves':{version:1,save:'host'}}[new URLSearchParams(location.search).get('editing')];if(settings)pudlHost.editing=settings;}
  // The toolbar a person can change (docs/command-toolbar-design.md), offered when the address asks for it. The controller is the package's own, and this host gives it only somewhere to keep the arrangement.
  if(new URLSearchParams(location.search).has('toolbar'))pudlHost.commandToolbar={attach:function(root,options){return yavcCommandToolbar.attach(root,Object.assign({},options,{config:pudlHost.config}));}};
  // A command of the host's own in the File menu (docs/document-commands-contract.md): present for one document, and unavailable until the host says otherwise.

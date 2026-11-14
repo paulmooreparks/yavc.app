@@ -26,3 +26,5 @@ test-split-caret.cjs
 test-host-flow.cjs
 test-pagination-preserves.cjs
 test-host-shortcode-node.cjs
+test-docs-read-only.cjs
+test-docs-file-commands.cjs
