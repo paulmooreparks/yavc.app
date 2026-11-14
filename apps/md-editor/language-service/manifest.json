@@ -1,7 +1,7 @@
 {
   "version": 1,
   "inputs": {
-    "build.mjs": "38fe1af7680dc9a54edfbfe91604e9b15476e21b97fb896a46dba479d0e08105",
+    "build.mjs": "a4b7e84e2b74cd86b288fe9283f5b47c859d4f022d68dc2af924d9da5f90f89d",
     "package.json": "d4bdfa45fdef860a29c8de8437bdef23dbb05b93d4608fe1f4cd6d39649db9b0",
     "../vendor/codemirror-6.43/entry.js": "109c8a3e23f00a8244aeb072154ac8a053b1234def206cf24b66706acb6e1dd9",
     "canvas-schema.mjs": "64ab38651728eb8bc0118ed860069b982a769d38c11a1c4bac0e6a28457d3db3",
@@ -17,6 +17,9 @@
     "worker.js": "9dd32c2cedde6611bfa5feba3dff0df6a10f981a20ca9d7cfeed7255e70dc65b",
     "WORKER-LICENSES.txt": "60a80ec288d9da001c4bc8a76aca116823e0aaa5bf94c19e9cbf9bf6260637fc",
     "../vendor/codemirror-6.43/lang/go.js": "e71a72e7f1f3bf717296df3f679a449562b1012ed77d4f48f339446d5d756c9c",
+    "../vendor/codemirror-6.43/lang/c.js": "25c362464a90755ba2711c1c39acbcd29f7e17914065a9c33b234a7882cb558b",
+    "../vendor/codemirror-6.43/lang/csharp.js": "3d0090b9feff71d9d212c3521e11c627c159898ca5eb4fc02487d9d8b19b52ff",
+    "../vendor/codemirror-6.43/lang/python.js": "a36ce512ef9743f60e1b2bdfbe351148cf5c7c98bb6c53e78a278656ee528c00",
     "../vendor/codemirror-6.43/lang/LICENSE.txt": "394d3a1365ac6f5404d40a02e475ec182dd6a1673bbba7d9c780effd1c01127f"
   },
   "packages": {
