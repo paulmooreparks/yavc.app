@@ -96,3 +96,6 @@ ins.host-suggestion-new { text-decoration:underline 2px var(--diff-add);text-und
 .host-suggestion-cell-changed { display:inline-flex;flex-wrap:wrap;gap:var(--space-1);color:var(--text); }
 .host-suggestion-stale { border-color:var(--warn);text-decoration-style:dotted; }
 @media (max-width:680px) { .md-gallery-layout {grid-template-columns:minmax(0,1fr);} .md-gallery-boundary {max-height:18rem;} }
+
+/* While a layout measures the page the gaps of the layout before it are not there (pages.js, measured). */
+.doc-measuring .doc-page-gap { display: none !important; }

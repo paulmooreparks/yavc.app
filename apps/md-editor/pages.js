@@ -100,13 +100,16 @@
        WebKit lays text out differently with the property set to 1 than with none. The zoom is put back before anything is painted. */
     function measured(dom, measure) {
         var host = dom.closest('.doc-paginated'), was = host && host.style.zoom;
-        if (!host || was === '1') { return measure(); }
-        /* Measuring at 100 percent can make the page shorter than the place a reader has scrolled to, and the browser then moves the
-           scroll back. Every scroll position above the page is put back with the zoom. */
+        if (!host) { return measure(); }
+        /* The page is measured as the document and the page size make it, without the gaps an earlier layout put in: the gaps are hidden while
+           it is measured, so that a layout is a function of the document and the page and not of the layout before it, and a layout that
+           is made again gives the same answer. Hiding them changes the heights that scrolling has, and the browser then moves the scroll
+           back; every scroll position above the page is put back with the gaps. */
         var kept = [];
         for (var node = host.parentElement; node; node = node.parentElement) { if (node.scrollTop || node.scrollLeft) { kept.push([node, node.scrollTop, node.scrollLeft]); } }
-        host.style.zoom = '1';
-        try { return measure(); } finally { host.style.zoom = was; kept.forEach(function (k) { k[0].scrollTop = k[1]; k[0].scrollLeft = k[2]; }); }
+        host.classList.add('doc-measuring');
+        if (was !== '1') { host.style.zoom = '1'; }
+        try { return measure(); } finally { host.classList.remove('doc-measuring'); if (was !== '1') { host.style.zoom = was; } kept.forEach(function (k) { k[0].scrollTop = k[1]; k[0].scrollLeft = k[2]; }); }
     }
     function blocksOf(dom, positions, position) {
         var host = dom.closest('.doc-paginated'), scale = host ? Number(host.style.zoom) || 1 : 1;
