@@ -16,6 +16,8 @@
         {name:'gkpiece',title:'Piece',kind:'container',example:'{{gkpiece}}\nBody.\n{{/gkpiece}}'},
         /* Two more, which the test puts in the document when it tries Print's refusals: a drawing the host keeps off paper, and one it cannot draw. */
         {name:'gklist',title:'List',kind:'block',example:'{{gklist}}'},
+        {name:'gkloose',title:'Loose List',kind:'block',example:'{{gkloose}}'},
+        {name:'gknested',title:'Nested Table',kind:'block',example:'{{gknested}}'},
         {name:'gknone',title:'Live',kind:'block',example:'{{gknone}}'},
         {name:'gkbroken',title:'Broken',kind:'block',example:'{{gkbroken}}'}
     ].map(function(d){return Object.assign({description:'Synthetic host shortcode',params:[]},d);});
@@ -29,6 +31,8 @@
         gkinclude:{html:include,flow:true},
         /* A flowing table with a row whose cell holds a list taller than a page (decision 183). */
         gklist:{html:'<table><thead><tr><th>ID</th><th>Needs</th></tr></thead><tbody><tr><td>R-1</td><td>Short.</td></tr><tr><td>R-2</td><td><ul>'+Array.from({length:60},function(_,i){return '<li>Item'+(i+1)+' of the list is short.</li>';}).join('')+'</ul></td></tr><tr><td>R-3</td><td>Last row.</td></tr></tbody></table>',flow:true},
+        gkloose:{html:'<table><thead><tr><th>ID</th><th>Needs</th></tr></thead><tbody><tr><td>R-1</td><td>Short.</td></tr><tr><td>R-2</td><td><ul>'+Array.from({length:60},function(_,i){return '<li><p>Item'+(i+1)+' of the list is short.</p></li>';}).join('')+'</ul></td></tr><tr><td>R-3</td><td>Last row.</td></tr></tbody></table>',flow:true},
+        gknested:{html:'<table><thead><tr><th>ID</th><th>Needs</th></tr></thead><tbody><tr><td>R-1</td><td>Short.</td></tr><tr><td>R-2</td><td><table><tbody>'+Array.from({length:60},function(_,i){return '<tr><td>Item'+(i+1)+' of the nested table is short.</td></tr>';}).join('')+'</tbody></table></td></tr><tr><td>R-3</td><td>Last row.</td></tr></tbody></table>',flow:true},
         gknone:{html:'<p>A live drawing.</p>',print:'none'},
         gkpiece:{html:'<div class="gk-panel" data-sc-piece="middle" data-sc-frame="" data-sc-body=""><slot name="content"></slot></div>'}
     };
