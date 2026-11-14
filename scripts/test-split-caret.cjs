@@ -54,6 +54,20 @@ const source=lines.join('\n');
             // And back to the page, which must not have kept a stale place of its own.
             await page.locator('#document .ProseMirror p').filter({hasText:'Paragraph 2 '}).click();
             await check('a click in the page again','paragraph 2','page');
+            // A change of one selection that no key and no click made, by an action: Go To, and Find Next, which a host and a person's menu use. The keyboard is wherever it was.
+            await page.locator('#document .ProseMirror p').filter({hasText:'Paragraph 3 '}).click();await check('a click in the page before Go To','paragraph 3','page');
+            const line=await page.evaluate(()=>{const doc=CM.EditorView.findFromDOM(document.querySelector('#document .cm-editor')).state.doc;for(let n=1;n<=doc.lines;n++)if(/^Paragraph 8 /.test(doc.line(n).text))return n;return 0;});
+            await page.evaluate(line=>pudlActions.run('yavc.docs/go-to@1',{line,column:5},{grant:'all'}),line);
+            await check('Go To an action, line '+line+' column 5','paragraph 8','text');
+            await page.locator('#document .cm-line').filter({hasText:'Paragraph 4 '}).click();await check('a click in the text before Find Next','paragraph 4','text');
+            await page.evaluate(()=>pudlCommands.run('find',null,document.querySelector('#document')));const box=page.locator('#document .cm-editor input[aria-label="Find"]');await box.waitFor();await box.fill('Paragraph 11');await box.press('Enter');
+            await check('Find Next from the search panel','paragraph 11','text');await page.keyboard.press('Escape');
+            // The other way: the page's selection set by a program while the keyboard is in the text.
+            await page.locator('#document .cm-line').filter({hasText:'Paragraph 6 '}).click();await check('a click in the text before the page is set','paragraph 6','text');
+            // A move of the page just after the mirror set it is the mirror's own, and is not told back; so a program that moves it waits out the half second.
+            await page.waitForTimeout(700);
+            await page.evaluate(()=>window.yavcMdEditor._page.goToHeading(0));
+            await check('the page set by a program (the outline goes to a heading)','heading','page');
             if(errors.length)failures.push(`${engine}: page errors ${errors.join(' | ')}`);
             console.log(engine+': Split checks done');
         }finally{await browser.close();}
