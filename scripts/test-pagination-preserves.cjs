@@ -8,8 +8,9 @@
 //  2. Typing on a continuation page, inside a broken box and inside a broken table, changes that place in the source and nothing else,
 //     and Undo takes it back to the same text.
 //  3. A repeated title or table header makes no extra review mark, and a copy of a selection across a gap has each paragraph once.
-//  4. take(), Save and opening the file again give one of each shortcode, and neither the saved Markdown, the html put on the
-//     clipboard nor the page prepared for printing has a piece, cap, cover or gap in it.
+//  4. take(), Save and opening the file again give one of each shortcode, and neither the saved Markdown nor the html put on the
+//     clipboard has a piece, cap, cover or gap in it. The page prepared for printing prints each paragraph once and has none of the
+//     editing page's gaps, caps or covers; its frames carry data-sc-piece, since print draws them from the same pieces (decision 172).
 //   node scripts/test-pagination-preserves.cjs <package folder> [chromium firefox webkit]
 // Docs has no html export of its own, so the html checked is what it puts on the clipboard and the page it prints. It needs the host-flow
 // fixture of decision 169 (scripts/fixtures/host-flow.js).
@@ -24,7 +25,6 @@ const source='# Preservation\n\nIntro words.\n\n{{gkinfo}}\n'+paras('Info',24)+'
 // Known failures, each in docs/backlog.md. The check still runs and says what it found, but does not fail the test; the pull request
 // that fixes one sets it to false here, and a known failure that starts to pass says so, so that it is turned on.
 const KNOWN={
-    printHostShortcodes:'docs/backlog.md, "A document with a host shortcode does not print, and nothing says why"',
 };
 const PAGE_MARKUP=/data-sc-piece|doc-gap|doc-page-gap|gap-cap|gap-cover|doc-page-break/;
 function settle({frames,limit}){
@@ -155,9 +155,13 @@ function settle({frames,limit}){
             // The page prepared for printing: its frame's html, read before the browser's print, which is replaced.
             await p.evaluate(()=>{window.__printed=null;new MutationObserver(rs=>{for(const r of rs)for(const n of r.addedNodes)if(n.nodeType===1&&n.matches('iframe.ed-print-frame'))n.contentWindow.print=function(){window.__printed=n.contentDocument.body.innerHTML;};}).observe(document,{childList:true,subtree:true});});
             p.evaluate(()=>pudlCommands.run('print-document',null,document.querySelector('#document')).catch(e=>{window.__printError=e.message;})).catch(()=>{});
+            // The document has review marks, so Print asks which version to print first; the accepted version is printed.
+            const ask=p.getByRole('dialog',{name:'Export Reviewed Copy'});await ask.waitFor();await ask.getByRole('button',{name:'Continue',exact:true}).click();
             const printed=await p.waitForFunction(()=>window.__printed||window.__printError,null,{timeout:30000}).then(()=>p.evaluate(()=>window.__printed)).catch(()=>null);
-            known('printHostShortcodes',!printed,'printing did not get as far as the browser\'s print: '+(await p.evaluate(()=>window.__printError||'status line: '+[...document.querySelectorAll('#document [data-role=message], .toast-region, [role=status]')].map(n=>n.textContent.trim()).filter(Boolean).join(' | ').slice(0,300))));
-            if(printed){if(PAGE_MARKUP.test(printed))fail('the printed page holds editing-page markup: '+printed.match(PAGE_MARKUP)[0]);
+            known('printHostShortcodes',!printed,'printing did not get as far as the browser\'s print: '+(await p.evaluate(()=>window.__printError||'dialogs: '+([...document.querySelectorAll('dialog[open]')].map(d=>d.innerText.replace(/\s+/g,' ').slice(0,200)).join(' || ')||'none')+'; frames: '+document.querySelectorAll('iframe.ed-print-frame').length+'; status line: '+[...document.querySelectorAll('#document [data-role=message], .toast-region, [role=status]')].map(n=>n.textContent.trim()).filter(Boolean).join(' | ').slice(0,300))));
+            // Print draws a broken frame from the same pieces as the page (decision 172), so data-sc-piece belongs on the printed sheets;
+            // the editing page's own gaps, caps and covers do not.
+            if(printed){const EDITING=/doc-page-gap|doc-gap-cap|doc-gap-cover/;if(EDITING.test(printed))fail('the printed page holds editing-page markup: '+printed.match(EDITING)[0]);
                 for(const n of [1,12,24]){const count=printed.split('Note paragraph '+n+'. ').length-1;if(count!==1)fail('Note paragraph '+n+' is printed '+count+' times');}}
             if(errors.length)fail('page errors '+errors.join(' | '));
             console.log(engine+': checks done');
