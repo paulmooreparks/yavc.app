@@ -41,6 +41,17 @@ A host that sends `Content-Security-Policy: style-src 'self' 'nonce-X'` with a n
 
 A page that has no nonce is as it was. The host keeps `'unsafe-inline'` where it wants, such as for static mockups; only the page that has the nonce can drop it.
 
+## Running an action on one instance
+
+`pudlActions.run` hands an action of the Docs applet (`yavc.docs/...`) to the instance that started last, since PUDL keeps its handlers in the order they were attached. A host with several instances on a page, such as notes drawn beside the one a person writes in, which start again when a note changes, addresses one instance by an event on its root.
+
+- **The event.** The host dispatches `yavc-docs-action` on the instance's root, with a `detail` object `{ref, input, grant}`: `ref` is the reference of a Docs action such as `"yavc.docs/insert@1"`, `input` is its input (`{}` when left out), and `grant` is what `pudlActions.run` takes as `grant`. The instance puts a promise in `detail.result`.
+- **What runs.** That instance alone runs the action, through `pudlActions.run`, so the input is checked against the action's schema, the grants are checked as for any call, and the output has the action's output schema. The promise resolves with the output and rejects with the reason of a refusal, which is the action's own: a read-only instance refuses what changes the text, a host that took the file commands away refuses those, and a `ref` that is not a Docs action is refused.
+- **What it covers.** Every action of the applet, including `document@1`, `export@1`, `print@1`, `insert@1` and `position@1`. The event `yavc-docs-position` (see "A read-only instance") keeps working as it does.
+- **An instance that is gone.** A call for an instance that has been disposed rejects with a message that says so, and never reaches another one.
+
+An action that is not addressed by an event still goes to the instance that started last, as before.
+
 ## When it is read
 
 Each applet reads `pudlHost.editing` once, when it starts, and uses that value for every editing area it draws for as long as it lives. A host sets it before it starts the applet. Changing the object afterwards has no effect on a running applet, and there is no `onChange` in version 1, so that one window cannot hold tabs that are set differently.
