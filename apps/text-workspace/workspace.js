@@ -535,16 +535,23 @@
         });
         var tabRow = window.yavcDocTabs ? window.yavcDocTabs.attach(el.tabs, {
             application: isDocs ? 'Docs' : 'Editor',
-            tabs: function () { return tabs.map(function (t) { return { name: t.name, path: t.path, modified: dirtyTab(t), note: t.readOnly ? '(read-only)' : '' }; }); },
+            /* A tab's tooltip is the name the host gave the document, as the status line shows it, and not the resource's ID (docs/editing-settings-contract.md, documentName). */
+            tabs: function () { return tabs.map(function (t) { return { name: t.name, path: shownName(t, false) || undefined, modified: dirtyTab(t), note: t.readOnly ? '(read-only)' : '' }; }); },
             active: function () { return active; },
             activate: async function (i) { await activate(i); view.focus(); },
             close: closeTab
         }) : null;
+        /* What names a document to a person: the name the host gave it, unless the host's documentName says otherwise (false: no name; "resource": the resource's ID). */
+        function shownName(t, unsaved) {
+            if (nameSetting === false) { return ''; }
+            if (nameSetting === 'resource') { return t.path || (unsaved ? 'Not saved yet' : ''); }
+            return (t.resource && t.name) || t.path || (unsaved ? 'Not saved yet' : '');
+        }
         function renderTabs() {
             if (tabRow) { tabRow.render(); }
             var t = current();
             /* A document a host gave is shown by the name the host gave it, and not by the resource's ID, which a host need not make readable. */
-            el.where.textContent = !t || nameSetting === false ? '' : nameSetting === 'resource' ? (t.path || 'Not saved yet') : ((t.resource && t.name) || t.path || 'Not saved yet');
+            el.where.textContent = !t ? '' : shownName(t, true);
             el.where.title = el.where.textContent;
             el.lang.textContent = t ? LANG_NAMES[t.lang] : '';
             showCount();
@@ -2136,7 +2143,7 @@
         /* Find in whichever the reader is working in: the page in Visual, or
            in Split while the text does not have the keyboard; else the text. */
         /* Find in a read-only instance: the drawn document is searched as text and each match is selected in turn, so the page itself is not changed and there is no Replace. */
-        var readFindBar = null;
+        var readFindBar = null, readFindApi = null;
         function openReadFind() {
             if (!readFindBar) {
                 readFindBar = document.createElement('div'); readFindBar.className = 'ed-read-find'; readFindBar.setAttribute('role', 'search');
@@ -2165,6 +2172,7 @@
                 }
                 input.addEventListener('input', function () { collect(); });
                 input.addEventListener('keydown', function (event) { if (event.key === 'Enter') { event.preventDefault(); go(event.shiftKey ? -1 : 1); } else if (event.key === 'Escape') { event.preventDefault(); el.findPlace.hidden = true; el.scroll.focus(); } });
+                readFindApi = { set: function (words) { input.value = words; collect(); go(1); /* The match stays selected, which a browser keeps only while the focus is not in the Find field. */ if (hits.length) { el.scroll.focus({ preventScroll: true }); } return { matches: hits.length, index: hits.length ? at + 1 : 0 }; } };
                 readFindBar.querySelector('[data-role="read-find-next"]').addEventListener('click', function () { go(1); });
                 readFindBar.querySelector('[data-role="read-find-previous"]').addEventListener('click', function () { go(-1); });
                 readFindBar.querySelector('[data-role="read-find-close"]').addEventListener('click', function () { el.findPlace.hidden = true; el.scroll.focus(); });
@@ -3357,6 +3365,24 @@ cmd('edit-diagram', 'Edit Diagram', 'new-window', function () { return openDiagr
                 return { output: docView(active, false) };
             },
             'set-text@1': async function (input) { var i = docNo(input.index); await setDocText(i, input.text); return { output: docView(i, false) }; },
+            /* The host's own search lands on a match (docs/editing-settings-contract.md, "Finding words"): the Find bar opens with the words and the first match is selected. */
+            'find@1': async function (input) {
+                docNo(); var words = String(input.text);
+                if (!words) { throw new Error('text is the words to find'); }
+                if (input.select !== undefined && input.select !== 'first') { throw new Error('select is "first"'); }
+                var found;
+                if (readMode) { openReadFind(); found = readFindApi.set(words); }
+                else if (formatsThePage() && pageActive()) { openPageFind(); pageFind.set(new CM.SearchQuery({ search: words })); found = { matches: pageMatches.total, index: pageMatches.total ? pageMatches.at : 0 }; }
+                else {
+                    var query = new CM.SearchQuery({ search: words }), count = 0, cursor = query.getCursor(view.state);
+                    while (!cursor.next().done && count < 100000) { count++; }
+                    view.dispatch({ effects: CM.setSearchQuery.of(query) }); CM.openSearchPanel(view);
+                    if (count) { CM.findNext(view); }
+                    found = { matches: count, index: count ? 1 : 0 };
+                }
+                if (!found.matches) { throw new Error('There is no match for "' + words + '".'); }
+                return { output: found };
+            },
             'insert@1': async function (input) {
                 docNo();var tab=current();if(tab.readOnly)throw new Error('the document is read-only');
                 if(input.format!==undefined&&input.format!=='markdown'&&input.format!=='plain')throw new Error('format is markdown or plain');

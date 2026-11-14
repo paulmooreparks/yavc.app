@@ -7,7 +7,7 @@ Editor and Docs accept an optional `pudlHost.editing` capability, version 1. It 
 | Member | Contract |
 | --- | --- |
 | `version` | The number 1. |
-| `documentName` | When it is `false`, Docs and Editor leave the document's name out of the status line, which a host that shows the name itself, or whose names are not for people, uses. When it is the string `"resource"`, the status line shows the resource's ID and not its name, which a host whose IDs are addresses a person reads, as the yavc.app site's are, uses. Any other value shows the name the host gave the resource, and the ID only when the host gave none. |
+| `documentName` | When it is `false`, Docs and Editor leave the document's name out of the status line, which a host that shows the name itself, or whose names are not for people, uses. When it is the string `"resource"`, the status line shows the resource's ID and not its name, which a host whose IDs are addresses a person reads, as the yavc.app site's are, uses. Any other value shows the name the host gave the resource, and the ID only when the host gave none. The same name is what a document's tab shows when a person points at it, and a host that left the name out has no ID there either. |
 | `fileCommands` | When it is `false`, Docs leaves out its own New, Open, Save As, Export and Print commands entirely, so that there is no toolbar button, no menu item and no key for them, and the actions that do the same work as a person's command (`new@1`, `new-template@1` and `open-file@1`) refuse with a message that says the host has taken the file commands away. `export@1` and `print@1` stay callable, since they are the host's own controls: it asks for the file, or for the document to be printed, and no person's command is involved. Any other value leaves them. Save is not in this group; `save` says who saves. |
 | `save` | `"docs"`, the default, shows Docs' own Save, which asks the host's `contentResources` to write. `"host"` shows no Save command at all, with no button, menu item or key, and leaves saving to the host, which reads the text with `yavc.docs/document@1` or from its snapshot. Any other value is `"docs"`. |
 | `nonce` | A string of the characters a Content-Security-Policy nonce has (letters, digits, `+`, `/`, `_`, `=` and `-`, from 8 to 200 of them). Docs puts it on every `<style>` element it makes and gives it to CodeMirror, so that a host whose policy is `style-src 'self' 'nonce-...'` with no `'unsafe-inline'` can run it. Any other value is no nonce. See "A nonce". |
@@ -51,6 +51,10 @@ A page that has no nonce is as it was. The host keeps `'unsafe-inline'` where it
 - **An instance that is gone.** A call for an instance that has been disposed rejects with a message that says so, and never reaches another one.
 
 An action that is not addressed by an event still goes to the instance that started last, as before.
+
+## Finding words
+
+`yavc.docs/find@1` takes `{text, select}` and is for a host whose own search, such as one across several notes, should land on a match in a note: the instance opens its Find with the words and selects the first match. `text` is the words as they are, and capital letters do not matter. `select` is `"first"`, the only value. It resolves with `{matches, index}`, the number of matches and which one is selected, counted from 1, and it rejects with a reason when there is no match. It changes no text, so it works in a read-only instance, where Find is the small bar of that instance, and in every view of an editable one. Like every Docs action, a host with several instances runs it on one by the event of "Running an action on one instance".
 
 ## When it is read
 
