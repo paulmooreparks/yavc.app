@@ -173,8 +173,8 @@
         var H = window.pudlHost || {}, resourceSession = null, resources = null, recovery = null;
         /* The host's editing settings (docs/editing-settings-contract.md), read once here and used for every editing area for as long as this applet lives. Only a version 1 service whose spellcheck is the boolean false changes anything. */
         var spellcheckOff = !!(H.editing && H.editing.version === 1 && H.editing.spellcheck === false);
-        /* documentName: false leaves the document's name out of the status line (docs/editing-settings-contract.md). */
-        var showDocumentName = !(H.editing && H.editing.version === 1 && H.editing.documentName === false);
+        /* documentName (docs/editing-settings-contract.md): false leaves the document's name out of the status line, and 'resource' shows the resource's ID, which a host whose IDs are readable addresses uses. */
+        var nameSetting = H.editing && H.editing.version === 1 ? H.editing.documentName : undefined;
         var documentWindows = H.documentWindows, documentReady = false, receivingDocument = false, unbindDocuments = null;
         /* Commands the host adds to the File menu, to publish a document
            somewhere of the host's say (docs/document-commands-contract.md).
@@ -527,7 +527,7 @@
             if (tabRow) { tabRow.render(); }
             var t = current();
             /* A document a host gave is shown by the name the host gave it, and not by the resource's ID, which a host need not make readable. */
-            el.where.textContent = t && showDocumentName ? ((t.resource && t.name) || t.path || 'Not saved yet') : '';
+            el.where.textContent = !t || nameSetting === false ? '' : nameSetting === 'resource' ? (t.path || 'Not saved yet') : ((t.resource && t.name) || t.path || 'Not saved yet');
             el.where.title = el.where.textContent;
             el.lang.textContent = t ? LANG_NAMES[t.lang] : '';
             showCount();
