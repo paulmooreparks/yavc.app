@@ -3,7 +3,8 @@
 // repository). A synthetic document with a host info frame, a host note with a title, the built-in info box and a long table, each
 // broken across pages in the Document view, and a host include block that flows. The test proves:
 //  1. Layout, view and caret changes (settling, a resize, every view, Split's caret going both ways) leave the text and the dirty
-//     state as they were and send no changed() to the host.
+//     state as they were. Layout, a resize and the settling of the pages send no changed() to the host; a view switch or a caret
+//     move may, since the snapshot holds the view and the caret; and every edit in step 2 does.
 //  2. Typing on a continuation page, inside a broken box and inside a broken table, changes that place in the source and nothing else,
 //     and Undo takes it back to the same text.
 //  3. A repeated title or table header makes no extra review mark, and a copy of a selection across a gap has each paragraph once.
@@ -23,7 +24,6 @@ const source='# Preservation\n\nIntro words.\n\n{{gkinfo}}\n'+paras('Info',24)+'
 // Known failures, each in docs/backlog.md. The check still runs and says what it found, but does not fail the test; the pull request
 // that fixes one sets it to false here, and a known failure that starts to pass says so, so that it is turned on.
 const KNOWN={
-    changedWithoutEdit:'docs/backlog.md, "Docs tells the host of a change when only the view or the Split caret moved"',
     printHostShortcodes:'docs/backlog.md, "A document with a host shortcode does not print, and nothing says why"',
 };
 const PAGE_MARKUP=/data-sc-piece|doc-gap|doc-page-gap|gap-cap|gap-cover|doc-page-break/;
@@ -69,7 +69,10 @@ function settle({frames,limit}){
             await step('back to Document and settled',async()=>{await view('document');await settled();});
             const after1=await doc();
             if(after1.text!==source)fail('the text changed');if(after1.modified)fail('the document is marked changed');
-            {const n=await changes()-changed0;known('changedWithoutEdit',n!==0,'changed() was sent to the host '+n+' times: '+Object.entries(sent).filter(([,c])=>c).map(([k,c])=>k+' '+c).join(', '));}
+            // The snapshot holds the view and the caret, so a view switch or a caret move may tell the host (content-recovery-contract.md,
+            // "Telling the host of a draft"); layout, a resize and the settling of the pages change neither and must not.
+            if(sent.resize)fail('changed() was sent to the host '+sent.resize+' times by a resize and the settling of the layout');
+            {const before=await changes();await settled();await p.waitForTimeout(0);if(await changes()!==before)fail('changed() was sent to the host while the settled layout was left alone');}
 
             phase='2. typing on a continuation page';
             let expected=source;
@@ -90,7 +93,8 @@ function settle({frames,limit}){
                 // The page takes the browser's selection a frame or so late, so this waits until its own selection is at the end (or 3 s pass).
                 const caret=await p.evaluate(async end=>{const limit=Date.now()+3000;let s;for(;;){s=await window.yavcMdEditor._page.sourceSelection();if(s&&s.from===end&&s.to===end||Date.now()>limit)return s&&s.from;await new Promise(r=>setTimeout(r,30));}},end);
                 if(caret!==end){fail('the caret at the end of "'+target+'" in '+label+' maps to source offset '+caret+', not '+end);continue;}
-                await p.keyboard.type(mark);expected=expected.slice(0,end)+mark+expected.slice(end);
+                const told=await changes();await p.keyboard.type(mark);expected=expected.slice(0,end)+mark+expected.slice(end);
+                if(await p.evaluate(async told=>{const limit=Date.now()+3000;while((fixture.changes.document||0)<=told&&Date.now()<limit)await new Promise(r=>setTimeout(r,30));return (fixture.changes.document||0)<=told;},told))fail('typing in '+label+' did not call changed()');
                 const got=await textBecomes(expected);if(got!==expected){const i=[...got].findIndex((c,k)=>c!==expected[k]);fail('typing in '+label+' changed the source wrongly at offset '+i+': '+JSON.stringify(got.slice(Math.max(0,i-30),i+40)));expected=got;}
             }
             for(let i=0;i<places.length&&(await doc()).text!==source;i++){await run('undo');await textBecomes(source,3000);}
