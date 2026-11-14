@@ -27,7 +27,8 @@ const source='# Preservation\n\nIntro words.\n\n{{gkinfo}}\n'+paras('Info',24)+'
 const KNOWN={
     // Firefox only: a click after an edit in a host frame often does not move the caret (bus 7719). It blocks the checks that place the
     // caret by a click after that edit and the selection and copy across the gap; in the other browsers those checks stay strict.
-    firefoxClickAfterHostEdit:'docs/backlog.md, "In Firefox a click after typing in a host frame often does not move the caret"',
+    // The Firefox click defect (bus 7719) is fixed (decision 176), so its known failure is off and those checks are strict in every browser; a known failure goes here as its key and a reason.
+    firefoxClickAfterHostEdit:false,
 };
 const PAGE_MARKUP=/data-sc-piece|doc-gap|doc-page-gap|gap-cap|gap-cover|doc-page-break/;
 function settle({frames,limit}){
