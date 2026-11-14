@@ -188,3 +188,4 @@
 .pc-docs-read:not([data-docs-layout="pages"]) .doc-page { max-width: 100%; min-width: 0; width: auto; box-sizing: border-box; overflow-wrap: anywhere; padding: var(--space-3, 12px) var(--space-4, 16px) !important; }
 .pc-editor .ed-read-find { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); padding: var(--space-2); }
 .pc-editor .ed-read-find .input { flex: 1 1 8rem; min-width: 0; }
+.pc-docs-read .ed-read-bar, .pc-docs-read .ed-read-group { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); padding: var(--space-1) var(--space-2); }

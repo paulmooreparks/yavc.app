@@ -38,6 +38,8 @@ const page = html => html.replace('<section><h2>Deck</h2>', '<section><h2>Notes<
     try {
         for (const engine of process.argv.slice(3).length ? process.argv.slice(3) : ['chromium', 'firefox', 'webkit']) {
             const browser = await pw[engine].launch({ headless: true }), p = await browser.newPage({ viewport: { width: 1500, height: 1000 } }), errors = [], wasm = []; p.setDefaultTimeout(30000);
+            // Observers that are connected: each observe() adds one and disconnect() takes it away, so a disposed instance that leaves one behind shows as growth.
+            await p.addInitScript(() => { window.liveObservers = new Set(); for (const name of ['MutationObserver', 'ResizeObserver', 'IntersectionObserver']) { const C = window[name]; if (!C) continue; const observe = C.prototype.observe, disconnect = C.prototype.disconnect; C.prototype.observe = function () { window.liveObservers.add(this); return observe.apply(this, arguments); }; C.prototype.disconnect = function () { window.liveObservers.delete(this); return disconnect.apply(this, arguments); }; } });
             p.on('pageerror', e => errors.push(e.message)); p.on('request', r => { if (/\.wasm(\?|$)/.test(r.url())) wasm.push(r.url()); }); let phase = 'startup';
             const act = (id, name, input = {}) => p.evaluate(({ id, name, input }) => pudlActions.run('yavc.docs/' + name + '@1', input, { grant: 'all', target: document.getElementById(id) }).then(v => ({ ok: v }), e => ({ error: String(e.message || e) })), { id, name, input });
             try {
@@ -115,6 +117,10 @@ const page = html => html.replace('<section><h2>Deck</h2>', '<section><h2>Notes<
                 await p.waitForTimeout(1500);
                 const back = await p.evaluate(() => document.querySelector('#note450 [data-role="scroll"]').scrollTop);
                 assert.ok(back > 300, engine + ': the new instance opens at the place (' + back + ')');
+                phase = 'disposing leaves no observer';
+                const cycle = () => p.evaluate(async () => { const r = document.getElementById('note600'); pudlApplets.destroy(r.parentNode); await new Promise(f => setTimeout(f, 300)); pudlApplets.boot(r.parentNode); await new Promise(f => setTimeout(f, 1500)); pudlApplets.destroy(r.parentNode); await new Promise(f => setTimeout(f, 300)); return window.liveObservers.size; });
+                const first = await cycle(), later = [await cycle(), await cycle()];
+                assert.deepEqual(later, [first, first], engine + ': each dispose of a read-only instance leaves no observer connected (' + first + ' then ' + later.join(', ') + ')');
                 assert.deepEqual(errors, [], engine + ': no page errors');
                 console.log(engine + ': three read-only instances beside an editable one: drawn, nothing to change them, nothing kept, keys only on the focused one, place given back');
             } catch (err) { console.error(engine, phase, errors.length ? 'page errors: ' + errors.join(' / ') : ''); throw err; } finally { await browser.close(); }
