@@ -33,6 +33,17 @@ The applet sanitizes returned HTML with the shared sanitizer and removes delegat
 
 Drawing calls have a 20-second deadline, a concurrency limit of six per workspace cache and a bounded waiting queue. A workspace retains at most 512 cached drawings and eight million UTF-16 code units of keys and HTML. Cache identity includes the document owner, resource and occurrence source. Drawings expire after five minutes; failed drawings can be retried after 30 seconds. A single drawing cannot exceed 512 KiB of UTF-16 code units. Initial rendering waits up to four seconds before displaying the fallback, then installs a valid late drawing. Until a drawing arrives, inline and block shortcodes show their source and editable paired shortcodes show their body.
 
+## Long shortcodes across pages
+
+A page breaks a long drawing between its parts, and the host says where the parts are, in the drawing it returns.
+
+- **A frame and a body.** A container's drawing may mark the element that is the frame with `data-sc-frame` and the element whose children are the body with `data-sc-body`, both with empty values, on one element or on two. The body goes where `<slot name="content"></slot>` is, as before, and the page breaks the shortcode between the body's children, and between the rows of a table in it, as it breaks its own containers. A drawing with neither mark is not broken, as before.
+- **Flowing content.** A block's drawing, which the host returns as `{html, flow: true}`, is the content of one outer element. The page breaks between that element's children, and between the rows of a table in them. Only a boolean `true` says so; without it the block is drawn whole.
+- **What the page keeps for itself.** `data-sc-piece` is the page's attribute, so it is taken out of every host drawing. The other three, `data-sc-frame`, `data-sc-body` and `data-sc-repeat`, are kept.
+- **One shortcode.** The source keeps one shortcode with its opening, arguments, body and closing, whatever the pages do. Each child of the body is on the page once, a table's header is repeated at the top of each page that holds rows of it, and the host is asked once for each drawing, not again when the page is laid out again.
+
+A page that is broken inside a frame shows the frame running through the page gap, as the page's own containers do. The frame is not drawn again for each page, and the page does not mark its pieces as first, middle and last; a host that needs that for its styling asks for it as a separate change.
+
 ## Forms and insertion
 
 `form(source)` resolves to `null` or `{kind, title, description, fields}`. Each field is `{name, label, description, required, value, values}`. A nonempty values array produces a select; otherwise the applet uses a text input. The supplied value initializes both Insert and Change forms. Forms use the shared PUDL dialog and keep validation errors beside their fields.

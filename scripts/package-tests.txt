@@ -23,3 +23,4 @@ test-diagram-picture-example.cjs
 test-docs-export-name.cjs
 test-document-settles.cjs
 test-split-caret.cjs
+test-host-flow.cjs
