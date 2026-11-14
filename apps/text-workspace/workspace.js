@@ -3043,19 +3043,20 @@ cmd('edit-diagram', 'Edit Diagram', 'new-window', function () { return openDiagr
             fallbackBar.replaceChildren();
             groups.forEach(function (entry) {
                 var g = entry.g, group = document.createElement('div');
-                group.className = 'toolbar-group'; group.setAttribute('role', 'group'); group.setAttribute('aria-label', g.label);
+                group.className = readMode ? 'ed-read-group' : 'toolbar-group'; group.setAttribute('role', 'group'); group.setAttribute('aria-label', g.label);
                 group.setAttribute('data-toolbar-group', g.label); group.setAttribute('data-toolbar-glyph', g.glyph); group.setAttribute('data-toolbar-priority', String(g.priority));
                 if (g.end) { group.setAttribute('data-toolbar-end', ''); }
                 entry.items.forEach(function (item) {
                     var control;
-                    if (typeof item === 'string') { control = document.createElement('button'); control.type = 'button'; control.setAttribute('data-command', item); }
+                    if (typeof item === 'string') { control = document.createElement('button'); control.type = 'button'; control.setAttribute('data-command', item); if (readMode) { control.className = 'btn'; } }
                     else { control = document.createElement('div'); control.className = 'seg sm'; control.setAttribute('data-command-choice', item.choice); }
                     group.appendChild(control);
                 });
                 fallbackBar.appendChild(group);
             });
             if (window.pudlCommands) { window.pudlCommands.changed(); }
-            if (window.pudlToolbar) { window.pudlToolbar.enhance(fallbackBar.parentNode); }
+            /* PUDL's toolbar folds its groups as the window narrows and has no call to undo that, so a read-only instance, whose few commands need no folding and which is disposed to change its note, does not use it. */
+            if (window.pudlToolbar && !readMode) { window.pudlToolbar.enhance(fallbackBar.parentNode); }
             /* PUDL fills the controls and folds the row in the next frame, so the keyboard is given back after that, to the same command
                where it is still shown and otherwise to the first control that is, or to the workspace. */
             if (owned) {
@@ -3405,10 +3406,10 @@ cmd('edit-diagram', 'Edit Diagram', 'new-window', function () { return openDiagr
         var fallbackSlot = commonToolbar ? null : root.querySelector('[data-toolbar-slot]');
         if (fallbackSlot) {
             fallbackBar = document.createElement('div');
-            fallbackBar.className = 'toolbar yavc-fallback-toolbar'; fallbackBar.setAttribute('role', 'toolbar');
-            fallbackBar.setAttribute('aria-label', (isDocs ? 'Docs' : 'Editor') + ' Toolbar'); fallbackBar.setAttribute('data-toolbar-fold', '');
-            /* Every command on it is in a menu, so the ribbon has them while it shows (PUDL 0.80.1). */
-            fallbackBar.setAttribute('data-toolbar-ribbon', 'hide');
+            /* PUDL enhances every element with the class toolbar that the page adds, with observers that it cannot undo, so a read-only instance, which is disposed to change its note, draws its few commands in a bar of its own. */
+            fallbackBar.className = (readMode ? 'ed-read-bar' : 'toolbar') + ' yavc-fallback-toolbar'; fallbackBar.setAttribute('role', 'toolbar');
+            fallbackBar.setAttribute('aria-label', (isDocs ? 'Docs' : 'Editor') + ' Toolbar');
+            if (!readMode) { fallbackBar.setAttribute('data-toolbar-fold', ''); /* Every command on it is in a menu, so the ribbon has them while it shows (PUDL 0.80.1). */ fallbackBar.setAttribute('data-toolbar-ribbon', 'hide'); }
             fallbackSlot.appendChild(fallbackBar);
             document.addEventListener('pudl:commands-change', drawFallbackToolbar);
             drawFallbackToolbar();
