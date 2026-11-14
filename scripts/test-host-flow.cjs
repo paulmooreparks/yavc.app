@@ -75,12 +75,49 @@ const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/cs
                 const expected = gaps => { const list = []; for (let i = 0; i < gaps; i++) { list.push((i === 0 ? 'first' : 'middle') + ':end', (i === gaps - 1 ? 'last' : 'middle') + ':start'); } return list; };
                 for (const kind of ['host', 'note', 'notice']) {
                     assert.ok(pieces[kind].gaps >= 1, engine + ': the ' + kind + ' frame is broken by a gap');
-                    assert.equal(pieces[kind].piece, 'first', engine + ': the ' + kind + ' frame is the first piece');
+                    assert.equal(pieces[kind].piece, 'only', engine + ': the ' + kind + ' frame is one element from its first piece to its last, so it draws the box whole and the caps draw the edges a gap opens');
                     assert.deepEqual(pieces[kind].caps, expected(pieces[kind].gaps), engine + ': the caps of the ' + kind + ' frame');
                     assert.equal(pieces[kind].covers, pieces[kind].gaps, engine + ': a cover for each gap of the ' + kind + ' frame');
                 }
                 assert.equal(pieces.only.piece, 'only', engine + ': a frame no gap runs through is a single piece'); assert.deepEqual(pieces.only.caps, []);
                 assert.equal(pieces.titles.filter(inCap => !inCap).length, 1, engine + ': the title of the note is on the page once'); assert.equal(pieces.titles.filter(inCap => inCap).length, pieces.note.gaps, engine + ': and again below each gap');
+                // What each part draws: the frame keeps its real top and bottom, a cap above a gap is open at its foot and one below it at its head, each
+                // keeps the side borders and the background of the frame, the cover paints the gutter where the sheets' gutter is and nowhere else, and a
+                // repeated title lies wholly in its cap and clear of the text that follows it.
+                phase = 'what each part draws';
+                const drawn = await p.evaluate(() => {
+                    const root = document.querySelector('#document .ProseMirror'), paginated = root.closest('.doc-paginated'), zoom = Number(paginated.style.zoom) || 1;
+                    const sheet = parseFloat(paginated.style.getPropertyValue('--sheet-height')), gutter = parseFloat(paginated.style.getPropertyValue('--sheet-gap')), period = sheet + gutter, origin = paginated.getBoundingClientRect().top;
+                    const px = v => parseFloat(v) || 0, result = {};
+                    const firstText = gap => { for (let n = gap.nextSibling; n; n = n.nextSibling) { if (n.nodeType === 3 && n.textContent.trim()) { const r = document.createRange(); r.selectNodeContents(n); const rect = r.getClientRects()[0]; if (rect) { return rect.top; } } if (n.nodeType === 1 && !n.classList.contains('doc-page-gap')) { return n.getBoundingClientRect().top; } } return null; };
+                    for (const [kind, sel] of [['host', '[data-host-shortcode="gkinfo"] [data-sc-frame]'], ['note', '[data-host-shortcode="gknote"] [data-sc-frame]'], ['notice', '.sc-notice']]) {
+                        const frame = root.querySelector(sel), fs = getComputedStyle(frame), out = result[kind] = { frameEdges: [px(fs.borderTopWidth), px(fs.borderBottomWidth), px(fs.borderLeftWidth)], frameBottomRadius: px(fs.borderBottomLeftRadius), frameTopRadius: px(fs.borderTopLeftRadius), caps: [], covers: [], overlaps: [] };
+                        for (const gap of Array.from(frame.querySelectorAll('.doc-page-gap')).filter(g => !g.closest('.doc-gap-cap'))) {
+                            for (const cap of gap.querySelectorAll('.doc-gap-cap')) {
+                                const cs = getComputedStyle(cap), end = cap.classList.contains('doc-gap-cap-end'), rect = cap.getBoundingClientRect();
+                                out.caps.push({ end, top: px(cs.borderTopWidth), bottom: px(cs.borderBottomWidth), left: px(cs.borderLeftWidth), right: px(cs.borderRightWidth), bg: cs.backgroundColor === fs.backgroundColor, width: Math.abs(rect.width - frame.getBoundingClientRect().width) < 1.5, clipped: cap.scrollHeight > cap.clientHeight + 1, withinGap: rect.top >= gap.getBoundingClientRect().top - 1 && rect.bottom <= gap.getBoundingClientRect().bottom + 1 });
+                                if (!end && cap.textContent.trim()) { const next = firstText(gap); out.overlaps.push({ inside: Array.from(cap.children).every(c => c.getBoundingClientRect().bottom <= rect.bottom + 0.5 && c.getBoundingClientRect().top >= rect.top - 0.5), clear: next === null || next >= rect.bottom - 0.5 }); }
+                            }
+                            const cover = gap.querySelector('.doc-gap-cover'), stops = Array.from(cover.style.background.matchAll(/(-?[\d.]+)px/g)).map(m => parseFloat(m[1])), at = (gap.getBoundingClientRect().top - origin) / zoom;
+                            const grey = period * Math.floor((at + 0.5) / period) + sheet - at;
+                            out.covers.push({ greyAt: Math.max(...stops), expected: Math.max(0, grey + gutter), gutter });
+                        }
+                    }
+                    return result;
+                });
+                for (const kind of ['host', 'note', 'notice']) {
+                    const d = drawn[kind];
+                    assert.ok(d.frameEdges[0] > 0 && d.frameEdges[1] > 0 && d.frameEdges[2] > 0, engine + ': the ' + kind + ' frame keeps its top, bottom and side borders ' + JSON.stringify(d.frameEdges));
+                    assert.ok(d.frameBottomRadius === d.frameTopRadius, engine + ': the ' + kind + ' frame\'s bottom corners are rounded as its top corners are');
+                    for (const cap of d.caps) {
+                        assert.ok(cap.left > 0 && cap.right > 0, engine + ': a ' + kind + ' cap keeps the side borders ' + JSON.stringify(cap));
+                        assert.equal(cap.end ? cap.bottom : cap.top, 0, engine + ': a ' + kind + ' cap is open where the gap is ' + JSON.stringify(cap));
+                        assert.ok(cap.bg && cap.width && !cap.clipped && cap.withinGap, engine + ': a ' + kind + ' cap has the background and width of the frame, clips nothing and stays inside its gap ' + JSON.stringify(cap));
+                    }
+                    for (const cover of d.covers) { assert.ok(Math.abs(cover.greyAt - cover.expected) < 1.5, engine + ': the cover paints the gutter where the sheets have it, ending at ' + cover.greyAt + ' and not ' + cover.expected); }
+                    for (const o of d.overlaps) { assert.ok(o.inside && o.clear, engine + ': a repeated title lies in its cap and clear of the text after it ' + JSON.stringify(o)); }
+                }
+                assert.ok(drawn.note.overlaps.length >= 1, engine + ': the note\'s repeated titles were checked');
                 phase = 'the host is asked once for each';
                 const calls = await p.evaluate(() => fixture.hostFlow.calls);
                 assert.equal(new Set(calls).size, calls.length, engine + ': the host was asked twice for the same shortcode: ' + JSON.stringify(calls));

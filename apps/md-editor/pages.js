@@ -156,6 +156,7 @@
                 if (content.matches('[data-sc-frame]')) {
                     var titles = Array.from(content.querySelectorAll('[data-sc-repeat]')).filter(function (t) { return !t.closest('[data-sc-body]') || t.closest('[data-sc-body]') === t; });
                     var titleHeight = titles.reduce(function (sum, t) { var r = t.getBoundingClientRect(), c = getComputedStyle(t); return sum + r.height / scale + Math.max(0, parseFloat(c.marginBottom) || 0); }, 0);
+                    if (titleHeight > 0) { titleHeight += Math.max(0, parseFloat(getComputedStyle(content).paddingTop) || 0); }
                     if (titleHeight > 0) { for (var ri = firstBlock; ri < blocks.length; ri++) { if (!titles.some(function (t) { return blocks[ri].node === t || blocks[ri].node.contains(t) || t.contains(blocks[ri].node); })) { blocks[ri].repeatHeader = blocks[ri].repeatHeader || titleHeight; } } }
                 }
                 if (blocks.length > firstBlock) {
@@ -238,11 +239,13 @@
        draws behind the gap. The caps and the cover take no room of their own: the gap is as tall as it was. They are put in again at every layout. */
     function applyPieces(host, d) {
         host.querySelectorAll('.doc-gap-cap, .doc-gap-cover').forEach(function (node) { node.remove(); });
-        var scale = Number((host.closest('.doc-paginated') || host).style.zoom) || 1, top = host.getBoundingClientRect().top, period = d.height + GAP;
+        var scale = Number((host.closest('.doc-paginated') || host).style.zoom) || 1, top = (host.closest('.doc-paginated') || host).getBoundingClientRect().top, period = d.height + GAP;
         host.querySelectorAll('.sc-notice, [data-sc-frame]').forEach(function (frame) {
             if (frame.closest('.doc-page-gap') || frame.closest('.doc-footnote')) { return; }
             var gaps = Array.from(frame.querySelectorAll('.doc-page-gap')).filter(function (gap) { return /^(DIV|SPAN)$/.test(gap.tagName) && !gap.closest('.doc-gap-cap'); });
-            frame.setAttribute('data-sc-piece', gaps.length ? 'first' : 'only');
+            /* The frame is one element from the first piece to the last, so it draws the box's real top and real bottom; the caps draw the edges that a gap opens. */
+            frame.setAttribute('data-sc-piece', 'only');
+            var frameLine = getComputedStyle(frame).lineHeight;
             var box = frame.getBoundingClientRect();
             gaps.forEach(function (gap, index) {
                 var rect = gap.getBoundingClientRect(), at = (rect.top - top) / scale, sheet = Math.floor(at / period), gutter = sheet * period + d.height - at;
@@ -255,14 +258,15 @@
                     Array.from(shell.attributes).forEach(function (a) { if (/^(id|data-host|data-line|contenteditable|tabindex)/i.test(a.name)) { shell.removeAttribute(a.name); } });
                     shell.removeAttribute('data-sc-frame'); shell.removeAttribute('data-sc-body');
                     shell.className = (frame.className ? frame.className + ' ' : '') + 'doc-gap-cap doc-gap-cap-' + kind; shell.setAttribute('data-sc-piece', piece); shell.setAttribute('aria-hidden', 'true');
-                    shell.style.cssText = 'max-width:none;position:absolute;left:' + left + 'px;width:' + width + 'px;box-sizing:border-box;pointer-events:none;' + (kind === 'end' ? 'top:0;' : 'bottom:0;');
+                    /* A gap inside a paragraph has line-height 0, which a cap would inherit and so lose the height of its title. */
+                    shell.style.cssText = 'line-height:' + frameLine + ';max-width:none;position:absolute;left:' + left + 'px;width:' + width + 'px;box-sizing:border-box;pointer-events:none;' + (kind === 'end' ? 'top:0;' : 'bottom:0;');
                     return shell;
                 }
                 var head = cap('start', index === gaps.length - 1 ? 'last' : 'middle');
                 /* A title the host marked data-sc-repeat comes again at the head of the piece, as a copy no one can reach. */
                 frame.querySelectorAll('[data-sc-repeat]').forEach(function (title) {
                     if (title.closest('[data-sc-body]') && title.closest('[data-sc-body]') !== title) { return; }
-                    var copy = title.cloneNode(true); copy.removeAttribute('id'); copy.removeAttribute('data-sc-repeat'); copy.setAttribute('aria-hidden', 'true');
+                    var copy = title.cloneNode(true); copy.style.marginBottom = getComputedStyle(title).marginBottom; copy.removeAttribute('id'); copy.removeAttribute('data-sc-repeat'); copy.setAttribute('aria-hidden', 'true');
                     copy.querySelectorAll('[id]').forEach(function (item) { item.removeAttribute('id'); }); copy.querySelectorAll('a,button,input,[tabindex]').forEach(function (item) { item.setAttribute('tabindex', '-1'); });
                     head.append(copy);
                 });
