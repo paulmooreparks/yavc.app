@@ -2006,20 +2006,26 @@
         }
         /* A host with several instances asks one of them, since actions go to the instance that started last: it dispatches a yavc-docs-position event on the instance's root, and the
            instance puts the place in event.detail.position. */
-        function onPositionRequest(event) { if (event.detail && typeof event.detail === 'object') { event.detail.position = positionNow(); } }
+        function onPositionRequest(event) { if (event.detail && typeof event.detail === 'object') { event.detail.position = positionNow(); event.detail.placeUsed = placeUsed; } }
         if (isDocs) { root.addEventListener('yavc-docs-position', onPositionRequest); }
         var pendingPlace = readMode ? (root.getAttribute('data-docs-position') || null) : null;
+        /* Whether the place the host gave was used: null when none was given or it has not been tried yet, true when the instance opened there, and false when the text it
+           named is no longer in the document or the string could not be read. The host reads it from position@1 or from the position event, or hears it once in
+           yavc-docs-place on the root (docs/editing-settings-contract.md, "A place in the text"), so that it can say that a note has changed since it was last read. */
+        var placeUsed = null;
+        function placeResult(used) { placeUsed = used; root.dispatchEvent(new CustomEvent('yavc-docs-place', { detail: { used: used } })); }
         function applyPlace() {
             if (pendingPlace === null || !view) { return; }
             var given = /^v1:(\d+):([0-9a-z]+)$/.exec(pendingPlace); pendingPlace = null;
-            if (!given) { return; }
+            if (!given) { placeResult(false); return; }
             var doc = view.state.doc, want = Math.min(Number(given[1]), doc.lines), found = 0;
             if (lineHash(doc.line(want).text) === given[2]) { found = want; }
             else { for (var n = 1; n <= doc.lines; n++) { if (lineHash(doc.line(n).text) === given[2] && (!found || Math.abs(n - want) < Math.abs(found - want))) { found = n; } } }
-            if (!found) { return; }
+            if (!found) { placeResult(false); return; }
             var target = null;
             Array.from(el.page.querySelectorAll('[data-line]')).forEach(function (block) { if (Number(block.getAttribute('data-line')) <= found) { target = block; } });
             if (target) { el.scroll.scrollTop += target.getBoundingClientRect().top - el.scroll.getBoundingClientRect().top; }
+            placeResult(!!target);
         }
         /* Draws preview blocks into an element with the kit's renderer
            (apps/md-editor/kit.js drawBlocks): made safe, diagrams, pictures,
@@ -3528,7 +3534,7 @@ cmd('edit-diagram', 'Edit Diagram', 'new-window', function () { return openDiagr
         if (!isDocs) ['new-template@1','page-setup@1','header-footer@1','export@1','document-zoom@1','table@1'].forEach(function (id) {if(liveActions[id])liveActions[id]=async function () {throw new Error('This document action moved to yavc.docs/'+id+'. Open the saved document in Docs.');};});
         /* A place in the document, and printing, which a host asks for with an action since its own command may be gone (docs/editing-settings-contract.md). */
         if (isDocs) {
-            liveActions['position@1'] = async function () { docNo(); return { output: { position: positionNow() } }; };
+            liveActions['position@1'] = async function () { docNo(); return { output: { position: positionNow(), placeUsed: placeUsed } }; };
             /* Resolves when the workspace has no work put off (docs/settled-signal.md). It changes nothing, so a read-only instance has it too. */
             liveActions['settled@1'] = async function () { await settled(); return { output: {} }; };
             liveActions['print@1'] = async function () { docNo(); await printDocument(); if (printProblem) { throw new Error(printProblem); } return { output: {} }; };
