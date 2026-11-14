@@ -60,7 +60,11 @@
         var text=place.anchor;
         if(!text||text.nodeType!==Node.TEXT_NODE||place.offset!==0)return place;
         var item=text.parentElement&&text.parentElement.closest('li');
-        if(!item||item.firstChild!==text||!item.parentElement||!/^(UL|OL)$/.test(item.parentElement.tagName))return place;
+        if(!item||!item.parentElement||!/^(UL|OL)$/.test(item.parentElement.tagName))return place;
+        /* The first words of the item: its first text that is not a gap's, whether it is the item's own child or in a paragraph of a loose item. */
+        var walker=document.createTreeWalker(item,NodeFilter.SHOW_TEXT),first=null,node;
+        while((node=walker.nextNode())){if(node.parentElement&&node.parentElement.closest('.doc-page-gap'))continue;if(!node.data.trim())continue;first=node;break;}
+        if(first!==text)return place;
         return {anchor:item.parentElement,offset:Array.prototype.indexOf.call(item.parentElement.childNodes,item),pos:place.pos};
     }
     function rowBands(row,origin,scale,gaps,position){
