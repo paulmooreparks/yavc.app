@@ -106,7 +106,7 @@
         var CM;
         if (window.CM && window.CM.EditorView) { CM = Promise.resolve(window.CM); }
         else {
-            if (!cmReady) { cmReady = loadScript(HERE + 'vendor/codemirror-6.43/codemirror.js?v=10').then(function () { return window.CM; }).catch(function (e) { cmReady = null; throw e; }); }
+            if (!cmReady) { cmReady = loadScript(HERE + 'vendor/codemirror-6.43/codemirror.js?v=11').then(function () { return window.CM; }).catch(function (e) { cmReady = null; throw e; }); }
             CM = cmReady;
         }
         return CM.then(function (lib) { return languages().then(function () { return lib; }); });
