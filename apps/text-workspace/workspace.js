@@ -173,6 +173,8 @@
         var H = window.pudlHost || {}, resourceSession = null, resources = null, recovery = null;
         /* The host's editing settings (docs/editing-settings-contract.md), read once here and used for every editing area for as long as this applet lives. Only a version 1 service whose spellcheck is the boolean false changes anything. */
         var spellcheckOff = !!(H.editing && H.editing.version === 1 && H.editing.spellcheck === false);
+        /* documentName (docs/editing-settings-contract.md): false leaves the document's name out of the status line, and 'resource' shows the resource's ID, which a host whose IDs are readable addresses uses. */
+        var nameSetting = H.editing && H.editing.version === 1 ? H.editing.documentName : undefined;
         var documentWindows = H.documentWindows, documentReady = false, receivingDocument = false, unbindDocuments = null;
         /* Commands the host adds to the File menu, to publish a document
            somewhere of the host's say (docs/document-commands-contract.md).
@@ -524,7 +526,8 @@
         function renderTabs() {
             if (tabRow) { tabRow.render(); }
             var t = current();
-            el.where.textContent = t ? (t.path || 'Not saved yet') : '';
+            /* A document a host gave is shown by the name the host gave it, and not by the resource's ID, which a host need not make readable. */
+            el.where.textContent = !t || nameSetting === false ? '' : nameSetting === 'resource' ? (t.path || 'Not saved yet') : ((t.resource && t.name) || t.path || 'Not saved yet');
             el.where.title = el.where.textContent;
             el.lang.textContent = t ? LANG_NAMES[t.lang] : '';
             showCount();
@@ -917,7 +920,9 @@
             (front.entries || []).forEach(function (entry) { if (entry.key === 'stylesheet') { path = entry.value; } });
             var result = await E.build(format, { text: output, engine: m, stylesheet: path ? resolveReference(path, 'stylesheet', directory) : '',
                 read: function (path) { if (!unchanged()) { throw new Error('The document changed during export.'); } return window.pudlHost.fs.readText(path); }, pictures: pictures, current: unchanged });
-            result.name = (tab.path ? tab.path.split('/').pop().replace(/(?:\.docs)?\.md$/i, '') : 'document') + '.' + format;
+            /* The file is named after the document's name, which a host gives with the resource, and not after the resource's ID. */
+            var shown = tab.name || (tab.path ? tab.path.split('/').pop() : ''), stem = String(shown).replace(/(?:\.docs)?\.md$/i, '').replace(/[\\/:*?"<>|\x00-\x1f]+/g, '_').replace(/^[\s._]+|[\s.]+$/g, '');
+            result.name = (stem || 'document') + '.' + format;
             return result;
         }
         async function downloadDocument(format) {

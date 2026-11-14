@@ -6,6 +6,7 @@
  function drawing(label){return JSON.stringify({nodes:[{id:'a',type:'text',x:0,y:0,width:200,height:80,text:label}],edges:[]});}
  records.set(dependency,{text:drawing('Independent host diagram'),revision:1,name:'plan.canvas'});
  records.get('memory:document.docs.md').text='# Document\n\n{{diagram:plan.canvas alt="Portable reference"}}\n\nEditable words.\n';
+ if(new URLSearchParams(location.search).has('plain'))records.get('memory:document.docs.md').text='# Document\n\nPlain words.\n';
  window.fixture={takes:{},changes:{},records:records,writes:writes,snapshots:snapshots,updateDiagram:function(label){records.get(dependency).text=drawing(label);listeners.forEach(function(fn){fn();});}};
  window.pudlHost=pudlHostKit.host({pages:'/',pudl:new URL('../pudl/',location.href).href,contentWorkspace:{version:1,directory:function(resource){return resource==='memory:document.docs.md'?'~/portable':null;},shortcodes:async function(){return {shortcodes:[{name:'empty-title',kind:'inline',title:' ',description:'Refused'},{name:'too-long',kind:'block',title:'Overlong Example',description:'Refused',example:'x'.repeat(4097)},null,{name:'<unsafe>',kind:'inline',title:'Unsafe',description:'Refused'},{name:'figure',kind:'inline',title:'Override',description:'A host cannot replace a built-in',params:[]},{name:'host-example',kind:'block',title:'Host Example',description:'Additional host metadata',params:[]}]};}},
   config:{load:async function (app,defaults) {return Object.assign({},defaults,preferences.get(app));},set:async function (app,value) {preferences.set(app,Object.assign({},preferences.get(app),value));},onChange:function () {return function () {}; }},
@@ -15,7 +16,7 @@
    write:async function (request) {var record=records.get(request.resource);if(!record || request.expectedRevision!==String(record.revision))throw new Error('Resource conflict');writes.push(request);record.text=request.text;record.revision++;return {resource:request.resource,revision:String(record.revision),name:record.name,writable:true};}}
  });
  // The host's editing settings (docs/editing-settings-contract.md), offered when the address asks for them and set before the applets start, since they read the service once.
- {const settings={'no-spellcheck':{version:1,spellcheck:false},'wrong-version':{version:2,spellcheck:false},'not-a-boolean':{version:1,spellcheck:'false'}}[new URLSearchParams(location.search).get('editing')];if(settings)pudlHost.editing=settings;}
+ {const settings={'no-spellcheck':{version:1,spellcheck:false},'wrong-version':{version:2,spellcheck:false},'not-a-boolean':{version:1,spellcheck:'false'},'no-name':{version:1,documentName:false}}[new URLSearchParams(location.search).get('editing')];if(settings)pudlHost.editing=settings;}
  // The toolbar a person can change (docs/command-toolbar-design.md), offered when the address asks for it. The controller is the package's own, and this host gives it only somewhere to keep the arrangement.
  if(new URLSearchParams(location.search).has('toolbar'))pudlHost.commandToolbar={attach:function(root,options){return yavcCommandToolbar.attach(root,Object.assign({},options,{config:pudlHost.config}));}};
  // A command of the host's own in the File menu (docs/document-commands-contract.md): present for one document, and unavailable until the host says otherwise.

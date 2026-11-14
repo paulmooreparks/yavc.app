@@ -108,6 +108,8 @@
     function startIn(F, want) { try { return want && F.resolve(F.home(), want) ? want : '~'; } catch (err) { return '~'; } }
 
     window.pudlHost = kit.host({
+        /* The site's resource IDs are the person's own paths, so its status line shows the path (docs/editing-settings-contract.md, documentName). */
+        editing: { version: 1, documentName: 'resource' },
         commandToolbar: {
             attach: function (root, options) {
                 var service=window.pudlHost.config;
