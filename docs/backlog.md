@@ -17,7 +17,6 @@ This page lists the defects and gaps the yavc.app team has found and not yet fix
 
 ## Docs in another host's page
 
-- **Docs has no menus on a page without a PUDL menu bar.** It offers menus() and not commands(), so PUDL's fallback Commands row does not appear (pudl-applets.js:286, :647). The Markdown view is then reachable only from the toolbar switch, and the editing settings contract (`docs/editing-settings-contract.md:27`) wrongly says it stays in the View menu. Found by Yavc.App Tester on 2026-11-14 in the one-page host with the v0.2.88 Docs-only package, for PFO.
 
 ## Other applets
 

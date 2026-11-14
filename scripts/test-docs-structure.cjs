@@ -34,7 +34,7 @@ const styled=['Setext heading','==============','','Second setext','------------
   if(u.pathname.endsWith('/workspace-lab/host.js'))body=Buffer.from(body.toString().replace(/records\.get\('memory:document\.docs\.md'\)\.text='[^;]*;/,()=>"records.get('memory:document.docs.md').text="+JSON.stringify(documentText)+";").replace("['editor','docs','slides']","['docs']"));
   res.writeHead(200,{'content-type':types[path.extname(u.pathname)]||'application/octet-stream'}).end(body);
  }catch{if(!res.headersSent)res.writeHead(404).end();}});
- await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const address=`http://127.0.0.1:${server.address().port}${prefix}workspace-lab/index.html`,failures=[];
+ await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const address=`http://127.0.0.1:${server.address().port}${prefix}workspace-lab/index.html?editing=menus-host`,failures=[];
  try{for(const engine of process.argv.slice(3).length?process.argv.slice(3):['chromium','firefox','webkit']){
   const browser=await pw[engine].launch({headless:true});
   const frames=page=>page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
