@@ -4,7 +4,6 @@ This page lists the defects and gaps the yavc.app team has found and not yet fix
 
 ## Docs and Editor, page view
 
-- **A link reference definition is drawn as text.** `[1]: https://example.org/ref` appears in the page view as a visible line. Found with the previous items.
 - **Typing `---` and Enter does not make a rule.** The three characters stay as text. Found with the previous items.
 - **PDF export has no right-to-left layout.** pdfmake has no such layout and the Roboto font it uses has no Hebrew or Arabic glyphs, so a PDF export refuses a document with such text. Left over from the right-to-left work (decision 155).
 - **Typing right-to-left text is not tested.** The right-to-left test reads a document and checks how it is drawn, printed and exported, and does not type Hebrew or Arabic into the page or the Text view. Left over from decision 155.
