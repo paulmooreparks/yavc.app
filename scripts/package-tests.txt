@@ -32,3 +32,4 @@ test-docs-insert.cjs
 test-portable-nonce-policy.cjs
 test-row-nested-list.cjs
 test-docs-menus.cjs
+test-rule-input.cjs
