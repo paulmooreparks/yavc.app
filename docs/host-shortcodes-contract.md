@@ -57,7 +57,17 @@ The Insert menu and slash menu include non-managed host entries alongside built-
 
 ## Export boundary
 
-This service supplies screen drawings for Document, Visual and Preview, including Slides' shared renderer. It does not define a trusted print or Office export representation. Export explicitly refuses host-rendered placeholders rather than exporting fallback text or losing content. The refusal is shown beside the tabs, as a notice that stays until it is dismissed or the next try, and it gives the shortcodes by name (`{{name}}`, up to eight), so that a person can find them. A host that needs those exports must provide a separate export representation in a future contract.
+Word and PDF are built from a structural description of the document and not from HTML, so a host's drawing gives them nothing to convert. Export explicitly refuses host-rendered placeholders rather than exporting fallback text or losing content. A host that needs those exports must provide a separate export representation in a future contract. The refusal is shown beside the tabs, as a notice that stays until it is dismissed or the next try, and it gives the shortcodes by name (`{{name}}`, up to eight), so that a person can find them.
+
+### Print
+
+Print is the browser drawing HTML, as the screen does, so it can use what the page already has. A host controls it with one optional field in a render result, `print`, whose value is `"screen"` or `"none"`.
+
+- **`"screen"`, the default.** Print uses the drawing as it is at the moment of printing, which is the drawing the page already holds for the screen, after the page has sanitised it, with no new request to the host. It is laid out across the printed pages by the same code that lays out Document view, so a frame is drawn in pieces, a title marked `data-sc-repeat` comes again, and a flowing block breaks between its parts, as they do on the screen. The print frame takes the page's own styles, which include the host's.
+- **`"none"`.** A host sets it on a drawing that is live or interactive and that it does not want on paper. Print refuses the document and gives that shortcode by name. The notice has no Try Again, because trying again cannot change the answer.
+- **A drawing that has failed, has timed out or is still pending.** Print never prints a blank or placeholder box. It refuses the document, gives each such shortcode by name and offers Try Again. Try Again prints the drawings as they are at that moment, again with no request to the host, so a host that wants a drawing retried makes it from its own side, as it does for the screen.
+
+A document that has any host-drawn shortcode is still refused by Word and PDF, whatever its `print` value.
 
 ## Verification
 
