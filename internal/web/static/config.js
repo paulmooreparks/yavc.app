@@ -99,7 +99,10 @@
     function watch() {
         if (watching) { return; }
         watching = true;
-        window.pcSiteFs.onChange(function () { Object.keys(entries).forEach(refresh); });
+        /* Only a change of the settings files is read again. The change event says what kind of change it is, and an ordinary file saved in the
+           home folder, which a large document does at every save, is 'home' and cannot be a settings file, since those are kept apart from the
+           other files (sitefs.js, settingsChanged), so it costs these files nothing. */
+        window.pcSiteFs.onChange(function (change) { if (change && change.reason === 'settings') { Object.keys(entries).forEach(refresh); } });
     }
 
     async function load(name, defaults) {
