@@ -29,7 +29,7 @@ const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/cs
                 }, words);
                 const open = async apps => {
                     const page = await browser.newPage({ viewport: { width: 1280, height: 900 } }), errors = [], fetched = [];
-                    page.setDefaultTimeout(25000); page.on('pageerror', error => errors.push(error.message)); page.on('request', request => { if (/\/lang\/go\.js/.test(request.url())) fetched.push(request.url()); });
+                    page.setDefaultTimeout(25000); page.on('pageerror', error => errors.push(error.message)); page.on('request', request => { { const m = /\/lang\/([a-z]+)\.js/.exec(request.url()); if (m) fetched.push(m[1]); } });
                     await page.goto(`http://127.0.0.1:${server.address().port}${prefix}workspace-lab/index.html?apps=${apps}`);
                     return { page, errors, fetched };
                 };
@@ -45,7 +45,7 @@ const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/cs
                     await run('open-file', { path: 'memory:main.go' });
                     await page.waitForFunction(() => Array.from(document.querySelectorAll('.cm-content span')).some(s => s.textContent === 'func'));
                     await page.waitForTimeout(400);
-                    assert.equal(fetched.length, 1, engine + ': the Go grammar is fetched once, when the file opens');
+                    assert.deepEqual(fetched, ['go'], engine + ': the Go grammar is fetched once, when the file opens, and no other');
                     const c = await colours(page, ['func', '"hi"', '42', '// Hello says hello.']);
                     for (const word of ['func', '"hi"', '42', '// Hello says hello.']) { assert.ok(c[word], engine + ': ' + word + ' has its own span'); assert.notEqual(c[word].color, c.plain, engine + ': ' + word + ' is coloured'); }
                     assert.notEqual(c.func.color, c['"hi"'].color, engine + ': a keyword and a string differ');
@@ -87,13 +87,13 @@ const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/cs
                     const { page, errors, fetched } = await open('docs');
                     await page.locator('#document .ProseMirror').waitFor();
                     const call = (name, input = {}) => page.evaluate(({ name, input }) => pudlActions.run('yavc.docs/' + name + '@1', input, { grant: 'all' }), { name, input });
-                    await call('set-text', { text: 'Words\n\n```python\nfunc = 42\n```\n\n```text\nfunc 42\n```\n' }); await call('view', { mode: 'text' });
+                    await call('set-text', { text: 'Words\n\n```ruby\nfunc = 42\n```\n\n```text\nfunc 42\n```\n' }); await call('view', { mode: 'text' });
                     await page.locator('.cm-content').waitFor(); await page.waitForTimeout(900);
-                    assert.deepEqual(fetched, [], engine + ': a fence of another language does not fetch the Go grammar');
+                    assert.deepEqual(fetched, [], engine + ': a fence of a language with no grammar, and a text fence, fetch nothing');
                     await call('set-text', { text: 'Words\n\n```go\npackage main\n\nfunc main() {\n\tprintln("hi")\n}\n```\n' });
                     await page.waitForFunction(() => Array.from(document.querySelectorAll('.cm-content span')).some(s => s.textContent === 'func'));
                     await page.waitForTimeout(400);
-                    assert.equal(fetched.length, 1, engine + ': a Go fence fetches the grammar once');
+                    assert.deepEqual(fetched, ['go'], engine + ': a Go fence fetches the grammar once, and no other');
                     const c = await colours(page, ['func', '"hi"']);
                     assert.ok(c.func && c['"hi"'], engine + ': the fence has coloured words');
                     assert.notEqual(c.func.color, c.plain, engine + ': a keyword in the fence is coloured');
@@ -109,7 +109,41 @@ const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/cs
                     assert.equal((await call('document')).text.includes('```go\npackage main'), true, engine + ': the text is unchanged');
                     assert.deepEqual(errors, []); await page.close();
                 }
-                console.log(engine + ': Go is coloured in the Editor and in a Docs fence, and loads only when needed');
+
+                // The other languages of the core set, each in a page of its own so that only its grammar can have been fetched.
+                for (const [id, file, name, words] of [['c', 'hello.c', 'C', ['return', '"hi"', '42', '/* Hello says hello. */']], ['csharp', 'hello.cs', 'C#', ['class', '"hi"', '42', '// Hello says hello.']], ['python', 'hello.py', 'Python', ['def', '"hi"', '42', '# Hello says hello.']]]) {
+                    phase = 'a ' + name + ' file in the Editor';
+                    const { page, errors, fetched } = await open('editor');
+                    await page.locator('#source .cm-content').waitFor();
+                    await page.evaluate(path => pudlActions.run('yavc.editor/open-file@1', { path }, { grant: 'all' }), 'memory:' + file);
+                    await page.waitForFunction(w => Array.from(document.querySelectorAll('.cm-content span')).some(s => s.textContent === w), words[0]); await page.waitForTimeout(400);
+                    assert.deepEqual(fetched, [id], engine + ': opening a ' + name + ' file fetches its grammar and no other');
+                    const c = await colours(page, words);
+                    for (const word of words) { assert.ok(c[word], engine + ' ' + name + ': ' + word + ' has its own span'); assert.notEqual(c[word].color, c.plain, engine + ' ' + name + ': ' + word + ' is coloured'); }
+                    assert.notEqual(c[words[0]].color, c['"hi"'].color, engine + ' ' + name + ': a keyword and a string differ');
+                    assert.ok(c[words[3]].italic, engine + ' ' + name + ': a comment is italic');
+                    assert.equal(await page.locator('[data-role="lang"]').first().textContent(), name, engine + ': the status bar says ' + name);
+                    assert.deepEqual(errors, []); await page.close();
+                }
+
+                phase = 'fences of every language and their other names in Docs';
+                {
+                    const { page, errors, fetched } = await open('docs');
+                    await page.locator('#document .ProseMirror').waitFor();
+                    const call = (name, input = {}) => page.evaluate(({ name, input }) => pudlActions.run('yavc.docs/' + name + '@1', input, { grant: 'all' }), { name, input });
+                    await call('view', { mode: 'text' });
+                    for (const [info, id, keyword, code] of [['golang', 'go', 'func', 'func main() {}'], ['c', 'c', 'return', 'int main() { return 0; }'], ['cs', 'csharp', 'class', 'class A {}'], ['c#', 'csharp', 'class', 'class B {}'], ['py', 'python', 'def', 'def f(): pass'], ['python3', 'python', 'def', 'def g(): pass']]) {
+                        await call('set-text', { text: '```' + info + '\n' + code + '\n```\n' }); await page.waitForTimeout(900);
+                        const n = await colours(page, [keyword]);
+                        assert.ok(n[keyword], engine + ': a fence called ' + info + ' has coloured words');
+                        assert.notEqual(n[keyword].color, n.plain, engine + ': a fence called ' + info + ' is coloured');
+                        assert.ok(fetched.includes(id), engine + ': a fence called ' + info + ' fetched ' + id);
+                    }
+                    assert.deepEqual([...new Set(fetched)].sort(), ['c', 'csharp', 'go', 'python'], engine + ': each grammar was fetched, and only those');
+                    assert.equal(fetched.length, 4, engine + ': each grammar was fetched once');
+                    assert.deepEqual(errors, []); await page.close();
+                }
+                console.log(engine + ': Go, C, C# and Python are coloured in the Editor and in Docs fences, and load only when needed');
             } catch (err) { console.error(engine, phase); throw err; } finally { await browser.close(); }
         }
     } finally { server.close(); }
