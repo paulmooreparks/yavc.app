@@ -19,7 +19,8 @@
         {name:'gkbroken',title:'Broken',kind:'block',example:'{{gkbroken}}'}
     ].map(function(d){return Object.assign({description:'Synthetic host shortcode',params:[]},d);});
     var rows=Array.from({length:40},function(_,i){return '<tr><td>R-'+(i+1)+'</td><td>'+words(60)+'</td></tr>';}).join('');
-    var include='<div class="gk-include"><h2>Included Page</h2>'+Array.from({length:10},function(_,i){return '<p>Included paragraph '+(i+1)+'. '+words(70)+'</p>';}).join('')+'<table><thead><tr><th>ID</th><th>Requirement</th></tr></thead><tbody>'+rows+'</tbody></table><p>Last paragraph.</p></div>';
+    var tall=Array.from({length:700},function(_,i){return 'T'+(i+1);}).join(' ');
+    var include='<div class="gk-include"><h2>Included Page</h2>'+Array.from({length:10},function(_,i){return '<p>Included paragraph '+(i+1)+'. '+words(70)+'</p>';}).join('')+'<table><thead><tr><th>ID</th><th>Requirement</th></tr></thead><tbody>'+rows+'<tr><td>TALL</td><td>'+tall+'</td></tr></tbody></table><p>Last paragraph.</p></div>';
     var renders={
         gkinfo:{html:'<div class="gk-panel gk-panel-info" data-sc-frame="" data-sc-body=""><slot name="content"></slot></div>'},
         gknote:{html:'<div class="gk-panel gk-panel-note" data-sc-frame=""><p data-sc-repeat=""><strong>Mind the gap</strong></p><div data-sc-body=""><slot name="content"></slot></div></div>'},

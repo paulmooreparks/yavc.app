@@ -30,7 +30,7 @@ const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/cs
                 // The layout settles: the number of gaps stays the same for three samples in a row.
                 phase = 'settled';
                 let last = -1, same = 0;
-                for (let i = 0; i < 40 && same < 3; i++) { await p.waitForTimeout(700); const n = await p.evaluate(() => document.querySelectorAll('#document .doc-page-gap').length); same = n === last ? same + 1 : 0; last = n; }
+                for (let i = 0; i < 40 && same < 3; i++) { await p.waitForTimeout(700); const n = await p.evaluate(() => document.querySelectorAll('#document .doc-page-gap').length + document.querySelectorAll('#document [data-host-shortcode="gkinclude"] .doc-page-gap').length * 10000); same = n >= 10000 && n === last ? same + 1 : 0; last = n; }
                 assert.equal(same, 3, engine + ': the layout did not settle (' + last + ' gaps)');
                 const shape = await p.evaluate(() => {
                     const root = document.querySelector('#document .ProseMirror'), q = s => root.querySelector(s), gaps = el => el.querySelectorAll('.doc-page-gap').length;
@@ -56,8 +56,11 @@ const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/cs
                 assert.deepEqual(shape.noteParagraphs, Array(24).fill(1), engine + ': each paragraph of the note body is there once'); assert.equal(shape.noteTitle, 1, engine + ': the title is there once');
                 assert.equal(shape.infoFlow, null, engine + ': a container is not flowing content'); assert.equal(shape.tocFlow, 'true'); assert.equal(shape.includeFlow, 'true');
                 assert.equal(shape.tocLinks, 3, engine + ': the contents block is drawn whole');
+                const tall = await p.evaluate(() => { const rows = Array.from(document.querySelectorAll('#document [data-host-shortcode="gkinclude"] tbody tr')).filter(r => !r.closest('.doc-page-gap') && /^TALL/.test(r.textContent)); return { tokens: rows.flatMap(r => (r.textContent.match(/T\d+/g) || []).map(t => Number(t.slice(1)))), gaps: rows.reduce((n, r) => n + r.querySelectorAll('.doc-page-gap').length, 0) }; });
+                assert.deepEqual(tall.tokens, Array.from({ length: 700 }, (_, i) => i + 1), engine + ': a row taller than a page has each of its words once, in order');
+                assert.ok(tall.gaps >= 1, engine + ': a row taller than a page is cut inside the row (' + tall.gaps + ' gaps in it)');
                 assert.ok(shape.includeGaps >= 2, engine + ': the included page is broken between its children and inside its table (' + shape.includeGaps + ' gaps)');
-                assert.deepEqual(shape.includeParagraphs, Array(10).fill(1), engine + ': each included paragraph is there once'); assert.equal(shape.includeRows, 40, engine + ': each row of the included table is there once'); assert.equal(shape.includeHeads, 2, engine + ': its header is there once, and repeated only in the gaps');
+                assert.deepEqual(shape.includeParagraphs, Array(10).fill(1), engine + ': each included paragraph is there once'); assert.equal(shape.includeRows, 41, engine + ': each row of the included table is there once'); assert.equal(shape.includeHeads, 2, engine + ': its header is there once, and repeated only in the gaps');
                 assert.equal(shape.pieceFrame, true); assert.equal(shape.pieceMark, 'only', engine + ': the page\'s own mark replaces data-sc-piece=middle in a host drawing');
                 assert.equal(shape.warned, false, engine + ': the page says something is indivisible');
                 // A frame that a gap runs through is drawn in pieces: the frame is the first, a cap above each gap closes the piece before it and a cap below it
@@ -127,11 +130,11 @@ const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/cs
                 const printed = await p.locator('.ed-print-frame').evaluate(f => {
                     const d = f.contentDocument, text = d.body.textContent, count = re => (text.match(re) || []).length, sheets = d.querySelectorAll('.doc-print-sheet');
                     return { sheets: sheets.length, paragraphs: Array.from({ length: 24 }, (_, i) => count(new RegExp('Paragraph ' + (i + 1) + '\. ', 'g'))), included: Array.from({ length: 10 }, (_, i) => count(new RegExp('Included paragraph ' + (i + 1) + '\. ', 'g'))),
-                        rows: Array.from(d.querySelectorAll('tbody tr')).filter(r => /^R-\d+/.test(r.textContent)).length, note: Array.from(d.querySelectorAll('[data-host-shortcode="gknote"] [data-sc-frame]')).map(f => f.getAttribute('data-sc-piece') + ':' + (f.textContent.match(/Mind the gap/g) || []).length), notice: Array.from(d.querySelectorAll('.sc-notice')).map(f => f.getAttribute('data-sc-piece')), frames: d.querySelectorAll('[data-sc-frame]').length, failed: d.querySelectorAll('.sc-host-failed').length, indivisible: /indivisible/.test(text) };
+                        rows: Array.from(d.querySelectorAll('tbody tr')).filter(r => /^R-\d+/.test(r.textContent)).length, note: Array.from(d.querySelectorAll('[data-host-shortcode="gknote"] [data-sc-frame]')).map(f => f.getAttribute('data-sc-piece') + ':' + (f.textContent.match(/Mind the gap/g) || []).length), notice: Array.from(d.querySelectorAll('.sc-notice')).map(f => f.getAttribute('data-sc-piece')), tall: (text.match(/T\d+/g) || []).map(t => Number(t.slice(1))), frames: d.querySelectorAll('[data-sc-frame]').length, failed: d.querySelectorAll('.sc-host-failed').length, indivisible: /indivisible/.test(text) };
                 });
                 assert.ok(printed.sheets >= 6, engine + ': the document prints over several sheets (' + printed.sheets + ')');
                 assert.deepEqual(printed.paragraphs, Array(24).fill(3), engine + ': each paragraph of the three bodies prints once'); assert.deepEqual(printed.included, Array(10).fill(1));
-                assert.equal(printed.rows, 40, engine + ': each row of the included table prints once');
+                assert.equal(printed.rows, 40, engine + ': each of the numbered rows of the included table prints once'); assert.deepEqual(printed.tall, Array.from({ length: 700 }, (_, i) => i + 1), engine + ': the row taller than a page prints each word once, in order');
                 const marks = list => list.map(x => x.split(':')[0]), pieceMarks = (n) => Array.from({ length: n }, (_, i) => n === 1 ? 'only' : i === 0 ? 'first' : i === n - 1 ? 'last' : 'middle');
                 assert.ok(printed.note.length >= 2, engine + ': the note is printed in pieces'); assert.deepEqual(marks(printed.note), pieceMarks(printed.note.length), engine + ': its pieces are marked first, middle and last');
                 assert.deepEqual(printed.note.map(x => x.split(':')[1]), Array(printed.note.length).fill('1'), engine + ': the repeated title is at the head of each piece, once');
@@ -161,7 +164,7 @@ const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/cs
                 assert.equal(await p.locator('.yavc-notice:not([hidden]) button', { hasText: 'Try Again' }).count(), 0, engine + ': a drawing the host keeps off paper has no Try Again');
                 assert.deepEqual(errors, []);
                 console.log(engine + ': a host\'s containers and flowing blocks are laid out across pages, each child once, with the source whole');
-            } catch (err) { console.error(engine, phase); throw err; } finally { await browser.close(); }
+            } catch (err) { console.error(engine, phase, errors.length ? 'page errors: ' + errors.join(' / ') : ''); throw err; } finally { await browser.close(); }
         }
     } finally { server.close(); }
 })().catch(error => { console.error(error.message || error); process.exitCode = 1; });
