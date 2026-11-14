@@ -28,14 +28,12 @@ A profile is a fixed list in `cmd/yavc-content`. It names the applets and shared
 | --- | --- |
 | Applet | Docs only. Editor, Slides and Diagrams, their folders and the two independent-host fixtures (`lab`, `workspace-lab`) are left out. |
 | Shared code Docs needs | `content-kit`, `text-workspace`, `md-editor`, `md-engine` with `yavc-md.wasm`, `support`, `pudl` (the whole verified PUDL release, unchanged), `shortcodes.json`, `LICENSE`, `go.mod` and `go.sum`. |
-| Printing | All of `export.js`, since printing prepares a document through it. Only the libraries that write Word and PDF files are left out. |
+| Printing and export | All of `export.js` and the libraries that write Word and PDF files (the vendored docx, pdfmake, fontkit and pdf-lib libraries and `pdf-notes.js`), so Download as Word and Download as PDF work, as does `yavc.docs/export@1`. |
 
 ### What `docs` leaves out, as named features
 
 | Feature | Files left out | What a person loses |
 | --- | --- | --- |
-| `export-word` | The vendored docx library | Download as Word |
-| `export-pdf` | The vendored pdfmake, fontkit and pdf-lib libraries and `pdf-notes.js` | Download as PDF |
 | `import-office` | `import-word.js`, its worker, `office-input.js`, `import-images.js`, `import/` and the vendored mammoth | Import Word |
 | `mermaid` | The vendored Mermaid | A Mermaid block cannot be drawn |
 | `diagrams` | All of `diagram-kit` (D2 and its 22 MB engine, the Canvas reader and `canvas-embed.js`) and the Diagrams applet | A `{{diagram}}` reference or a D2 block cannot be drawn, so no diagram code is present at all |

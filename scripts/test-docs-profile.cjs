@@ -63,12 +63,21 @@ const headers={'Content-Security-Policy':policy,'X-Frame-Options':'DENY','Referr
    await rich.getByRole('heading',{name:'Plain'}).waitFor();
    await p.evaluate(()=>{window.__seen=[];new MutationObserver(l=>l.forEach(m=>m.addedNodes.forEach(n=>n.textContent&&window.__seen.push(n.textContent.trim().slice(0,200))))).observe(document.body,{childList:true,subtree:true});});
    // Each omitted feature, used: a person who presses it is told in words, and nothing fails silently.
-   for(const [command,sentence] of [['export-docx','Export to Word is not part of this build of Docs.'],['export-pdf','Export to PDF is not part of this build of Docs.'],['import-docx','Opening a Word document is not part of this build of Docs.']]){
+   for(const [command,sentence] of [['import-docx','Opening a Word document is not part of this build of Docs.']]){
     await p.evaluate(c=>{pudlCommands.run(c,null,document.querySelector('#document'));},command);
     // A toast is shown for a few seconds, so what is added to the page is recorded as it arrives.
     await p.waitForFunction(s=>document.body.innerText.includes(s)||window.__seen.some(t=>t.includes(s)),sentence).catch(async()=>{throw new Error(engine+': '+command+' did not say "'+sentence+'"; the page said: '+JSON.stringify(await p.evaluate(()=>window.__seen).catch(()=>[])));});
     await p.keyboard.press('Escape');
    }
+   // Word and PDF are kept: each command hands over a file, under the same policy, with nothing refused and nothing requested outside the package.
+   for(const [command,extension] of [['export-docx','.docx'],['export-pdf','.pdf']]){
+    const download=p.waitForEvent('download');
+    await p.evaluate(c=>{pudlCommands.run(c,null,document.querySelector('#document'));},command);
+    const file=await download,saved=await file.path();
+    assert.ok(file.suggestedFilename().endsWith(extension),engine+': '+command+' gave '+file.suggestedFilename());
+    assert.ok((await require('node:fs/promises').stat(saved)).size>1000,engine+': '+command+' gave an empty file');
+   }
+   assert.deepEqual(await p.evaluate(()=>window.__violations),[],engine+': an export broke the policy');
    // A Mermaid block shows its notice where it is.
    await p.evaluate(()=>{pudlCommands.run('view-text',null,document.querySelector('#document'));});await p.locator('#document .cm-content').click();await p.keyboard.press('ControlOrMeta+End');
    await p.keyboard.type('\n\n```mermaid\ngraph TD; A-->B;\n```\n');

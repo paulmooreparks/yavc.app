@@ -61,8 +61,6 @@ var profiles = map[string]profile{
 		entry:    "content/docs/applet.json",
 		entries:  []string{"content/docs/applet.json"},
 		omit: []feature{
-			{"export-word", "Export to Word is not part of this build of Docs.", []string{"content/md-editor/vendor/docx-9.15.2/"}},
-			{"export-pdf", "Export to PDF is not part of this build of Docs.", []string{"content/md-editor/vendor/pdfmake-0.2.23/", "content/md-editor/vendor/fontkit-1.1.1/", "content/md-editor/vendor/pdf-lib-1.17.1/", "content/md-editor/pdf-notes.js"}},
 			{"import-office", "Opening a Word document is not part of this build of Docs.", []string{"content/md-editor/import/", "content/md-editor/import-images.js", "content/md-editor/import-word.js", "content/md-editor/import-word-worker.js", "content/md-editor/office-input.js", "content/md-editor/vendor/mammoth-1.13.0/", "content/md-editor/vendor/office-NOTICE.md"}},
 			{"mermaid", "Mermaid diagrams are not part of this build of Docs.", []string{"content/md-editor/vendor/mermaid/"}},
 			{"diagrams", "Diagrams are not part of this build of Docs.", []string{"content/diagram-kit/", "content/diagrams/"}},
