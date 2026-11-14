@@ -928,9 +928,10 @@
             return result;
         }
         async function downloadDocument(format) {
+            window.yavcUtil.notice(el.tabs, '');
             say('Writing the ' + format.toUpperCase() + ' file…');
             try { var result = await exportDocument(format); download(result.name, result.blob); say('Downloaded ' + result.name + '. ' + result.warnings.join(' ')); }
-            catch (err) { if(err.name!=='AbortError')say('The document could not be exported: ' + err.message, true);else say('Export cancelled.'); }
+            catch (err) { if (err.refusal) { say('Download as ' + format.toUpperCase() + ': ' + err.message, 'warn'); } else if(err.name!=='AbortError')say('The document could not be exported: ' + err.message, true);else say('Export cancelled.'); }
         }
 
         /* === Dialogs ====================================================== */
@@ -1391,6 +1392,7 @@
         }
         async function printDocument() {
             var t = current(); if (!t || t.lang !== 'markdown') { return; }
+            window.yavcUtil.notice(el.tabs, '');
             try {
                 if (pageActive()) { await visual.api.sync(); }
                 var text = view.state.doc.toString(), K = await loadKit(), E = await K.exports(), P = await K.pages(), m = await documentEngine(text);
@@ -1433,7 +1435,7 @@
                         frame.contentWindow.print(); say('Print uses the document page size and margins. Turn off browser headers and footers and select the matching paper size.');
                     }
                 });
-            } catch (err) { if (printFrame) { printFrame.remove(); printFrame = null; } say('The document could not be printed: ' + err.message, true); }
+            } catch (err) { if (printFrame) { printFrame.remove(); printFrame = null; } if (err.refusal) { say('Print: ' + err.message, 'warn'); } else { say('The document could not be printed: ' + err.message, true); } }
         }
 
         /* A call to one of the server's admin APIs, signing in again when the
