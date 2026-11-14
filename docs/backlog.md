@@ -17,7 +17,6 @@ This page lists the defects and gaps the yavc.app team has found and not yet fix
 
 ## Diagrams
 
-- **Closing a Diagrams window while the language service is still starting rejects with an error nobody handles.** The language-service bridge's start is rejected with `{code: -32800, message: "Language session ended."}` and the rejection is not caught, so a closed window leaves an unhandled rejection in the console. It should be handled quietly, as a start that was cancelled. Found by Dinah Team Lead on 2026-11-14.
 
 ## Tests
 

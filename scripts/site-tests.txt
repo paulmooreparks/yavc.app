@@ -108,3 +108,4 @@ test-rtl.cjs
 test-barcode-scanner-library-reload.cjs
 test-split-mirror.cjs
 test-config-watch.cjs
+test-language-session-end.cjs
