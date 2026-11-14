@@ -24,3 +24,4 @@ test-docs-export-name.cjs
 test-document-settles.cjs
 test-split-caret.cjs
 test-host-flow.cjs
+test-host-shortcode-node.cjs
