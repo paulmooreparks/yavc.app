@@ -117,6 +117,25 @@ const page = html => html.replace('<section><h2>Deck</h2>', '<section><h2>Notes<
                 await p.waitForTimeout(1500);
                 const back = await p.evaluate(() => document.querySelector('#note450 [data-role="scroll"]').scrollTop);
                 assert.ok(back > 300, engine + ': the new instance opens at the place (' + back + ')');
+                // Actions go to the instance that started last, which here is a read-only one, so a host that writes in the editable note asks it by an event on its root
+                // (docs/editing-settings-contract.md, "Running an action on one instance"): the same actions, the same input, and the answer in detail.result.
+                phase = 'an action on one instance';
+                const onRoot = (id, ref, input) => p.evaluate(({ id, ref, input }) => { const detail = { ref, input, grant: 'all' }; document.getElementById(id).dispatchEvent(new CustomEvent('yavc-docs-action', { detail })); return detail.result.then(v => ({ ok: v }), e => ({ error: String(e.message || e) })); }, { id, ref, input });
+                const editable = await onRoot('document', 'yavc.docs/document@1', {}), note = await onRoot('note450', 'yavc.docs/document@1', {});
+                assert.ok(editable.ok && /Editable words/.test(editable.ok.text) && editable.ok.readOnly === false, engine + ': document@1 on the editable root reaches the editable note: ' + JSON.stringify(editable).slice(0, 200));
+                assert.ok(note.ok && /The Note/.test(note.ok.text) && note.ok.readOnly === true, engine + ': and on a read-only root, that note: ' + JSON.stringify(note).slice(0, 200));
+                await p.locator('#document .ProseMirror p', { hasText: 'Editable words.' }).first().click(); await p.keyboard.press('End');
+                const typed = await onRoot('document', 'yavc.docs/insert@1', { text: ' *PLAIN*', format: 'plain' });
+                assert.ok(typed.ok, engine + ': insert@1 plain on the editable root: ' + JSON.stringify(typed).slice(0, 200));
+                await p.waitForTimeout(600);
+                const after = await onRoot('document', 'yavc.docs/document@1', {}), noteAfter = await onRoot('note450', 'yavc.docs/document@1', {});
+                assert.ok(/Editable words\. ?\\\*PLAIN\\\*/.test(after.ok.text), engine + ': the words went into the editable note: ' + JSON.stringify(after.ok.text));
+                assert.equal(noteAfter.ok.text, note.ok.text, engine + ': and no read-only note changed');
+                const refused = await onRoot('note450', 'yavc.docs/insert@1', { text: 'x', format: 'plain' }); assert.ok(refused.error && /read-only/.test(refused.error), engine + ': a read-only root refuses insert@1 with its reason: ' + JSON.stringify(refused));
+                await onRoot('document', 'yavc.docs/set-text@1', { text: '# Plain\n\nWords only.\n' });
+                const exported = await onRoot('document', 'yavc.docs/export@1', { format: 'docx' }); assert.ok(exported.ok, engine + ': export@1 on the editable root: ' + JSON.stringify(exported).slice(0, 200));
+                const where2 = await onRoot('note450', 'yavc.docs/position@1', {}); assert.ok(where2.ok && /^v1:/.test(where2.ok.position || ''), engine + ': position@1 on a read-only root: ' + JSON.stringify(where2));
+                const alien = await onRoot('note450', 'yavc.other/anything@1', {}); assert.ok(alien.error, engine + ': a reference that is not a Docs action is refused');
                 phase = 'disposing leaves no observer';
                 const cycle = () => p.evaluate(async () => { const r = document.getElementById('note600'); pudlApplets.destroy(r.parentNode); await new Promise(f => setTimeout(f, 300)); pudlApplets.boot(r.parentNode); await new Promise(f => setTimeout(f, 1500)); pudlApplets.destroy(r.parentNode); await new Promise(f => setTimeout(f, 300)); return window.liveObservers.size; });
                 const first = await cycle(), later = [await cycle(), await cycle()];

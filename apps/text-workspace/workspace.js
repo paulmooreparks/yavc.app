@@ -3419,7 +3419,31 @@ cmd('edit-diagram', 'Edit Diagram', 'new-window', function () { return openDiagr
                 return await liveActions[request.operation + '@1'](request.input);
             } finally { receivingDocument = false; } }, flush: function () { return !!snap && snap.flush(); }
         });
-        var detachLive = window.pudlApplets && window.pudlApplets.attach ? window.pudlApplets.attach('yavc.' + app, liveActions) : null;
+        /* Actions go to the instance that started last (PUDL attaches handlers by provider), so a host with several instances addresses one by an event on its root
+           (docs/editing-settings-contract.md, "Running an action on one instance"): the instance runs the action with PUDL's own run, which checks the input and the
+           grants as for any action, and PUDL hands the call to the newest instance, whose handlers look at the owner of the call and pass it on to the instance it names. */
+        var instances = window.yavcDocsInstances || (window.yavcDocsInstances = new Map()), token = 'docs-' + n + '-' + Math.random().toString(36).slice(2, 10);
+        instances.set(token, liveActions);
+        var routed = {};
+        Object.keys(liveActions).forEach(function (id) {
+            routed[id] = function (input, ctx) {
+                var owner = ctx && ctx.owner, target = owner && owner.kind === 'docs-instance' ? instances.get(owner.id) : liveActions;
+                if (!target || typeof target[id] !== 'function') { return Promise.reject(new Error('That Docs instance is no longer there.')); }
+                return target[id](input, ctx);
+            };
+        });
+        function onActionRequest(event) {
+            var d = event.detail;
+            if (!d || typeof d !== 'object' || event.target !== root) { return; }
+            event.stopPropagation();
+            d.result = Promise.resolve().then(function () {
+                if (typeof d.ref !== 'string' || !/^yavc\.docs\/[a-z0-9-]+@\d+$/.test(d.ref)) { throw new Error('ref is the reference of a yavc.docs action'); }
+                if (destroyed) { throw new Error('That Docs instance is no longer there.'); }
+                return window.pudlActions.run(d.ref, d.input === undefined ? {} : d.input, { grant: d.grant, owner: { kind: 'docs-instance', id: token } });
+            });
+        }
+        if (isDocs) { root.addEventListener('yavc-docs-action', onActionRequest); }
+        var detachLive = window.pudlApplets && window.pudlApplets.attach ? window.pudlApplets.attach('yavc.' + app, routed) : null;
         var commonToolbar = window.pudlHost && window.pudlHost.commandToolbar ? window.pudlHost.commandToolbar.attach(root, { app: app, label: isDocs ? 'Docs' : 'Editor', table: commandTable,
             defaults: ['save', '-', 'undo', 'redo', '-', 'style', 'bold', 'italic', 'link', 'insert', '-', 'find'].concat(SEVERAL_VIEWS ? ['-', 'view-mode'] : []) }) : null;
         /* Without the host's toolbar service the workspace draws its own, once it has started. */
@@ -3454,6 +3478,7 @@ cmd('edit-diagram', 'Edit Diagram', 'new-window', function () { return openDiagr
                 if (fallbackBar) { document.removeEventListener('pudl:commands-change', drawFallbackToolbar); cancelAnimationFrame(fallbackFocusFrame); fallbackBar.remove(); fallbackBar = null; }
                 /* The session as the Editor closes, for when it opens again. */
                 if (detachLive) { detachLive(); }
+                instances.delete(token); root.removeEventListener('yavc-docs-action', onActionRequest);
                 keepSession();
                 if (snap) snap.flush();
                 destroyed = true;
