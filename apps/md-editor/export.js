@@ -111,7 +111,12 @@
         fragment.querySelectorAll('p,h1,h2,h3,h4,h5,h6,li,blockquote,td,th,dt,dd').forEach(function (e) { if (!e.hasAttribute('dir')) { e.setAttribute('dir', 'auto'); } });
         // The HTML cleaner uses an inert template, so omitted assets have not loaded.
         fragment.querySelectorAll('[data-export="omit"],.sc-draft-note').forEach(function (node) { node.remove(); });
-        if (fragment.querySelector('[data-host-shortcode]')) { throw new Error('This document contains host-rendered shortcodes. This host must provide their export representation before printing or Office export.'); }
+        if (fragment.querySelector('[data-host-shortcode]')) {
+            /* The refusal gives the shortcodes, so that a person can find them, and is marked so that the caller shows it where it stays. */
+            var drawn = Array.from(new Set(Array.from(fragment.querySelectorAll('[data-host-shortcode]')).map(function (node) { return node.getAttribute('data-host-shortcode'); }))).slice(0, 8);
+            var refusal = new Error('This document has ' + drawn.map(function (name) { return '{{' + name + '}}'; }).join(', ') + ', which this host draws on the screen and has not given a form for print, Word or PDF. Take ' + (drawn.length === 1 ? 'it' : 'them') + ' out of the document to print or export it.');
+            refusal.refusal = true; throw refusal;
+        }
         // Browser printing includes every disclosure body without its controls.
         // Office conversion retains its separate structural representation gate.
         if (options.renderPages) {

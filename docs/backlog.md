@@ -29,3 +29,4 @@ This page lists the defects and gaps the yavc.app team has found and not yet fix
 ## Tests
 
 - `test-files-dialogs.cjs` failed in CI without a cause in the logs. Look again when a run keeps its logs. `test-editor-visual-defaults.cjs` is repaired (see review.md, "Waits that ran once"); the same fault is in nine more tests, listed there.
+- `test-docs-key-selection.cjs` fails in Firefox on a clean build of main (2026-11-14): after Click, End, Shift+Enter and typing in the Document view, the text the test typed is still on the page at line 41, where it waits for it to go. It passed in Firefox on an earlier build and in Chromium throughout, so it is intermittent. It has not been diagnosed.

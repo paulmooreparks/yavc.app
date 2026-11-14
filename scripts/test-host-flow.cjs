@@ -118,6 +118,15 @@ const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/cs
                     for (const o of d.overlaps) { assert.ok(o.inside && o.clear, engine + ': a repeated title lies in its cap and clear of the text after it ' + JSON.stringify(o)); }
                 }
                 assert.ok(drawn.note.overlaps.length >= 1, engine + ': the note\'s repeated titles were checked');
+                // Print and Office export refuse a document with host-drawn shortcodes (docs/host-shortcodes-contract.md, "Export boundary"), and say so beside
+                // the tabs, in words that give the shortcodes, where it stays until it is dismissed and a person can read it.
+                phase = 'print says why it refuses';
+                await p.evaluate(() => { window.printed = 0; window.print = () => { window.printed++; }; return pudlCommands.run('print-document', null, document.querySelector('#document')); });
+                const refusal = p.locator('.yavc-notice:not([hidden])').first(); await refusal.waitFor();
+                const said = await refusal.innerText(); await p.waitForTimeout(6000);
+                assert.ok(await refusal.isVisible(), engine + ': the refusal stays on the page');
+                for (const name of ['gkinfo', 'gknote', 'gktoc', 'gkinclude', 'gkpiece']) { assert.ok(said.includes('{{' + name + '}}'), engine + ': the refusal gives ' + name + ': ' + said); }
+                assert.match(said, /print/i); assert.equal(await p.evaluate(() => window.printed), 0);
                 phase = 'the host is asked once for each';
                 const calls = await p.evaluate(() => fixture.hostFlow.calls);
                 assert.equal(new Set(calls).size, calls.length, engine + ': the host was asked twice for the same shortcode: ' + JSON.stringify(calls));

@@ -57,7 +57,7 @@ The Insert menu and slash menu include non-managed host entries alongside built-
 
 ## Export boundary
 
-This service supplies screen drawings for Document, Visual and Preview, including Slides' shared renderer. It does not define a trusted print or Office export representation. Export explicitly refuses host-rendered placeholders rather than exporting fallback text or losing content. A host that needs those exports must provide a separate export representation in a future contract.
+This service supplies screen drawings for Document, Visual and Preview, including Slides' shared renderer. It does not define a trusted print or Office export representation. Export explicitly refuses host-rendered placeholders rather than exporting fallback text or losing content. The refusal is shown beside the tabs, as a notice that stays until it is dismissed or the next try, and it gives the shortcodes by name (`{{name}}`, up to eight), so that a person can find them. A host that needs those exports must provide a separate export representation in a future contract.
 
 ## Verification
 
