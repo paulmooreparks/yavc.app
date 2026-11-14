@@ -99,6 +99,10 @@ Go to definition, find references, rename and edits across several files are out
 
 Steps 1 and 2 are yavc.app's alone. Steps 3 and 4 need a host contract written with Dinah Team Lead before any code.
 
+## Paul's decision (2026-11-14)
+
+Paul answered the questions below, narrowing the proposal for now: colouring is for demonstration, so the core set is C, JavaScript, Go, Python and C#, in the Editor's Text view and in code fences in Docs' source views. Colouring ships with the applets and loads when a file or a fence of the language appears, and nothing is installed. Packs are only ones we build. Colouring the rendered page comes later. The language servers of decisions 4 to 8 are not started. DESIGN.md decision 188 records this and the shape of the first step, Go alone.
+
 ## Open questions for Paul
 
 1. Do you agree that highlighting should simply come with the applets, loaded on demand, with install reserved for servers? The alternative is that grammars are packs too.
