@@ -41,7 +41,7 @@ for (const [entry, target, globalName] of [['../vendor/codemirror-6.43/entry.js'
     output(licenseTarget, licenseBytes); manifest.outputs[licenseTarget] = digest(licenseBytes);
 }
 // Code grammars (docs/language-packs-design.md, decision 1): one classic script for each language, built from CodeMirror's legacy-mode package. A legacy mode is a plain object that holds no CodeMirror of its own, so the script needs no copy of the editor's bundle and cannot be loaded into one it does not match. Each script only records its mode as window.yavcCodeModes[id]; apps/md-editor/languages.js is the one table that says which file or fence is which language.
-const GRAMMARS = [['go', 'go', 'go']];
+const GRAMMARS = [['go', 'go', 'go'], ['c', 'clike', 'c'], ['csharp', 'clike', 'csharp'], ['python', 'python', 'python']];
 {
     const legacy = path.join(dependencies, 'node_modules', '@codemirror', 'legacy-modes'), info = JSON.parse(fs.readFileSync(path.join(legacy, 'package.json')));
     manifest.packages['@codemirror/legacy-modes'] = { version: info.version, license: info.license };

@@ -1469,8 +1469,8 @@
                         flow.append.apply(flow, Array.from(surface.childNodes)); surface.append(flow);
                         await document.fonts.ready;
                         var frameTitles = P.tagFrames(flow), blocks = P.blocks(flow), layout = P.plan(blocks, page);
-                        if(layout.problem)throw new Error(layout.problem);
-                        if (layout.oversized) { throw new Error('A block is taller than the page. Shorten it or enlarge the page before printing.'); }
+                        /* A page that cannot be laid out is a refusal the person can act on, shown as the other refusals are, in a notice that stays beside the tabs. */
+                        if (layout.problem || layout.oversized) { var tooTall = new Error(layout.problem || 'A block is taller than the page. Shorten it or enlarge the page before printing.'); tooTall.refusal = true; throw tooTall; }
                         var frame = document.createElement('iframe'); frame.className = 'ed-print-frame'; frame.title = 'Document Print'; frame.inert = true; frame.tabIndex = -1; frame.setAttribute('aria-hidden', 'true'); document.body.append(frame); printFrame = frame;
                         var doc = frame.contentDocument;
                         // A static standards-mode shell keeps table typography
