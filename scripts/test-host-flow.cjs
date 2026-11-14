@@ -118,21 +118,47 @@ const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/cs
                     for (const o of d.overlaps) { assert.ok(o.inside && o.clear, engine + ': a repeated title lies in its cap and clear of the text after it ' + JSON.stringify(o)); }
                 }
                 assert.ok(drawn.note.overlaps.length >= 1, engine + ': the note\'s repeated titles were checked');
-                // Print and Office export refuse a document with host-drawn shortcodes (docs/host-shortcodes-contract.md, "Export boundary"), and say so beside
-                // the tabs, in words that give the shortcodes, where it stays until it is dismissed and a person can read it.
-                phase = 'print says why it refuses';
-                await p.evaluate(() => { window.printed = 0; window.print = () => { window.printed++; }; return pudlCommands.run('print-document', null, document.querySelector('#document')); });
-                const refusal = p.locator('.yavc-notice:not([hidden])').first(); await refusal.waitFor();
-                const said = await refusal.innerText(); await p.waitForTimeout(6000);
-                assert.ok(await refusal.isVisible(), engine + ': the refusal stays on the page');
-                for (const name of ['gkinfo', 'gknote', 'gktoc', 'gkinclude', 'gkpiece']) { assert.ok(said.includes('{{' + name + '}}'), engine + ': the refusal gives ' + name + ': ' + said); }
-                assert.match(said, /print/i); assert.equal(await p.evaluate(() => window.printed), 0);
+                // Print uses the drawings the page holds (docs/host-shortcodes-contract.md, "Print"): each host shortcode once, its text whole, a table's
+                // rows whole and in order, over several sheets, with no request to the host for a drawing it already holds.
+                phase = 'print uses the drawings the page holds';
+                const asked = await p.evaluate(() => fixture.hostFlow.calls.length);
+                await p.evaluate(() => { window.printed = 0; const append = document.body.append.bind(document.body); document.body.append = (...nodes) => { append(...nodes); for (const node of nodes) { if (node.tagName === 'IFRAME') { node.contentWindow.print = () => { window.printed++; }; } } }; return pudlCommands.run('print-document', null, document.querySelector('#document')); });
+                await p.waitForFunction(() => window.printed === 1);
+                const printed = await p.locator('.ed-print-frame').evaluate(f => {
+                    const d = f.contentDocument, text = d.body.textContent, count = re => (text.match(re) || []).length, sheets = d.querySelectorAll('.doc-print-sheet');
+                    return { sheets: sheets.length, paragraphs: Array.from({ length: 24 }, (_, i) => count(new RegExp('Paragraph ' + (i + 1) + '\. ', 'g'))), included: Array.from({ length: 10 }, (_, i) => count(new RegExp('Included paragraph ' + (i + 1) + '\. ', 'g'))),
+                        rows: Array.from(d.querySelectorAll('tbody tr')).filter(r => /^R-\d+/.test(r.textContent)).length, note: Array.from(d.querySelectorAll('[data-host-shortcode="gknote"] [data-sc-frame]')).map(f => f.getAttribute('data-sc-piece') + ':' + (f.textContent.match(/Mind the gap/g) || []).length), notice: Array.from(d.querySelectorAll('.sc-notice')).map(f => f.getAttribute('data-sc-piece')), frames: d.querySelectorAll('[data-sc-frame]').length, failed: d.querySelectorAll('.sc-host-failed').length, indivisible: /indivisible/.test(text) };
+                });
+                assert.ok(printed.sheets >= 6, engine + ': the document prints over several sheets (' + printed.sheets + ')');
+                assert.deepEqual(printed.paragraphs, Array(24).fill(3), engine + ': each paragraph of the three bodies prints once'); assert.deepEqual(printed.included, Array(10).fill(1));
+                assert.equal(printed.rows, 40, engine + ': each row of the included table prints once');
+                const marks = list => list.map(x => x.split(':')[0]), pieceMarks = (n) => Array.from({ length: n }, (_, i) => n === 1 ? 'only' : i === 0 ? 'first' : i === n - 1 ? 'last' : 'middle');
+                assert.ok(printed.note.length >= 2, engine + ': the note is printed in pieces'); assert.deepEqual(marks(printed.note), pieceMarks(printed.note.length), engine + ': its pieces are marked first, middle and last');
+                assert.deepEqual(printed.note.map(x => x.split(':')[1]), Array(printed.note.length).fill('1'), engine + ': the repeated title is at the head of each piece, once');
+                assert.deepEqual(printed.notice, pieceMarks(printed.notice.length), engine + ': the built-in box is marked the same way');
+                assert.ok(printed.frames >= 3 && printed.failed === 0 && !printed.indivisible, engine + ': the frames print and nothing failed ' + JSON.stringify(printed));
+                assert.equal(await p.evaluate(() => fixture.hostFlow.calls.length), asked, engine + ': print asked the host for no drawing the page already held');
                 phase = 'the host is asked once for each';
                 const calls = await p.evaluate(() => fixture.hostFlow.calls);
                 assert.equal(new Set(calls).size, calls.length, engine + ': the host was asked twice for the same shortcode: ' + JSON.stringify(calls));
                 phase = 'the source';
                 const text = (await p.evaluate(() => pudlActions.run('yavc.docs/document@1', {}, { grant: 'all' }))).text;
                 assert.equal(text, await p.evaluate(() => fixture.hostFlow.source), engine + ': drawing the shortcodes across pages changed the source');
+                // A host's `print: "none"` and a drawing that failed are refused by name, the second with Try Again and the first without.
+                phase = 'print refuses by name';
+                await p.evaluate(() => { return pudlActions.run('yavc.docs/set-text@1', { text: '# Two\n\n{{gknone}}\n\n{{gkbroken}}\n' }, { grant: 'all' }); });
+                await p.waitForFunction(() => document.querySelector('#document [data-host-shortcode="gknone"][data-host-drawn]'));
+                await p.evaluate(() => { window.printed = 0; return pudlCommands.run('print-document', null, document.querySelector('#document')); });
+                const refusal = p.locator('.yavc-notice:not([hidden])').first(); await refusal.waitFor(); await p.waitForTimeout(3000);
+                const said = await refusal.innerText();
+                assert.ok(await refusal.isVisible(), engine + ': the refusal stays on the page'); assert.ok(said.includes('{{gknone}}') && said.includes('{{gkbroken}}'), engine + ': it gives both shortcodes: ' + said);
+                assert.equal(await p.evaluate(() => window.printed), 0, engine + ': nothing was sent to print');
+                assert.equal(await refusal.getByRole('button', { name: 'Try Again' }).count(), 1, engine + ': a drawing that failed can be tried again');
+                await p.evaluate(() => pudlActions.run('yavc.docs/set-text@1', { text: '# One\n\n{{gknone}}\n' }, { grant: 'all' }));
+                await p.waitForFunction(() => !document.querySelector('#document [data-host-shortcode="gkbroken"]'));
+                await p.evaluate(() => pudlCommands.run('print-document', null, document.querySelector('#document')));
+                await p.waitForFunction(() => Array.from(document.querySelectorAll('.yavc-notice:not([hidden])')).some(n => /gknone/.test(n.textContent) && !/gkbroken/.test(n.textContent)));
+                assert.equal(await p.locator('.yavc-notice:not([hidden]) button', { hasText: 'Try Again' }).count(), 0, engine + ': a drawing the host keeps off paper has no Try Again');
                 assert.deepEqual(errors, []);
                 console.log(engine + ': a host\'s containers and flowing blocks are laid out across pages, each child once, with the source whole');
             } catch (err) { console.error(engine, phase); throw err; } finally { await browser.close(); }

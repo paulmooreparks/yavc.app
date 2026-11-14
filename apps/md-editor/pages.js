@@ -237,6 +237,29 @@
        frame with nothing in them and marked "first" or "middle" above the gap and "middle" or "last" below it, which carry the frame's own styling for
        the foot of one piece and the head of the next, and a cover between them, painted as the page and its gutter are, which hides what the frame
        draws behind the gap. The caps and the cover take no room of their own: the gap is as tall as it was. They are put in again at every layout. */
+    /* Printing cuts a document into sheets with no gaps, so it marks the pieces of a frame itself, as applyPieces does on the page. tagFrames numbers the
+       frames of the flow before it is cut, and keeps a copy of each one's repeated titles; printPieces marks the frames of one cut sheet first, middle, last
+       or only by the edges the cut left open (page-lines.js, fragment), and puts a title copy at the head of a piece that continues. */
+    function tagFrames(flow) {
+        var titles = new Map();
+        Array.from(flow.querySelectorAll('.sc-notice, [data-sc-frame]')).forEach(function (frame, index) {
+            frame.setAttribute('data-print-frame', String(index));
+            titles.set(String(index), Array.from(frame.querySelectorAll('[data-sc-repeat]')).filter(function (t) { return !t.closest('[data-sc-body]') || t.closest('[data-sc-body]') === t; }));
+        });
+        return titles;
+    }
+    function printPieces(sheet, titles) {
+        sheet.querySelectorAll('[data-print-frame]').forEach(function (frame) {
+            var start = frame.classList.contains('doc-fragment-open-start'), end = frame.classList.contains('doc-fragment-open-end');
+            frame.setAttribute('data-sc-piece', start && end ? 'middle' : start ? 'last' : end ? 'first' : 'only');
+            if (!start) { return; }
+            (titles.get(frame.getAttribute('data-print-frame')) || []).slice().reverse().forEach(function (title) {
+                var copy = title.cloneNode(true); copy.removeAttribute('id'); copy.removeAttribute('data-sc-repeat'); copy.setAttribute('aria-hidden', 'true');
+                copy.querySelectorAll('[id]').forEach(function (item) { item.removeAttribute('id'); });
+                frame.insertBefore(copy, frame.firstChild);
+            });
+        });
+    }
     function applyPieces(host, d) {
         host.querySelectorAll('.doc-gap-cap, .doc-gap-cover').forEach(function (node) { node.remove(); });
         var scale = Number((host.closest('.doc-paginated') || host).style.zoom) || 1, top = (host.closest('.doc-paginated') || host).getBoundingClientRect().top, period = d.height + GAP;
@@ -394,5 +417,5 @@
             }
         });
     }
-    window.yavcDocumentPages = { paper: '--doc-size:11pt;--doc-ink:#202124;--doc-muted:#555555;--doc-accent:#2355a0;--doc-page:#ffffff;--doc-rule:#cfd4da;--doc-code:#e4e7eb;--doc-warning:#b86e1c;--doc-danger:#b42318;--doc-positive:#2e7d4f;', lookup: paper, length: length, settings: settings, properties: properties, dimensions: dimensions, surface: surface, plan: plan, blocks: blocksOf, spacer: spacer,noteFragment:noteFragment,preview: preview, plugin: plugin };
+    window.yavcDocumentPages = { paper: '--doc-size:11pt;--doc-ink:#202124;--doc-muted:#555555;--doc-accent:#2355a0;--doc-page:#ffffff;--doc-rule:#cfd4da;--doc-code:#e4e7eb;--doc-warning:#b86e1c;--doc-danger:#b42318;--doc-positive:#2e7d4f;', lookup: paper, length: length, settings: settings, properties: properties, dimensions: dimensions, surface: surface, plan: plan, blocks: blocksOf, spacer: spacer,noteFragment:noteFragment,preview: preview, plugin: plugin, tagFrames: tagFrames, printPieces: printPieces };
 })();

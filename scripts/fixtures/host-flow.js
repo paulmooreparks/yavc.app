@@ -13,7 +13,10 @@
         {name:'gknote',title:'Note',kind:'container',example:'{{gknote:Title}}\nBody.\n{{/gknote}}'},
         {name:'gktoc',title:'Contents',kind:'block',example:'{{gktoc}}'},
         {name:'gkinclude',title:'Include',kind:'block',example:'{{gkinclude}}'},
-        {name:'gkpiece',title:'Piece',kind:'container',example:'{{gkpiece}}\nBody.\n{{/gkpiece}}'}
+        {name:'gkpiece',title:'Piece',kind:'container',example:'{{gkpiece}}\nBody.\n{{/gkpiece}}'},
+        /* Two more, which the test puts in the document when it tries Print's refusals: a drawing the host keeps off paper, and one it cannot draw. */
+        {name:'gknone',title:'Live',kind:'block',example:'{{gknone}}'},
+        {name:'gkbroken',title:'Broken',kind:'block',example:'{{gkbroken}}'}
     ].map(function(d){return Object.assign({description:'Synthetic host shortcode',params:[]},d);});
     var rows=Array.from({length:40},function(_,i){return '<tr><td>R-'+(i+1)+'</td><td>'+words(60)+'</td></tr>';}).join('');
     var include='<div class="gk-include"><h2>Included Page</h2>'+Array.from({length:10},function(_,i){return '<p>Included paragraph '+(i+1)+'. '+words(70)+'</p>';}).join('')+'<table><thead><tr><th>ID</th><th>Requirement</th></tr></thead><tbody>'+rows+'</tbody></table><p>Last paragraph.</p></div>';
@@ -22,6 +25,7 @@
         gknote:{html:'<div class="gk-panel gk-panel-note" data-sc-frame=""><p data-sc-repeat=""><strong>Mind the gap</strong></p><div data-sc-body=""><slot name="content"></slot></div></div>'},
         gktoc:{html:'<div class="gk-toc"><ul><li><a href="#one">One</a><ul><li><a href="#one-a">One A</a></li></ul></li><li><a href="#two">Two</a></li></ul></div>',flow:true},
         gkinclude:{html:include,flow:true},
+        gknone:{html:'<p>A live drawing.</p>',print:'none'},
         gkpiece:{html:'<div class="gk-panel" data-sc-piece="middle" data-sc-frame="" data-sc-body=""><slot name="content"></slot></div>'}
     };
     /* The frame's look, as Dinah gave it for the fixture, with the first, middle and last of a piece (docs/host-shortcodes-contract.md). */

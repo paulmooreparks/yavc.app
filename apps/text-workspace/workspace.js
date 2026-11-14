@@ -931,7 +931,7 @@
             window.yavcUtil.notice(el.tabs, '');
             say('Writing the ' + format.toUpperCase() + ' file…');
             try { var result = await exportDocument(format); download(result.name, result.blob); say('Downloaded ' + result.name + '. ' + result.warnings.join(' ')); }
-            catch (err) { if (err.refusal) { say('Download as ' + format.toUpperCase() + ': ' + err.message, 'warn'); } else if(err.name!=='AbortError')say('The document could not be exported: ' + err.message, true);else say('Export cancelled.'); }
+            catch (err) { if (err.refusal) { say('Download as ' + format.toUpperCase() + ': ' + err.message, 'warn'); retryButton(false); } else if(err.name!=='AbortError')say('The document could not be exported: ' + err.message, true);else say('Export cancelled.'); }
         }
 
         /* === Dialogs ====================================================== */
@@ -1390,6 +1390,14 @@
             var source=await G.template({engine:m,read:H.fs&&H.fs.readText,host:picturesHost(),signal:styleLifetime.signal,current:unchanged});
             if(source!==null&&source!==undefined&&unchanged())return liveActions['new@1']({text:source});
         }
+        /* A refusal that trying again could change has a Try Again button, which a refusal that it could not change does not. */
+        function retryButton(again) {
+            var n = el.tabs.previousElementSibling; if (!n || !n.classList.contains('yavc-notice')) { return; }
+            n.querySelectorAll('.notice-actions').forEach(function (x) { x.remove(); });
+            if (!again) { return; }
+            var actions = document.createElement('div'), button = document.createElement('button'); actions.className = 'notice-actions'; button.type = 'button'; button.className = 'btn'; button.textContent = 'Try Again';
+            button.addEventListener('click', function () { again(); }); actions.append(button); n.querySelector('.notice-content').append(actions);
+        }
         async function printDocument() {
             var t = current(); if (!t || t.lang !== 'markdown') { return; }
             window.yavcUtil.notice(el.tabs, '');
@@ -1407,7 +1415,7 @@
                         Array.from(surface.querySelectorAll('.dinah-src[data-start],.doc-block,.dinah-block')).reverse().forEach(function (node) { node.replaceWith.apply(node, Array.from(node.childNodes)); });
                         flow.append.apply(flow, Array.from(surface.childNodes)); surface.append(flow);
                         await document.fonts.ready;
-                        var blocks = P.blocks(flow), layout = P.plan(blocks, page);
+                        var frameTitles = P.tagFrames(flow), blocks = P.blocks(flow), layout = P.plan(blocks, page);
                         if(layout.problem)throw new Error(layout.problem);
                         if (layout.oversized) { throw new Error('A block is taller than the page. Shorten it or enlarge the page before printing.'); }
                         var frame = document.createElement('iframe'); frame.className = 'ed-print-frame'; frame.title = 'Document Print'; frame.inert = true; frame.tabIndex = -1; frame.setAttribute('aria-hidden', 'true'); document.body.append(frame); printFrame = frame;
@@ -1422,7 +1430,7 @@
                         var at = 0, starts = [0].concat(layout.gaps.map(function (gap) { return gap.index; })).concat(blocks.length);while(starts.length<layout.count+1)starts.push(blocks.length);
                         for (var i = 0; i < starts.length - 1; i++) {
                             var sheet = surface.cloneNode(false); sheet.classList.add('doc-print-sheet'); var body = doc.createElement('div'); body.className = 'doc-page-flow'; sheet.append(body);
-                            body.append(window.yavcPageLines.fragment(flow, blocks, starts[i], starts[i + 1]));
+                            body.append(window.yavcPageLines.fragment(flow, blocks, starts[i], starts[i + 1])); P.printPieces(body, frameTitles);
                             (layout.footnotes||[]).filter(function(note){return note.page===i+1;}).forEach(function(note){var copy=P.noteFragment(note,blocks);copy.classList.add('doc-print-footnote');copy.style.position='absolute';copy.style.marginTop='0';copy.style.top=(d.top+note.top-i*(d.height+24))+'px';copy.style.left=d.left+'px';copy.style.width=(d.width-d.left-d.right)+'px';sheet.append(copy);});
                             var layer = doc.createElement('div'); layer.className = 'doc-furniture';
                             var header = window.yavcDocumentSettings.row(page, 'header', i + 1, starts.length - 1, doc), footer = window.yavcDocumentSettings.row(page, 'footer', i + 1, starts.length - 1, doc);
@@ -1435,7 +1443,7 @@
                         frame.contentWindow.print(); say('Print uses the document page size and margins. Turn off browser headers and footers and select the matching paper size.');
                     }
                 });
-            } catch (err) { if (printFrame) { printFrame.remove(); printFrame = null; } if (err.refusal) { say('Print: ' + err.message, 'warn'); } else { say('The document could not be printed: ' + err.message, true); } }
+            } catch (err) { if (printFrame) { printFrame.remove(); printFrame = null; } if (err.refusal) { say('Print: ' + err.message, 'warn'); retryButton(err.retry && printDocument); } else { say('The document could not be printed: ' + err.message, true); } }
         }
 
         /* A call to one of the server's admin APIs, signing in again when the
