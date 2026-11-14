@@ -2787,9 +2787,26 @@
             return key ? keyLabel(key) : undefined;
         }
 
-        function insertText(text) {
+        /* Words as Markdown that reads back as the same words (docs/editing-settings-contract.md, "Inserting text"): what would be taken for Markdown is escaped with a backslash, a line break
+           is a backslash break, and a blank line is a blank line. A mark at the start of a line, such as a heading's or a list's, is escaped only there. */
+        function plainToMarkdown(text, atLineStart) {
+            var lines = String(text).replace(/\r\n?/g, '\n').split('\n');
+            var escaped = lines.map(function (line, i) {
+                var s = line.replace(/[\\`*_\[\]<>|~&{}]/g, '\\$&');
+                if (i > 0 || atLineStart) { s = s.replace(/^(\s*)([#+\-=])/, '$1\\$2').replace(/^(\s*)(\d+)([.)])/, '$1$2\\$3'); }
+                return s;
+            });
+            return escaped.reduce(function (out, line, i) { return i === 0 ? line : out + (escaped[i - 1] !== '' && line !== '' ? '\\\n' : '\n') + line; }, '');
+        }
+        function insertText(text, format) {
             var t = current();
             if (!t || t.readOnly) { say('This file is read-only, so nothing can be added to it.', true); return; }
+            if (format === 'plain') {
+                if (formatsThePage()) { return visual.api.insertPlain(text); }
+                var from = view.state.selection.main.from;
+                view.dispatch(view.state.replaceSelection(plainToMarkdown(text, from === view.state.doc.lineAt(from).from)), { scrollIntoView: true, userEvent: 'input' });
+                view.focus(); return;
+            }
             if (formatsThePage()) { return visual.api.insertMarkdown(text); }
             view.dispatch(view.state.replaceSelection(text), { scrollIntoView: true, userEvent: 'input' });
             view.focus();
@@ -3340,7 +3357,8 @@ cmd('edit-diagram', 'Edit Diagram', 'new-window', function () { return openDiagr
             'set-text@1': async function (input) { var i = docNo(input.index); await setDocText(i, input.text); return { output: docView(i, false) }; },
             'insert@1': async function (input) {
                 docNo();var tab=current();if(tab.readOnly)throw new Error('the document is read-only');
-                if(await insertText(String(input.text))===false || current()!==tab)throw new Error('The document or selection changed before insertion.');
+                if(input.format!==undefined&&input.format!=='markdown'&&input.format!=='plain')throw new Error('format is markdown or plain');
+                if(await insertText(String(input.text),input.format)===false || current()!==tab)throw new Error('The document or selection changed before insertion.');
                 if(pageActive())await visual.api.sync();
                 if(current()!==tab)throw new Error('The document changed before insertion was acknowledged.');
                 return {output:docView(active,false)};
