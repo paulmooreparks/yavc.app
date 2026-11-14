@@ -1151,6 +1151,13 @@
               "null"
             ],
             "description": "Null when no document is drawn."
+          },
+          "placeUsed": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Whether the place given as data-docs-position at the start was used: true when the instance opened there, false when the text it named is no longer in the document or the string could not be read, and null when none was given or it has not been tried yet."
           }
         }
       },

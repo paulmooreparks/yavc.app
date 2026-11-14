@@ -114,11 +114,25 @@ const page = html => html.replace('<section><h2>Deck</h2>', '<section><h2>Notes<
                 await p.evaluate(() => { const r = document.getElementById('note450'); pudlApplets.destroy(r.parentNode); });
                 const left = await p.evaluate(() => ({ children: document.getElementById('note450').children.length, joins: fixture.joins.slice() }));
                 assert.equal(left.children, 0, engine + ': disposing leaves nothing drawn');
-                await p.evaluate(place => { const r = document.getElementById('note450'); r.setAttribute('data-docs-position', place); pudlApplets.boot(r.parentNode); }, place);
+                await p.evaluate(place => { const r = document.getElementById('note450'); window.placeEvents = []; r.addEventListener('yavc-docs-place', e => window.placeEvents.push(e.detail.used)); r.setAttribute('data-docs-position', place); pudlApplets.boot(r.parentNode); }, place);
                 await p.waitForFunction(() => /The Note/.test(document.getElementById('note450').textContent));
                 await p.waitForTimeout(1500);
                 const back = await p.evaluate(() => document.querySelector('#note450 [data-role="scroll"]').scrollTop);
                 assert.ok(back > 300, engine + ': the new instance opens at the place (' + back + ')');
+                // The host is told that the place was used, by the event, by the position event and by position@1, so that it can say a note has changed when it was not.
+                phase = 'whether the place was used';
+                assert.deepEqual(await p.evaluate(() => window.placeEvents), [true], engine + ': yavc-docs-place said the place was used, once');
+                assert.equal(await p.evaluate(() => { const detail = {}; document.getElementById('note450').dispatchEvent(new CustomEvent('yavc-docs-position', { detail })); return detail.placeUsed; }), true, engine + ': the position event says it was used');
+                const usedByAction = await p.evaluate(() => { const detail = { ref: 'yavc.docs/position@1', input: {}, grant: 'all' }; document.getElementById('note450').dispatchEvent(new CustomEvent('yavc-docs-action', { detail })); return detail.result.then(v => v.placeUsed !== undefined ? v.placeUsed : v.output && v.output.placeUsed); });
+                assert.equal(usedByAction, true, engine + ': position@1 says it was used');
+                // A place whose text is no longer in the note, a string that cannot be read, and none at all.
+                for (const [given, expected, what] of [['v1:3:zzzzzz', false, 'a place whose text is gone'], ['not a place', false, 'a string that cannot be read'], [null, null, 'no place']]) {
+                    await p.evaluate(() => { const r = document.getElementById('note450'); pudlApplets.destroy(r.parentNode); });
+                    await p.evaluate(given => { const r = document.getElementById('note450'); window.placeEvents = []; if (given === null) r.removeAttribute('data-docs-position'); else r.setAttribute('data-docs-position', given); pudlApplets.boot(r.parentNode); }, given);
+                    await p.waitForFunction(() => /The Note/.test(document.getElementById('note450').textContent)); await p.waitForTimeout(1200);
+                    assert.deepEqual(await p.evaluate(() => window.placeEvents), expected === null ? [] : [expected], engine + ': ' + what + ': the event');
+                    assert.equal(await p.evaluate(() => { const detail = {}; document.getElementById('note450').dispatchEvent(new CustomEvent('yavc-docs-position', { detail })); return detail.placeUsed; }), expected, engine + ': ' + what + ': placeUsed is ' + expected);
+                }
                 // Actions go to the instance that started last, which here is a read-only one, so a host that writes in the editable note asks it by an event on its root
                 // (docs/editing-settings-contract.md, "Running an action on one instance"): the same actions, the same input, and the answer in detail.result.
                 phase = 'an action on one instance';
