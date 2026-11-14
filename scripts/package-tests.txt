@@ -30,3 +30,4 @@ test-docs-read-only.cjs
 test-docs-file-commands.cjs
 test-docs-insert.cjs
 test-portable-nonce-policy.cjs
+test-row-nested-list.cjs
