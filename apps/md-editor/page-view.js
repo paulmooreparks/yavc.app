@@ -1604,8 +1604,14 @@ var schemaCache = null;
         return node.nodeType === 1 && (node.matches('.sc-style[hidden]') || node.matches('.doc-block') && hiddenStyles(node));
       });
     }
+    /* A block that is only link reference definitions ("[1]: https://example.org") is not drawn by the preview, so the page does not draw it. */
+    function onlyLinkDefinitions(node) {
+      var src = node.attrs.src || '';
+      return node.attrs.kind === 'other' && /\S/.test(src) && src.split(/\r?\n/).every(function (line) { return !line.trim() || /^ {0,3}\[(?!\^)(?:[^\]\\]|\\.)+\]:\s*\S/.test(line); });
+    }
     function hiddenSource(node) {
       if (!node || node.type.name !== 'source_block') return false;
+      if (onlyLinkDefinitions(node)) return true;
       if (node.attrs.kind === 'definition') return !(node.attrs.html || '').includes('sc-problem');
       return hiddenStyles(window.yavcHTML.fragment(node.attrs.html || ''));
     }
@@ -1617,7 +1623,7 @@ var schemaCache = null;
       function draw(nd) {
         shownNode = nd;
         dom.dataset.kind = nd.attrs.kind;
-        dom.hidden = nd.attrs.kind === 'definition' && !(nd.attrs.html || '').includes('sc-problem');
+        dom.hidden = onlyLinkDefinitions(nd) || nd.attrs.kind === 'definition' && !(nd.attrs.html || '').includes('sc-problem');
         var inner = document.createElement('div');
         dom.replaceChildren(inner);
         o.draw(inner, nd.attrs.html || '<pre>' + (nd.attrs.src || '').replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</pre>', nd.attrs.diagrams || []);
