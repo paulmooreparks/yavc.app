@@ -2172,7 +2172,16 @@
         }
         /* A read-only instance has no editing surface to carry the key for Find, so the key is taken at its root, and only for a press whose target is inside it. */
         function onReadKey(event) { if ((event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey && String(event.key).toLowerCase() === 'f') { event.preventDefault(); openReadFind(); } }
-        if (readMode) { root.addEventListener('keydown', onReadKey); }
+        /* A link to a heading in the same note is followed inside the instance: the browser would take the page to the first element with that id, which with several notes on one page may be
+           in another, and would leave the keyboard on the page's body, where the instance gets no key. */
+        function onReadLink(event) {
+            var link = event.target.closest && event.target.closest('a[href^="#"]'); if (!link || !el.page.contains(link)) { return; }
+            event.preventDefault();
+            var id = decodeURIComponent(link.getAttribute('href').slice(1)), target = Array.from(el.page.querySelectorAll('[id]')).find(function (node) { return node.id === id; });
+            if (target) { el.scroll.scrollTop += target.getBoundingClientRect().top - el.scroll.getBoundingClientRect().top; }
+            el.scroll.focus({ preventScroll: true });
+        }
+        if (readMode) { root.addEventListener('keydown', onReadKey); root.addEventListener('click', onReadLink); }
         function openFind() {
             if (readMode) { openReadFind(); return; }
             if (formatsThePage() && pageActive()) { openPageFind(); return; }
@@ -3427,7 +3436,7 @@ cmd('edit-diagram', 'Edit Diagram', 'new-window', function () { return openDiagr
                 keepSession();
                 if (snap) snap.flush();
                 destroyed = true;
-                root.removeEventListener('yavc-docs-position', onPositionRequest); root.removeEventListener('keydown', onReadKey);
+                root.removeEventListener('yavc-docs-position', onPositionRequest); root.removeEventListener('keydown', onReadKey); root.removeEventListener('click', onReadLink);
                 styleLifetime.abort();
                 styleRevision++; clearTimeout(styleTimer); if (documentStyles) { documentStyles.destroy(); }
                 if (unsubscribe) { unsubscribe(); }

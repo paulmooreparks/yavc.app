@@ -45,6 +45,8 @@ const page = html => html.replace('<section><h2>Deck</h2>', '<section><h2>Notes<
                 await p.waitForFunction(() => ['note320', 'note450', 'note600'].every(id => document.querySelector('#' + id + ' [data-ed-page]') && /The Note/.test(document.querySelector('#' + id).textContent)));
                 await p.locator('#document .ProseMirror').waitFor();
                 phase = 'what each draws';
+                // The pages are laid out a moment after the note is drawn, which a slow browser takes longer to do.
+                await p.waitForFunction(() => document.querySelectorAll('#note600 .doc-page-gap').length > 0, null, { timeout: 20000 }).catch(() => {});
                 const shape = await p.evaluate(() => ['note320', 'note450', 'note600'].map(id => {
                     const r = document.getElementById(id), vis = e => !!(e.offsetWidth || e.offsetHeight || e.getClientRects().length);
                     return { id, width: r.clientWidth, overflow: r.scrollWidth - r.clientWidth, editable: Array.from(r.querySelectorAll('[contenteditable="true"],textarea')).filter(vis).length,
@@ -75,9 +77,17 @@ const page = html => html.replace('<section><h2>Deck</h2>', '<section><h2>Notes<
                 const finds = await p.evaluate(() => ['note320', 'note450', 'note600', 'document'].map(id => { const r = document.getElementById(id), f = r.querySelector('[data-role="find-place"]'); return { id, open: !!f && !f.hidden && f.children.length > 0, replace: !!(f && /replace/i.test(f.textContent + Array.from(f.querySelectorAll('input')).map(i => i.name + i.getAttribute('aria-label')).join(''))) }; }));
                 assert.ok(finds.find(f => f.id === 'note450').open && !finds.find(f => f.id === 'note450').replace, engine + ': Find opens in that instance, without Replace: ' + JSON.stringify(finds));
                 assert.ok(finds.filter(f => f.id !== 'note450').every(f => !f.open), engine + ': and in no other instance');
-                phase = 'keys act on the focused instance';
                 await p.keyboard.press('Escape');
-                await p.locator('#note320 [data-ed-page] p').first().click();
+                phase = 'a link in a note stays in the note';
+                // The first paragraph holds a link to a later heading. Following it moves that note and no other, leaves the address of the page alone and keeps the keyboard in the note, so that a key such as Ctrl+F still reaches it.
+                const scrolls = () => p.evaluate(() => ['note320', 'note450', 'note600'].map(id => document.querySelector('#' + id + ' [data-role="scroll"]').scrollTop));
+                const beforeLink = await scrolls(); await p.locator('#note320 [data-ed-page] a[href="#second-part"]').first().click(); await p.waitForTimeout(400);
+                const afterLink = await scrolls();
+                assert.ok(afterLink[0] > beforeLink[0] + 100 && afterLink[1] === beforeLink[1] && afterLink[2] === beforeLink[2], engine + ': the link moves its own note only ' + JSON.stringify([beforeLink, afterLink]));
+                assert.equal(await p.evaluate(() => location.hash), '', engine + ': and the address of the page is not changed');
+                assert.equal(await p.evaluate(() => document.activeElement.closest('[data-applet]') && document.activeElement.closest('[data-applet]').id), 'note320', engine + ': the keyboard stays in the note');
+                phase = 'keys act on the focused instance';
+                await p.locator('#note320 [data-ed-page] p', { hasText: 'Paragraph 1.' }).first().click();
                 // The instance has a key for Find once it is ready, which a slow machine reaches later than the click.
                 await p.waitForFunction(() => { const c = pudlCommands.find('find', document.getElementById('note320')); const k = c && (typeof c.shortcut === 'function' ? c.shortcut() : c.shortcut); return !!k; });
                 await p.keyboard.press('ControlOrMeta+s'); await p.keyboard.press('ControlOrMeta+f'); await p.waitForTimeout(500);
