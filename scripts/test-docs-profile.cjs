@@ -46,7 +46,14 @@ const headers={'Content-Security-Policy':policy,'X-Frame-Options':'DENY','Referr
    // Saving and printing.
    await p.evaluate(()=>{pudlCommands.run('save',null,document.querySelector('#document'));});
    await p.waitForFunction(()=>/Typed under the policy/.test(fixture.records.get('memory:document.docs.md').text));
+   // The print frame is given a print() that only counts, since a browser's own print dialog stops the page (Firefox's headless one never returns).
+   await p.evaluate(()=>{window.printed=0;window.printedText='';const append=document.body.append.bind(document.body);document.body.append=(...nodes)=>{append(...nodes);for(const n of nodes)if(n.tagName==='IFRAME')n.contentWindow.print=()=>{window.printed++;window.printedFrame=n;};};});
    await p.evaluate(()=>{window.print=()=>{};pudlCommands.run('print-document',null,document.querySelector('#document'));});await p.waitForTimeout(1500);
+   // The document refers to a diagram that this build omits. Print prints the rest and says in the diagram's place what the page says, and print@1 answers that it printed.
+   const printedBy=await p.evaluate(()=>{window.printed=0;return pudlActions.run('yavc.docs/print@1',{},{grant:'all'}).then(()=>'printed',e=>'refused: '+e.message);});
+   assert.equal(printedBy,'printed',engine+': print@1 with an omitted diagram: '+printedBy);
+   assert.equal(await p.evaluate(()=>window.printed),1,engine+': the browser was asked to print once');
+   assert.match(await p.evaluate(()=>window.printedFrame.contentDocument.body.textContent),/Diagram not printed\. Diagrams are not part of this build of Docs\./,engine+': the printed page says that the diagram is not part of this build');
    // Nothing the package was asked for was missing, and the policy was not broken. The omitted files are not asked for yet.
    // The one thing asked for and missing is the diagram code the host's document needs, which the profile says it omits.
    const omits=manifest.omits.flatMap(f=>f.paths);const isOmitted=n=>omits.some(o=>n===o||o.endsWith('/')&&n.startsWith(o));
@@ -61,6 +68,10 @@ const headers={'Content-Security-Policy':policy,'X-Frame-Options':'DENY','Referr
    // A document with no diagram in it, since an export refuses one it cannot draw.
    await p.evaluate(()=>{fixture.records.set('memory:plain.docs.md',{text:'# Plain\n\nWords.\n',revision:1,name:'Plain.docs.md'});return pudlActions.run('yavc.docs/open-file@1',{path:'memory:plain.docs.md'},{grant:'all'});});
    await rich.getByRole('heading',{name:'Plain'}).waitFor();
+   // A document that cannot be printed (it has a shortcode that is nothing) makes print@1 refuse with the reason, and not answer as if it had printed.
+   {const big=await p.evaluate(()=>{fixture.records.set('memory:bad.docs.md',{text:'# Bad\n\n{{no-such-shortcode-here}}\n',revision:1,name:'Bad.docs.md'});return pudlActions.run('yavc.docs/open-file@1',{path:'memory:bad.docs.md'},{grant:'all'}).then(()=>pudlActions.run('yavc.docs/print@1',{},{grant:'all'})).then(()=>'printed',e=>'refused: '+e.message);});
+    assert.match(big,/^refused: /,engine+': print@1 of a document that cannot be printed refuses with its reason: '+big);
+    await p.evaluate(()=>pudlActions.run('yavc.docs/open-file@1',{path:'memory:plain.docs.md'},{grant:'all'}));await rich.getByRole('heading',{name:'Plain'}).waitFor();}
    await p.evaluate(()=>{window.__seen=[];new MutationObserver(l=>l.forEach(m=>m.addedNodes.forEach(n=>n.textContent&&window.__seen.push(n.textContent.trim().slice(0,200))))).observe(document.body,{childList:true,subtree:true});});
    // Each omitted feature, used: a person who presses it is told in words, and nothing fails silently.
    for(const [command,sentence] of [['import-docx','Opening a Word document is not part of this build of Docs.']]){

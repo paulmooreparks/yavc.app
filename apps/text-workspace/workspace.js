@@ -1422,14 +1422,17 @@
             var actions = document.createElement('div'), button = document.createElement('button'); actions.className = 'notice-actions'; button.type = 'button'; button.className = 'btn'; button.textContent = 'Try Again';
             button.addEventListener('click', function () { again(); }); actions.append(button); n.querySelector('.notice-content').append(actions);
         }
+        /* printProblem is the reason the last try printed nothing, for print@1, which must not answer as if it had printed. */
+        var printProblem = '';
         async function printDocument() {
-            var t = current(); if (!t || t.lang !== 'markdown') { return; }
+            printProblem = 'Nothing was printed.';
+            var t = current(); if (!t || t.lang !== 'markdown') { printProblem = 'There is no Markdown document to print.'; return false; }
             window.yavcUtil.notice(el.tabs, '');
             try {
                 if (pageActive()) { await visual.api.sync(); }
                 var text = view.state.doc.toString(), K = await loadKit(), E = await K.exports(), P = await K.pages(), m = await documentEngine(text);
                 function unchanged() { return !destroyed && current() === t && view.state.doc.toString() === text; }
-                var R=await reviewModule(),output=await R.project({text:text,engine:m,root:root,signal:styleLifetime.signal,current:unchanged});if(output===null)return;
+                var R=await reviewModule(),output=await R.project({text:text,engine:m,root:root,signal:styleLifetime.signal,current:unchanged});if(output===null){printProblem='Printing was cancelled.';return false;}
                 m=m.withMacros(output,sharedMacros);
                 if (printFrame) { printFrame.remove(); printFrame = null; }
                 await E.prepare({ text: output, engine: m, stylesheet: currentSharedStyle, pictures: picturesHost(), read: window.pudlHost.fs.readText, current: unchanged,
@@ -1464,10 +1467,10 @@
                         await Promise.all(Array.from(doc.querySelectorAll('link[rel="stylesheet"]')).map(function (link) { return link.sheet ? Promise.resolve() : new Promise(function (resolve, reject) { link.onload = resolve; link.onerror = function () { reject(new Error('A print stylesheet could not load.')); }; }); }));
                         await doc.fonts.ready; await Promise.all(Array.from(doc.images).map(function (img) { return img.decode(); }));
                         if (!unchanged()) { frame.remove(); throw new Error('The document changed during print preparation.'); }
-                        frame.contentWindow.print(); say('Print uses the document page size and margins. Turn off browser headers and footers and select the matching paper size.');
+                        printProblem = ''; frame.contentWindow.print(); say('Print uses the document page size and margins. Turn off browser headers and footers and select the matching paper size.');
                     }
                 });
-            } catch (err) { if (printFrame) { printFrame.remove(); printFrame = null; } if (err.refusal) { say('Print: ' + err.message, 'warn'); retryButton(err.retry && printDocument); } else { say('The document could not be printed: ' + err.message, true); } }
+            } catch (err) { printProblem = err.message; if (printFrame) { printFrame.remove(); printFrame = null; } if (err.refusal) { say('Print: ' + err.message, 'warn'); retryButton(err.retry && printDocument); } else { say('The document could not be printed: ' + err.message, true); } }
         }
 
         /* A call to one of the server's admin APIs, signing in again when the
@@ -3426,7 +3429,7 @@ cmd('edit-diagram', 'Edit Diagram', 'new-window', function () { return openDiagr
         /* A place in the document, and printing, which a host asks for with an action since its own command may be gone (docs/editing-settings-contract.md). */
         if (isDocs) {
             liveActions['position@1'] = async function () { docNo(); return { output: { position: positionNow() } }; };
-            liveActions['print@1'] = async function () { docNo(); await printDocument(); return { output: {} }; };
+            liveActions['print@1'] = async function () { docNo(); await printDocument(); if (printProblem) { throw new Error(printProblem); } return { output: {} }; };
         }
         /* A read-only instance has no action that changes the text, the file or the view, and a host that took the file commands away has none that does their work. */
         if (readMode) {
