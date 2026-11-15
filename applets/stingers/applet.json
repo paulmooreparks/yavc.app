@@ -1,8 +1,8 @@
 {
   "name": "stingers",
   "title": "Stingers",
-  "version": "0.2.0",
-  "description": "A formation shooter: a nest of wasps settles into ranks and dives at the ship in groups, a queen can snare a ship that is then won back as a twin, and every fourth wave is a bonus wave.",
+  "version": "0.3.0",
+  "description": "A formation shooter: a nest of wasps settles into ranks and dives at the ship in groups, a queen can snare a ship that is then won back as a twin, every fourth wave is a bonus wave, and each wave flies in another way.",
   "license": "Apache-2.0",
   "src": "stingers.js",
   "css": "stingers.css",

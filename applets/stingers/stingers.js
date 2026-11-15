@@ -542,7 +542,9 @@
    a ship caught in it is carried up to the ranks, and shooting that queen
    brings it back to fly beside the next ship, two ships firing as one.
    Every fourth wave is a bonus wave, where the wasps fly past without
-   shooting. The shell (../shared/splash-shell.js) gives it the canvas,
+   shooting. The waves differ: the nest flies in by another plan each
+   wave and settles into another shape, and the bonus waves have flights
+   of their own. The shell (../shared/splash-shell.js) gives it the canvas,
    the bar, the dialogs, the scores, the sound and the loop; this file is
    the game. */
 (function () {
@@ -582,11 +584,14 @@
     ];
     var BOOM = sprite('wb', ['X...X...X', '.X..X..X.', '..X...X..', '.........', 'XX.....XX', '.........', '..X...X..', '.X..X..X.', 'X...X...X']);
     var HONEY = sprite('wh', ['..X..', '..X..', '.XXX.', 'XXXXX', 'XXXXX', '.XXX.']);
-    var RANKS = [{ type: QUEEN, n: 3 }, { type: SOLDIER, n: 6 }, { type: SOLDIER, n: 8 }, { type: DRONE, n: 9 }, { type: DRONE, n: 10 }];
+    /* The ranks from the top down, and the shapes they take by turns: how
+       many wasps stand in each. Every shape has thirty-six. */
+    var RANKS = [QUEEN, SOLDIER, SOLDIER, DRONE, DRONE], RANK_TOP = 34, RANK_GAP = 15;
+    var SHAPES = [[3, 6, 8, 9, 10], [3, 8, 6, 10, 9], [3, 7, 7, 9, 10]];
     var HELP =
         '<p>Shoot the whole nest. The wasps fly in by squads and settle into ranks, then dive at you alone or two and three together, shooting as they come. A wasp hit in its dive is worth double. A queen takes two hits and drops honey, and catching the honey gives you rapid fire.</p>' +
         '<p>Now and then a queen stops above you and lets down a snare of honey threads. A ship caught in it is carried up to the ranks, and you play on with your next ship. Shoot that queen and the ship comes down to fly beside yours, so that you fire two shots for one. Shoot the ship itself and it is gone. A hit on twin ships costs one of the two. A queen sets no snare while you are on your last ship.</p>' +
-        '<p>Every fourth wave is a bonus wave. Forty wasps fly past in flights without shooting, each one you hit is worth 100 more when the wave ends, and all forty are worth 5,000. Each wave dives more often and faster. You have three ships, and another every 4,000 points. When the game is over it tells you how many of your shots hit.</p>' +
+        '<p>Every fourth wave is a bonus wave. Forty wasps fly past in flights without shooting, each one you hit is worth 100 more when the wave ends, and all forty are worth 5,000. Each wave flies in another way, settles into another shape, and dives more often and faster. You have three ships, and another every 4,000 points. When the game is over it tells you how many of your shots hit.</p>' +
         '<dl class="splash-keys">' +
           '<dt>← → or A D</dt><dd>Move</dd>' +
           '<dt>Space or X</dt><dd>Fire, two shots at a time; hold it down with rapid fire</dd>' +
@@ -642,30 +647,64 @@
        above the ship where she stops. */
     function snarePath(x, y, over) { return [peel(x, y, over), { x: over, y: HOVER_Y }]; }
 
-    /* The ways across the screen in a bonus wave, for a wasp coming from
-       the left: where it starts, which way it faces, and the points it
-       flies through, as so many pixels right of the middle and down from
-       the top. The last point of each is off the screen. A wasp coming
-       from the right flies the same way mirrored. */
+    /* A route is where a wasp starts, which way it faces, and the points
+       it flies through, as so many pixels right of the middle and down
+       from the top, for a wasp coming from the left. A wasp coming from
+       the right flies the same route mirrored. */
+    function route(r, s) {
+        return {
+            x: MID + s * r.from[0], y: r.from[1], ang: r.facing === 'down' ? Math.PI / 2 : s > 0 ? 0 : Math.PI,
+            path: r.via.map(function (v) { return { x: MID + s * v[0], y: v[1] }; })
+        };
+    }
+    /* The ways into the ranks. A wasp flies one and then makes straight
+       for its place. */
+    var WAYS = [
+        { from: [-30, -10], facing: 'down', via: [[70, 110], [40, 170], [-30, 150]] },
+        { from: [-124, 190], facing: 'in', via: [[-20, 170], [50, 130], [0, 100]] },
+        { from: [60, -10], facing: 'down', via: [[60, 120], [0, 172], [-60, 120], [0, 84]] },
+        { from: [-124, 60], facing: 'in', via: [[-30, 80], [60, 140], [0, 184], [-50, 130]] },
+        { from: [-80, -10], facing: 'down', via: [[-80, 100], [60, 160], [80, 96], [0, 110]] }
+    ];
+    /* The plans a nest flies in by, one a wave by turns. The nest comes
+       in six squads of six; a plan gives each squad its way in and its
+       side (1 from the left, -1 from the right), and says whether the
+       squads come one after another or two at a time. */
+    var PLANS = [
+        { squads: [[0, 1], [1, 1], [0, -1], [1, -1], [0, 1], [1, 1]], pairs: false },
+        { squads: [[2, 1], [2, -1], [3, 1], [3, -1], [4, 1], [4, -1]], pairs: true },
+        { squads: [[4, 1], [1, -1], [4, -1], [1, 1], [2, 1], [3, -1]], pairs: false },
+        { squads: [[3, 1], [3, -1], [0, 1], [0, -1], [1, 1], [1, -1]], pairs: true },
+        { squads: [[2, -1], [4, 1], [1, -1], [3, 1], [0, -1], [2, 1]], pairs: false }
+    ];
+    /* The ways across the screen in a bonus wave. The last point of each
+       is off the screen. */
     var PASSES = [
         { from: [86, -12], facing: 'down', via: [[80, 140], [0, 196], [-80, 140], [-86, -26]] },
         { from: [-40, -12], facing: 'down', via: [[64, 110], [20, 180], [-70, 140], [-138, 70]] },
         { from: [-124, 70], facing: 'in', via: [[-30, 84], [52, 130], [0, 182], [-52, 130], [0, 80], [138, 50]] },
-        { from: [-124, 180], facing: 'in', via: [[-56, 120], [0, 176], [56, 110], [138, 170]] }
+        { from: [-124, 180], facing: 'in', via: [[-56, 120], [0, 176], [56, 110], [138, 170]] },
+        { from: [-20, -12], facing: 'down', via: [[-20, 60], [70, 110], [-70, 150], [60, 192], [138, 130]] },
+        { from: [-124, 40], facing: 'in', via: [[-50, 50], [30, 100], [-20, 160], [-76, 104], [-20, 50], [138, 90]] }
     ];
-    function pass(n, s) {
-        var p = PASSES[n];
-        return {
-            x: MID + s * p.from[0], y: p.from[1], ang: p.facing === 'down' ? Math.PI / 2 : s > 0 ? 0 : Math.PI,
-            path: p.via.map(function (v) { return { x: MID + s * v[0], y: v[1] }; })
-        };
-    }
-    /* The flights of a bonus wave, eight wasps each: all from one side,
-       or four from each side at once. */
-    var FLIGHTS = [
+    /* The bonus waves, by turns. Each is five flights of eight wasps: all
+       from one side, or four from each side at once. */
+    var SWARMS = [[
         { type: DRONE, pass: 0, both: true }, { type: SOLDIER, pass: 1, side: 1 }, { type: DRONE, pass: 2, both: true },
         { type: SOLDIER, pass: 1, side: -1 }, { type: QUEEN, pass: 3, both: true }
-    ];
+    ], [
+        { type: SOLDIER, pass: 4, both: true }, { type: DRONE, pass: 3, side: 1 }, { type: DRONE, pass: 3, side: -1 },
+        { type: SOLDIER, pass: 5, both: true }, { type: QUEEN, pass: 0, both: true }
+    ], [
+        { type: DRONE, pass: 5, side: 1 }, { type: DRONE, pass: 5, side: -1 }, { type: SOLDIER, pass: 2, both: true },
+        { type: SOLDIER, pass: 4, side: 1 }, { type: QUEEN, pass: 1, both: true }
+    ]];
+    /* Which of each a wave has. The bonus waves are not counted among
+       the others, so every plan and shape comes round. */
+    function nest(level) { return level - Math.floor(level / BONUS_EVERY) - 1; }
+    function planOf(level) { return PLANS[nest(level) % PLANS.length]; }
+    function shapeOf(level) { return SHAPES[nest(level) % SHAPES.length]; }
+    function swarmOf(level) { return SWARMS[(Math.floor(level / BONUS_EVERY) + SWARMS.length - 1) % SWARMS.length]; }
 
     /* For the checks that need no browser (../../tools/test-stingers-dive.js
        and test-stingers-play.js): the paths and the flying, and the game
@@ -673,8 +712,11 @@
     var current = null;
     window.splash.stingers = {
         width: W, height: H, shipY: PLAYER_Y, hoverY: HOVER_Y, turn: DIVE_R, flyTurn: FLY_R, giveUp: GIVE_UP, bonusEvery: BONUS_EVERY,
-        follow: follow, flySpeed: flySpeed, diveSpeed: diveSpeed, divePath: divePath, snarePath: snarePath, passes: PASSES.length, pass: pass,
-        rows: RANKS.map(function (rank, r) { return 34 + r * 15; }),
+        follow: follow, flySpeed: flySpeed, diveSpeed: diveSpeed, divePath: divePath, snarePath: snarePath,
+        passes: PASSES.length, pass: function (n, s) { return route(PASSES[n], s); },
+        ways: WAYS.length, way: function (n, s) { return route(WAYS[n], s); },
+        plans: PLANS.length, shapes: SHAPES.length, swarms: SWARMS.length, plan: planOf, shape: shapeOf, swarm: swarmOf,
+        rows: RANKS.map(function (type, r) { return RANK_TOP + r * RANK_GAP; }),
         game: function () { return current ? current() : null; }
     };
 
@@ -693,33 +735,32 @@
 
         function wasp(type, delay) {
             return { type: type, sx: 0, sy: 0, x: 0, y: -20, ang: 0, state: 'wait', delay: delay, path: null, wp: 0, wpT: 0,
-                hp: type.hp, alive: true, shot: false, shots: 0, fireT: 0, side: 1, top: true, held: false, phase: '', over: 0, cast: 0, pass: null };
+                hp: type.hp, alive: true, shot: false, shots: 0, fireT: 0, held: false, phase: '', over: 0, cast: 0, way: null, pass: null };
         }
-        function ranks() {
-            var list = [];
-            RANKS.forEach(function (rank, r) {
-                for (var n = 0; n < rank.n; n++) {
-                    var e = wasp(rank.type, 0);
-                    e.sx = MID + (n - (rank.n - 1) / 2) * 18; e.sy = 34 + r * 15;
+        function ranks(level) {
+            var list = [], shape = shapeOf(level), plan = planOf(level);
+            RANKS.forEach(function (type, r) {
+                for (var n = 0; n < shape[r]; n++) {
+                    var e = wasp(type, 0);
+                    e.sx = MID + (n - (shape[r] - 1) / 2) * 18; e.sy = RANK_TOP + r * RANK_GAP;
                     list.push(e);
                 }
             });
-            /* Squads of six, a moment apart, from the top and from the
-               sides by turns, and from the left and the right by pairs. */
+            /* Squads of six, a moment apart or two squads at a time, each
+               by the way in and from the side its plan gives it. */
             list.forEach(function (e, n) {
-                var squad = Math.floor(n / 6);
-                e.delay = 600 + squad * 1700 + (n % 6) * 150;
-                e.side = squad % 4 < 2 ? 1 : -1;
-                e.top = squad % 2 === 0;
+                var squad = Math.floor(n / 6), turn = plan.squads[squad];
+                e.delay = 600 + (plan.pairs ? Math.floor(squad / 2) * 2600 : squad * 1700) + (n % 6) * 150;
+                e.way = route(WAYS[turn[0]], turn[1]);
             });
             return list;
         }
-        function swarm() {
+        function swarm(level) {
             var list = [];
-            FLIGHTS.forEach(function (f, n) {
+            swarmOf(level).forEach(function (f, n) {
                 for (var m = 0; m < 8; m++) {
                     var e = wasp(f.type, 1400 + n * 3800 + (f.both ? Math.floor(m / 2) : m) * 170);
-                    e.hp = 1; e.pass = pass(f.pass, f.both ? (m % 2 ? -1 : 1) : f.side);
+                    e.hp = 1; e.pass = route(PASSES[f.pass], f.both ? (m % 2 ? -1 : 1) : f.side);
                     list.push(e);
                 }
             });
@@ -735,7 +776,7 @@
 
         function startWave(level) {
             bonus = level % BONUS_EVERY === 0; tally = null; said = false; waveClock = 0;
-            enemies = bonus ? swarm() : ranks();
+            enemies = bonus ? swarm(level) : ranks(level);
             shots = []; bullets = []; booms = []; pending = []; honey = null; toast = null; taking = null;
             player.x = MID - wide() / 2; diveTimer = 1500; snareTimer = 9000 + Math.random() * 6000; rapid = 0; cool = 0; shield = 0;
         }
@@ -759,14 +800,7 @@
            its own place in the ranks, and drops into it. */
         function home(e) { e.x = slot(e).x; e.y = -12; e.state = 'return'; }
         function enter(e) {
-            var s = e.side;
-            if (e.top) {
-                e.x = MID - s * 30; e.y = -10; e.ang = Math.PI / 2;
-                e.path = [{ x: MID + s * 70, y: 110 }, { x: MID + s * 40, y: 170 }, { x: MID - s * 30, y: 150 }];
-            } else {
-                e.x = MID - s * (MID + 12); e.y = 190; e.ang = s > 0 ? 0 : Math.PI;
-                e.path = [{ x: MID - s * 20, y: 170 }, { x: MID + s * 50, y: 130 }, { x: MID, y: 100 }];
-            }
+            e.x = e.way.x; e.y = e.way.y; e.ang = e.way.ang; e.path = e.way.path;
             e.state = 'enter'; e.wp = 0; e.wpT = 0;
         }
         /* A dive at the ship, or at a place beside it for a wasp flying
