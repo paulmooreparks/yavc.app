@@ -65,13 +65,13 @@ async function runOne(test, port) {
     /* One try on one port. */
     const started = Date.now(), data = mkdtempSync(join(tmpdir(), 'yavc-site-data-')), log = join(logs, test.name + '.log');
     let output = '', status = 'fail';
-    const host = spawn(server, ['-addr', '127.0.0.1:' + port, '-data', data, ...test.flags], { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] });
+    const host = spawn(server, ['-addr', '127.0.0.1:' + port, '-data', data, ...test.flags], { cwd: root, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
     let hostOutput = ''; host.stdout.on('data', d => { hostOutput += d; }); host.stderr.on('data', d => { hostOutput += d; });
     try {
         if (!await waitFor(port, host)) { output = 'The server did not start.\n' + hostOutput; }
         else {
             const env = { ...process.env, YAVC_CHROME_TEST_PORT: String(port), CANVAS_TEST_URL: 'http://127.0.0.1:' + port + '/' };
-            const child = spawn(process.execPath, [join('scripts', test.name), engine], { cwd: root, env, stdio: ['ignore', 'pipe', 'pipe'] });
+            const child = spawn(process.execPath, [join('scripts', test.name), engine], { cwd: root, env, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
             child.stdout.on('data', d => { output += d; }); child.stderr.on('data', d => { output += d; });
             const timer = setTimeout(() => { output += '\nTimed out after ' + limit / 1000 + ' seconds.\n'; child.kill(); }, limit);
             const code = await new Promise(done => { child.on('exit', done); child.on('error', () => done(1)); });
