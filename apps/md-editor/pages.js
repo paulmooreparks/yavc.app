@@ -410,13 +410,21 @@
             while(walker.nextNode()){if(walker.currentNode.nodeType===3){var data=walker.currentNode.data;length+=data.length;for(var i=0;i<data.length;i++){hash=(hash*31+data.charCodeAt(i))|0;}}}
             return length+'.'+hash+':'+table.querySelectorAll('[data-host-drawn]').length;
         }
+        /* A table measured while a font is loading has the columns of the font that stood in for it, so that measure is used for this layout and not kept. The page
+           does not rely on the fonts event to hear that the font has arrived (it did not reach the page on WebKit on Linux): the promise `document.fonts.ready` says when
+           the fonts have loaded, and the tables are then measured again. */
+        var waiting=false;
+        function waitForFonts(v){
+            if(waiting)return;waiting=true;
+            document.fonts.ready.then(function(){waiting=false;if(!alive)return;tableWidths=new WeakMap();seenDoc=null;schedule(v);});
+        }
         function measureTables(v,scale){
             var map=new Map();
             v.dom.querySelectorAll('table').forEach(function(table){
                 /* A table that a host drew, or the page's own copy of one, is not the page's to give columns to. */
                 if(table.closest('.doc-page-gap')||table.closest('.doc-gap-cap')||table.closest('.pm-source'))return;
                 var fingerprint=fingerprintOf(table),entry=tableWidths.get(table);
-                if(!entry||entry.fingerprint!==fingerprint){var values=naturalWidths(v,table,scale);if(!values)return;entry={fingerprint:fingerprint,values:values};tableWidths.set(table,entry);}
+                if(!entry||entry.fingerprint!==fingerprint){var values=naturalWidths(v,table,scale);if(!values)return;entry={fingerprint:fingerprint,values:values};if(document.fonts.status==='loading'){waitForFonts(v);}else{tableWidths.set(table,entry);}}
                 map.set(table,entry.values);
             });
             return map;

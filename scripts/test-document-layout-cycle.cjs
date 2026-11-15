@@ -60,21 +60,28 @@ function settle({frames,limit}){
     const server=http.createServer(async(req,res)=>{try{const u=new URL(req.url,'http://localhost');const name=decodeURIComponent(u.pathname.slice(prefix.length));
         const own=name.startsWith('workspace-lab/'),file=own?path.join(fixture,name.slice('workspace-lab/'.length)):allowed.has(name)?path.join(artifact,name):null;
         if(!file||/\.\./.test(name))return res.writeHead(404).end();
+        if(name==='workspace-lab/slow-inter.woff2'){await new Promise(r=>setTimeout(r,2500));return res.writeHead(200,{'Content-Type':'font/woff2','Cache-Control':'no-store'}).end(await fs.readFile(path.join(artifact,'pudl','fonts','Inter-latin.woff2')));}
         let body=await fs.readFile(file);
         if(name==='workspace-lab/host.js')body=Buffer.from(body+(withNote?'\n'+noteHost:'')+"\nfixture.records.get('memory:document.docs.md').text="+JSON.stringify(text)+";");
         res.writeHead(200,{'Content-Type':types[path.extname(name)]||'application/octet-stream','Cache-Control':'no-store'}).end(body);}catch{if(!res.headersSent)res.writeHead(404).end();}});
     await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const failures=[];
-    async function open(browser,source,width,notes){
-        text=source;withNote=!!notes;const page=await browser.newPage({viewport:{width:width||2048,height:1152}});await page.addInitScript("window.arrangement="+arrangement.toString());await page.addInitScript("window.columnsAndGaps="+columnsAndGaps.toString());page.setDefaultTimeout(60000);page.errors=[];page.on('pageerror',e=>page.errors.push(e.message));
+    async function open(browser,source,width,notes,slow){
+        text=source;withNote=!!notes;const page=await browser.newPage({viewport:{width:width||2048,height:1152}});await page.addInitScript("window.arrangement="+arrangement.toString());await page.addInitScript("window.columnsAndGaps="+columnsAndGaps.toString());if(slow)await page.addInitScript(()=>{
+            // A web font that loads slowly, and a fonts event that never reaches the page (it did not on WebKit on Linux): the page must find out that the font has arrived by another way.
+            document.fonts.addEventListener('loadingdone',e=>e.stopImmediatePropagation());
+            document.addEventListener('DOMContentLoaded',()=>{const st=document.createElement('style');st.textContent="@font-face{font-family:SlowInter;src:url(slow-inter.woff2) format('woff2');unicode-range:U+0020-007E;} #document .ProseMirror td,#document .ProseMirror th{font-family:SlowInter,serif !important;}";document.head.append(st);});
+        });
+        page.setDefaultTimeout(60000);page.errors=[];page.on('pageerror',e=>page.errors.push(e.message));
         await page.goto(`http://127.0.0.1:${server.address().port}${prefix}workspace-lab/index.html?apps=docs`);
         await page.locator('#document .doc-paginated .ProseMirror').waitFor();await page.evaluate(()=>document.fonts.ready);return page;
     }
     try{for(const engine of process.argv.slice(3).length?process.argv.slice(3):['chromium','firefox','webkit']){
         const browser=await pw[engine].launch({headless:true});
         try{
-            for(const shape of [{oversized:false},{oversized:true},{note:true,width:1620},{note:true,width:700}]){
-                const oversized=!!shape.oversized,label=engine+(shape.note?' with the synthetic note at '+shape.width+' pixels':oversized?' with the oversized block':' without it'),page=await open(browser,shape.note?note:longDocument(oversized),shape.width,shape.note);
+            for(const shape of [{oversized:false},{oversized:true},{note:true,width:1620},{note:true,width:700},{note:true,width:1620,slow:true}]){
+                const oversized=!!shape.oversized,label=engine+(shape.note?' with the synthetic note at '+shape.width+' pixels'+(shape.slow?' and a slow font':''):oversized?' with the oversized block':' without it'),page=await open(browser,shape.note?note:longDocument(oversized),shape.width,shape.note,shape.slow);
                 try{
+                    if(shape.slow)await page.waitForFunction(()=>[...document.fonts].some(f=>f.family==='SlowInter'&&f.status==='loaded'),null,{timeout:30000});
                     const first=await page.evaluate(settle,{frames:120,limit:60000});
                     if(!first.settled){failures.push(`${label}: the first layout did not settle in 60 s`);continue;}
                     const warned=await page.evaluate(()=>/indivisible block is taller than the page/.test(document.body.innerText));
@@ -125,10 +132,10 @@ function settle({frames,limit}){
                         if(again.wrong.length||again.overlaps.length)failures.push(`${label}: after the edit and its undo ${again.wrong.length} tables have other columns (${JSON.stringify(again.wrong[0])}) and ${again.overlaps.length} blocks run into a gap`);
                         // A font that arrives after a table was measured changes how it lays out by its content (a web font, loaded the first time it is used, on a machine
                         // where that takes longer than the first layout). The page cannot tell why the fonts event came, so every table is measured again.
-                        await page.evaluate(()=>{const st=document.createElement('style');st.id='late-font';st.textContent='#document .ProseMirror td,#document .ProseMirror th{letter-spacing:2px;}';document.head.append(st);document.fonts.dispatchEvent(new Event('loadingdone'));});
+                        if(!shape.slow){await page.evaluate(()=>{const st=document.createElement('style');st.id='late-font';st.textContent='#document .ProseMirror td,#document .ProseMirror th{letter-spacing:2px;}';document.head.append(st);document.fonts.dispatchEvent(new Event('loadingdone'));});
                         await page.evaluate(settle,{frames:120,limit:60000});
                         const late=await page.evaluate(()=>window.columnsAndGaps());
-                        if(late.wrong.length||late.overlaps.length)failures.push(`${label}: after a font arrived ${late.wrong.length} of ${late.tables} tables kept their earlier columns (${JSON.stringify(late.wrong[0])}) and ${late.overlaps.length} blocks run into a gap`);
+                        if(late.wrong.length||late.overlaps.length)failures.push(`${label}: after a font arrived ${late.wrong.length} of ${late.tables} tables kept their earlier columns (${JSON.stringify(late.wrong[0])}) and ${late.overlaps.length} blocks run into a gap`);}
                     }
                     if(page.errors.length)failures.push(`${label}: page errors ${page.errors.join(' | ')}`);
                     console.log(`${label}: ${first.now.pages} pages, settled in ${first.ms} ms, ${c0.passes} passes and ${c0.changes} changes to get there, none while idle, after the trip or after the edit settled`);
