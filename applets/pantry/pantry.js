@@ -535,9 +535,10 @@
 /* Copyright 2026 Paul Parks. SPDX-License-Identifier: Apache-2.0 */
 /* Pantry Raid, a PUDL applet package (../../README.md). A maze chase: a
    mouse eats every crumb in a pantry while four cats hunt it, and a bell
-   sends the cats running for a few seconds. Every level has a maze of its
-   own, made from the level's number, so level 7 is the same maze for
-   everybody. The shell (../shared/splash-shell.js) gives it the canvas,
+   sends the cats running for a few seconds. There are three pantries,
+   drawn by hand, and the levels go round them in turn. In every one the
+   mouse starts in the middle, the cats in the four corners, and the bells
+   hang halfway along the four outside walls. The shell (../shared/splash-shell.js) gives it the canvas,
    the bar, the dialogs, the scores, the sound and the loop; this file is
    the game. */
 (function () {
@@ -548,9 +549,81 @@
     var W = COLS * T, H = TOP + ROWS * T + FOOT;
     var DIR = { left: { x: -1, y: 0, a: -Math.PI / 2 }, right: { x: 1, y: 0, a: Math.PI / 2 }, up: { x: 0, y: -1, a: 0 }, down: { x: 0, y: 1, a: Math.PI } };
     var DIRS = [DIR.up, DIR.left, DIR.down, DIR.right];
-    var START = { x: 9, y: 15 };
+    var START = { x: 9, y: 10 };
     var HOMES = [{ x: 1, y: 1 }, { x: 17, y: 1 }, { x: 1, y: 19 }, { x: 17, y: 19 }];
-    var BELLS = [{ x: 5, y: 5 }, { x: 13, y: 5 }, { x: 5, y: 15 }, { x: 13, y: 15 }];
+    var BELLS = [{ x: 9, y: 1 }, { x: 17, y: 10 }, { x: 9, y: 19 }, { x: 1, y: 10 }];
+    /* The pantries: the left half of each and its middle column, a wall
+       as # and floor as a dot. The right half is the left one mirrored.
+       ../../tools/test-pantry-maze.js checks that each is walled all
+       round, has no dead end, and has floor under the mouse, the cats
+       and the bells. */
+    var PANTRIES = [[
+        '##########',
+        '#.........',
+        '#.##.####.',
+        '#.##.####.',
+        '#.........',
+        '#.##.#.###',
+        '#....#....',
+        '####.####.',
+        '#....#....',
+        '#.##.#.###',
+        '#.........',
+        '#.##.#.###',
+        '#....#....',
+        '####.####.',
+        '#....#....',
+        '#.##.#.###',
+        '#.........',
+        '#.##.####.',
+        '#.##.####.',
+        '#.........',
+        '##########'
+    ], [
+        '##########',
+        '#.........',
+        '#.#.####.#',
+        '#.#......#',
+        '#.#.##.#.#',
+        '#...##.#..',
+        '#.#....###',
+        '#.####.#..',
+        '#......#.#',
+        '###.##.#.#',
+        '#.........',
+        '#.##.###.#',
+        '#.##......',
+        '#....##.##',
+        '#.##.##...',
+        '#.##....##',
+        '#....##.##',
+        '#.##.##.##',
+        '#.##.##.##',
+        '#.........',
+        '##########'
+    ], [
+        '##########',
+        '#.........',
+        '#.##.###.#',
+        '#.##.###.#',
+        '#....#....',
+        '##.#.#.###',
+        '#..#......',
+        '#.##.###.#',
+        '#....#...#',
+        '#.##.#.#..',
+        '#.##...#..',
+        '#.##.#.#..',
+        '#.#..#...#',
+        '#.#.####.#',
+        '#.........',
+        '#.##.#.###',
+        '#.##.#....',
+        '#....####.',
+        '#.##.####.',
+        '#.........',
+        '##########'
+    ]];
 
     function sprite(id, rows) { return { id: id, w: rows[0].length, h: rows.length, rows: rows }; }
     /* The mouse from above, nose up; it is turned to face the way it runs. */
@@ -562,7 +635,7 @@
     var BELL = sprite('pb', ['...X...', '..XXX..', '.XXXXX.', '.XXXXX.', '.XXXXX.', 'XXXXXXX', '...X...']);
     var CHEESE = sprite('pz', ['......XXX', '....XXXXX', '..XXXXXXX', 'XXXXXXXXX', 'X.XXX.XXX', 'XXXXXXX.X', 'XXXXXXXXX']);
     var HELP =
-        '<p>Eat every crumb in the pantry and keep away from the four cats. Ring a bell and the cats run from you for a few seconds; catch one while it runs and it goes back to its corner. A piece of cheese appears once half the crumbs are gone. Every level is a new maze with faster cats. You have three mice, and another every 5,000 points.</p>' +
+        '<p>Eat every crumb in the pantry and keep away from the four cats. Ring a bell and the cats run from you for a few seconds; catch one while it runs and it goes back to its corner. A piece of cheese appears in the middle once half the crumbs are gone. There are three pantries, which take turns, and the cats get faster every level. You have three mice, and another every 5,000 points.</p>' +
         '<dl class="splash-keys">' +
           '<dt>Arrows or W A S D</dt><dd>Turn; the mouse keeps running until a wall stops it</dd>' +
           '<dt>P or Esc</dt><dd>Pause and resume</dd>' +
@@ -570,59 +643,19 @@
         '</dl>' +
         '<p>On a touch screen, the buttons under the game do the same. The game pauses when it loses the keyboard.</p>';
 
-    /* A small generator of random numbers from a seed, so a level's maze
-       is always the same maze. */
-    function rng(seed) {
-        var a = seed >>> 0;
-        return function () {
-            a = (a + 0x6D2B79F5) | 0;
-            var t = Math.imul(a ^ (a >>> 15), 1 | a);
-            t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-            return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-        };
-    }
-
     /* A level's maze, as COLS by ROWS tiles that are open (1) or wall (0).
-       The rooms are the tiles at odd columns and rows. The left half and
-       the middle column are carved as one tree, so every room is reached,
-       and mirrored onto the right. Then every dead end is opened into a
-       neighbour and a few more walls are knocked through, so there is
-       always a second way out of a corridor. */
+       The levels go round the pantries in turn. */
     function makeMaze(level) {
-        var rnd = rng(level * 7919 + 17), open = new Uint8Array(COLS * ROWS);
-        var CX = 5, CY = 10;
-        function carve(x, y) { open[y * COLS + x] = 1; open[y * COLS + (COLS - 1 - x)] = 1; }
+        var rows = PANTRIES[(level - 1) % PANTRIES.length], open = new Uint8Array(COLS * ROWS), mid = (COLS - 1) / 2;
+        for (var y = 0; y < ROWS; y++) {
+            for (var x = 0; x <= mid; x++) {
+                if (rows[y].charAt(x) === '.') { open[y * COLS + x] = 1; open[y * COLS + (COLS - 1 - x)] = 1; }
+            }
+        }
         function isOpen(x, y) { return x >= 0 && y >= 0 && x < COLS && y < ROWS && open[y * COLS + x] === 1; }
-        var seen = new Uint8Array(CX * CY), stack = [[4, 7]];
-        seen[7 * CX + 4] = 1;
-        carve(START.x, START.y);
-        while (stack.length) {
-            var c = stack[stack.length - 1], ways = [];
-            for (var i = 0; i < DIRS.length; i++) {
-                var nx = c[0] + DIRS[i].x, ny = c[1] + DIRS[i].y;
-                if (nx >= 0 && ny >= 0 && nx < CX && ny < CY && !seen[ny * CX + nx]) { ways.push(DIRS[i]); }
-            }
-            if (!ways.length) { stack.pop(); continue; }
-            var d = ways[Math.floor(rnd() * ways.length)];
-            seen[(c[1] + d.y) * CX + c[0] + d.x] = 1;
-            carve(1 + 2 * c[0] + d.x, 1 + 2 * c[1] + d.y);
-            carve(1 + 2 * (c[0] + d.x), 1 + 2 * (c[1] + d.y));
-            stack.push([c[0] + d.x, c[1] + d.y]);
-        }
-        function room(x, y) { return x >= 1 && y >= 1 && x <= COLS - 2 && y <= ROWS - 2; }
-        for (var cy = 0; cy < CY; cy++) {
-            for (var cx = 0; cx < CX; cx++) {
-                var x = 1 + 2 * cx, y = 1 + 2 * cy;
-                var shut = DIRS.filter(function (w) { return !isOpen(x + w.x, y + w.y) && room(x + 2 * w.x, y + 2 * w.y); });
-                var exits = DIRS.filter(function (w) { return isOpen(x + w.x, y + w.y); }).length;
-                if (exits < 2 && shut.length) { var k = shut[Math.floor(rnd() * shut.length)]; carve(x + k.x, y + k.y); }
-                if (room(x + 2, y) && !isOpen(x + 1, y) && rnd() < 0.12) { carve(x + 1, y); }
-                if (room(x, y + 2) && !isOpen(x, y + 1) && rnd() < 0.12) { carve(x, y + 1); }
-            }
-        }
         return { open: open, isOpen: isOpen };
     }
-    window.splash.pantry = { maze: makeMaze, cols: COLS, rows: ROWS, start: START, homes: HOMES, bells: BELLS };
+    window.splash.pantry = { maze: makeMaze, pantries: PANTRIES.length, cols: COLS, rows: ROWS, start: START, homes: HOMES, bells: BELLS };
 
     function init(root, opts) {
         var shell = null, S = null, ctx = null, C = null;
@@ -765,13 +798,22 @@
             c.width = W; c.height = ROWS * T;
             var g = c.getContext('2d');
             g.fillStyle = C.muted;
+            /* The walls are shelves. A wall tile is drawn as its middle,
+               an arm to each side where the next tile is wall too, and a
+               corner where the two tiles beside the corner and the one
+               across it are all wall. So a wall one tile thick is a bar
+               with a margin of floor, and a block of wall is solid. */
+            var M = 3, MID = T - 2 * M;
+            function wall(x, y) { return x >= 0 && y >= 0 && x < COLS && y < ROWS && !maze.open[y * COLS + x]; }
             for (var y = 0; y < ROWS; y++) {
                 for (var x = 0; x < COLS; x++) {
-                    if (maze.open[y * COLS + x]) { continue; }
-                    var cx = x * T + T / 2, cy = y * T + T / 2;
-                    g.fillRect(cx - 2, cy - 2, 4, 4);
-                    if (x + 1 < COLS && !maze.open[y * COLS + x + 1]) { g.fillRect(cx + 2, cy - 2, T - 4, 4); }
-                    if (y + 1 < ROWS && !maze.open[(y + 1) * COLS + x]) { g.fillRect(cx - 2, cy + 2, 4, T - 4); }
+                    if (!wall(x, y)) { continue; }
+                    for (var j = -1; j <= 1; j++) {
+                        for (var i = -1; i <= 1; i++) {
+                            if (!wall(x + i, y) || !wall(x, y + j) || !wall(x + i, y + j)) { continue; }
+                            g.fillRect(x * T + (i < 0 ? 0 : i > 0 ? T - M : M), y * T + (j < 0 ? 0 : j > 0 ? T - M : M), i ? M : MID, j ? M : MID);
+                        }
+                    }
                 }
             }
             mazeImg = c;
