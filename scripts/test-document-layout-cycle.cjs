@@ -38,7 +38,7 @@ const columnsAndGaps=()=>{
         copy.querySelectorAll('.doc-page-gap,.doc-gap-cap,.doc-gap-cover,colgroup').forEach(n=>n.remove());copy.removeAttribute('style');copy.querySelectorAll('td,th').forEach(n=>n.removeAttribute('style'));
         holder.append(copy);pm.parentElement.append(holder);const alone=[...copy.rows[0].cells].map(c=>c.getBoundingClientRect().width);holder.remove();
         const now=[...real.cells].map(c=>c.getBoundingClientRect().width);out.tables++;
-        if(now.length!==alone.length||Math.max(...now.map((w,i)=>Math.abs(w-alone[i])))>3)out.wrong.push({now:now.map(Math.round),alone:alone.map(Math.round),afterGap:t.rows[0].classList.contains('doc-page-gap')});
+        if(now.length!==alone.length||Math.max(...now.map((w,i)=>Math.abs(w-alone[i])))>3)out.wrong.push({now:now.map(Math.round),alone:alone.map(Math.round),afterGap:t.rows[0].classList.contains('doc-page-gap'),cells:[...real.cells].map(c=>c.textContent.trim().slice(0,24)),font:getComputedStyle(real.cells[0]).fontFamily.slice(0,60)});
     }
     const gaps=[...pm.querySelectorAll('.doc-page-gap')].filter(g=>getComputedStyle(g).position!=='absolute'&&!g.closest('.doc-gap-cap')).map(g=>{const r=g.getBoundingClientRect();return {t:r.top-top,b:r.bottom-top,el:g};}).filter(g=>g.b-g.t>1);
     for(const e of pm.querySelectorAll('p,li,tr,h1,h2,h3,h4,h5,h6,pre,figure')){
@@ -123,6 +123,12 @@ function settle({frames,limit}){
                         else if(undone.now.pages!==first.now.pages)failures.push(`${label}: ${first.now.pages} pages on load and ${undone.now.pages} after an edit and its undo`);
                         const again=await page.evaluate(()=>window.columnsAndGaps());
                         if(again.wrong.length||again.overlaps.length)failures.push(`${label}: after the edit and its undo ${again.wrong.length} tables have other columns (${JSON.stringify(again.wrong[0])}) and ${again.overlaps.length} blocks run into a gap`);
+                        // A font that arrives after a table was measured changes how it lays out by its content (a web font, loaded the first time it is used, on a machine
+                        // where that takes longer than the first layout). The page cannot tell why the fonts event came, so every table is measured again.
+                        await page.evaluate(()=>{const st=document.createElement('style');st.id='late-font';st.textContent='#document .ProseMirror td,#document .ProseMirror th{letter-spacing:2px;}';document.head.append(st);document.fonts.dispatchEvent(new Event('loadingdone'));});
+                        await page.evaluate(settle,{frames:120,limit:60000});
+                        const late=await page.evaluate(()=>window.columnsAndGaps());
+                        if(late.wrong.length||late.overlaps.length)failures.push(`${label}: after a font arrived ${late.wrong.length} of ${late.tables} tables kept their earlier columns (${JSON.stringify(late.wrong[0])}) and ${late.overlaps.length} blocks run into a gap`);
                     }
                     if(page.errors.length)failures.push(`${label}: page errors ${page.errors.join(' | ')}`);
                     console.log(`${label}: ${first.now.pages} pages, settled in ${first.ms} ms, ${c0.passes} passes and ${c0.changes} changes to get there, none while idle, after the trip or after the edit settled`);
