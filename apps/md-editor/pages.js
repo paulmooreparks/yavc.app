@@ -385,7 +385,7 @@
             var holder=document.createElement('div'),copy=table.cloneNode(true),parent=v.dom.parentElement;
             if(!parent)return null;
             holder.className=v.dom.className;holder.setAttribute('aria-hidden','true');holder.style.cssText='position:absolute;visibility:hidden;pointer-events:none;left:-100000px;top:0;width:'+v.dom.clientWidth+'px;';
-            copy.querySelectorAll('.doc-page-gap,.doc-gap-cap,.doc-gap-cover').forEach(function(node){node.remove();});
+            copy.querySelectorAll('.doc-page-gap,.doc-gap-cap,.doc-gap-cover,.ProseMirror-separator,.ProseMirror-trailingBreak').forEach(function(node){node.remove();}); /* the editor's own marks for an empty cell come and go with the selection */
             copy.querySelectorAll(':scope > colgroup[data-doc-columns]').forEach(function(node){node.remove();});
             copy.removeAttribute('style');copy.querySelectorAll('td,th').forEach(function(cell){cell.removeAttribute('style');});
             holder.append(copy);parent.append(holder);
