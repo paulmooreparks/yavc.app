@@ -404,11 +404,18 @@
         /* The natural columns of each table of the page. A table is measured again when its text or the drawings in it have changed, since a host's drawing
            that arrives after the first layout changes how the table lays out by its content, and the columns are part of the arrangement (so that a table
            measured before its drawings were there is not kept at the columns it had then). */
+        /* The table's own text, as its length and a hash of it, without the page's gaps (the copy of a repeated header in a gap moves with the layout), and its drawings. */
+        function fingerprintOf(table){
+            var length=0,hash=0,walker=document.createTreeWalker(table,NodeFilter.SHOW_ELEMENT|NodeFilter.SHOW_TEXT,{acceptNode:function(node){return node.nodeType===1&&node.classList.contains('doc-page-gap')?NodeFilter.FILTER_REJECT:NodeFilter.FILTER_ACCEPT;}});
+            while(walker.nextNode()){if(walker.currentNode.nodeType===3){var data=walker.currentNode.data;length+=data.length;for(var i=0;i<data.length;i++){hash=(hash*31+data.charCodeAt(i))|0;}}}
+            return length+'.'+hash+':'+table.querySelectorAll('[data-host-drawn]').length;
+        }
         function measureTables(v,scale){
             var map=new Map();
             v.dom.querySelectorAll('table').forEach(function(table){
-                if(table.closest('.doc-page-gap')||table.closest('.doc-gap-cap'))return;
-                var fingerprint=table.textContent.length+':'+table.querySelectorAll('[data-host-drawn]').length,entry=tableWidths.get(table);
+                /* A table that a host drew, or the page's own copy of one, is not the page's to give columns to. */
+                if(table.closest('.doc-page-gap')||table.closest('.doc-gap-cap')||table.closest('.pm-source'))return;
+                var fingerprint=fingerprintOf(table),entry=tableWidths.get(table);
                 if(!entry||entry.fingerprint!==fingerprint){var values=naturalWidths(v,table,scale);if(!values)return;entry={fingerprint:fingerprint,values:values};tableWidths.set(table,entry);}
                 map.set(table,entry.values);
             });
@@ -441,7 +448,7 @@
                 try {
                     // Keep mapped page furniture visible until its replacement
                     // has been measured. Clearing it paints a collapsed page.
-                    if(seenDoc!==v.state.doc){seenDoc=v.state.doc;tableWidths=new WeakMap();signature='';release();}
+                    if(seenDoc!==v.state.doc){seenDoc=v.state.doc;signature='';release();}
                     if (stopped) { return; }
                     put(o.page, 'data-layout-passes', ++passes);
                     var d = surface(o.page, page), positions = [], scale = Number(o.page.style.zoom) || 1, measures = measureTables(v, scale); v.state.doc.forEach(function (n, pos) { positions.push(pos); });
