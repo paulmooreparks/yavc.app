@@ -378,14 +378,50 @@
         function sizeOf(dom) { var r = dom.getBoundingClientRect(); return Math.round(r.width * 10) + 'x' + Math.round(r.height * 10); }
         function gapIdentity(block){var node=block.rowNode||block.node;if(!gapIds.has(node))gapIds.set(node,++gapSerial);return gapIds.get(node);}
         function headerIdentity(block){return (block.headerRows||[]).map(function(row){return row.outerHTML;}).join('');}
-        function tableDecorations(v,scale){
+        /* A table's columns as the browser lays the table out by its content, on a copy of it that no gap, cap or earlier width is in, outside the page's own
+           elements. A table that has a gap or a width of its own is not measured as it is, since a fixed layout takes its columns from the table's column
+           elements and then from its first row, and a gap before the first row is a row of one cell. */
+        function naturalWidths(v,table,scale){
+            var holder=document.createElement('div'),copy=table.cloneNode(true),parent=v.dom.parentElement;
+            if(!parent)return null;
+            holder.className=v.dom.className;holder.setAttribute('aria-hidden','true');holder.style.cssText='position:absolute;visibility:hidden;pointer-events:none;left:-100000px;top:0;width:'+v.dom.clientWidth+'px;';
+            copy.querySelectorAll('.doc-page-gap,.doc-gap-cap,.doc-gap-cover').forEach(function(node){node.remove();});
+            copy.querySelectorAll(':scope > colgroup[data-doc-columns]').forEach(function(node){node.remove();});
+            copy.removeAttribute('style');copy.querySelectorAll('td,th').forEach(function(cell){cell.removeAttribute('style');});
+            holder.append(copy);parent.append(holder);
+            try{var row=copy.rows[0];if(!row)return null;return {width:copy.getBoundingClientRect().width/scale,cells:Array.from(row.cells).map(function(cell){return cell.getBoundingClientRect().width/scale;})};}
+            finally{holder.remove();}
+        }
+        /* The table's column elements, which a fixed layout reads before it reads any row (CSS 2.1, 17.5.2.1), one for each measured column. A table that has
+           column elements of its own, an HTML table, keeps them. */
+        function columns(table,widths){
+            var group=table.querySelector(':scope > colgroup[data-doc-columns]');
+            if(!group){if(table.querySelector(':scope > colgroup'))return;group=document.createElement('colgroup');group.setAttribute('data-doc-columns','');table.insertBefore(group,table.firstChild);}
+            while(group.children.length<widths.length)group.append(document.createElement('col'));
+            while(group.children.length>widths.length)group.lastChild.remove();
+            widths.forEach(function(width,index){var value=width+'px';if(group.children[index].style.width!==value)group.children[index].style.width=value;});
+        }
+        /* The natural columns of each table of the page. A table is measured again when its text or the drawings in it have changed, since a host's drawing
+           that arrives after the first layout changes how the table lays out by its content, and the columns are part of the arrangement (so that a table
+           measured before its drawings were there is not kept at the columns it had then). */
+        function measureTables(v,scale){
+            var map=new Map();
+            v.dom.querySelectorAll('table').forEach(function(table){
+                if(table.closest('.doc-page-gap')||table.closest('.doc-gap-cap'))return;
+                var fingerprint=table.textContent.length+':'+table.querySelectorAll('[data-host-drawn]').length,entry=tableWidths.get(table);
+                if(!entry||entry.fingerprint!==fingerprint){var values=naturalWidths(v,table,scale);if(!values)return;entry={fingerprint:fingerprint,values:values};tableWidths.set(table,entry);}
+                map.set(table,entry.values);
+            });
+            return map;
+        }
+        function tableDecorations(v,scale,measures){
             var decorations=[];
             v.dom.querySelectorAll('table').forEach(function(table){
                 /* The first row that is the table's own: a gap before the first row is a row of one cell as wide as the table, which gave every column no width. */
                 var first=Array.from(table.rows).find(function(row){return !row.classList.contains('doc-page-gap');});
                 if(table.closest('.doc-page-gap')||!first)return;
-                var values=tableWidths.get(table);
-                if(!values){values={width:table.getBoundingClientRect().width/scale,cells:Array.from(first.cells).map(function(cell){return cell.getBoundingClientRect().width/scale;})};tableWidths.set(table,values);}
+                var values=measures.get(table);
+                if(!values)return;
                 function range(node){var parent=node.parentNode,index=Array.prototype.indexOf.call(parent.childNodes,node);return [v.posAtDOM(parent,index),v.posAtDOM(parent,index+1)];}
                 var span=range(table);if(span[1]>span[0])decorations.push(PM.Decoration.node(span[0],span[1],{style:'table-layout:fixed;width:'+values.width+'px;'}));
                 Array.from(first.cells).forEach(function(cell,index){var span=range(cell);if(span[1]>span[0])decorations.push(PM.Decoration.node(span[0],span[1],{style:'width:'+values.cells[index]+'px;'}));});
@@ -408,9 +444,9 @@
                     if(seenDoc!==v.state.doc){seenDoc=v.state.doc;tableWidths=new WeakMap();signature='';release();}
                     if (stopped) { return; }
                     put(o.page, 'data-layout-passes', ++passes);
-                    var d = surface(o.page, page), positions = []; v.state.doc.forEach(function (n, pos) { positions.push(pos); });
+                    var d = surface(o.page, page), positions = [], scale = Number(o.page.style.zoom) || 1, measures = measureTables(v, scale); v.state.doc.forEach(function (n, pos) { positions.push(pos); });
                     var blocks = measured(v.dom, function () { return blocksOf(v.dom, positions, function (node, offset) { return v.posAtDOM(node, offset); }); }), layout = plan(blocks, page);
-                    var next = arrangement([page, layout.gaps, layout.count, layout.oversized,layout.footnotes,layout.problem]);
+                    var next = arrangement([page, layout.gaps, layout.count, layout.oversized,layout.footnotes,layout.problem, Array.from(measures.values())]);
                     if (next !== signature && seen.has(next)) { stopped = true; o.page.setAttribute('data-layout-stopped', ''); return; }
                     var minimum = (layout.count * (d.height + GAP) - GAP) + 'px', changed = next !== signature;
                     if (o.page.style.minHeight !== minimum) { o.page.style.minHeight = minimum; }
@@ -419,7 +455,7 @@
                     if (changed) {
                         signature = next; seen.add(next); put(o.page, 'data-layout-changes', ++changes);
                         if (window.yavcDocumentSettings) { window.yavcDocumentSettings.decorate(o.page, page, layout.count); }
-                        var scale=Number(o.page.style.zoom)||1,widgets=tableDecorations(v,scale);layout.gaps.forEach(function(gap){var block=blocks[gap.index];if(block.flow)return;
+                        var widgets=tableDecorations(v,scale,measures);layout.gaps.forEach(function(gap){var block=blocks[gap.index];if(block.flow)return;
                             var identity=gapIdentity(block)+':'+gap.index+':'+gap.height+':'+gap.header+':'+(gap.header?headerIdentity(block):'');
                             if(block.rowNode&&block.band){block.anchors.forEach(function(anchor,column){if(anchor)widgets.push(PM.Decoration.widget(anchor.pos,function(){return rowSpacer(gap,block,column);},{side:gap.index,key:'cell:'+identity+':'+column+':'+gap.rowHeaderTop+':'+!!anchor.exhausted,ignoreSelection:true}));});}
                             else widgets.push(PM.Decoration.widget(gap.pos,function(){return spacer(gap.height,!!block.anchor,block,gap.header);},{side:-1,key:'gap:'+identity+':'+!!block.anchor,ignoreSelection:true}));
@@ -430,6 +466,7 @@
                         if (o.syncSelection) { o.syncSelection(); }
                         v.dispatch(v.state.tr.setMeta(key, PM.DecorationSet.create(v.state.doc, widgets)).setMeta('addToHistory', false));
                     }
+                    measures.forEach(function (values, table) { columns(table, values.cells); });
                     if (changed || furniture !== placed(v.dom)) { applyFlowGaps(v.dom, layout, blocks); applyPieces(v.dom, d); furniture = placed(v.dom); }
                     ownSize = sizeOf(v.dom);
                 } catch (err) { if (o.paginationProblem) { o.paginationProblem(err.message); } }

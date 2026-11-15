@@ -29,6 +29,24 @@ function shortDocument(){let t='# First Heading\n\n';for(let s=1;s<=40;s++)t+=pr
 const arrangement=()=>{const root=document.querySelector('#document'),pm=root.querySelector('.ProseMirror'),top=pm.getBoundingClientRect().top,scroll=root.querySelector('.ed-scroll');
     return {gaps:[...pm.querySelectorAll('.doc-page-gap')].map(g=>{const r=g.getBoundingClientRect();return [Math.round(r.top-top),Math.round(r.height)];}),pages:root.querySelector('[data-page-count]')?.getAttribute('data-page-count'),scroll:scroll?Math.round(scroll.scrollTop):0};};
 const counters=()=>{const el=document.querySelector('#document [data-page-count]');return {passes:Number(el?.getAttribute('data-layout-passes')),changes:Number(el?.getAttribute('data-layout-changes')),stopped:el?.hasAttribute('data-layout-stopped')};};
+// Tables whose columns are not the ones the table has laid out alone (a gap before the first row must not decide them), and blocks that run into a page gap.
+const columnsAndGaps=()=>{
+    const pm=document.querySelector('#document .ProseMirror'),top=pm.getBoundingClientRect().top,out={tables:0,wrong:[],overlaps:[]};
+    for(const t of pm.querySelectorAll('table')){
+        if(t.closest('.doc-page-gap')||t.closest('.doc-gap-cap'))continue;const real=[...t.rows].find(r=>!r.classList.contains('doc-page-gap'));if(!real)continue;
+        const holder=document.createElement('div'),copy=t.cloneNode(true);holder.className=pm.className;holder.style.cssText='position:absolute;visibility:hidden;left:-100000px;top:0;width:'+pm.clientWidth+'px';
+        copy.querySelectorAll('.doc-page-gap,.doc-gap-cap,.doc-gap-cover,colgroup').forEach(n=>n.remove());copy.removeAttribute('style');copy.querySelectorAll('td,th').forEach(n=>n.removeAttribute('style'));
+        holder.append(copy);pm.parentElement.append(holder);const alone=[...copy.rows[0].cells].map(c=>c.getBoundingClientRect().width);holder.remove();
+        const now=[...real.cells].map(c=>c.getBoundingClientRect().width);out.tables++;
+        if(now.length!==alone.length||Math.max(...now.map((w,i)=>Math.abs(w-alone[i])))>3)out.wrong.push({now:now.map(Math.round),alone:alone.map(Math.round),afterGap:t.rows[0].classList.contains('doc-page-gap')});
+    }
+    const gaps=[...pm.querySelectorAll('.doc-page-gap')].filter(g=>getComputedStyle(g).position!=='absolute'&&!g.closest('.doc-gap-cap')).map(g=>{const r=g.getBoundingClientRect();return {t:r.top-top,b:r.bottom-top,el:g};}).filter(g=>g.b-g.t>1);
+    for(const e of pm.querySelectorAll('p,li,tr,h1,h2,h3,h4,h5,h6,pre,figure')){
+        if(e.closest('.doc-page-gap')||e.querySelector('.doc-page-gap')||e.closest('.doc-gap-cap')||e.closest('.doc-footnote'))continue;const r=e.getBoundingClientRect();if(r.height<2)continue;
+        for(const g of gaps){if(g.el.contains(e))continue;if(Math.min(r.bottom-top,g.b)-Math.max(r.top-top,g.t)>1.5){out.overlaps.push((e.tagName+' '+(e.textContent||'').slice(0,20)).trim());break;}}
+    }
+    return out;
+};
 // Waits until the arrangement has stayed the same for `frames` frames, and answers with it.
 function settle({frames,limit}){
     return new Promise(done=>{const started=performance.now();let last=null,same=0;
@@ -47,7 +65,7 @@ function settle({frames,limit}){
         res.writeHead(200,{'Content-Type':types[path.extname(name)]||'application/octet-stream','Cache-Control':'no-store'}).end(body);}catch{if(!res.headersSent)res.writeHead(404).end();}});
     await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const failures=[];
     async function open(browser,source,width,notes){
-        text=source;withNote=!!notes;const page=await browser.newPage({viewport:{width:width||2048,height:1152}});await page.addInitScript("window.arrangement="+arrangement.toString());page.setDefaultTimeout(60000);page.errors=[];page.on('pageerror',e=>page.errors.push(e.message));
+        text=source;withNote=!!notes;const page=await browser.newPage({viewport:{width:width||2048,height:1152}});await page.addInitScript("window.arrangement="+arrangement.toString());await page.addInitScript("window.columnsAndGaps="+columnsAndGaps.toString());page.setDefaultTimeout(60000);page.errors=[];page.on('pageerror',e=>page.errors.push(e.message));
         await page.goto(`http://127.0.0.1:${server.address().port}${prefix}workspace-lab/index.html?apps=docs`);
         await page.locator('#document .doc-paginated .ProseMirror').waitFor();await page.evaluate(()=>document.fonts.ready);return page;
     }
@@ -66,6 +84,12 @@ function settle({frames,limit}){
                     // A table row that follows a page gap is as wide as the table, and its columns must not take their widths from the gap's one cell.
                     const squeezed=await page.evaluate(()=>[...document.querySelectorAll('#document .ProseMirror table')].filter(t=>!t.closest('.doc-page-gap')).filter(t=>{const row=[...t.rows].find(r=>!r.classList.contains('doc-page-gap'));return row&&row.cells.length>1&&[...row.cells].some(c=>c.getBoundingClientRect().width<5);}).length);
                     if(squeezed)failures.push(`${label}: ${squeezed} tables have a column with no width`);
+                    // Every table has the columns it has laid out alone, also those that follow a gap, and no block runs into a gap.
+                    if(shape.note){
+                        const found=await page.evaluate(()=>window.columnsAndGaps());
+                        if(found.wrong.length)failures.push(`${label}: ${found.wrong.length} of ${found.tables} tables have columns that are not those of the table laid out alone, such as ${JSON.stringify(found.wrong[0])}`);
+                        if(found.overlaps.length)failures.push(`${label}: ${found.overlaps.length} blocks run into a page gap, such as ${found.overlaps[0]}`);
+                    }
                     // Idle: no layout pass in 5 seconds, and the same arrangement.
                     await page.evaluate(()=>{window.idleWrites=[];window.idleWatch=new MutationObserver(list=>{for(const m of list)window.idleWrites.push(m.type+' '+(m.target.nodeType===1?m.target.tagName+'.'+String(m.target.className).slice(0,40):'#text')+' '+(m.attributeName||''));});window.idleWatch.observe(document.querySelector('#document'),{subtree:true,childList:true,attributes:true,characterData:true});});
                     await page.waitForTimeout(5000);
@@ -90,6 +114,16 @@ function settle({frames,limit}){
                     if(!edited.settled)failures.push(`${label}: after an edit the page did not settle`);
                     const c3=await page.evaluate(counters);await page.waitForTimeout(3000);const c4=await page.evaluate(counters);
                     if(c4.passes!==c3.passes)failures.push(`${label}: ${c4.passes-c3.passes} layout passes in 3 idle seconds after an edit`);
+                    if(shape.note){
+                        // An edit and its undo give back the page count the note had on load.
+                        for(let i=0;i<8;i++){await page.keyboard.press('Control+z');}
+                        const undone=await page.evaluate(settle,{frames:120,limit:60000});
+                        const text=await page.evaluate(()=>document.querySelector('#document .ProseMirror').textContent.includes('Synthetic edit.'));
+                        if(text)failures.push(`${label}: the undo left the edit in the text`);
+                        else if(undone.now.pages!==first.now.pages)failures.push(`${label}: ${first.now.pages} pages on load and ${undone.now.pages} after an edit and its undo`);
+                        const again=await page.evaluate(()=>window.columnsAndGaps());
+                        if(again.wrong.length||again.overlaps.length)failures.push(`${label}: after the edit and its undo ${again.wrong.length} tables have other columns (${JSON.stringify(again.wrong[0])}) and ${again.overlaps.length} blocks run into a gap`);
+                    }
                     if(page.errors.length)failures.push(`${label}: page errors ${page.errors.join(' | ')}`);
                     console.log(`${label}: ${first.now.pages} pages, settled in ${first.ms} ms, ${c0.passes} passes and ${c0.changes} changes to get there, none while idle, after the trip or after the edit settled`);
                 }catch(e){failures.push(`${label}: ${String(e.message).split(/\r?\n/)[0]}`);}finally{await page.close();}
