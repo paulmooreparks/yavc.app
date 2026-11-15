@@ -1,8 +1,8 @@
 {
   "name": "pantry",
   "title": "Pantry Raid",
-  "version": "0.1.0",
-  "description": "A maze chase: a mouse eats every crumb in the pantry while four cats hunt it, in a new maze every level.",
+  "version": "0.2.0",
+  "description": "A maze chase: a mouse eats every crumb in the pantry while four cats hunt it, through three pantries that take turns.",
   "license": "Apache-2.0",
   "src": "pantry.js",
   "css": "pantry.css",

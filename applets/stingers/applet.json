@@ -1,7 +1,7 @@
 {
   "name": "stingers",
   "title": "Stingers",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A formation shooter: a nest of wasps settles into ranks, then dives at the ship one at a time.",
   "license": "Apache-2.0",
   "src": "stingers.js",

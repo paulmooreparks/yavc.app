@@ -545,6 +545,11 @@
     /* The shared modules are bundled in front of this file when the
        package is built (applet.json, "bundle"), so window.splash is here. */
     var W = 224, H = 256, PLAYER_Y = 228, MID = W / 2;
+    /* A wasp turns in a circle of this many pixels, flying in and diving,
+       at any speed: the paths are drawn for these circles, so a faster
+       wave flies the same curves sooner instead of missing its points.
+       A point of a path is given up after GIVE_UP milliseconds. */
+    var FLY_R = 27, DIVE_R = 30, GIVE_UP = 3000;
 
     function sprite(id, rows) { return { id: id, w: rows[0].length, h: rows.length, rows: rows }; }
     var DRONE = { points: 10, hp: 1, colour: 'fg', frames: [
@@ -577,6 +582,49 @@
         '</dl>' +
         '<p>On a touch screen, the buttons under the game do the same. The game pauses when it loses the keyboard.</p>';
 
+    /* Flying is turning towards a point no faster than a turn rate
+       allows, at a steady speed, which is what makes the curves. */
+    function steer(e, tx, ty, speed, turn, dt) {
+        var diff = Math.atan2(ty - e.y, tx - e.x) - e.ang;
+        while (diff > Math.PI) { diff -= 2 * Math.PI; }
+        while (diff < -Math.PI) { diff += 2 * Math.PI; }
+        var most = turn * dt / 1000;
+        e.ang += Math.max(-most, Math.min(most, diff));
+        e.x += Math.cos(e.ang) * speed * dt / 1000;
+        e.y += Math.sin(e.ang) * speed * dt / 1000;
+    }
+    /* Flies e towards the next point of its path and says when the path
+       is done. A point is given up after a while, so that a wasp that
+       cannot turn tightly enough to reach one does not circle it. */
+    function follow(e, speed, turn, dt) {
+        var p = e.path[e.wp];
+        steer(e, p.x, p.y, speed, turn, dt);
+        e.wpT += dt;
+        var dx = p.x - e.x, dy = p.y - e.y;
+        if (dx * dx + dy * dy < 256 || e.wpT > GIVE_UP) { e.wp++; e.wpT = 0; }
+        return e.wp >= e.path.length;
+    }
+    function diveSpeed(level) { return Math.min(190, 125 + level * 5); }
+    /* The path of a dive from a place in the ranks, by a wasp that starts
+       out flying up the screen. The first point is a quarter of a turn
+       away, so the wasp passes through it. The wasp turns away from the
+       ship and loops round to come down across the screen; where that
+       loop would cross the side of the screen, it turns towards the ship
+       instead. The second point is just above where the ship was. The
+       wasp then flies on the way it was going and off the bottom, or
+       hooks back where flying on would cross the side. */
+    function divePath(x, y, aim) {
+        var s = aim < x ? -1 : 1, k = -s, out = aim + s * 34;
+        if (x + k * 2 * DIVE_R < 8 || x + k * 2 * DIVE_R > W - 8) { k = s; }
+        if (out < 16 || out > W - 16) { out = aim - s * 34; }
+        return [{ x: x + k * DIVE_R, y: y - DIVE_R }, { x: aim, y: PLAYER_Y - 36 }, { x: out, y: H + 20 }];
+    }
+    /* For the checks that need no browser (../../tools/test-stingers-dive.js). */
+    window.splash.stingers = {
+        width: W, height: H, shipY: PLAYER_Y, turn: DIVE_R, flyTurn: FLY_R, giveUp: GIVE_UP, follow: follow, diveSpeed: diveSpeed, divePath: divePath,
+        rows: RANKS.map(function (rank, r) { return 34 + r * 15; })
+    };
+
     function init(root, opts) {
         var shell = null, S = null, ctx = null, C = null;
         var enemies = [], shots = [], bullets = [], booms = [], stars = [], honey = null, toast = null;
@@ -605,7 +653,7 @@
         }
         function respawn() {
             player.x = MID - 6; shots = []; bullets = []; honey = null; rapid = 0;
-            enemies.forEach(function (e) { if (e.alive && e.state === 'dive') { e.y = -12; e.state = 'return'; } });
+            enemies.forEach(function (e) { if (e.alive && e.state === 'dive') { home(e); } });
         }
 
         /* Where an enemy's place in the ranks is now: the ranks sway from
@@ -613,25 +661,9 @@
         function slot(e) {
             return { x: MID + (e.sx - MID) * (1 + 0.05 * Math.sin(clock / 770)) + 10 * Math.sin(clock / 1430), y: e.sy };
         }
-        /* Flying is turning towards a point no faster than a turn rate
-           allows, at a steady speed, which is what makes the curves. */
-        function steer(e, tx, ty, speed, turn, dt) {
-            var diff = Math.atan2(ty - e.y, tx - e.x) - e.ang;
-            while (diff > Math.PI) { diff -= 2 * Math.PI; }
-            while (diff < -Math.PI) { diff += 2 * Math.PI; }
-            var most = turn * dt / 1000;
-            e.ang += Math.max(-most, Math.min(most, diff));
-            e.x += Math.cos(e.ang) * speed * dt / 1000;
-            e.y += Math.sin(e.ang) * speed * dt / 1000;
-        }
-        function follow(e, speed, turn, dt) {
-            var p = e.path[e.wp];
-            steer(e, p.x, p.y, speed, turn, dt);
-            e.wpT += dt;
-            var dx = p.x - e.x, dy = p.y - e.y;
-            if (dx * dx + dy * dy < 256 || e.wpT > 2200) { e.wp++; e.wpT = 0; }
-            return e.wp >= e.path.length;
-        }
+        /* A wasp that has left the screen comes back in at the top, above
+           its own place in the ranks, and drops into it. */
+        function home(e) { e.x = slot(e).x; e.y = -12; e.state = 'return'; }
         function enter(e) {
             var s = e.side;
             if (e.top) {
@@ -644,9 +676,8 @@
             e.state = 'enter'; e.wp = 0; e.wpT = 0;
         }
         function launch(e) {
-            var aim = Math.max(20, Math.min(W - 20, player.x + 6)), s = aim < e.x ? -1 : 1;
             e.state = 'dive'; e.ang = -Math.PI / 2; e.wp = 0; e.wpT = 0;
-            e.path = [{ x: e.x - s * 24, y: e.y - 10 }, { x: aim, y: PLAYER_Y - 36 }, { x: aim + s * 34, y: H + 20 }];
+            e.path = divePath(e.x, e.y, Math.max(20, Math.min(W - 20, player.x + 6)));
             e.shots = Math.min(3, 1 + Math.floor(S.level / 3)); e.fireT = 500;
             shell.beep(900, 350, 'sawtooth', 0.03, 300);
         }
@@ -707,12 +738,12 @@
             var live = enemies.filter(function (e) { return e.alive; });
             if (!live.length) { shell.cleared(1500); return; }
 
-            var fly = Math.min(170, 120 + S.level * 4), dive = Math.min(190, 125 + S.level * 5);
+            var fly = Math.min(170, 120 + S.level * 4), dive = diveSpeed(S.level);
             var settled = true, diving = 0, killed = false, ship = { x: player.x, y: PLAYER_Y, w: SHIP.w, h: SHIP.h };
             live.forEach(function (e) {
                 var p;
                 if (e.state === 'wait') { settled = false; e.delay -= dt; if (e.delay <= 0) { enter(e); } return; }
-                if (e.state === 'enter') { settled = false; if (follow(e, fly, 4.5, dt)) { e.state = 'settle'; } return; }
+                if (e.state === 'enter') { settled = false; if (follow(e, fly, fly / FLY_R, dt)) { e.state = 'settle'; } return; }
                 if (e.state === 'settle' || e.state === 'return') {
                     if (e.state === 'settle') { settled = false; }
                     p = slot(e);
@@ -725,7 +756,7 @@
                 diving++;
                 e.fireT -= dt;
                 if (e.shots > 0 && e.fireT <= 0 && e.wp >= 1 && e.y > 50 && e.y < PLAYER_Y - 60) { shoot(e); e.shots--; e.fireT = 450; }
-                if (follow(e, dive, 3.5, dt) || e.y > H + 10) { e.y = -12; e.state = 'return'; }
+                if (follow(e, dive, dive / DIVE_R, dt) || e.y > H + 10) { home(e); }
                 else if (hit(box(e), ship)) { killed = true; }
             });
 
