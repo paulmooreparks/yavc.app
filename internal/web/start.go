@@ -22,7 +22,7 @@ var startTaxonomy = []startCategory{
 	{Key: "tools", Label: "Tools", Glyph: "folder", Apps: []string{"files", "terminal", "diff"}},
 	{Key: "barcodes", Label: "Barcodes", Glyph: "app", Apps: []string{"barcode-scanner", "barcodes", "flashcards"}},
 	{Key: "learning", Label: "Learning", Glyph: "document", Apps: []string{"flashcards", "sight-reader", "conway"}},
-	{Key: "games", Label: "Games", Glyph: "app", Apps: []string{"asteroids", "conway", "dice", "invaders", "sudoku"}},
+	{Key: "games", Label: "Games", Glyph: "app", Apps: []string{"asteroids", "conway", "dice", "invaders", "pantry", "stingers", "sudoku"}},
 	{Key: "settings", Label: "Settings", Glyph: "gear", Apps: []string{"settings", "theme-studio"}},
 	{Key: "other", Label: "Other", Glyph: "app"},
 }

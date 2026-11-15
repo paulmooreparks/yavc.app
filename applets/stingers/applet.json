@@ -1,0 +1,35 @@
+{
+  "name": "stingers",
+  "title": "Stingers",
+  "version": "0.1.0",
+  "description": "A formation shooter: a nest of wasps settles into ranks, then dives at the ship one at a time.",
+  "license": "Apache-2.0",
+  "src": "stingers.js",
+  "css": "stingers.css",
+  "icon": "icon.svg",
+  "page": {
+    "body": "page.html"
+  },
+  "window": {
+    "shape": "0.3,0.8",
+    "min": "300,420"
+  },
+  "handles": {
+    "play": {
+      "param": "level"
+    }
+  },
+  "actions": "actions.json",
+  "continuity": false,
+  "wants": [
+    "fs",
+    "config"
+  ],
+  "shared": [
+    "../shared"
+  ],
+  "tags": [
+    "games",
+    "arcade"
+  ]
+}

@@ -1,0 +1,4 @@
+/* Pantry Raid (pantry.js): the shared look, and the pantry's own proportions, 228 by 278, scaled whole. */
+@import url(../shared/splash.css);
+.splash-pantry .splash-stage { max-width: 456px; }
+.splash-pantry canvas { aspect-ratio: 228 / 278; }

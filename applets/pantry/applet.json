@@ -1,0 +1,35 @@
+{
+  "name": "pantry",
+  "title": "Pantry Raid",
+  "version": "0.1.0",
+  "description": "A maze chase: a mouse eats every crumb in the pantry while four cats hunt it, in a new maze every level.",
+  "license": "Apache-2.0",
+  "src": "pantry.js",
+  "css": "pantry.css",
+  "icon": "icon.svg",
+  "page": {
+    "body": "page.html"
+  },
+  "window": {
+    "shape": "0.34,0.86",
+    "min": "300,440"
+  },
+  "handles": {
+    "play": {
+      "param": "level"
+    }
+  },
+  "actions": "actions.json",
+  "continuity": false,
+  "wants": [
+    "fs",
+    "config"
+  ],
+  "shared": [
+    "../shared"
+  ],
+  "tags": [
+    "games",
+    "arcade"
+  ]
+}

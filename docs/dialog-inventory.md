@@ -111,6 +111,10 @@ The executable evidence includes the site, content, authored, block, formatting,
 | Asteroids | Scores | Readable table or empty state, Close and Escape | Authored sweep, all three engines; real empty state checked |
 | Invaders | Help | Game keys remain inactive while the dialog is open | Authored sweep, all three engines |
 | Invaders | Scores | Readable table or empty state, Close and Escape | Authored sweep, all three engines; real empty state checked |
+| Pantry Raid | Help | Game keys remain inactive while the dialog is open | Authored sweep, Chromium |
+| Pantry Raid | Scores | Readable table or empty state, Close and Escape | Authored sweep, Chromium; real empty state checked |
+| Stingers | Help | Game keys remain inactive while the dialog is open | Authored sweep, Chromium |
+| Stingers | Scores | Readable table or empty state, Close and Escape | Authored sweep, Chromium; real empty state checked |
 | Sudoku | Help | Accessible title and structured reference content | Authored sweep, all three engines |
 | Conway | Help | Structured reference content and Close | Authored sweep, all three engines |
 | Conway | Share | Read-only address, navigation link and Copy action | Authored sweep, all three engines; populated flow checked |
