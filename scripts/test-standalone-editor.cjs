@@ -25,7 +25,7 @@ async function until(what, test, ms = 15000) {
 
 async function startService(work) {
     const state = path.join(work, 'state'); fs.mkdirSync(state, {recursive: true});
-    const child = spawn(exe, ['--document-service', '--headless', '--dir', state], {stdio: 'ignore'});
+    const child = spawn(exe, ['--document-service', '--headless', '--dir', state], {stdio: 'ignore', windowsHide: true});
     const file = path.join(state, 'service.json');
     await until('the service to write service.json', () => fs.existsSync(file) && fs.readFileSync(file, 'utf8').trim().endsWith('}'));
     const service = JSON.parse(fs.readFileSync(file, 'utf8')), origin = 'http://' + service.addr;

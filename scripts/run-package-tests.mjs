@@ -35,7 +35,7 @@ function run(test) {
     return new Promise(done => {
         const started = Date.now();
         let output = '';
-        const child = spawn(process.execPath, [join('scripts', test.name), artifact, ...test.engines], { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] });
+        const child = spawn(process.execPath, [join('scripts', test.name), artifact, ...test.engines], { cwd: root, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
         child.stdout.on('data', d => { output += d; }); child.stderr.on('data', d => { output += d; });
         const timer = setTimeout(() => { output += '\nTimed out after ' + limit / 1000 + ' seconds.\n'; child.kill(); }, limit);
         child.on('error', error => { output += String(error); });

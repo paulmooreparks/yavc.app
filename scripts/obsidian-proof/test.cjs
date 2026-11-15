@@ -6,8 +6,8 @@ const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms)),hash=raw=>crypto.cr
 async function wait(test,label){const end=Date.now()+30000;while(Date.now()<end){const value=await test();if(value)return value;await delay(100);}throw new Error('Timed out: '+label);}
 (async()=>{
     const children=[],logs=[],checks=[];let browser,page,startupError,phase='Input identity',result;
-    function start(file,args){const child=cp.spawn(file,args,{stdio:['ignore','pipe','pipe']});children.push(child);child.on('error',error=>{startupError=error;});child.stdout.on('data',raw=>logs.push(raw.toString()));child.stderr.on('data',raw=>logs.push(raw.toString()));return child;}
-    function x(...args){return cp.execFileSync('xdotool',args,{encoding:'utf8'}).trim();}
+    function start(file,args){const child=cp.spawn(file,args,{windowsHide:true,stdio:['ignore','pipe','pipe']});children.push(child);child.on('error',error=>{startupError=error;});child.stdout.on('data',raw=>logs.push(raw.toString()));child.stderr.on('data',raw=>logs.push(raw.toString()));return child;}
+    function x(...args){return cp.execFileSync('xdotool',args,{encoding:'utf8',windowsHide:true}).trim();}
     try{
         const manifest=JSON.parse(await fs.readFile('/input/manifest.json','utf8'));
         assert.equal(hash(JSON.stringify(manifest.files)),manifest.digest);
@@ -25,10 +25,10 @@ async function wait(test,label){const end=Date.now()+30000;while(Date.now()<end)
         phase='Native vault selection';
         // Electron's native chooser blocks completion of the browser click.
         let pickingError;const picking=page.getByRole('button',{name:'Open',exact:true}).click().catch(error=>{pickingError=error;});
-        const chooser=await wait(()=>{const found=cp.spawnSync('xdotool',['search','--onlyvisible','--name','^Open folder as vault$'],{encoding:'utf8'});return found.status===0&&found.stdout.trim().split('\n').at(-1);},'Native folder chooser');
+        const chooser=await wait(()=>{const found=cp.spawnSync('xdotool',['search','--onlyvisible','--name','^Open folder as vault$'],{encoding:'utf8',windowsHide:true});return found.status===0&&found.stdout.trim().split('\n').at(-1);},'Native folder chooser');
         x('windowfocus','--sync',chooser);x('key','ctrl+l');x('type','--clearmodifiers','--delay','0',vault);x('key','Return');
         // In a SELECT_FOLDER chooser, Return navigates and Open accepts it.
-        await delay(500);if(cp.spawnSync('xdotool',['search','--onlyvisible','--name','^Open folder as vault$']).status===0)x('key','alt+o');
+        await delay(500);if(cp.spawnSync('xdotool',['search','--onlyvisible','--name','^Open folder as vault$'],{windowsHide:true}).status===0)x('key','alt+o');
         await picking;if(pickingError)throw pickingError;
         page=await wait(async()=>{for(const candidate of context.pages())if(!candidate.isClosed()&&(await candidate.title()).includes('Canvas Proof'))return candidate;return null;},'Verified vault window');
         x('windowfocus','--sync',x('search','--onlyvisible','--name','Canvas Proof').split('\n').at(-1));

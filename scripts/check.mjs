@@ -67,7 +67,7 @@ rules.push({ id: 'js-syntax', run() {
     }
   }
   for (const f of js.filter((f) => f.endsWith('.mjs') || /^\s*(import|export)\s/m.test(text.get(f)))) {
-    try { execFileSync(process.execPath, ['--check', join(ROOT, f)], { stdio: 'pipe' }); }
+    try { execFileSync(process.execPath, ['--check', join(ROOT, f)], { stdio: 'pipe', windowsHide: true }); }
     catch (err) { report('js-syntax', f, null, String(err.stderr || err.message).split('\n')[0]); }
   }
 } });
@@ -84,6 +84,25 @@ rules.push({ id: 'no-async-wait-function', run() {
   for (const f of files) {
     if (!/^scripts\/test-[^/]*\.cjs$/.test(f)) continue;
     each(/\.waitForFunction\(\s*async\b/g, text.get(f), (m) => report('no-async-wait-function', f, m.index, 'waitForFunction given an async function runs it once and does not test its answer; poll inside the page with page.evaluate'));
+  }
+} });
+
+// A script that starts a child process hides its window. Node's documentation says that on Windows a console window "would normally be
+// created" for a child unless windowsHide is true (child_process, options.windowsHide, default false). The site test runner starts a server
+// and a node process for each test, so a full run opened a couple of hundred console windows that took the keyboard from Paul while he typed
+// (Team Leads 8989, 2026-11-15). Dinah's rule for tests is that nothing appears on Paul's screen. The scripts folder is read here directly,
+// because .cjs is not among the extensions the other rules read.
+rules.push({ id: 'child-window-hidden', run() {
+  const scripts = [];
+  (function list(dir) { for (const name of readdirSync(join(ROOT, dir))) { const rel = dir + '/' + name; if (name === 'node_modules') continue; if (statSync(join(ROOT, rel)).isDirectory()) list(rel); else if (/\.(c|m)?js$/.test(name)) scripts.push(rel); } })('scripts');
+  for (const f of scripts) {
+    const src = readFileSync(join(ROOT, f), 'utf8');
+    if (!text.has(f)) text.set(f, src);
+    each(/\b(spawn|spawnSync|execFile|execFileSync|execSync|fork)\(/g, src, (m) => {
+      let depth = 0, i = m.index + m[0].length - 1;
+      for (; i < src.length; i++) { if (src[i] === '(') depth++; else if (src[i] === ')' && --depth === 0) break; }
+      if (!/windowsHide\s*:\s*true/.test(src.slice(m.index, i))) report('child-window-hidden', f, m.index, 'a child process without windowsHide: true opens a console window on Windows; add it to the options');
+    });
   }
 } });
 
@@ -195,7 +214,7 @@ rules.push({ id: 'engine-licences', run() {
   let modules;
   try {
     modules = execFileSync('go', ['list', '-deps', '-f', '{{with .Module}}{{.Path}}{{end}}', './cmd/yavc-d2'],
-      { cwd: ROOT, encoding: 'utf8', env: { ...process.env, GOOS: 'js', GOARCH: 'wasm' }, stdio: ['ignore', 'pipe', 'pipe'] });
+      { cwd: ROOT, encoding: 'utf8', windowsHide: true, env: { ...process.env, GOOS: 'js', GOARCH: 'wasm' }, stdio: ['ignore', 'pipe', 'pipe'] });
   } catch (err) {
     report('engine-licences', 'cmd/yavc-d2', null, 'the Go tool could not list the engine\'s modules: ' + String(err.stderr || err.message).split('\n')[0]);
     return;
@@ -206,14 +225,14 @@ rules.push({ id: 'engine-licences', run() {
 } });
 
 rules.push({ id: 'applet-version-bump', needsSince: true, run() {
-  const changed = execFileSync('git', ['diff', '--name-only', since, '--', 'apps', 'applets'], { cwd: ROOT, encoding: 'utf8' }).split('\n').filter(Boolean);
+  const changed = execFileSync('git', ['diff', '--name-only', since, '--', 'apps', 'applets'], { cwd: ROOT, encoding: 'utf8', windowsHide: true }).split('\n').filter(Boolean);
   const folders = new Set(changed.map((f) => f.split('/').slice(0, 2).join('/')).filter((d) => {
     try { return statSync(join(ROOT, d, 'applet.json')).isFile(); } catch { return false; }
   }));
   for (const d of folders) {
     const files = changed.filter((f) => f.startsWith(d + '/'));
     if (files.length === 1 && files[0] === d + '/applet.json') continue;
-    const was = (() => { try { return JSON.parse(execFileSync('git', ['show', `${since}:${d}/applet.json`], { cwd: ROOT, encoding: 'utf8' })).version; } catch { return null; } })();
+    const was = (() => { try { return JSON.parse(execFileSync('git', ['show', `${since}:${d}/applet.json`], { cwd: ROOT, encoding: 'utf8', windowsHide: true })).version; } catch { return null; } })();
     const now = JSON.parse(readFileSync(join(ROOT, d, 'applet.json'), 'utf8')).version;
     if (was && was === now) report('applet-version-bump', d + '/applet.json', null, `${d} changed since ${since} but its version is still ${now}`);
   }

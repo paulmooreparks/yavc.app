@@ -45,7 +45,7 @@ const count=await page.evaluate(()=>new Promise(done=>{let last=null,since=Date.
   await action(page,'view',{mode:'document'});await page.locator('.doc-footer').first().waitFor();await action(page,'document-zoom',{value:100});await page.setViewportSize({width:1500,height:1000});
   await page.screenshot({path:path.join(evidence,engine+'-document.png')});
   phase='export';for(const format of ['docx','pdf']) {const pending=page.waitForEvent('download');await command(page,'export-'+format);const download=await pending;await download.saveAs(path.join(evidence,engine+'.'+format));}
-  require('node:child_process').execFileSync('python',[path.join(__dirname,'check-document-furniture.py'),path.join(evidence,engine)],{stdio:'inherit'});
+  require('node:child_process').execFileSync('python',[path.join(__dirname,'check-document-furniture.py'),path.join(evidence,engine)],{stdio:'inherit',windowsHide:true});
   phase='print';await page.evaluate(()=>{const append=document.body.append.bind(document.body);document.body.append=function(...nodes){append(...nodes);nodes.forEach(n=>{if(n.tagName==='IFRAME')n.contentWindow.print=()=>{window.printCalled=true;};});};});await command(page,'print-document');await page.waitForFunction(()=>window.printCalled);
   assert.equal(await page.locator('.ed-print-frame').evaluate(f=>f.contentDocument.querySelector('.doc-header').textContent),'');assert.match(await page.locator('.ed-print-frame').evaluate(f=>f.contentDocument.querySelector('.doc-footer').textContent),/Page 1 of \d+/);
   await page.locator('.ed-print-frame').evaluate(f=>f.contentWindow.dispatchEvent(new Event('afterprint')));

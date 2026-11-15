@@ -101,7 +101,7 @@ module.exports = async function (page, action, assert) {
     assert.equal((await action('docs', 'document')).text, LONG);
     const pending = page.waitForEvent('download'); await page.evaluate(() => pudlCommands.run('export-pdf', null, document.querySelector('#document'))); const download = await pending;
     const pdf = path.join(os.tmpdir(), 'yavc-suggestion-row.pdf'); await download.saveAs(pdf);
-    const spawned = require('node:child_process').spawnSync('pdftotext', ['-layout', pdf, '-'], { encoding: 'utf8' });
+    const spawned = require('node:child_process').spawnSync('pdftotext', ['-layout', pdf, '-'], { encoding: 'utf8', windowsHide: true });
     if (spawned.error) { console.log('pdftotext is not installed here, so the PDF text was not read.'); } else { assert.ok(/K70/.test(spawned.stdout) && !/Suggested by/.test(spawned.stdout), 'A PDF has the table and no card.'); }
     if (process.env.YAVC_SHOTS) { await publish('narrow-shot', [{ id: 'word', before: paragraph, after: paragraph.replace('beta', 'gamma') }, { id: 'row', before: '| F2 | Card | second |', after: '| F2 | Debit | second |' }]); await page.locator(rich + ' [data-host-suggestion="row"]').waitFor(); await page.waitForTimeout(300); await page.locator('#document').screenshot({ path: process.env.YAVC_SHOTS + '-visual.png' }); await action('docs', 'view', { mode: 'text' }); await page.waitForTimeout(500); await page.locator('#document').screenshot({ path: process.env.YAVC_SHOTS + '-text.png' }); }
     await publish('narrow-5', []);
