@@ -1,0 +1,3 @@
+/* Stingers (stingers.js): the shared look, and a tall screen of 224 by 256, scaled whole. */
+@import url(../shared/splash.css);
+.splash-stingers canvas { aspect-ratio: 224 / 256; }

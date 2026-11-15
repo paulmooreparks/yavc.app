@@ -21,9 +21,9 @@ const evidence = path.join(os.tmpdir(), 'yavc-start-review'); fs.mkdirSync(evide
             await page.locator('.site-menubar .menubar-title[data-menu-id=site]').click();
             const root = page.locator('#site-start');
             await root.waitFor({ state: 'visible' });
-            assert.equal(await root.locator('[data-start-item]').count(), 18); // Docs became an application of its own when it was split from the Editor.
+            assert.equal(await root.locator('[data-start-item]').count(), 20); // Docs became an application of its own when it was split from the Editor.
             await root.locator('[data-start-category-key="games"]').click();
-            await page.waitForFunction(() => pudlStart.state(document.querySelector('#site-start')).count === 5);
+            await page.waitForFunction(() => pudlStart.state(document.querySelector('#site-start')).count === 7);
             assert.equal(new URL(page.url()).searchParams.get('start-category'), 'games');
             await page.reload(); await root.waitFor({ state: 'visible' });
             assert.equal(await root.locator('[data-start-heading]').textContent(), 'Games');
@@ -34,7 +34,7 @@ const evidence = path.join(os.tmpdir(), 'yavc-start-review'); fs.mkdirSync(evide
             await query.fill('no-such-application');
             await root.locator('[data-start-empty]').waitFor({ state: 'visible' });
             await root.locator('[data-start-empty] [data-start-clear]').click();
-            await page.waitForFunction(() => pudlStart.state(document.querySelector('#site-start')).count === 18);
+            await page.waitForFunction(() => pudlStart.state(document.querySelector('#site-start')).count === 20);
             await query.focus(); await page.keyboard.press('ArrowDown');
             assert.equal(await root.locator('[data-start-items] a').first().evaluate(e => e === document.activeElement), true);
             await page.keyboard.press('ArrowUp');

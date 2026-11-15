@@ -51,7 +51,7 @@ func TestStartTaxonomyCoversInstalledApplications(t *testing.T) {
 			known[name] = true
 		}
 	}
-	for _, name := range []string{"diagrams", "editor", "slides", "files", "terminal", "diff", "theme-studio", "barcode-scanner", "barcodes", "flashcards", "sight-reader", "conway", "asteroids", "dice", "invaders", "sudoku", "settings"} {
+	for _, name := range []string{"diagrams", "editor", "slides", "files", "terminal", "diff", "theme-studio", "barcode-scanner", "barcodes", "flashcards", "sight-reader", "conway", "asteroids", "dice", "invaders", "pantry", "stingers", "sudoku", "settings"} {
 		if !known[name] {
 			t.Errorf("uncategorized installed app: %s", name)
 		}

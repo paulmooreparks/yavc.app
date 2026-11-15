@@ -1,0 +1,25 @@
+{
+  "id": "splash.pantry",
+  "version": "0.1.0",
+  "apiVersion": 1,
+  "title": "Pantry Raid",
+  "description": "A maze chase.",
+  "actions": [
+    {
+      "ref": "splash.pantry/play@1",
+      "title": "Play Pantry Raid",
+      "description": "Open Pantry Raid for the person at the page and start a game, at the first level or the one given.",
+      "handles": "play",
+      "inputSchema": {
+        "type": "object", "additionalProperties": false,
+        "properties": { "path": { "type": "string", "pattern": "^[1-9][0-9]?$", "default": "1", "description": "The level to start at, 1 to 99." } }
+      },
+      "outputSchema": {
+        "type": "object", "additionalProperties": false, "required": ["opened"],
+        "properties": { "opened": { "const": true }, "view": { "enum": ["window", "tab"] } }
+      },
+      "capabilities": ["window.open"],
+      "replay": "once"
+    }
+  ]
+}
