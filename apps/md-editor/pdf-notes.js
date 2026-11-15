@@ -189,7 +189,8 @@
             else { var url = new URL(link.href, location.href); if (!/^https?:$/.test(url.protocol) && url.protocol !== 'mailto:') return; annotation.A = { Type: 'Action', S: 'URI', URI: D.PDFString.of(url.href) }; }
             link.page.node.addAnnot(pdf.context.register(pdf.context.obj(annotation)));
         });
-        pdf.setTitle(model.properties.title || ''); pdf.setAuthor(model.properties.author || ''); pdf.setSubject(model.properties.subject || '');
+        pdf.setTitle(model.properties.title || ''); pdf.setAuthor(model.properties.author || ''); pdf.setSubject(model.properties.subject || ''); if (model.properties.keywords) { pdf.setKeywords([model.properties.keywords]); }
+        pdf.setCreationDate(model.created || new Date()); pdf.setModificationDate(new Date());
         return new Blob([await pdf.save()], { type: 'application/pdf' });
     }
     window.yavcFootnotePDF = Object.freeze({ write: write });

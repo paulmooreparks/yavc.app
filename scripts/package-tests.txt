@@ -37,3 +37,4 @@ test-ref-definitions.cjs
 test-code-colouring.cjs
 test-doc-ends.cjs
 test-pdf-rtl-print.cjs
+test-document-properties.cjs

@@ -23,6 +23,26 @@
         });
     }
     function settings(front) { return window.yavcDocumentPages.settings(front); }
+    /* The front matter's date as a Date, or null: a date (2025-03-09, which is that day at midnight UTC) or a date and time, as the
+       document properties contract says. Anything else is not a date and the export time is used (docs/content-workspace-contract.md). */
+    function documentDate(value) {
+        var text = String(value == null ? '' : value).trim();
+        if (!/^\d{4}-\d{2}-\d{2}([T ]\d{2}:\d{2}(:\d{2})?(Z|[+-]\d{2}:?\d{2})?)?$/.test(text)) { return null; }
+        var date = new Date(text.replace(' ', 'T'));
+        return isNaN(date.getTime()) ? null : date;
+    }
+    /* Word writes dcterms:created as the moment of export, with no way to give it another. The package is a zip, so the date is put in
+       its core properties after it is written, with the library that reads and writes zips. */
+    async function setCreated(blob, date, K) {
+        await K.loadScript(K.here + 'vendor/jszip-3.10.1/jszip.min.js' + K.stamp);
+        var zip = await window.JSZip.loadAsync(blob), entry = zip.file('docProps/core.xml');
+        if (!entry) { return blob; }
+        var xml = await entry.async('string'), stamp = date.toISOString().replace(/\.\d+Z$/, 'Z');
+        var changed = xml.replace(/(<dcterms:created[^>]*>)[^<]*(<\/dcterms:created>)/, '$1' + stamp + '$2');
+        if (changed === xml) { return blob; }
+        zip.file('docProps/core.xml', changed);
+        return zip.generateAsync({ type: 'blob', mimeType: blob.type, compression: 'DEFLATE' });
+    }
     function rgb(value) {
         var canvas = document.createElement('canvas'); canvas.width = canvas.height = 1;
         var context = canvas.getContext('2d', { colorSpace: 'srgb' });
@@ -264,7 +284,7 @@
             }
             children(surface, blocks);
             noteNodes.forEach(function(node,label){var content=[];children(node.querySelector(':scope > .doc-footnote-body'),content);function check(items){items.forEach(function(b){if(b.kind==='table'||b.kind==='break')throw new Error('Footnote export supports paragraphs, lists, quotations and pictures. Move tables or page breaks into the document body.');if((b.runs||[]).some(function(r){return r.footnote;}))throw new Error('A footnote cannot contain another footnote reference in Office export.');if(b.blocks)check(b.blocks);(b.items||[]).forEach(check);});}check(content);notes.push({label:label,number:noteContext[label],blocks:content});});
-            return { blocks: blocks, footnotes:notes, page: page, furniture: running, properties: props, warnings: ['PDF uses Roboto instead of the document font.'] };
+            return { blocks: blocks, footnotes:notes, page: page, furniture: running, properties: props, created: documentDate(props.date), warnings: ['PDF uses Roboto instead of the document font.'] };
         } finally { if (controller) { controller.destroy(); } boundary.remove(); }
     }
     function docxDocument(model, D) {
@@ -310,7 +330,7 @@
             return kind === 'header' ? new D.Header({ children: content }) : new D.Footer({ children: content });
         }
         var footnotes=Object.create(null);notes.forEach(function(note){footnotes[note.number]={children:write(note.blocks,0)};});
-        return new D.Document({ title: p.title || '', creator: p.author || '', subject: p.subject || '', keywords: p.keywords || '', description: '', background: { color: model.page.background || 'ffffff' }, numbering: { config: numbering }, footnotes:footnotes,features:{updateFields:notes.size>0},
+        return new D.Document({ title: p.title || '', creator: p.author || '', subject: p.subject || '', keywords: p.keywords || '', description: '', lastModifiedBy: p.author || '', background: { color: model.page.background || 'ffffff' }, numbering: { config: numbering }, footnotes:footnotes,features:{updateFields:notes.size>0},
             sections: [{ headers: { default: running('header'), first: running('header', !model.page.furniture.first) }, footers: { default: running('footer'), first: running('footer') }, properties: { titlePage: !model.page.furniture.first, page: { size: { width: Math.round(model.page.width * 20), height: Math.round(model.page.height * 20) }, margin: { header: Math.max(0, m[1] / 2 - 6) * 20, footer: Math.max(0, m[3] / 2 - 6) * 20, left: m[0] * 20, top: m[1] * 20, right: m[2] * 20, bottom: m[3] * 20 } } }, children: children.length ? children : [new D.Paragraph({})] }] });
     }
     function pdfDefinition(model) {
@@ -336,7 +356,7 @@
             pageBreakBefore:function(current,following,next,previous){return !!current.headlineLevel&&!following.length&&next.length>0&&previous.length>0;},
             background: { canvas: [{ type: 'rect', x: 0, y: 0, w: model.page.width, h: model.page.height, color: '#' + (model.page.background || 'ffffff') }] },
             defaultStyle: { font: 'Roboto', fontSize: 11, color: '#202124' },
-            info: { title: model.properties.title || '', author: model.properties.author || '', subject: model.properties.subject || '', keywords: model.properties.keywords || '' } };
+            info: { title: model.properties.title || '', author: model.properties.author || '', subject: model.properties.subject || '', keywords: model.properties.keywords || '', creationDate: model.created || new Date(), modDate: new Date() } };
     }
     async function build(format, options) {
         if (format !== 'docx' && format !== 'pdf') { throw new Error('Export format is docx or pdf.'); }
@@ -347,6 +367,7 @@
         if (format === 'docx') {
             await K.loadScript(K.here + 'vendor/docx-9.15.2/index.js' + K.stamp);
             blob = await window.docx.Packer.toBlob(docxDocument(model, window.docx));
+            if (model.created) { blob = await setCreated(blob, model.created, K); }
         } else {
             if((model.footnotes||[]).length){
                 await K.loadScript(K.here+'pdf-notes.js'+K.stamp);
