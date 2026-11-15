@@ -1388,12 +1388,15 @@
         function readsAsPreview() { var t = current(); return viewMode === 'preview' || !!(t && t.readOnly && viewMode !== 'text'); }
         function pagedView(mode) { return mode === 'document'; }
         function pageLayout(layout) {
-            el.pages.textContent = layout.count + (layout.count === 1 ? ' page' : ' pages');
+            var count = layout.count + (layout.count === 1 ? ' page' : ' pages');
+            if (el.pages.textContent !== count) { el.pages.textContent = count; }
             pageNotice(layout.problem || (layout.oversized ? 'An indivisible block is taller than the page. Shorten it or enlarge the page before printing.' : ''));
         }
+        /* The page lays out many times and writes what it shows each time, so a write that changes nothing is left out (decision 197). */
         function pageNotice(message) {
-            var notice = root.querySelector('[data-role="page-problems"]');
-            notice.hidden = !message; notice.querySelector('.notice-body').textContent = message;
+            var notice = root.querySelector('[data-role="page-problems"]'), body = notice.querySelector('.notice-body');
+            if (notice.hidden !== !message) { notice.hidden = !message; }
+            if (body.textContent !== message) { body.textContent = message; }
         }
         function clearPages() {
             el.page.querySelectorAll(':scope > .doc-furniture').forEach(function (node) { node.remove(); }); el.page.style.zoom = '1';

@@ -7,3 +7,5 @@
 *.ico binary
 # The generated worker contains literal whitespace in JavaScript template strings.
 apps/md-editor/language-service/worker.js whitespace=-blank-at-eol
+# GK Companion's synthetic note keeps its CRLF line endings, which is part of its shape (docs/review.md, "The Document view that GK reports never settling").
+scripts/fixtures/docs-long-settle.md -text
