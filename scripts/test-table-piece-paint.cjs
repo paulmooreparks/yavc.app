@@ -1,6 +1,6 @@
 // Copyright 2026 Paul Parks. SPDX-License-Identifier: Apache-2.0
 // Every continued table header must paint all its cells and stay inside its frame.
-const assert=require('node:assert/strict'),http=require('node:http'),fs=require('node:fs/promises'),path=require('node:path'),pw=require('playwright');
+const assert=require('node:assert/strict'),http=require('node:http'),fs=require('node:fs/promises'),path=require('node:path'),os=require('node:os'),pw=require('playwright');
 const artifact=path.resolve(process.argv[2]),fixture=path.join(__dirname,'fixtures/portable-workspace'),prefix='/pieces/assets/';
 const types={'.html':'text/html','.js':'text/javascript','.css':'text/css','.json':'application/json','.wasm':'application/wasm','.svg':'image/svg+xml','.woff2':'font/woff2'};
 const words=(name,count)=>Array.from({length:count},(_,i)=>`${name} ${i} describes an invented mapping between an operator and an independent physical reference.`).join(' ');
@@ -80,11 +80,11 @@ async function checkUnbreakables(page,engine){
                 for(const p of paint){if(p.border<p.total*.8)faults.push({fault:1,column:p.index,border:p.border,total:p.total});if(p.edges.some(e=>!e.filled))faults.push({fault:2,column:p.index,edges:p.edges});if(p.ink<Math.max(3,ink[p.index].ink*.8))faults.push({fault:4,column:p.index,ink:p.ink,sourceInk:ink[p.index].ink});}
                 report.push({engine,framed,key,description:d,paint,faults});if(faults.length)failures.push({engine,framed,key,faults});
             }
-            await page.screenshot({path:path.join(process.env.TEMP,'yavc-table-piece-'+engine+'-'+(framed?'framed':'plain')+'.png'),fullPage:true});
+            await page.screenshot({path:path.join(os.tmpdir(),'yavc-table-piece-'+engine+'-'+(framed?'framed':'plain')+'.png'),fullPage:true});
             console.log(engine+' '+(framed?'framed':'plain')+' '+keys.length+' cuts: '+JSON.stringify([...new Set(report.filter(r=>r.engine===engine&&r.framed===framed).flatMap(r=>r.faults.map(f=>f.fault)))]));
             await printCheck(page,engine,framed,report,failures);
             if(framed)await checkUnbreakables(page,engine);
         }finally{await page.close();}
-    }}finally{await browser.close();}}}finally{await new Promise(r=>server.close(r));await fs.writeFile(path.join(process.env.TEMP,'yavc-table-piece-report.json'),JSON.stringify(report,null,2));}
+    }}finally{await browser.close();}}}finally{await new Promise(r=>server.close(r));await fs.writeFile(path.join(os.tmpdir(),'yavc-table-piece-report.json'),JSON.stringify(report,null,2));}
     assert.deepEqual(failures,[],JSON.stringify(failures.slice(0,3)));
 })().catch(e=>{console.error(e.message||e);process.exitCode=1;});
