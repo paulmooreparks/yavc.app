@@ -180,10 +180,11 @@
                 breakBefore: /^(page|always)$/.test(css.breakBefore)||/^(page|always)$/.test(contentCSS.breakBefore)||!!(previous&&(previous.control||previous.breakAfter)) };
             if(block.row&&!node.querySelector('th')){
                 var table=node.closest('table'),headers=[];
-                if(table)for(var row of Array.from(table.rows)){if(row.classList.contains('host-suggestion-row'))continue;if(row===node||!row.querySelector('th')||row.classList.contains('doc-page-gap'))break;headers.push(row);}
+                if(table)for(var row of Array.from(table.rows)){if(row.classList.contains('host-suggestion-row')||row.classList.contains('doc-page-gap'))continue;if(row===node||!row.querySelector('th'))break;headers.push(row);}
                 block.headerRows=headers;block.repeatHeader=headers.reduce(function(sum,row){return sum+row.getBoundingClientRect().height/scale;},0);
             }
-            var bands=block.row&&window.yavcPageLines&&window.yavcPageLines.rowBands(content,top,scale,offsets,position);
+            // A repeated header is one unit. Cutting it into bands also copies its gaps into every subsequent header.
+            var bands=block.row&&!node.querySelector('th')&&window.yavcPageLines&&window.yavcPageLines.rowBands(content,top,scale,offsets,position);
             if(bands){
                 bands.forEach(function(band,index){blocks.push(Object.assign({},block,band,{rowTop:block.top,references:[],pos:index?band.pos:block.pos,breakBefore:!index&&block.breakBefore,breakAfter:index===bands.length-1&&block.breakAfter,keepNext:index===0&&bands.length>1||index===bands.length-2||index===bands.length-1&&block.keepNext}));});
                 content.querySelectorAll('.doc-footnote-ref[data-footnote-ref]').forEach(function(ref){if(ref.closest('.doc-page-gap'))return;var y=clean(ref.getBoundingClientRect().top),index=0;while(index+1<bands.length&&bands[index+1].top<=y)index++;blocks[blocks.length-bands.length+index].references.push(ref.getAttribute('data-footnote-ref'));});
@@ -216,6 +217,7 @@
                 node.style.removeProperty('height');var space=document.createElement('div');space.style.height=height+'px';cell.append(space);
                 var copy=document.createElement('table'),body=document.createElement('tbody');copy.className='doc-table-repeated-header';copy.append(body);
                 block.headerRows.forEach(function(row){body.append(row.cloneNode(true));});
+                copy.querySelectorAll('.doc-page-gap,.doc-gap-cap,.doc-gap-cover').forEach(function(item){item.remove();});
                 copy.querySelectorAll('[id]').forEach(function(item){item.removeAttribute('id');});copy.querySelectorAll('a,button,input,select,textarea,[tabindex]').forEach(function(item){item.setAttribute('tabindex','-1');if('disabled' in item)item.disabled=true;});
                 var original=block.headerRows[0],columns=document.createElement('colgroup'),host=original.closest('.doc-paginated'),zoom=host?Number(host.style.zoom)||1:1;
                 Array.from(original.cells).forEach(function(item){var col=document.createElement('col');col.style.width=item.getBoundingClientRect().width/zoom+'px';columns.append(col);});
@@ -270,7 +272,8 @@
         var scale = Number((host.closest('.doc-paginated') || host).style.zoom) || 1, top = (host.closest('.doc-paginated') || host).getBoundingClientRect().top, period = d.height + GAP;
         host.querySelectorAll('.sc-notice, [data-sc-frame]').forEach(function (frame) {
             if (frame.closest('.doc-page-gap') || frame.closest('.doc-footnote')) { return; }
-            var gaps = Array.from(frame.querySelectorAll('.doc-page-gap')).filter(function (gap) { return /^(DIV|SPAN)$/.test(gap.tagName) && !gap.closest('.doc-gap-cap'); });
+            // An exhausted cell has only an absolute repeated-header marker. It takes no flow space and must not become a frame gap.
+            var gaps = Array.from(frame.querySelectorAll('.doc-page-gap')).filter(function (gap) { return /^(DIV|SPAN)$/.test(gap.tagName) && getComputedStyle(gap).position !== 'absolute' && !gap.closest('.doc-gap-cap'); });
             /* The frame is one element from the first piece to the last, so it draws the box's real top and real bottom; the caps draw the edges that a gap opens. */
             frame.setAttribute('data-sc-piece', 'only');
             var frameLine = getComputedStyle(frame).lineHeight;
@@ -309,7 +312,7 @@
         if(gap.header&&block.headerRows.length){
             var space=document.createElement('span');space.className='doc-cell-page-space';space.style.display='block';space.style.height=gap.height+'px';node.style.height='auto';if(!exhausted)node.append(space);
             var header=document.createElement('span');header.className='doc-cell-repeated-header';header.style.height=gap.header+'px';
-            block.headerRows.forEach(function(row){var cell=row.cells[column];if(!cell)return;var copy=cell.cloneNode(true);copy.removeAttribute('id');copy.querySelectorAll('[id]').forEach(function(item){item.removeAttribute('id');});copy.querySelectorAll('a,button,input,select,textarea,[tabindex]').forEach(function(item){item.setAttribute('tabindex','-1');if('disabled' in item)item.disabled=true;});header.append.apply(header,Array.from(copy.childNodes));});node.append(header);
+            block.headerRows.forEach(function(row){var cell=row.cells[column];if(!cell)return;var copy=cell.cloneNode(true);copy.querySelectorAll('.doc-page-gap,.doc-gap-cap,.doc-gap-cover').forEach(function(item){item.remove();});copy.removeAttribute('id');copy.querySelectorAll('[id]').forEach(function(item){item.removeAttribute('id');});copy.querySelectorAll('a,button,input,select,textarea,[tabindex]').forEach(function(item){item.setAttribute('tabindex','-1');if('disabled' in item)item.disabled=true;});header.append.apply(header,Array.from(copy.childNodes));});node.append(header);
         }
         if(exhausted){
             node.style.position='absolute';node.style.top=gap.rowHeaderTop+'px';node.style.left='0';node.style.width='100%';node.style.height=(gap.header||0)+'px';
