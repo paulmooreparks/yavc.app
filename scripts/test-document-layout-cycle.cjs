@@ -40,8 +40,11 @@ const ownTables=pm=>[...pm.querySelectorAll('table')].filter(t=>!t.closest('.doc
 // One sample of every table laid out alone, kept in the page. WebKit lays out the same table differently as unrelated layouts pass, so a table is compared with
 // all the samples that were taken while the page laid out, and its allowance is 3 pixels plus the spread its own samples show.
 // A sample is not taken while fonts are loading, and it keeps what the table held (its text and its drawings), since a table that has changed legitimately has other columns.
-const contentOf=t=>t.textContent.length+':'+t.querySelectorAll('[data-host-drawn]').length;
-const takeAlone=()=>{if(document.fonts.status==='loading')return false;const pm=document.querySelector('#document .ProseMirror');(window.aloneSamples=window.aloneSamples||[]).push(window.ownTables(pm).map(t=>({w:window.aloneOf(pm,t),k:window.contentOf(t)})));return true;};
+const contentOf=t=>{let hash=0,length=0;const walker=document.createTreeWalker(t,NodeFilter.SHOW_ELEMENT|NodeFilter.SHOW_TEXT,{acceptNode:n=>n.nodeType===1&&n.matches('.doc-page-gap,.doc-gap-cap')?NodeFilter.FILTER_REJECT:NodeFilter.FILTER_ACCEPT});while(walker.nextNode()){const n=walker.currentNode;if(n.nodeType!==3)continue;length+=n.data.length;for(let i=0;i<n.data.length;i++)hash=(hash*31+n.data.charCodeAt(i))|0;}return length+':'+hash+':'+[...t.querySelectorAll('[data-host-drawn]')].filter(n=>!n.closest('.doc-page-gap,.doc-gap-cap')).length;};
+const takeAlone=()=>{if(document.fonts.status==='loading')return false;const pm=document.querySelector('#document .ProseMirror'),tables=window.ownTables(pm),samples=window.aloneSamples=window.aloneSamples||[];
+    samples.push(tables.map(t=>({w:window.aloneOf(pm,t),k:window.contentOf(t)})));
+    // The page's colgroup stores its own measurement of a copy laid out alone. Include that actual sample alongside the copies the test measures later.
+    samples.push(tables.map(t=>({w:[...t.querySelectorAll(':scope > colgroup[data-doc-columns] > col')].map(c=>parseFloat(c.style.width)),k:window.contentOf(t)})));return true;};
 // The columns the page draws now, kept to be compared later with samples taken after other layouts.
 const liveColumns=()=>{const pm=document.querySelector('#document .ProseMirror');return window.ownTables(pm).map(t=>{const real=[...t.rows].find(r=>!r.classList.contains('doc-page-gap'));return [...real.cells].map(c=>c.getBoundingClientRect().width);});};
 const columnsAndGaps=(options)=>{
@@ -87,7 +90,7 @@ function settle({frames,limit}){
         if(name==='workspace-lab/host.js')body=Buffer.from(body+(withNote?'\n'+noteHost:'')+"\nfixture.records.get('memory:document.docs.md').text="+JSON.stringify(text)+";");
         res.writeHead(200,{'Content-Type':types[path.extname(name)]||'application/octet-stream','Cache-Control':'no-store'}).end(body);}catch{if(!res.headersSent)res.writeHead(404).end();}});
     await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const failures=[];
-    async function open(browser,source,width,notes,slow){
+    async function open(browser,source,width,notes,slow,whileLoading){
         text=source;withNote=!!notes;const page=await browser.newPage({viewport:{width:width||2048,height:1152}});await page.addInitScript("window.arrangement="+arrangement.toString());await page.addInitScript("window.aloneOf="+aloneOf.toString());await page.addInitScript("window.ownTables="+ownTables.toString());await page.addInitScript("window.contentOf="+contentOf.toString());await page.addInitScript("window.takeAlone="+takeAlone.toString());await page.addInitScript("window.liveColumns="+liveColumns.toString());await page.addInitScript("window.columnsAndGaps="+columnsAndGaps.toString());if(slow)await page.addInitScript(()=>{
             // A web font that loads slowly, and a fonts event that never reaches the page (it did not on WebKit on Linux): the page must find out that the font has arrived by another way.
             document.fonts.addEventListener('loadingdone',e=>e.stopImmediatePropagation());
@@ -95,7 +98,9 @@ function settle({frames,limit}){
         });
         page.setDefaultTimeout(60000);page.errors=[];page.on('pageerror',e=>page.errors.push(e.message));
         await page.goto(`http://127.0.0.1:${server.address().port}${prefix}workspace-lab/index.html?apps=docs`);
-        await page.locator('#document .doc-paginated .ProseMirror').waitFor();await page.evaluate(()=>document.fonts.ready);return page;
+        await page.locator('#document .doc-paginated .ProseMirror').waitFor();
+        if(!slow)await page.evaluate(async()=>{const face=new FontFace('CycleTestFace','url(../pudl/fonts/Inter-latin.woff2)');document.fonts.add(face);await face.load();window.cycleTestFace=face;const event=new Event('loadingdone');Object.defineProperty(event,'fontfaces',{value:[face]});document.fonts.dispatchEvent(event);});
+        if(!whileLoading)await page.evaluate(()=>document.fonts.ready);return page;
     }
     try{for(const engine of process.argv.slice(3).length?process.argv.slice(3):['chromium','firefox','webkit']){
         const browser=await pw[engine].launch({headless:true});
@@ -146,6 +151,14 @@ function settle({frames,limit}){
                     await page.waitForFunction(p=>Number(document.querySelector('#document [data-page-count]').getAttribute('data-layout-passes'))>p,c2.passes,{timeout:8000}).catch(()=>failures.push(`${label}: the edit was not counted as a layout pass`));
                     const edited=await page.evaluate(settle,{frames:120,limit:60000});
                     if(!edited.settled)failures.push(`${label}: after an edit the page did not settle`);
+                    if(shape.note&&!shape.slow){
+                        const before=await page.evaluate(()=>({pages:window.arrangement().pages,columns:window.liveColumns(),passes:document.querySelector('#document [data-layout-passes]').dataset.layoutPasses}));
+                        // WebKit supplies fontfaces on native events but does not expose the FontFaceSetLoadEvent constructor. These test events provide that documented data explicitly.
+                        await page.evaluate(()=>{const faces=[window.cycleTestFace],send=(type,list)=>{const event=new Event(type);Object.defineProperty(event,'fontfaces',{value:list});document.fonts.dispatchEvent(event);};send('loading',faces);send('loadingdone',faces);send('loadingdone',[]);});
+                        await page.evaluate(settle,{frames:120,limit:60000});
+                        const after=await page.evaluate(()=>({pages:window.arrangement().pages,columns:window.liveColumns(),passes:document.querySelector('#document [data-layout-passes]').dataset.layoutPasses}));
+                        if(JSON.stringify(before)!==JSON.stringify(after))failures.push(`${label}: a font cycle with no new loaded face changed page count, columns or layout passes after the edit`);
+                    }
                     if(shape.note)await page.evaluate(()=>window.takeAlone());
                     const c3=await page.evaluate(counters);await page.waitForTimeout(3000);const c4=await page.evaluate(counters);
                     if(c4.passes!==c3.passes)failures.push(`${label}: ${c4.passes-c3.passes} layout passes in 3 idle seconds after an edit`);
@@ -155,7 +168,7 @@ function settle({frames,limit}){
                         const undone=await page.evaluate(settle,{frames:120,limit:60000});
                         const text=await page.evaluate(()=>document.querySelector('#document .ProseMirror').textContent.includes('Synthetic edit.'));
                         if(text)failures.push(`${label}: the undo left the edit in the text`);
-                        else if(undone.now.pages!==first.now.pages)failures.push(`${label}: ${first.now.pages} pages on load and ${undone.now.pages} after an edit and its undo`);
+                        else if(undone.now.pages!==first.now.pages){const widths=await page.evaluate(()=>window.liveColumns()),changed=widths.map((w,i)=>({table:i,onLoad:liveOnLoad[i],afterUndo:w})).filter(s=>s.afterUndo.some((w,c)=>Math.abs(w-s.onLoad[c])>3));failures.push(`${label}: ${first.now.pages} pages on load and ${undone.now.pages} after an edit and its undo; changed columns: ${JSON.stringify(changed)}`);}
                         for(let i=0;i<2;i++){await page.evaluate(()=>window.takeAlone());await page.waitForTimeout(500);}
                         const onLoad=await page.evaluate(s=>window.columnsAndGaps({snapshot:s}),liveOnLoad);
                         // WebKit on Linux draws one table with columns its own alone layouts never give (175 against 93 to 160 on load; 153,246,178,171 against 111,246,178,171
@@ -171,8 +184,9 @@ function settle({frames,limit}){
                         if((again.wrong.length&&!columnsExempt)||again.overlaps.length)failures.push(`${label}: after the edit and its undo ${again.wrong.length} tables have other columns (${JSON.stringify(again.wrong[0])}) and ${again.overlaps.length} blocks run into a gap`);
                         // A font that arrives after a table was measured changes how it lays out by its content (a web font, loaded the first time it is used, on a machine
                         // where that takes longer than the first layout). The page cannot tell why the fonts event came, so every table is measured again.
-                        if(!shape.slow){await page.evaluate(()=>{const st=document.createElement('style');st.id='late-font';st.textContent='#document .ProseMirror td,#document .ProseMirror th{letter-spacing:2px;}';document.head.append(st);document.fonts.dispatchEvent(new Event('loadingdone'));});
+                        if(!shape.slow){const beforeFont=await page.evaluate(()=>window.liveColumns());await page.evaluate(async()=>{const face=new FontFace('LateMeasuredInter','url(slow-inter.woff2)');document.fonts.add(face);const st=document.createElement('style');st.id='late-font';st.textContent='#document .ProseMirror td,#document .ProseMirror th{font-family:LateMeasuredInter,serif!important;letter-spacing:2px;}';document.head.append(st);await face.load();await document.fonts.ready;});
                         await page.evaluate(settle,{frames:120,limit:60000});
+                        const afterFont=await page.evaluate(()=>window.liveColumns());if(!afterFont.some((row,i)=>row.some((w,c)=>Math.abs(w-beforeFont[i][c])>3)))failures.push(`${label}: a genuinely new font face did not change any table columns`);
                         await page.evaluate(()=>{window.aloneSamples=[];});for(let i=0;i<2;i++){await page.evaluate(()=>window.takeAlone());await page.waitForTimeout(500);}
                         const late=await page.evaluate(()=>window.columnsAndGaps());
                         if(late.equal.length)failures.push(`${label}: after a font arrived ${late.equal.length} tables are drawn with equal columns`);
@@ -182,6 +196,38 @@ function settle({frames,limit}){
                     if(page.errors.length)failures.push(`${label}: page errors ${page.errors.join(' | ')}`);
                     console.log(`${label}: ${first.now.pages} pages, settled in ${first.ms} ms, ${c0.passes} passes and ${c0.changes} changes to get there, none while idle, after the trip or after the edit settled`);
                 }catch(e){failures.push(`${label}: ${String(e.message).split(/\r?\n/)[0]}`);}finally{await page.close();}
+            }
+            // Formatting changes natural widths even when a table's text does not change.
+            {
+                const label=engine+' with formatting in a table',page=await open(browser,'| Reference | Description |\n| --- | --- |\n| iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii | Description |\n');
+                try{
+                    await page.evaluate(settle,{frames:60,limit:30000});
+                    const original=await page.locator('#document .ProseMirror table').innerText();
+                    await page.locator('#document .ProseMirror td').first().click();
+                    await page.evaluate(()=>{const cell=document.querySelector('#document .ProseMirror td'),range=document.createRange(),selection=getSelection();range.selectNodeContents(cell);selection.removeAllRanges();selection.addRange(range);});
+                    await page.evaluate(()=>pudlActions.run('yavc.docs/format@1',{op:'code'},{grant:'all'}));
+                    await page.locator('#document .ProseMirror td code').waitFor();
+                    await page.evaluate(settle,{frames:60,limit:30000});
+                    const check=async()=>page.evaluate(()=>{const pm=document.querySelector('#document .ProseMirror'),table=window.ownTables(pm)[0],alone=window.aloneOf(pm,table),now=window.liveColumns()[0];return now.every((w,c)=>Math.abs(w-alone[c])<=3);});
+                    if(!await check())failures.push(`${label}: formatting kept stale column widths`);
+                    if(await page.locator('#document .ProseMirror table').innerText()!==original)failures.push(`${label}: formatting changed the text`);
+                    await page.keyboard.press('Control+z');await page.evaluate(settle,{frames:60,limit:30000});
+                    if(!await check())failures.push(`${label}: undo kept stale column widths`);
+                }catch(e){failures.push(`${label}: ${e.message}`);}finally{await page.close();}
+            }
+            // This small table proves font arrival independently of the long note's allowance samples.
+            {
+                const label=engine+' with a slow font in a small table',page=await open(browser,'| Operator reference | Mapping reference |\n| --- | --- |\n| Invented operator description | Independent mapping description |\n',1620,false,true,true);
+                try{
+                    await page.waitForFunction(()=>document.fonts.status==='loading'&&document.querySelectorAll('#document colgroup[data-doc-columns] > col').length===2);
+                    const before=await page.evaluate(()=>window.liveColumns());
+                    await page.waitForFunction(()=>[...document.fonts].some(f=>f.family==='SlowInter'&&f.status==='loaded'));
+                    await page.evaluate(settle,{frames:120,limit:30000});
+                    const after=await page.evaluate(()=>window.liveColumns());
+                    if(!after[0].some((w,c)=>Math.abs(w-before[0][c])>3))failures.push(`${label}: the table kept its stand-in font columns`);
+                    const alone=await page.evaluate(()=>{const pm=document.querySelector('#document .ProseMirror');return window.aloneOf(pm,window.ownTables(pm)[0]);});
+                    if(after[0].some((w,c)=>Math.abs(w-alone[c])>3))failures.push(`${label}: the loaded font columns differ from the table alone`);
+                }catch(e){failures.push(`${label}: ${e.message}`);}finally{await page.close();}
             }
             // A layout that is the reverse of the one before it, every time: the page stops on one arrangement.
             {
