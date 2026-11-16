@@ -1471,6 +1471,7 @@
                         Array.from(surface.querySelectorAll('.dinah-src[data-start],.doc-block,.dinah-block')).reverse().forEach(function (node) { node.replaceWith.apply(node, Array.from(node.childNodes)); });
                         flow.append.apply(flow, Array.from(surface.childNodes)); surface.append(flow);
                         await document.fonts.ready;
+                        P.fitTables(flow);
                         var frameTitles = P.tagFrames(flow), blocks = P.blocks(flow), layout = P.plan(blocks, page);
                         if(layout.problem)throw new Error(layout.problem);
                         if (layout.oversized) { throw new Error('A block is taller than the page. Shorten it or enlarge the page before printing.'); }

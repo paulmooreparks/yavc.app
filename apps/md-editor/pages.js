@@ -267,6 +267,21 @@
         var origin=sheet.getBoundingClientRect();
         sheet.querySelectorAll('table[data-doc-cut-end]').forEach(function(table){var rect=table.getBoundingClientRect(),rule=sheet.ownerDocument.createElement('div'),cell=table.rows[table.rows.length-1].cells[0];rule.className='doc-table-cut-border';rule.setAttribute('aria-hidden','true');rule.style.cssText='position:absolute;pointer-events:none;box-sizing:border-box;left:'+(rect.left-origin.left)+'px;top:'+(d.height-d.bottom)+'px;width:'+rect.width+'px;border-top:'+getComputedStyle(cell).borderBottom+';';sheet.append(rule);});
     }
+    var fittedTables=new WeakMap();
+    function fitTables(flow,drawingsOnly){
+        flow.querySelectorAll('table').forEach(function(table){if(table.closest('.doc-page-gap,.doc-gap-cap')||drawingsOnly&&!table.closest('.pm-source'))return;
+            var parent=table.parentElement,css=getComputedStyle(parent),host=table.closest('.doc-paginated'),scale=host?Number(host.style.zoom)||1:1,available=parent.clientWidth-(parseFloat(css.paddingLeft)||0)-(parseFloat(css.paddingRight)||0),owners=new Set(),hash=0,walker=document.createTreeWalker(table,NodeFilter.SHOW_TEXT),text;
+            for(var node=table;node;node=node.parentElement)(node.getAttribute('data-md-style')||'').split(/\s+/).filter(Boolean).forEach(function(owner){owners.add(owner);});
+            while((text=walker.nextNode())){if(text.parentElement.closest('.doc-page-gap,.doc-gap-cap'))continue;for(var i=0;i<text.data.length;i++)hash=(hash*31+text.data.charCodeAt(i))|0;}
+            var context=available+'|'+getComputedStyle(table).font+'|'+document.fonts.status+'|'+hash+'|'+Array.from(table.querySelectorAll('img')).map(function(img){return img.src+':'+img.naturalWidth+':'+img.naturalHeight;}).join('|')+'|'+Array.from(document.querySelectorAll('style[data-md-style-owner]')).filter(function(style){return owners.has(style.getAttribute('data-md-style-owner'));}).map(function(style){return style.textContent;}).join('\n');
+            var entry=fittedTables.get(table);if(entry&&entry.context===context)return;
+            if(!entry){entry={width:table.style.getPropertyValue('width'),widthPriority:table.style.getPropertyPriority('width'),layout:table.style.getPropertyValue('table-layout'),layoutPriority:table.style.getPropertyPriority('table-layout')};fittedTables.set(table,entry);}entry.context=context;
+            var old=table.querySelector(':scope > colgroup[data-doc-fit-columns]');if(old){old.remove();table.classList.remove('doc-table-constrained');if(entry.width)table.style.setProperty('width',entry.width,entry.widthPriority);else table.style.removeProperty('width');if(entry.layout)table.style.setProperty('table-layout',entry.layout,entry.layoutPriority);else table.style.removeProperty('table-layout');}
+            if(table.querySelector(':scope > colgroup'))return;
+            var rect=table.getBoundingClientRect();if(rect.width/scale<=available+.5)return;
+            var cells=table.rows[0]&&Array.from(table.rows[0].cells);if(!cells||!cells.length)return;var widths=cells.map(function(cell){return cell.getBoundingClientRect().width/scale;}),total=widths.reduce(function(a,b){return a+b;},0),border=Math.max(0,rect.width/scale-total),cols=document.createElement('colgroup');cols.setAttribute('data-doc-fit-columns','');widths.forEach(function(width){var col=document.createElement('col');col.style.width=(width*(available-border)/total)+'px';cols.append(col);});table.prepend(cols);table.classList.add('doc-table-constrained');table.style.width=available+'px';table.style.tableLayout='fixed';
+        });
+    }
     /* A frame that a page gap runs through is drawn as pieces (docs/host-shortcodes-contract.md, "Long shortcodes across pages"). The frame stays one
        element, marked data-sc-piece="first", with "only" on a frame no gap runs through. Each gap inside it holds two caps, shells cloned from the
        frame with nothing in them and marked "first" or "middle" above the gap and "middle" or "last" below it, which carry the frame's own styling for
@@ -444,13 +459,14 @@
             holder.className=v.dom.className;holder.setAttribute('aria-hidden','true');holder.style.cssText='position:absolute;visibility:hidden;pointer-events:none;left:-100000px;top:0;width:'+v.dom.clientWidth+'px;';
             copy.querySelectorAll('.doc-page-gap,.doc-gap-cap,.doc-gap-cover,.ProseMirror-separator,.ProseMirror-trailingBreak').forEach(function(node){node.remove();}); /* the editor's own marks for an empty cell come and go with the selection */
             copy.querySelectorAll(':scope > colgroup[data-doc-columns]').forEach(function(node){node.remove();});
+            copy.classList.remove('doc-table-constrained');
             copy.removeAttribute('style');copy.querySelectorAll('td,th').forEach(function(cell){cell.removeAttribute('style');});
             // Keep ancestor widths and selectors, including a frame's content padding, when measuring outside the live table.
             var ancestors=[],ancestor=table.parentElement,container=holder;while(ancestor&&ancestor!==v.dom){ancestors.unshift(ancestor);ancestor=ancestor.parentElement;}
             ancestors.forEach(function(source){var shell=source.cloneNode(false);shell.removeAttribute('id');container.append(shell);container=shell;});container.append(copy);parent.append(holder);
             try{var row=copy.rows[0];if(!row)return null;var css=getComputedStyle(container),available=(container.clientWidth-(parseFloat(css.paddingLeft)||0)-(parseFloat(css.paddingRight)||0)),width=copy.getBoundingClientRect().width/scale,cells=Array.from(row.cells).map(function(cell){return cell.getBoundingClientRect().width/scale;});
-                if(width>available){var total=cells.reduce(function(sum,value){return sum+value;},0),border=Math.max(0,width-total);cells=cells.map(function(value){return value*(available-border)/total;});width=available;}
-                return {width:width,cells:cells};}
+                var constrained=width>available+.5;if(constrained){var total=cells.reduce(function(sum,value){return sum+value;},0),border=Math.max(0,width-total);cells=cells.map(function(value){return value*(available-border)/total;});width=available;}
+                return {width:width,cells:cells,constrained:constrained};}
             finally{holder.remove();}
         }
         /* The table's column elements, which a fixed layout reads before it reads any row (CSS 2.1, 17.5.2.1), one for each measured column. A table that has
@@ -485,6 +501,7 @@
             document.fonts.ready.then(function(){waiting=false;if(!alive)return;if(rememberLoadedFonts(waitingFonts))tableCache.widths=new WeakMap();waitingFonts.clear();seenDoc=null;schedule(v);});
         }
         function measureTables(v,scale){
+            fitTables(v.dom,true);
             var owners=new Set();for(var ancestor=v.dom;ancestor;ancestor=ancestor.parentElement){(ancestor.getAttribute('data-md-style')||'').split(/\s+/).filter(Boolean).forEach(function(owner){owners.add(owner);});}
             var context=v.dom.clientWidth+'|'+getComputedStyle(v.dom).font+'|'+Array.from(document.querySelectorAll('style[data-md-style-owner]')).filter(function(style){return owners.has(style.getAttribute('data-md-style-owner'));}).map(function(style){return style.textContent;}).join('\n');
             if(tableCache.context!==context){tableCache.context=context;tableCache.widths=new WeakMap();}
@@ -509,7 +526,7 @@
                 var values=measures.get(table);
                 if(!values)return;
                 function range(node){var parent=node.parentNode,index=Array.prototype.indexOf.call(parent.childNodes,node);return [v.posAtDOM(parent,index),v.posAtDOM(parent,index+1)];}
-                var span=range(table);if(span[1]>span[0])decorations.push(PM.Decoration.node(span[0],span[1],{style:'table-layout:fixed;width:'+values.width+'px;'}));
+                var span=range(table);if(span[1]>span[0])decorations.push(PM.Decoration.node(span[0],span[1],{class:values.constrained?'doc-table-constrained':'',style:'table-layout:fixed;width:'+values.width+'px;'}));
                 Array.from(first.cells).forEach(function(cell,index){var span=range(cell);if(span[1]>span[0])decorations.push(PM.Decoration.node(span[0],span[1],{style:'width:'+values.cells[index]+'px;'}));});
             });return decorations;
         }
@@ -569,11 +586,11 @@
                 /* A change of width is real input. A change of height is the page's own, since the page makes it each time it lays out. */
                 var ro = new ResizeObserver(function (entries) { var width = entries.length ? entries[entries.length - 1].contentRect.width : lastWidth; if (Math.abs(width - lastWidth) > .5) { lastWidth = width; seenDoc = null; } else if (sizeOf(v.dom) === ownSize) { return; } schedule(v); }); ro.observe(v.dom);
                 /* A picture or a font that arrives is real input, and one that the page's own gaps draw again (the copy of a repeated header) is not. It also changes how a table lays out by its content, so the measures of the tables are taken again. */
-                function loaded(e) { if (e && e.target && e.target.closest && e.target.closest('.doc-page-gap')) { return; } if(e&&e.type==='loadingdone'&&!rememberLoadedFonts(e.fontfaces||[]))return;tableCache.widths=new WeakMap();seenDoc=null;schedule(v); }
+                function loaded(e) { if (e && e.target && e.target.closest && e.target.closest('.doc-page-gap')) { return; } if(e&&e.type==='loadingdone'&&!rememberLoadedFonts(e.fontfaces||[]))return;v.dom.querySelectorAll('.pm-source table').forEach(function(table){var fit=fittedTables.get(table);if(fit)fit.context=null;});tableCache.widths=new WeakMap();seenDoc=null;schedule(v); }
                 v.dom.addEventListener('load', loaded, true); document.fonts.addEventListener('loadingdone', loaded); schedule(v);
                 return { update: function () { schedule(v); }, destroy: function () { alive = false; cancelAnimationFrame(raf); raf = 0; ro.disconnect(); o.page.querySelectorAll('.doc-table-gap-cover,.doc-row-header-layer,.doc-table-cut-border').forEach(function(node){node.remove();}); v.dom.removeEventListener('load', loaded, true); document.fonts.removeEventListener('loadingdone', loaded); } };
             }
         });
     }
-    window.yavcDocumentPages = { paper: '--doc-size:11pt;--doc-ink:#202124;--doc-muted:#555555;--doc-accent:#2355a0;--doc-page:#ffffff;--doc-rule:#cfd4da;--doc-code:#e4e7eb;--doc-warning:#b86e1c;--doc-danger:#b42318;--doc-positive:#2e7d4f;', lookup: paper, length: length, settings: settings, properties: properties, dimensions: dimensions, surface: surface, plan: plan, blocks: blocksOf, spacer: spacer,noteFragment:noteFragment,preview: preview, plugin: plugin, tagFrames: tagFrames, printPieces: printPieces,closePrintTables:closePrintTables };
+    window.yavcDocumentPages = { paper: '--doc-size:11pt;--doc-ink:#202124;--doc-muted:#555555;--doc-accent:#2355a0;--doc-page:#ffffff;--doc-rule:#cfd4da;--doc-code:#e4e7eb;--doc-warning:#b86e1c;--doc-danger:#b42318;--doc-positive:#2e7d4f;', lookup: paper, length: length, settings: settings, properties: properties, dimensions: dimensions, surface: surface, plan: plan, blocks: blocksOf, spacer: spacer,noteFragment:noteFragment,preview: preview, plugin: plugin, tagFrames: tagFrames, printPieces: printPieces,closePrintTables:closePrintTables,fitTables:fitTables };
 })();
