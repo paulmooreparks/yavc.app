@@ -5,6 +5,7 @@ const artifact=path.resolve(process.argv[2]),fixture=path.join(__dirname,'fixtur
 const types={'.html':'text/html','.js':'text/javascript','.css':'text/css','.json':'application/json','.wasm':'application/wasm','.svg':'image/svg+xml','.woff2':'font/woff2'};
 const prose=(name,n)=>Array.from({length:n},(_,i)=>`${name}${i} describes an invented physical mapping and preserves the next line in its own column.`).join(' ');
 const source='---\npage: 420pt x 500pt\nmargins: 30pt\n---\n\n{{style}}\ntd { background-color: #e6f2ff; }\n{{/style}}\n\n# Invented mapping\n\n| Step | Operator | Mapping | Outcome |\n| --- | --- | --- | --- |\n'+Array.from({length:4},(_,i)=>`| ${i+1} | ${prose('Operator',6+i)} | ${prose('Mapping',8-i)} | ${prose('Outcome',2+i)} |`).join('\n')+'\n\nAfter the table.\n';
+const rowHeaderSource=source.slice(0,source.indexOf('| Step |'))+'<table><thead><tr><th>Step</th><th>Operator</th><th>Mapping</th><th>Outcome</th></tr></thead><tbody>'+Array.from({length:4},(_,i)=>`<tr><th scope="row">${i+1}</th><td>${prose('Operator',6+i)}</td><td>${prose('Mapping',8-i)}</td><td>${prose('Outcome',2+i)}</td></tr>`).join('')+'</tbody></table>\n\nAfter the table.\n';
 function inspect(){
     const pm=document.querySelector('#document .ProseMirror'),page=pm.parentElement,box=r=>({top:r.top,bottom:r.bottom,left:r.left,right:r.right});
     const gaps=[...pm.querySelectorAll('.doc-page-gap')].filter(g=>getComputedStyle(g).position!=='absolute'&&!g.closest('.doc-gap-cap')).map(el=>({el,r:el.getBoundingClientRect()})).filter(g=>g.r.height>1);
@@ -27,14 +28,15 @@ function inspect(){
         const css=getComputedStyle(cell),line=parseFloat(css.lineHeight)||parseFloat(css.fontSize)*1.5;if(next-bottom>line+2)continuationErrors.push(next-bottom);
     }
     const metadata=yavcDocumentPages.blocks(pm).filter(b=>b.node.matches('colgroup,col')).map(b=>b.node.tagName);
-    return {pages:page.dataset.pageCount,passes:page.dataset.layoutPasses,stopped:page.dataset.layoutStopped,inline:gaps.filter(g=>g.el.matches('span')).length,overlap,headerErrors,continuationErrors,metadata,headerFurniture:pm.querySelectorAll('th .doc-page-gap,.doc-cell-repeated-header .doc-page-gap').length,covers:page.querySelectorAll('.doc-table-gap-cover').length,offsetHeight:pm.querySelector('.row-offset')?.getBoundingClientRect().height,
+    const sourceHeaders=[...pm.querySelectorAll('table')].flatMap(table=>{const headers=[];for(const row of table.rows){if(row.classList.contains('doc-page-gap'))continue;if(!row.cells.length||![...row.cells].every(c=>c.tagName==='TH'&&!/^(row|rowgroup)$/.test(c.getAttribute('scope')||'')))break;headers.push(row);}return headers;});
+    return {pages:page.dataset.pageCount,passes:page.dataset.layoutPasses,stopped:page.dataset.layoutStopped,inline:gaps.filter(g=>g.el.matches('span')).length,overlap,headerErrors,continuationErrors,metadata,headerFurniture:sourceHeaders.reduce((n,row)=>n+row.querySelectorAll('.doc-page-gap').length,0)+pm.querySelectorAll('.doc-cell-repeated-header .doc-page-gap').length,covers:page.querySelectorAll('.doc-table-gap-cover').length,offsetHeight:pm.querySelector('.row-offset')?.getBoundingClientRect().height,
         warning:/indivisible block is taller than the page/i.test(document.body.innerText),
         headers:[...pm.querySelectorAll('.doc-cell-repeated-header')].map(h=>({rect:box(h.getBoundingClientRect()),gap:box(h.parentElement.getBoundingClientRect()),text:h.textContent})),
         pageTop:page.getBoundingClientRect().top,sheetHeight:parseFloat(page.style.getPropertyValue('--sheet-height')),sheetTop:parseFloat(page.style.getPropertyValue('--sheet-top')),
         cells:[...pm.querySelectorAll('td')].filter(c=>!c.closest('.doc-page-gap')).slice(0,4).map(c=>({rect:box(c.getBoundingClientRect()),border:getComputedStyle(c).borderLeft,background:getComputedStyle(c).backgroundColor}))};
 }
 async function checkPaint(page,engine){
-    const headers=page.locator('#document td:first-child .doc-cell-repeated-header'),count=await headers.count();assert.ok(count>=2,engine+': the table must have two continued pieces');
+    const headers=page.locator('#document :is(td,th):first-child .doc-cell-repeated-header'),count=await headers.count();assert.ok(count>=2,engine+': the table must have two continued pieces');
     for(let i=0;i<Math.min(count,3);i++){
         await headers.nth(i).scrollIntoViewIfNeeded();
         const samples=await headers.nth(i).evaluate(header=>{const row=header.closest('tr'),table=row.closest('table'),p=table.closest('.doc-paginated'),pr=p.getBoundingClientRect(),period=parseFloat(p.style.getPropertyValue('--sheet-height'))+24;
@@ -95,9 +97,9 @@ async function checkPrint(page,engine){
     }catch{res.writeHead(404).end();}});
     await new Promise(r=>server.listen(0,'127.0.0.1',r));const failures=[];
     try{for(const engine of process.argv.slice(3).length?process.argv.slice(3):['chromium','firefox','webkit']){
-        const offsets=process.env.ROW_GAP_SWEEP==='1'?Array.from({length:58},(_,i)=>i*20):[Number(process.env.ROW_GAP_OFFSET)||0],frames=noteMode?['plain']:process.env.ROW_GAP_FRAME==='1'?['framed']:['plain','framed','code-header'];
+        const offsets=process.env.ROW_GAP_SWEEP==='1'?Array.from({length:58},(_,i)=>i*20):[Number(process.env.ROW_GAP_OFFSET)||0],frames=noteMode?['plain']:process.env.ROW_GAP_FRAME==='1'?['framed']:['plain','framed','code-header','row-header'];
         const browser=await pw[engine].launch({headless:true});try{for(const {offset,variant} of offsets.flatMap(offset=>frames.map(variant=>({offset,variant})))){
-            const base=variant==='framed'?plain.replace('| Step |','{{info:Invented frame}}\n\n| Step |').replace('\n\nAfter the table.','\n\n{{/info}}\n\nAfter the table.'):variant==='code-header'?plain.replace('# Invented mapping','# Invented mapping\n\n'+prose('Introduction',12)).replace('Operator | Mapping |','`Operator reference with wrapped code labels and names for this column` | Mapping |'):plain;
+            const base=variant==='row-header'?rowHeaderSource:variant==='framed'?plain.replace('| Step |','{{info:Invented frame}}\n\n| Step |').replace('\n\nAfter the table.','\n\n{{/info}}\n\nAfter the table.'):variant==='code-header'?plain.replace('# Invented mapping','# Invented mapping\n\n'+prose('Introduction',12)).replace('Operator | Mapping |','`Operator reference with wrapped code labels and names for this column` | Mapping |'):plain;
             text=offset?base.replace(/^(---\r?\n[\s\S]*?\r?\n---\r?\n)?/,m=>m+'\n{{style}}\n.row-offset {height:'+offset+'px;}\n{{/style}}\n\n<div class="row-offset">Invented offset.</div>\n\n'):base;
             const page=await browser.newPage({viewport:{width:1620,height:1100}});page.setDefaultTimeout(60000);const pageErrors=[];page.on('pageerror',e=>pageErrors.push(e.message));
             if(process.env.ROW_GAP_SLOW==='1')await page.addInitScript(()=>{document.addEventListener('DOMContentLoaded',()=>{const style=document.createElement('style');style.textContent="@font-face{font-family:RowSlowInter;src:url(slow-inter.woff2) format('woff2');} #document .ProseMirror td,#document .ProseMirror th{font-family:RowSlowInter,serif!important;}";document.head.append(style);});});

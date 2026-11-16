@@ -40,8 +40,11 @@ const ownTables=pm=>[...pm.querySelectorAll('table')].filter(t=>!t.closest('.doc
 // One sample of every table laid out alone, kept in the page. WebKit lays out the same table differently as unrelated layouts pass, so a table is compared with
 // all the samples that were taken while the page laid out, and its allowance is 3 pixels plus the spread its own samples show.
 // A sample is not taken while fonts are loading, and it keeps what the table held (its text and its drawings), since a table that has changed legitimately has other columns.
-const contentOf=t=>t.textContent.length+':'+t.querySelectorAll('[data-host-drawn]').length;
-const takeAlone=()=>{if(document.fonts.status==='loading')return false;const pm=document.querySelector('#document .ProseMirror');(window.aloneSamples=window.aloneSamples||[]).push(window.ownTables(pm).map(t=>({w:window.aloneOf(pm,t),k:window.contentOf(t)})));return true;};
+const contentOf=t=>{let hash=0,length=0;const walker=document.createTreeWalker(t,NodeFilter.SHOW_ELEMENT|NodeFilter.SHOW_TEXT,{acceptNode:n=>n.nodeType===1&&n.matches('.doc-page-gap,.doc-gap-cap')?NodeFilter.FILTER_REJECT:NodeFilter.FILTER_ACCEPT});while(walker.nextNode()){const n=walker.currentNode;if(n.nodeType!==3)continue;length+=n.data.length;for(let i=0;i<n.data.length;i++)hash=(hash*31+n.data.charCodeAt(i))|0;}return length+':'+hash+':'+[...t.querySelectorAll('[data-host-drawn]')].filter(n=>!n.closest('.doc-page-gap,.doc-gap-cap')).length;};
+const takeAlone=()=>{if(document.fonts.status==='loading')return false;const pm=document.querySelector('#document .ProseMirror'),tables=window.ownTables(pm),samples=window.aloneSamples=window.aloneSamples||[];
+    samples.push(tables.map(t=>({w:window.aloneOf(pm,t),k:window.contentOf(t)})));
+    // The page's colgroup stores its own measurement of a copy laid out alone. Include that actual sample alongside the copies the test measures later.
+    samples.push(tables.map(t=>({w:[...t.querySelectorAll(':scope > colgroup[data-doc-columns] > col')].map(c=>parseFloat(c.style.width)),k:window.contentOf(t)})));return true;};
 // The columns the page draws now, kept to be compared later with samples taken after other layouts.
 const liveColumns=()=>{const pm=document.querySelector('#document .ProseMirror');return window.ownTables(pm).map(t=>{const real=[...t.rows].find(r=>!r.classList.contains('doc-page-gap'));return [...real.cells].map(c=>c.getBoundingClientRect().width);});};
 const columnsAndGaps=(options)=>{
@@ -155,7 +158,7 @@ function settle({frames,limit}){
                         const undone=await page.evaluate(settle,{frames:120,limit:60000});
                         const text=await page.evaluate(()=>document.querySelector('#document .ProseMirror').textContent.includes('Synthetic edit.'));
                         if(text)failures.push(`${label}: the undo left the edit in the text`);
-                        else if(undone.now.pages!==first.now.pages)failures.push(`${label}: ${first.now.pages} pages on load and ${undone.now.pages} after an edit and its undo`);
+                        else if(undone.now.pages!==first.now.pages){const widths=await page.evaluate(()=>window.liveColumns()),changed=widths.map((w,i)=>({table:i,onLoad:liveOnLoad[i],afterUndo:w})).filter(s=>s.afterUndo.some((w,c)=>Math.abs(w-s.onLoad[c])>3));failures.push(`${label}: ${first.now.pages} pages on load and ${undone.now.pages} after an edit and its undo; changed columns: ${JSON.stringify(changed)}`);}
                         for(let i=0;i<2;i++){await page.evaluate(()=>window.takeAlone());await page.waitForTimeout(500);}
                         const onLoad=await page.evaluate(s=>window.columnsAndGaps({snapshot:s}),liveOnLoad);
                         // WebKit on Linux draws one table with columns its own alone layouts never give (175 against 93 to 160 on load; 153,246,178,171 against 111,246,178,171

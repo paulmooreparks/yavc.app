@@ -171,20 +171,21 @@
             }
             var gapNode = node.parentElement && node.parentElement.matches('li') && node.parentElement.firstElementChild === node ? node.parentElement : node;
             if (gapNode !== node && position) suppliedPosition = position(gapNode.parentNode, Array.prototype.indexOf.call(gapNode.parentNode.childNodes, gapNode));
+            var headers=[],table=node.tagName==='TR'&&node.closest('table');
+            if(table)for(var row of Array.from(table.rows)){if(row.classList.contains('host-suggestion-row')||row.classList.contains('doc-page-gap'))continue;if(!row.cells.length||!Array.from(row.cells).every(function(cell){return cell.tagName==='TH'&&!/^(row|rowgroup)$/.test(cell.getAttribute('scope')||'');}))break;headers.push(row);}
+            var repeatedHeader=headers.indexOf(node)>=0;
             var block = { node: gapNode, pos: suppliedPosition, top: clean(rect.top), row: node.tagName === 'TR', columns: node.classList.contains('host-suggestion-row') ? node.cells[0].colSpan : node.cells ? node.cells.length : 0,
                 height: clean(rect.bottom) - clean(rect.top) + Math.max(0, parseFloat(css.marginBottom) || 0),
                 references:node.matches('aside.doc-footnote')?[]:window.yavcPageFootnotes?window.yavcPageFootnotes.references(node):[],
-                keepNext:/^(avoid|avoid-page)$/.test(css.breakAfter)||/^(avoid|avoid-page)$/.test(contentCSS.breakAfter)||node.tagName==='TR'&&!!node.querySelector('th'),
+                keepNext:/^(avoid|avoid-page)$/.test(css.breakAfter)||/^(avoid|avoid-page)$/.test(contentCSS.breakAfter)||repeatedHeader,
                 breakAfter:/^(page|always)$/.test(css.breakAfter)||/^(page|always)$/.test(contentCSS.breakAfter),
                 control:node.matches('.sc-page-break')||!!node.querySelector('.sc-page-break'),
                 breakBefore: /^(page|always)$/.test(css.breakBefore)||/^(page|always)$/.test(contentCSS.breakBefore)||!!(previous&&(previous.control||previous.breakAfter)) };
-            if(block.row&&!node.querySelector('th')){
-                var table=node.closest('table'),headers=[];
-                if(table)for(var row of Array.from(table.rows)){if(row.classList.contains('host-suggestion-row')||row.classList.contains('doc-page-gap'))continue;if(row===node||!row.querySelector('th'))break;headers.push(row);}
+            if(block.row&&!repeatedHeader){
                 block.headerRows=headers;block.repeatHeader=headers.reduce(function(sum,row){return sum+row.getBoundingClientRect().height/scale;},0);
             }
             // A repeated header is one unit. Cutting it into bands also copies its gaps into every subsequent header.
-            var bands=block.row&&!node.querySelector('th')&&window.yavcPageLines&&window.yavcPageLines.rowBands(content,top,scale,offsets,position);
+            var bands=block.row&&!repeatedHeader&&window.yavcPageLines&&window.yavcPageLines.rowBands(content,top,scale,offsets,position);
             if(bands){
                 bands.forEach(function(band,index){blocks.push(Object.assign({},block,band,{rowTop:block.top,references:[],pos:index?band.pos:block.pos,breakBefore:!index&&block.breakBefore,breakAfter:index===bands.length-1&&block.breakAfter,keepNext:index===0&&bands.length>1||index===bands.length-2||index===bands.length-1&&block.keepNext}));});
                 content.querySelectorAll('.doc-footnote-ref[data-footnote-ref]').forEach(function(ref){if(ref.closest('.doc-page-gap'))return;var y=clean(ref.getBoundingClientRect().top),index=0;while(index+1<bands.length&&bands[index+1].top<=y)index++;blocks[blocks.length-bands.length+index].references.push(ref.getAttribute('data-footnote-ref'));});
