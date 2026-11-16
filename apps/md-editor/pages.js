@@ -172,7 +172,7 @@
             var gapNode = node.parentElement && node.parentElement.matches('li') && node.parentElement.firstElementChild === node ? node.parentElement : node;
             if (gapNode !== node && position) suppliedPosition = position(gapNode.parentNode, Array.prototype.indexOf.call(gapNode.parentNode.childNodes, gapNode));
             var headers=[],table=node.tagName==='TR'&&node.closest('table');
-            if(table)for(var row of Array.from(table.rows)){if(row.classList.contains('host-suggestion-row')||row.classList.contains('doc-page-gap'))continue;if(!row.cells.length||!Array.from(row.cells).every(function(cell){return cell.tagName==='TH'&&!/^(row|rowgroup)$/.test(cell.getAttribute('scope')||'');}))break;headers.push(row);}
+            if(table)for(var row of Array.from(table.rows)){if(row.classList.contains('host-suggestion-row')||row.classList.contains('doc-page-gap'))continue;if(!row.cells.length||!Array.from(row.cells).every(function(cell){return cell.tagName==='TH'&&!/^(row|rowgroup)$/i.test(cell.getAttribute('scope')||'');}))break;headers.push(row);}
             var repeatedHeader=headers.indexOf(node)>=0;
             var block = { node: gapNode, pos: suppliedPosition, top: clean(rect.top), row: node.tagName === 'TR', columns: node.classList.contains('host-suggestion-row') ? node.cells[0].colSpan : node.cells ? node.cells.length : 0,
                 height: clean(rect.bottom) - clean(rect.top) + Math.max(0, parseFloat(css.marginBottom) || 0),
@@ -399,8 +399,9 @@
         o.flow.addEventListener('load', schedule, true); document.fonts.addEventListener('loadingdone', schedule); schedule();
         return { refresh: function () { signature = ''; schedule(); }, destroy: function () { alive = false; cancelAnimationFrame(raf); ro.disconnect(); o.flow.removeEventListener('load', schedule, true); document.fonts.removeEventListener('loadingdone', schedule); } };
     }
+    var tableMeasureCaches=new WeakMap();
     function plugin(PM, o) {
-        var key = new PM.PluginKey('document-pages'), signature = '', raf = 0, alive = true,seenDoc=null,tableWidths=new WeakMap(),gapIds=new WeakMap(),gapSerial=0;
+        var key = new PM.PluginKey('document-pages'), signature = '', raf = 0, alive = true,seenDoc=null,tableCache=null,gapIds=new WeakMap(),gapSerial=0;
         /* The arrangements this document has been laid out in since the last real input (an edit, a width, a picture or a font arriving). A layout that
            comes out as one of them again is a cycle, in which each arrangement changes what the next one measures: it is kept as it is and the page
            stops laying out until there is real input, so that a layout that cannot settle ends in a fixed arrangement and not in another pass. The
@@ -442,27 +443,37 @@
         /* The natural columns of each table of the page. A table is measured again when its text or the drawings in it have changed, since a host's drawing
            that arrives after the first layout changes how the table lays out by its content, and the columns are part of the arrangement (so that a table
            measured before its drawings were there is not kept at the columns it had then). */
-        /* The table's own text, as its length and a hash of it, without the page's gaps (the copy of a repeated header in a gap moves with the layout), and its drawings. */
+        /* Hash source text and inline formatting, excluding page furniture and the editor's empty-cell marks. Formatting can change widths without changing text. */
         function fingerprintOf(table){
-            var length=0,hash=0,walker=document.createTreeWalker(table,NodeFilter.SHOW_ELEMENT|NodeFilter.SHOW_TEXT,{acceptNode:function(node){return node.nodeType===1&&node.classList.contains('doc-page-gap')?NodeFilter.FILTER_REJECT:NodeFilter.FILTER_ACCEPT;}});
-            while(walker.nextNode()){if(walker.currentNode.nodeType===3){var data=walker.currentNode.data;length+=data.length;for(var i=0;i<data.length;i++){hash=(hash*31+data.charCodeAt(i))|0;}}}
-            return length+'.'+hash+':'+table.querySelectorAll('[data-host-drawn]').length;
+            var length=0,hash=0,walker=document.createTreeWalker(table,NodeFilter.SHOW_ELEMENT|NodeFilter.SHOW_TEXT,{acceptNode:function(node){return node.nodeType===1&&node.matches('.doc-page-gap,.doc-gap-cap,.doc-gap-cover,colgroup[data-doc-columns],.ProseMirror-separator,.ProseMirror-trailingBreak')?NodeFilter.FILTER_REJECT:NodeFilter.FILTER_ACCEPT;}});
+            while(walker.nextNode()){var node=walker.currentNode,data=node.nodeType===3?node.data:'<'+node.tagName+(node.matches('td,th,tr,tbody,thead,tfoot')?'':':'+(node.getAttribute('style')||'')+':'+(node.getAttribute('class')||''))+'>';length+=data.length;for(var i=0;i<data.length;i++){hash=(hash*31+data.charCodeAt(i))|0;}}
+            return length+'.'+hash;
         }
         /* A table measured while a font is loading has the columns of the font that stood in for it, so that measure is used for this layout and not kept. The page
            does not rely on the fonts event to hear that the font has arrived (it did not reach the page on WebKit on Linux): the promise `document.fonts.ready` says when
            the fonts have loaded, and the tables are then measured again. */
-        var waiting=false;
+        var waiting=false,waitingFonts=new Set();
+        function rememberLoadedFonts(faces){
+            var changed=false;Array.from(faces).forEach(function(face){if(face.status==='loaded'&&!tableCache.fonts.has(face)){tableCache.fonts.add(face);changed=true;}});
+            return changed;
+        }
         function waitForFonts(v){
+            Array.from(document.fonts).forEach(function(face){if(face.status==='loading')waitingFonts.add(face);});
             if(waiting)return;waiting=true;
-            document.fonts.ready.then(function(){waiting=false;if(!alive)return;tableWidths=new WeakMap();seenDoc=null;schedule(v);});
+            document.fonts.ready.then(function(){waiting=false;if(!alive)return;if(rememberLoadedFonts(waitingFonts))tableCache.widths=new WeakMap();waitingFonts.clear();seenDoc=null;schedule(v);});
         }
         function measureTables(v,scale){
+            var owners=new Set();for(var ancestor=v.dom;ancestor;ancestor=ancestor.parentElement){(ancestor.getAttribute('data-md-style')||'').split(/\s+/).filter(Boolean).forEach(function(owner){owners.add(owner);});}
+            var context=v.dom.clientWidth+'|'+getComputedStyle(v.dom).font+'|'+Array.from(document.querySelectorAll('style[data-md-style-owner]')).filter(function(style){return owners.has(style.getAttribute('data-md-style-owner'));}).map(function(style){return style.textContent;}).join('\n');
+            if(tableCache.context!==context){tableCache.context=context;tableCache.widths=new WeakMap();}
+            if(rememberLoadedFonts(waitingFonts))tableCache.widths=new WeakMap();
+            if(document.fonts.status==='loading')waitForFonts(v);
             var map=new Map();
             v.dom.querySelectorAll('table').forEach(function(table){
                 /* A table that a host drew, or the page's own copy of one, is not the page's to give columns to. */
                 if(table.closest('.doc-page-gap')||table.closest('.doc-gap-cap')||table.closest('.pm-source'))return;
-                var fingerprint=fingerprintOf(table),entry=tableWidths.get(table);
-                if(!entry||entry.fingerprint!==fingerprint){var values=naturalWidths(v,table,scale);if(!values)return;entry={fingerprint:fingerprint,values:values};if(document.fonts.status==='loading'){waitForFonts(v);}else{tableWidths.set(table,entry);}}
+                var fingerprint=fingerprintOf(table),entry=tableCache.widths.get(table);
+                if(!entry||entry.fingerprint!==fingerprint){var values=naturalWidths(v,table,scale);if(!values)return;entry={fingerprint:fingerprint,values:values};if(document.fonts.status==='loading'){waitForFonts(v);}else{tableCache.widths.set(table,entry);}}
                 map.set(table,entry.values);
             });
             return map;
@@ -530,11 +541,13 @@
             state: { init: function () { return PM.DecorationSet.empty; }, apply: function (tr, value) { return tr.getMeta(key) || value.map(tr.mapping, tr.doc); } },
             props: { decorations: function (state) { return key.getState(state); } },
             view: function (v) {
+                tableCache=tableMeasureCaches.get(v.dom);
+                if(!tableCache){tableCache={widths:new WeakMap(),fonts:new WeakSet(),context:null};tableMeasureCaches.set(v.dom,tableCache);rememberLoadedFonts(document.fonts);}
                 alive = true; signature = ''; release();
                 /* A change of width is real input. A change of height is the page's own, since the page makes it each time it lays out. */
                 var ro = new ResizeObserver(function (entries) { var width = entries.length ? entries[entries.length - 1].contentRect.width : lastWidth; if (Math.abs(width - lastWidth) > .5) { lastWidth = width; seenDoc = null; } else if (sizeOf(v.dom) === ownSize) { return; } schedule(v); }); ro.observe(v.dom);
                 /* A picture or a font that arrives is real input, and one that the page's own gaps draw again (the copy of a repeated header) is not. It also changes how a table lays out by its content, so the measures of the tables are taken again. */
-                function loaded(e) { if (e && e.target && e.target.closest && e.target.closest('.doc-page-gap')) { return; } seenDoc=null;tableWidths=new WeakMap();schedule(v); }
+                function loaded(e) { if (e && e.target && e.target.closest && e.target.closest('.doc-page-gap')) { return; } if(e&&e.type==='loadingdone'&&!rememberLoadedFonts(e.fontfaces||[]))return;tableCache.widths=new WeakMap();seenDoc=null;schedule(v); }
                 v.dom.addEventListener('load', loaded, true); document.fonts.addEventListener('loadingdone', loaded); schedule(v);
                 return { update: function () { schedule(v); }, destroy: function () { alive = false; cancelAnimationFrame(raf); raf = 0; ro.disconnect(); o.page.querySelectorAll('.doc-table-gap-cover').forEach(function(node){node.remove();}); v.dom.removeEventListener('load', loaded, true); document.fonts.removeEventListener('loadingdone', loaded); } };
             }

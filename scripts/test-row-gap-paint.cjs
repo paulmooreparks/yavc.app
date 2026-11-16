@@ -107,6 +107,7 @@ async function checkPrint(page,engine){
             if(process.env.ROW_GAP_SLOW==='1')await page.waitForFunction(()=>[...document.fonts].some(f=>f.family==='RowSlowInter'&&f.status==='loaded'));
             await page.waitForFunction(()=>document.querySelector('#document .doc-page-gap-inline'));
             await settled(page);
+            if(variant==='row-header')assert.equal(await page.evaluate(()=>[...document.querySelectorAll('#document .ProseMirror tr')].filter(r=>!r.closest('.doc-page-gap')&&r.cells[0]?.tagName==='TH'&&[...r.cells].some(c=>c.tagName==='TD')).length),4,engine+': the fixture must retain its four HTML body rows with row-header cells');
             const result=await page.evaluate(inspect);console.log(engine+' offset '+offset+' '+variant+' '+JSON.stringify({...result,headers:undefined,cells:undefined}));
             if(!noteMode){await page.waitForTimeout(2000);const idle=await page.evaluate(()=>{const p=document.querySelector('#document [data-page-count]');return {passes:p.dataset.layoutPasses,stopped:p.dataset.layoutStopped};});assert.equal(idle.passes,result.passes,engine+': a settled tall table made an idle layout pass');assert.equal(idle.stopped,undefined,engine+': the cycle guard stopped the tall table');}
             await fs.writeFile(path.join(process.env.TEMP||'/tmp','yavc-row-gap-'+engine+'.json'),JSON.stringify(result,null,2));
