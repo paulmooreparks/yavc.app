@@ -324,6 +324,8 @@
                     head.append(copy);
                 });
                 gap.append(cover, cap('end', index === 0 ? 'first' : 'middle'), head);
+                // The continuation frame encloses the repeated table header as well as its own padding and title.
+                var tableHeader=gap.querySelector('.doc-cell-repeated-header');if(tableHeader){head.style.height=((head.getBoundingClientRect().height+tableHeader.getBoundingClientRect().height)/scale)+'px';}
             });
         });
     }
