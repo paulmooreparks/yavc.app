@@ -44,7 +44,8 @@ async function checkPaint(page,engine){
             const end=pr.top+(sheet-1)*period+parseFloat(p.style.getPropertyValue('--sheet-height'))-parseFloat(p.style.getPropertyValue('--sheet-bottom'));
             const walker=document.createTreeWalker(row,NodeFilter.SHOW_TEXT);let node,last=-Infinity;
             while((node=walker.nextNode())){if(!node.data.trim()||node.parentElement.closest('.doc-page-gap'))continue;const range=document.createRange();range.selectNodeContents(node);for(const r of range.getClientRects())if(r.width>0&&r.bottom<=end+1)last=Math.max(last,r.bottom);}
-            const y=last+4;return [...table.rows[0].cells].flatMap(c=>{const cr=c.getBoundingClientRect();return [{x:Math.round(cr.left),y:Math.round(y)},{x:Math.round((cr.left+cr.right)/2),y:Math.round(y)}];});});
+            let y=last+4;for(const rule of p.querySelectorAll('.doc-table-cut-border')){const r=rule.getBoundingClientRect();if(y>=r.top-2&&y<=r.bottom+2)y=r.bottom+4;}
+            return [...table.rows[0].cells].flatMap(c=>{const cr=c.getBoundingClientRect();return [{x:Math.round(cr.left),y:Math.round(y)},{x:Math.round((cr.left+cr.right)/2),y:Math.round(y)}];});});
         const png=(await page.screenshot()).toString('base64');
         const bad=await page.evaluate(async({png,samples})=>{const image=new Image();image.src='data:image/png;base64,'+png;await image.decode();const canvas=document.createElement('canvas');canvas.width=image.width;canvas.height=image.height;const context=canvas.getContext('2d');context.drawImage(image,0,0);return samples.filter(p=>{const rgb=context.getImageData(p.x,p.y,1,1).data;return Math.min(rgb[0],rgb[1],rgb[2])<250;});},{png,samples});
         assert.deepEqual(bad,[],engine+': cell borders or backgrounds remain below the last line');
