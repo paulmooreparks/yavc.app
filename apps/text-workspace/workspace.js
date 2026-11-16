@@ -1495,6 +1495,7 @@
                         }
                         await Promise.all(Array.from(doc.querySelectorAll('link[rel="stylesheet"]')).map(function (link) { return link.sheet ? Promise.resolve() : new Promise(function (resolve, reject) { link.onload = resolve; link.onerror = function () { reject(new Error('A print stylesheet could not load.')); }; }); }));
                         await doc.fonts.ready; await Promise.all(Array.from(doc.images).map(function (img) { return img.decode(); }));
+                        doc.querySelectorAll('.doc-print-sheet').forEach(function(sheet){P.closePrintTables(sheet,d);});
                         if (!unchanged()) { frame.remove(); throw new Error('The document changed during print preparation.'); }
                         printProblem = ''; frame.contentWindow.print(); say('Print uses the document page size and margins. Turn off browser headers and footers and select the matching paper size.');
                     }

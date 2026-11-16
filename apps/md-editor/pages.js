@@ -263,6 +263,10 @@
             });
         });
     }
+    function closePrintTables(sheet,d){
+        var origin=sheet.getBoundingClientRect();
+        sheet.querySelectorAll('table[data-doc-cut-end]').forEach(function(table){var rect=table.getBoundingClientRect(),rule=sheet.ownerDocument.createElement('div'),cell=table.rows[table.rows.length-1].cells[0];rule.className='doc-table-cut-border';rule.setAttribute('aria-hidden','true');rule.style.cssText='position:absolute;pointer-events:none;box-sizing:border-box;left:'+(rect.left-origin.left)+'px;top:'+(d.height-d.bottom)+'px;width:'+rect.width+'px;border-top:'+getComputedStyle(cell).borderBottom+';';sheet.append(rule);});
+    }
     /* A frame that a page gap runs through is drawn as pieces (docs/host-shortcodes-contract.md, "Long shortcodes across pages"). The frame stays one
        element, marked data-sc-piece="first", with "only" on a frame no gap runs through. Each gap inside it holds two caps, shells cloned from the
        frame with nothing in them and marked "first" or "middle" above the gap and "middle" or "last" below it, which carry the frame's own styling for
@@ -334,7 +338,7 @@
     // The editable cells remain whole. Page furniture covers their paint between the last line of a piece and its next repeated header.
     function paintRowBreaks(flow,d){
         var page=flow.closest('.doc-paginated'),scale=Number(page.style.zoom)||1,origin=page.getBoundingClientRect(),groups=new Map();
-        page.querySelectorAll('.doc-table-gap-cover').forEach(function(node){node.remove();});
+        page.querySelectorAll('.doc-table-gap-cover,.doc-row-header-layer,.doc-table-cut-border').forEach(function(node){node.remove();});
         flow.querySelectorAll('[data-row-header-top]').forEach(function(gap){var key=gap.getAttribute('data-page-gap-key'),group=groups.get(key);if(!group){group=[];groups.set(key,group);}group.push(gap);});
         groups.forEach(function(group){
             var row=group[0].closest('tr'),table=row&&row.closest('table');if(!table)return;
@@ -348,6 +352,20 @@
             var cover=document.createElement('div');cover.className='doc-table-gap-cover';cover.setAttribute('aria-hidden','true');cover.contentEditable='false';
             cover.style.cssText='position:absolute;pointer-events:none;z-index:1;left:'+((rect.left-origin.left)/scale-1)+'px;top:'+top+'px;width:'+(rect.width/scale+2)+'px;height:'+(bottom-top)+'px;background-color:var(--doc-page);background-image:linear-gradient(to bottom,var(--doc-page) 0,var(--doc-page) '+Math.max(0,gutter)+'px,var(--sheet-gutter,var(--surface-alt)) '+Math.max(0,gutter)+'px,var(--sheet-gutter,var(--surface-alt)) '+Math.max(0,gutter+GAP)+'px,var(--doc-page) '+Math.max(0,gutter+GAP)+'px)';
             page.append(cover);
+            // Paint one real header above the frame's covers, with the original table's column boxes and header-cell styling.
+            var layer=document.createElement('div');layer.className='doc-row-header-layer';layer.setAttribute('aria-hidden','true');layer.inert=true;layer.contentEditable='false';
+            layer.style.cssText='position:absolute;pointer-events:none;z-index:2;left:'+((rect.left-origin.left)/scale)+'px;top:'+bottom+'px;width:'+(rect.width/scale)+'px;';
+            var context=document.createElement('div');context.className='doc-page-flow';context.style.cssText='margin:0;padding:0;border:0;font:'+getComputedStyle(flow).font+';';layer.append(context);
+            var chain=[],parent=table.parentElement;while(parent&&parent!==flow){chain.unshift(parent);parent=parent.parentElement;}
+            chain.forEach(function(source){var shell=source.cloneNode(false);shell.removeAttribute('id');shell.removeAttribute('data-sc-frame');shell.removeAttribute('data-sc-piece');shell.style.cssText+=';display:block;margin:0;padding:0;border:0;background:transparent;width:100%;box-sizing:border-box;';context.append(shell);context=shell;});
+            var copy=table.cloneNode(false),body=document.createElement('tbody'),cols=document.createElement('colgroup');copy.removeAttribute('id');copy.style.cssText='table-layout:fixed;width:100%;margin:0;';copy.classList.add('doc-row-repeated-header');copy.setAttribute('data-page-gap-key',group[0].getAttribute('data-page-gap-key'));
+            var sourceRows=[];Array.from(table.rows).some(function(source){if(source.classList.contains('doc-page-gap'))return false;if(!source.cells.length||!Array.from(source.cells).every(function(cell){return cell.tagName==='TH'&&!/^(row|rowgroup)$/.test(cell.getAttribute('scope')||'');}))return true;sourceRows.push(source);return false;});
+            if(!sourceRows.length)return;
+            Array.from(sourceRows[0].cells).forEach(function(cell){var col=document.createElement('col');col.style.width=(cell.getBoundingClientRect().width/scale)+'px';cols.append(col);});
+            sourceRows.forEach(function(source){body.append(source.cloneNode(true));});copy.append(cols,body);copy.querySelectorAll('.doc-page-gap,.doc-gap-cap,.doc-gap-cover').forEach(function(node){node.remove();});copy.querySelectorAll('[id]').forEach(function(node){node.removeAttribute('id');});context.append(copy);page.append(layer);
+            // The blank band hides the live row's border, so give the cut piece its own closing rule at the content foot.
+            var sourceStyle=getComputedStyle(row.cells[0]),foot=Math.floor(top/(d.height+GAP))*(d.height+GAP)+d.height-d.bottom;
+            var rule=document.createElement('div');rule.className='doc-table-cut-border';rule.setAttribute('aria-hidden','true');rule.style.cssText='position:absolute;pointer-events:none;z-index:2;box-sizing:border-box;left:'+((rect.left-origin.left)/scale)+'px;top:'+foot+'px;width:'+(rect.width/scale)+'px;border-top:'+sourceStyle.borderBottom+';';page.append(rule);
         });
     }
     function noteGaps(layout,blocks){
@@ -427,8 +445,12 @@
             copy.querySelectorAll('.doc-page-gap,.doc-gap-cap,.doc-gap-cover,.ProseMirror-separator,.ProseMirror-trailingBreak').forEach(function(node){node.remove();}); /* the editor's own marks for an empty cell come and go with the selection */
             copy.querySelectorAll(':scope > colgroup[data-doc-columns]').forEach(function(node){node.remove();});
             copy.removeAttribute('style');copy.querySelectorAll('td,th').forEach(function(cell){cell.removeAttribute('style');});
-            holder.append(copy);parent.append(holder);
-            try{var row=copy.rows[0];if(!row)return null;return {width:copy.getBoundingClientRect().width/scale,cells:Array.from(row.cells).map(function(cell){return cell.getBoundingClientRect().width/scale;})};}
+            // Keep ancestor widths and selectors, including a frame's content padding, when measuring outside the live table.
+            var ancestors=[],ancestor=table.parentElement,container=holder;while(ancestor&&ancestor!==v.dom){ancestors.unshift(ancestor);ancestor=ancestor.parentElement;}
+            ancestors.forEach(function(source){var shell=source.cloneNode(false);shell.removeAttribute('id');container.append(shell);container=shell;});container.append(copy);parent.append(holder);
+            try{var row=copy.rows[0];if(!row)return null;var css=getComputedStyle(container),available=(container.clientWidth-(parseFloat(css.paddingLeft)||0)-(parseFloat(css.paddingRight)||0)),width=copy.getBoundingClientRect().width/scale,cells=Array.from(row.cells).map(function(cell){return cell.getBoundingClientRect().width/scale;});
+                if(width>available){var total=cells.reduce(function(sum,value){return sum+value;},0),border=Math.max(0,width-total);cells=cells.map(function(value){return value*(available-border)/total;});width=available;}
+                return {width:width,cells:cells};}
             finally{holder.remove();}
         }
         /* The table's column elements, which a fixed layout reads before it reads any row (CSS 2.1, 17.5.2.1), one for each measured column. A table that has
@@ -497,7 +519,7 @@
                 raf = 0; if (!alive || v.isDestroyed) { return; }
                 var page = o.pagination && o.pagination();
                 if (!page || !v.dom.isConnected) {
-                    o.page.querySelectorAll('.doc-table-gap-cover').forEach(function(node){node.remove();});
+                    o.page.querySelectorAll('.doc-table-gap-cover,.doc-row-header-layer,.doc-table-cut-border').forEach(function(node){node.remove();});
                     release();
                     if (signature) { signature = ''; if (o.syncSelection) { o.syncSelection(); } v.dispatch(v.state.tr.setMeta(key, PM.DecorationSet.empty).setMeta('addToHistory', false)); }
                     return;
@@ -549,9 +571,9 @@
                 /* A picture or a font that arrives is real input, and one that the page's own gaps draw again (the copy of a repeated header) is not. It also changes how a table lays out by its content, so the measures of the tables are taken again. */
                 function loaded(e) { if (e && e.target && e.target.closest && e.target.closest('.doc-page-gap')) { return; } if(e&&e.type==='loadingdone'&&!rememberLoadedFonts(e.fontfaces||[]))return;tableCache.widths=new WeakMap();seenDoc=null;schedule(v); }
                 v.dom.addEventListener('load', loaded, true); document.fonts.addEventListener('loadingdone', loaded); schedule(v);
-                return { update: function () { schedule(v); }, destroy: function () { alive = false; cancelAnimationFrame(raf); raf = 0; ro.disconnect(); o.page.querySelectorAll('.doc-table-gap-cover').forEach(function(node){node.remove();}); v.dom.removeEventListener('load', loaded, true); document.fonts.removeEventListener('loadingdone', loaded); } };
+                return { update: function () { schedule(v); }, destroy: function () { alive = false; cancelAnimationFrame(raf); raf = 0; ro.disconnect(); o.page.querySelectorAll('.doc-table-gap-cover,.doc-row-header-layer,.doc-table-cut-border').forEach(function(node){node.remove();}); v.dom.removeEventListener('load', loaded, true); document.fonts.removeEventListener('loadingdone', loaded); } };
             }
         });
     }
-    window.yavcDocumentPages = { paper: '--doc-size:11pt;--doc-ink:#202124;--doc-muted:#555555;--doc-accent:#2355a0;--doc-page:#ffffff;--doc-rule:#cfd4da;--doc-code:#e4e7eb;--doc-warning:#b86e1c;--doc-danger:#b42318;--doc-positive:#2e7d4f;', lookup: paper, length: length, settings: settings, properties: properties, dimensions: dimensions, surface: surface, plan: plan, blocks: blocksOf, spacer: spacer,noteFragment:noteFragment,preview: preview, plugin: plugin, tagFrames: tagFrames, printPieces: printPieces };
+    window.yavcDocumentPages = { paper: '--doc-size:11pt;--doc-ink:#202124;--doc-muted:#555555;--doc-accent:#2355a0;--doc-page:#ffffff;--doc-rule:#cfd4da;--doc-code:#e4e7eb;--doc-warning:#b86e1c;--doc-danger:#b42318;--doc-positive:#2e7d4f;', lookup: paper, length: length, settings: settings, properties: properties, dimensions: dimensions, surface: surface, plan: plan, blocks: blocksOf, spacer: spacer,noteFragment:noteFragment,preview: preview, plugin: plugin, tagFrames: tagFrames, printPieces: printPieces,closePrintTables:closePrintTables };
 })();
