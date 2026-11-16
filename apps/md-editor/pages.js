@@ -148,6 +148,8 @@
             if ((!node.matches('.pm-source') || flowHost) && !/^(avoid|avoid-page)$/.test(contentCSS.breakInside) && container) {
                 var firstBlock = blocks.length;
                 Array.from(content.children).forEach(function (child) {
+                    // Columns size the table but have no place in its sequence of content blocks.
+                    if(content.matches('table')&&!child.matches('caption,thead,tbody,tfoot,tr'))return;
                     var before = position ? position(child.parentNode, Array.prototype.indexOf.call(child.parentNode.childNodes, child)) : 0;
                     emit(child, before);
                 });
@@ -302,15 +304,47 @@
     }
     function rowSpacer(gap,block,column){
         var node=spacer(gap.height,true,null);node.setAttribute('data-page-gap-key','body:'+gap.index);
+        node.setAttribute('data-row-header-top',gap.headerTop);
         var exhausted=block.anchors[column].exhausted;
         if(gap.header&&block.headerRows.length){
-            var space=document.createElement('span');space.style.display='block';space.style.height=gap.height+'px';node.style.height='auto';if(!exhausted)node.append(space);
+            var space=document.createElement('span');space.className='doc-cell-page-space';space.style.display='block';space.style.height=gap.height+'px';node.style.height='auto';if(!exhausted)node.append(space);
             var header=document.createElement('span');header.className='doc-cell-repeated-header';header.style.height=gap.header+'px';
             block.headerRows.forEach(function(row){var cell=row.cells[column];if(!cell)return;var copy=cell.cloneNode(true);copy.removeAttribute('id');copy.querySelectorAll('[id]').forEach(function(item){item.removeAttribute('id');});copy.querySelectorAll('a,button,input,select,textarea,[tabindex]').forEach(function(item){item.setAttribute('tabindex','-1');if('disabled' in item)item.disabled=true;});header.append.apply(header,Array.from(copy.childNodes));});node.append(header);
         }
         if(exhausted){
             node.style.position='absolute';node.style.top=gap.rowHeaderTop+'px';node.style.left='0';node.style.width='100%';node.style.height=(gap.header||0)+'px';
         }return node;
+    }
+    // A shared cut can precede different lines in its cells. Align each spacer to the planned page top after the browser has placed its anchor.
+    function alignRowHeaders(flow){
+        var page=flow.closest('.doc-paginated'),scale=Number(page.style.zoom)||1,origin=flow.getBoundingClientRect().top;
+        Array.from(flow.querySelectorAll('[data-row-header-top]')).sort(function(a,b){return Number(a.getAttribute('data-row-header-top'))-Number(b.getAttribute('data-row-header-top'));}).forEach(function(gap){
+            var header=gap.querySelector('.doc-cell-repeated-header');if(!header)return;
+            var delta=(origin+Number(gap.getAttribute('data-row-header-top'))*scale-header.getBoundingClientRect().top)/scale;
+            if(Math.abs(delta)<.05)return;
+            var space=gap.querySelector('.doc-cell-page-space');
+            if(space)space.style.height=Math.max(0,parseFloat(space.style.height)+delta)+'px';
+            else gap.style.top=(parseFloat(gap.style.top)||0)+delta+'px';
+        });
+    }
+    // The editable cells remain whole. Page furniture covers their paint between the last line of a piece and its next repeated header.
+    function paintRowBreaks(flow,d){
+        var page=flow.closest('.doc-paginated'),scale=Number(page.style.zoom)||1,origin=page.getBoundingClientRect(),groups=new Map();
+        page.querySelectorAll('.doc-table-gap-cover').forEach(function(node){node.remove();});
+        flow.querySelectorAll('[data-row-header-top]').forEach(function(gap){var key=gap.getAttribute('data-page-gap-key'),group=groups.get(key);if(!group){group=[];groups.set(key,group);}group.push(gap);});
+        groups.forEach(function(group){
+            var row=group[0].closest('tr'),table=row&&row.closest('table');if(!table)return;
+            var headers=group.map(function(gap){return gap.querySelector('.doc-cell-repeated-header');}).filter(Boolean);if(!headers.length)return;
+            var end=Math.min.apply(null,headers.map(function(header){return header.getBoundingClientRect().top;})),start=-Infinity;
+            var first=Math.min.apply(null,group.filter(function(gap){return getComputedStyle(gap).position!=='absolute';}).map(function(gap){return gap.getBoundingClientRect().top;}));
+            var walker=document.createTreeWalker(row,NodeFilter.SHOW_TEXT),text,range=document.createRange();
+            while((text=walker.nextNode())){if(!text.data.trim()||text.parentElement.closest('.doc-page-gap'))continue;range.selectNodeContents(text);Array.from(range.getClientRects()).forEach(function(rect){if(rect.width>0&&rect.bottom<=first+1)start=Math.max(start,rect.bottom);});}
+            if(!Number.isFinite(start)||end<=start)return;
+            var rect=table.getBoundingClientRect(),top=(start-origin.top)/scale+1,bottom=(end-origin.top)/scale,gutter=Math.floor(top/(d.height+GAP))*(d.height+GAP)+d.height-top;
+            var cover=document.createElement('div');cover.className='doc-table-gap-cover';cover.setAttribute('aria-hidden','true');cover.contentEditable='false';
+            cover.style.cssText='position:absolute;pointer-events:none;z-index:1;left:'+((rect.left-origin.left)/scale-1)+'px;top:'+top+'px;width:'+(rect.width/scale+2)+'px;height:'+(bottom-top)+'px;background-color:var(--doc-page);background-image:linear-gradient(to bottom,var(--doc-page) 0,var(--doc-page) '+Math.max(0,gutter)+'px,var(--sheet-gutter,var(--surface-alt)) '+Math.max(0,gutter)+'px,var(--sheet-gutter,var(--surface-alt)) '+Math.max(0,gutter+GAP)+'px,var(--doc-page) '+Math.max(0,gutter+GAP)+'px)';
+            page.append(cover);
+        });
     }
     function noteGaps(layout,blocks){
         var first=new Map(),added=new Map(),result=[];
@@ -448,6 +482,7 @@
                 raf = 0; if (!alive || v.isDestroyed) { return; }
                 var page = o.pagination && o.pagination();
                 if (!page || !v.dom.isConnected) {
+                    o.page.querySelectorAll('.doc-table-gap-cover').forEach(function(node){node.remove();});
                     release();
                     if (signature) { signature = ''; if (o.syncSelection) { o.syncSelection(); } v.dispatch(v.state.tr.setMeta(key, PM.DecorationSet.empty).setMeta('addToHistory', false)); }
                     return;
@@ -482,7 +517,7 @@
                         v.dispatch(v.state.tr.setMeta(key, PM.DecorationSet.create(v.state.doc, widgets)).setMeta('addToHistory', false));
                     }
                     measures.forEach(function (values, table) { columns(table, values.cells); });
-                    if (changed || furniture !== placed(v.dom)) { applyFlowGaps(v.dom, layout, blocks); applyPieces(v.dom, d); furniture = placed(v.dom); }
+                    if (changed || furniture !== placed(v.dom)) { applyFlowGaps(v.dom, layout, blocks); alignRowHeaders(v.dom); applyPieces(v.dom, d); paintRowBreaks(v.dom,d); furniture = placed(v.dom); }
                     ownSize = sizeOf(v.dom);
                 } catch (err) { if (o.paginationProblem) { o.paginationProblem(err.message); } }
             });
@@ -497,7 +532,7 @@
                 /* A picture or a font that arrives is real input, and one that the page's own gaps draw again (the copy of a repeated header) is not. It also changes how a table lays out by its content, so the measures of the tables are taken again. */
                 function loaded(e) { if (e && e.target && e.target.closest && e.target.closest('.doc-page-gap')) { return; } seenDoc=null;tableWidths=new WeakMap();schedule(v); }
                 v.dom.addEventListener('load', loaded, true); document.fonts.addEventListener('loadingdone', loaded); schedule(v);
-                return { update: function () { schedule(v); }, destroy: function () { alive = false; cancelAnimationFrame(raf); raf = 0; ro.disconnect(); v.dom.removeEventListener('load', loaded, true); document.fonts.removeEventListener('loadingdone', loaded); } };
+                return { update: function () { schedule(v); }, destroy: function () { alive = false; cancelAnimationFrame(raf); raf = 0; ro.disconnect(); o.page.querySelectorAll('.doc-table-gap-cover').forEach(function(node){node.remove();}); v.dom.removeEventListener('load', loaded, true); document.fonts.removeEventListener('loadingdone', loaded); } };
             }
         });
     }

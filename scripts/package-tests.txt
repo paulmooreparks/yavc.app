@@ -37,3 +37,4 @@ test-ref-definitions.cjs
 test-code-colouring.cjs
 test-document-layout-cycle.cjs
 test-table-editing.cjs
+test-row-gap-paint.cjs
