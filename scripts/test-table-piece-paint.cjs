@@ -26,9 +26,14 @@ async function pixels(page,description){
             return {index:h.index,edges:edge.map(([x,y])=>({x,y,rgb:rgb(x,y),filled:close(rgb(x,y),bg)})),ink,border,total};});
     },{png,d:description});
 }
-async function printCheck(page,engine,framed,report,failures){
+async function sourcePaint(page){
+    const row=page.locator('#document .doc-paginated > .ProseMirror table').first().locator('tr').first();await row.scrollIntoViewIfNeeded();
+    const d=await row.evaluate(row=>{const box=r=>({left:r.left,right:r.right,top:r.top,bottom:r.bottom});return {foot:-100,headers:[...row.cells].map((h,index)=>{const range=document.createRange(),walker=document.createTreeWalker(h,NodeFilter.SHOW_TEXT),text=[];let node;while((node=walker.nextNode())){if(!node.data.trim())continue;range.selectNodeContents(node);text.push(...[...range.getClientRects()].filter(r=>r.width>0&&r.height>0).map(box));}return {index,box:box(h.getBoundingClientRect()),column:box(h.getBoundingClientRect()),text,background:getComputedStyle(h).backgroundColor};})};});return pixels(page,d);
+}
+async function printCheck(page,engine,framed,report,failures,checkCells){
+    const ink=await sourcePaint(page);
     const reference=await page.evaluate(()=>{const table=document.querySelector('#document .doc-paginated > .ProseMirror table'),left=table.getBoundingClientRect().left;return [...table.rows[0].cells].map(c=>{const r=c.getBoundingClientRect();return {left:r.left-left,right:r.right-left,background:getComputedStyle(c).backgroundColor};});});
-    await page.evaluate(()=>{const append=document.body.append.bind(document.body);document.body.append=(...nodes)=>{append(...nodes);for(const node of nodes)if(node.tagName==='IFRAME')node.contentWindow.print=()=>{window.piecesPrinted=true;};};window.piecesPrintTask=pudlActions.run('yavc.docs/print@1',{}, {grant:'all'});});
+    await page.evaluate(()=>{window.piecesPrinted=false;const append=document.body.append.bind(document.body);document.body.append=(...nodes)=>{append(...nodes);for(const node of nodes)if(node.tagName==='IFRAME')node.contentWindow.print=()=>{window.piecesPrinted=true;};};window.piecesPrintTask=pudlActions.run('yavc.docs/print@1',{}, {grant:'all'});});
     await page.evaluate(()=>window.piecesPrintTask);assert.equal(await page.evaluate(()=>window.piecesPrinted),true,'table must print');
     const frame=page.locator('.ed-print-frame');await frame.evaluate(f=>{f.style.cssText='display:block!important;position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;z-index:100000!important;';});
     const sheets=page.frameLocator('.ed-print-frame').locator('.doc-print-sheet');
@@ -40,10 +45,23 @@ async function printCheck(page,engine,framed,report,failures){
         assert.deepEqual(d.headers.map(h=>h.title.trim()),['Step','Operator','Mapping','Outcome'],engine+': every printed piece repeats all titles');
         for(const h of d.headers){if(Math.abs(h.box.left-d.table.left-reference[h.index].left)>1||Math.abs(h.box.right-d.table.left-reference[h.index].right)>1)faults.push({fault:3,column:h.index,header:h.box,reference:reference[h.index]});if(d.content&&(h.box.left<d.content.left-1||h.box.right>d.content.right+1))faults.push({fault:5,column:h.index});}
         if(d.content&&(d.table.left<d.content.left-1||d.table.right>d.content.right+1))faults.push({fault:6,table:d.table,frame:d.content});
-        for(const p of paint){if(d.cut&&p.border<p.total*.8)faults.push({fault:1,column:p.index,border:p.border,total:p.total});if(p.edges.some(e=>!e.filled))faults.push({fault:2,column:p.index,edges:p.edges});if(p.ink<3)faults.push({fault:4,column:p.index,ink:p.ink});}
+        for(const p of paint){if(d.cut&&p.border<p.total*.8)faults.push({fault:1,column:p.index,border:p.border,total:p.total});if(p.edges.some(e=>!e.filled))faults.push({fault:2,column:p.index,edges:p.edges});if(p.ink<Math.max(3,ink[p.index].ink*.8))faults.push({fault:4,column:p.index,ink:p.ink,sourceInk:ink[p.index].ink});}
         report.push({engine,framed,print:i,description:d,paint,faults});if(faults.length)failures.push({engine,framed,print:i,faults});
     }
+    if(checkCells)assert.deepEqual(await page.frameLocator('.ed-print-frame').locator('body').evaluate(checkCells),[],engine+': printed unbroken text and pictures must remain within their cells');
     await frame.evaluate(f=>f.contentWindow.dispatchEvent(new Event('afterprint')));
+}
+async function checkUnbreakables(page,engine){
+    const image=await page.evaluate(()=>{const c=document.createElement('canvas');c.width=1800;c.height=600;const x=c.getContext('2d');x.fillStyle='#3377bb';x.fillRect(0,0,c.width,c.height);return c.toDataURL();});
+    const url='https://example.invalid/'+('invented-reference-'.repeat(18)),code='InventedUnbrokenMappingReference'.repeat(15);
+    const text=source(true).replace(words('Operator',7),words('Operator',7)+' ['+url+']('+url+') `'+code+'`').replace('\n\n{{/info}}','\n| Picture | Visible | Image | ![Invented wide picture]('+image+') |\n\n{{/info}}');
+    await page.evaluate(text=>pudlActions.run('yavc.docs/set-text@1',{text},{grant:'all'}),text);await page.locator('#document .ProseMirror img[alt="Invented wide picture"]').waitFor();await page.evaluate(()=>document.querySelector('#document .ProseMirror img[alt="Invented wide picture"]').decode());await settle(page);
+    const inspect=pm=>{const bad=[];for(const cell of pm.querySelectorAll('td,th')){if(cell.closest('.doc-page-gap'))continue;const box=cell.getBoundingClientRect(),walker=document.createTreeWalker(cell,NodeFilter.SHOW_TEXT),range=document.createRange();let node;while((node=walker.nextNode())){if(!node.data.trim()||node.parentElement.closest('.doc-page-gap'))continue;range.selectNodeContents(node);for(const r of range.getClientRects())if(r.width>0&&(r.left<box.left-1||r.right>box.right+1))bad.push({kind:'text',text:node.data.slice(0,30),left:r.left,right:r.right,cell:{left:box.left,right:box.right}});}for(const img of cell.querySelectorAll('img:not(.ProseMirror-separator)')){const r=img.getBoundingClientRect();if(r.width<1||r.left<box.left-1||r.right>box.right+1)bad.push({kind:'image',left:r.left,right:r.right,cell:{left:box.left,right:box.right}});}}return bad;};
+    assert.deepEqual(await page.locator('#document .doc-paginated > .ProseMirror').evaluate(inspect),[],engine+': unbroken text and pictures must remain within their cells');
+    const picture=page.locator('#document .ProseMirror img[alt="Invented wide picture"]');await picture.scrollIntoViewIfNeeded();const r=await picture.boundingBox(),png=(await page.screenshot()).toString('base64');
+    const visible=await page.evaluate(async({png,r})=>{const image=new Image();image.src='data:image/png;base64,'+png;await image.decode();const c=document.createElement('canvas');c.width=image.width;c.height=image.height;const ctx=c.getContext('2d');ctx.drawImage(image,0,0);return [.1,.5,.9].every(f=>{const p=ctx.getImageData(Math.round(r.x+r.width*f),Math.round(r.y+r.height/2),1,1).data;return Math.abs(p[0]-51)<10&&Math.abs(p[1]-119)<10&&Math.abs(p[2]-187)<10;});},{png,r});assert.ok(visible,engine+': the resized picture must remain visibly painted across its width');
+    const printFailures=[];await printCheck(page,engine,true,[],printFailures,inspect);assert.deepEqual(printFailures,[],engine+': unbreakable content must print within its frame');
+    console.log(engine+' framed URL, code and 1800-pixel picture: wrapped or resized inside cells and picture pixels visible');
 }
 (async()=>{
     const manifest=JSON.parse(await fs.readFile(path.join(artifact,'manifest.json'),'utf8')),allowed=new Set(manifest.files.map(f=>f.path));let text='';
@@ -53,15 +71,17 @@ async function printCheck(page,engine,framed,report,failures){
         text=source(framed);const page=await browser.newPage({viewport:{width:1620,height:1100}});page.setDefaultTimeout(30000);
         try{await page.goto(`http://127.0.0.1:${server.address().port}${prefix}workspace-lab/index.html?apps=docs`);await page.locator('#document .doc-cell-repeated-header').first().waitFor({state:'attached'});await page.evaluate(()=>document.fonts.ready);await settle(page);
             const keys=await page.evaluate(()=>[...new Set([...document.querySelectorAll('#document [data-page-gap-key]')].filter(g=>g.querySelector('.doc-cell-repeated-header')).map(g=>g.dataset.pageGapKey))]);assert.ok(keys.length>=3,'fixture must cross at least three page breaks');
+            const ink=await sourcePaint(page);
             for(const key of keys){const painted=page.locator('.doc-row-repeated-header[data-page-gap-key="'+key+'"]'),gap=await painted.count()?painted:page.locator('#document [data-page-gap-key="'+key+'"] .doc-cell-repeated-header').first();await gap.scrollIntoViewIfNeeded();const d=await page.evaluate(describe,key),paint=await pixels(page,d),faults=[];
                 for(const h of d.headers){if(Math.abs(h.box.left-h.column.left)>1||Math.abs(h.box.right-h.column.right)>1)faults.push({fault:3,column:h.index,header:h.box,columnBox:h.column});if(d.content&&(h.box.left<d.content.left-1||h.box.right>d.content.right+1))faults.push({fault:5,column:h.index,header:h.box,frame:d.content});}
                 if(d.content&&(d.table.left<d.content.left-1||d.table.right>d.content.right+1))faults.push({fault:6,table:d.table,frame:d.content});
-                for(const p of paint){if(p.border<p.total*.8)faults.push({fault:1,column:p.index,border:p.border,total:p.total});if(p.edges.some(e=>!e.filled))faults.push({fault:2,column:p.index,edges:p.edges});if(p.ink<3)faults.push({fault:4,column:p.index,ink:p.ink});}
+                for(const p of paint){if(p.border<p.total*.8)faults.push({fault:1,column:p.index,border:p.border,total:p.total});if(p.edges.some(e=>!e.filled))faults.push({fault:2,column:p.index,edges:p.edges});if(p.ink<Math.max(3,ink[p.index].ink*.8))faults.push({fault:4,column:p.index,ink:p.ink,sourceInk:ink[p.index].ink});}
                 report.push({engine,framed,key,description:d,paint,faults});if(faults.length)failures.push({engine,framed,key,faults});
             }
             await page.screenshot({path:path.join(process.env.TEMP,'yavc-table-piece-'+engine+'-'+(framed?'framed':'plain')+'.png'),fullPage:true});
             console.log(engine+' '+(framed?'framed':'plain')+' '+keys.length+' cuts: '+JSON.stringify([...new Set(report.filter(r=>r.engine===engine&&r.framed===framed).flatMap(r=>r.faults.map(f=>f.fault)))]));
             await printCheck(page,engine,framed,report,failures);
+            if(framed)await checkUnbreakables(page,engine);
         }finally{await page.close();}
     }}finally{await browser.close();}}}finally{await new Promise(r=>server.close(r));await fs.writeFile(path.join(process.env.TEMP,'yavc-table-piece-report.json'),JSON.stringify(report,null,2));}
     assert.deepEqual(failures,[],JSON.stringify(failures.slice(0,3)));
