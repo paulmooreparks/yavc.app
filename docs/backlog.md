@@ -4,6 +4,7 @@ This page lists the defects and gaps the yavc.app team has found and not yet fix
 
 ## Docs and Editor, page view
 
+- **A framed four-column table has three visual faults after a page cut.** In GK's invented v0.2.101 fixture, only the last repeated-header title ("Outcome") is visible, the header sits outside the frame above its left edge, and the table extends past the frame's right edge; geometry checks pass, so add a pixel check for every repeated-header title and checks for frame containment when Paul or Dinah Team Lead schedules the work (messages 10402 and 10404; read-only evidence at `%TEMP%\gkc-docs-02101-page-break\invented-break.png`).
 - **Typing `---` and Enter does not make a rule.** The three characters stay as text. Found with the previous items.
 - **PDF export has no right-to-left layout.** pdfmake has no such layout and the Roboto font it uses has no Hebrew or Arabic glyphs, so a PDF export refuses a document with such text. Left over from the right-to-left work (decision 155).
 - **Typing right-to-left text is not tested.** The right-to-left test reads a document and checks how it is drawn, printed and exported, and does not type Hebrew or Arabic into the page or the Text view. Left over from decision 155.
