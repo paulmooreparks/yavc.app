@@ -279,7 +279,9 @@
             var old=table.querySelector(':scope > colgroup[data-doc-fit-columns]');if(old){old.remove();table.classList.remove('doc-table-constrained');if(entry.width)table.style.setProperty('width',entry.width,entry.widthPriority);else table.style.removeProperty('width');if(entry.layout)table.style.setProperty('table-layout',entry.layout,entry.layoutPriority);else table.style.removeProperty('table-layout');}
             if(table.querySelector(':scope > colgroup'))return;
             var rect=table.getBoundingClientRect();if(rect.width/scale<=available+.5)return;
-            var cells=table.rows[0]&&Array.from(table.rows[0].cells);if(!cells||!cells.length)return;var widths=cells.map(function(cell){return cell.getBoundingClientRect().width/scale;}),total=widths.reduce(function(a,b){return a+b;},0),border=Math.max(0,rect.width/scale-total),cols=document.createElement('colgroup');cols.setAttribute('data-doc-fit-columns','');widths.forEach(function(width){var col=document.createElement('col');col.style.width=(width*(available-border)/total)+'px';cols.append(col);});table.prepend(cols);table.classList.add('doc-table-constrained');table.style.width=available+'px';table.style.tableLayout='fixed';
+            var cells=table.rows[0]&&Array.from(table.rows[0].cells);if(!cells||!cells.length)return;
+            table.classList.add('doc-table-constrained');table.style.width=available+'px';table.style.tableLayout='auto';
+            var widths=cells.map(function(cell){return cell.getBoundingClientRect().width/scale;}),cols=document.createElement('colgroup');cols.setAttribute('data-doc-fit-columns','');widths.forEach(function(width){var col=document.createElement('col');col.style.width=width+'px';cols.append(col);});table.prepend(cols);table.style.tableLayout='fixed';
         });
     }
     /* A frame that a page gap runs through is drawn as pieces (docs/host-shortcodes-contract.md, "Long shortcodes across pages"). The frame stays one
@@ -465,7 +467,7 @@
             var ancestors=[],ancestor=table.parentElement,container=holder;while(ancestor&&ancestor!==v.dom){ancestors.unshift(ancestor);ancestor=ancestor.parentElement;}
             ancestors.forEach(function(source){var shell=source.cloneNode(false);shell.removeAttribute('id');container.append(shell);container=shell;});container.append(copy);parent.append(holder);
             try{var row=copy.rows[0];if(!row)return null;var css=getComputedStyle(container),available=(container.clientWidth-(parseFloat(css.paddingLeft)||0)-(parseFloat(css.paddingRight)||0)),width=copy.getBoundingClientRect().width/scale,cells=Array.from(row.cells).map(function(cell){return cell.getBoundingClientRect().width/scale;});
-                var constrained=width>available+.5;if(constrained){var total=cells.reduce(function(sum,value){return sum+value;},0),border=Math.max(0,width-total);cells=cells.map(function(value){return value*(available-border)/total;});width=available;}
+                var constrained=width>available+.5;if(constrained){copy.classList.add('doc-table-constrained');copy.style.width=available+'px';width=copy.getBoundingClientRect().width/scale;cells=Array.from(row.cells).map(function(cell){return cell.getBoundingClientRect().width/scale;});}
                 return {width:width,cells:cells,constrained:constrained};}
             finally{holder.remove();}
         }
