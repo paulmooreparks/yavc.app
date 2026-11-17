@@ -4,6 +4,7 @@ import json
 import re
 import shutil
 import stat
+import subprocess
 import tempfile
 import unittest
 import warnings
@@ -130,13 +131,15 @@ class ReleaseRecordTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "differs from the build declarations"):
             self.check()
 
-    def test_summary_matches_documented_keys_types_and_pin_values(self):
+    @patch.object(release.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, b"", b""))
+    def test_summary_matches_documented_keys_types_and_trust_values(self, verify):
         section = (release.ROOT / "docs/release-record.md").read_text(encoding="utf-8").split("## Checker summary contract\n", 1)[1].split("\n## ", 1)[0]
         fields = dict(re.findall(r"^\| `([^`]+)` \| (integer|boolean|string|object|array) \|", section, re.MULTILINE))
         self.assertTrue(fields)
         types = {"integer": int, "boolean": bool, "string": str, "object": dict, "array": list}
-        for pin in (None, release.file_hash(self.record_path)):
-            summary = release.check_record(str(self.record_path), self.assets, pinned_hash=pin)
+        for pin, attestation in ((None, False), (release.file_hash(self.record_path), False),
+                                 (None, True), (release.file_hash(self.record_path), True)):
+            summary = release.check_record(str(self.record_path), self.assets, pinned_hash=pin, attestation=attestation)
             flattened = {}
             def visit(value, prefix=""):
                 for name, item in value.items():
@@ -150,6 +153,7 @@ class ReleaseRecordTests(unittest.TestCase):
                 self.assertIs(type(flattened[name]), types[kind], name)
             self.assertEqual(summary["summarySchema"], 1)
             self.assertIs(summary["trustedPinVerified"], pin is not None)
+            self.assertIs(summary["attestationVerified"], attestation)
             self.assertTrue(summary["verified"])
             record = release.read_json(self.record_path)
             self.assertEqual(summary["pudl"], record["pudl"])
@@ -159,6 +163,55 @@ class ReleaseRecordTests(unittest.TestCase):
             self.assertEqual(summary["qualifications"], record["qualifications"])
             for profile in ("full", "docs"):
                 self.assertEqual(summary["packages"][profile], {key: record["packages"][profile][key] for key in ("contentDigest", "fileCount")})
+        self.assertEqual(verify.call_count, 6)
+
+    def test_attestation_binds_each_subject_to_the_release_identity(self):
+        with patch.object(release.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, b"", b"")) as verify:
+            summary = release.check_record(str(self.record_path), self.assets, attestation=True)
+        self.assertTrue(summary["attestationVerified"])
+        self.assertFalse(summary["trustedPinVerified"])
+        subjects = [self.record_path] + [self.assets / release.package_names(self.tag, profile)[0] for profile in ("full", "docs")]
+        self.assertEqual(len(verify.call_args_list), 3)
+        for call, subject in zip(verify.call_args_list, subjects):
+            self.assertEqual(call.args[0], ["gh", "attestation", "verify", str(subject), "--hostname", "github.com",
+                "--repo", "paulmooreparks/yavc.app",
+                "--cert-identity", "https://github.com/paulmooreparks/yavc.app/.github/workflows/content-release.yml@refs/tags/" + self.tag,
+                "--cert-oidc-issuer", "https://token.actions.githubusercontent.com", "--source-ref", "refs/tags/" + self.tag,
+                "--source-digest", "a" * 40, "--predicate-type", "https://slsa.dev/provenance/v1"])
+            self.assertTrue(call.kwargs["capture_output"])
+            self.assertNotIn("shell", call.kwargs)
+            self.assertEqual(call.kwargs["creationflags"], subprocess.CREATE_NO_WINDOW if release.os.name == "nt" else 0)
+
+    def test_each_failed_attestation_blocks_even_with_a_valid_pin(self):
+        for failed_subject in range(3):
+            with self.subTest(subject=failed_subject):
+                results = [subprocess.CompletedProcess([], 0, b"", b"")] * failed_subject
+                results.append(subprocess.CompletedProcess([], 1, b"", b"no matching signed provenance"))
+                target = self.root / "not-accepted"
+                with patch.object(release.subprocess, "run", side_effect=results) as verify:
+                    with self.assertRaisesRegex(ValueError, "Attestation verification failed.*no matching signed provenance"):
+                        release.check_record(str(self.record_path), self.assets, target, release.file_hash(self.record_path), True)
+                self.assertEqual(verify.call_count, failed_subject + 1)
+                self.assertFalse(target.exists())
+
+    def test_missing_cli_and_timeout_block_attestation(self):
+        for error in (FileNotFoundError("gh unavailable"), subprocess.TimeoutExpired("gh", 120)):
+            with self.subTest(error=type(error).__name__):
+                with patch.object(release.subprocess, "run", side_effect=error):
+                    with self.assertRaises(type(error)):
+                        release.check_record(str(self.record_path), self.assets, attestation=True)
+
+    def test_byte_checks_do_not_call_gh_without_attestation(self):
+        with patch.object(release.subprocess, "run", side_effect=AssertionError("unexpected gh call")):
+            self.assertFalse(self.check()["attestationVerified"])
+
+    def test_successful_record_attestation_cannot_override_tampered_bytes(self):
+        archive = self.assets / release.package_names(self.tag, "full")[0]
+        archive.write_bytes(archive.read_bytes() + b"tampered")
+        with patch.object(release.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, b"", b"")) as verify:
+            with self.assertRaisesRegex(ValueError, "ZIP size mismatch"):
+                release.check_record(str(self.record_path), self.assets, attestation=True)
+        self.assertEqual(verify.call_count, 1)
 
     def test_bad_record_checksum_and_pin(self):
         with self.assertRaisesRegex(ValueError, "Pinned"):

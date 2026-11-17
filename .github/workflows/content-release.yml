@@ -7,6 +7,8 @@ on:
 
 permissions:
   contents: write
+  id-token: write
+  attestations: write
 
 jobs:
   content:
@@ -47,6 +49,13 @@ jobs:
             --workflow-run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
       - name: Verify the record and packages before publishing
         run: python3 scripts/release_record.py check "$RUNNER_TEMP/release-assets/yavc-release-$GITHUB_REF_NAME.json" --assets-dir "$RUNNER_TEMP/release-assets"
+      - name: Attest the record and both packages
+        uses: actions/attest-build-provenance@43d14bc2b83dec42d39ecae14e916627a18bb661 # v3
+        with:
+          subject-path: |
+            ${{ runner.temp }}/release-assets/yavc-release-${{ github.ref_name }}.json
+            ${{ runner.temp }}/release-assets/yavc-content-${{ github.ref_name }}.zip
+            ${{ runner.temp }}/release-assets/yavc-content-docs-${{ github.ref_name }}.zip
       - name: Publish immutable download assets
         env:
           GH_TOKEN: ${{ github.token }}

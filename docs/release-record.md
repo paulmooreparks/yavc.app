@@ -50,7 +50,7 @@ The digest is the existing `cmd/yavc-content` manifest digest, which Tester reco
 
 The record contains this explanation in `readme.contentDigest`. Current package paths make Tester's Node compact-JSON calculation agree with Go. The Python checker also implements and tests Go's escaping, so correctness does not depend on those characters being absent from future paths. The manifest's other properties, including `profile`, are outside the content digest. The external manifest's separate SHA-256 protects all of its bytes, and the checker requires the internal manifest to be identical.
 
-The record sidecar is one ordinary checksum line: `HEX`, two spaces, the record basename, and a newline. Its digest covers the record's entire original UTF-8 file, including the final newline. The sidecar detects download corruption but is not a signature. A receiving project should pin the record SHA-256 through its trusted dependency process and pass that pin to the checker.
+The record sidecar is one ordinary checksum line: `HEX`, two spaces, the record basename, and a newline. Its digest covers the record's entire original UTF-8 file, including the final newline. The sidecar detects download corruption but is not a signature. A receiving project can pin the record SHA-256 through its trusted dependency process or require GitHub provenance using `--attestation`.
 
 ## Consumer checker
 
@@ -72,6 +72,20 @@ The checker verifies the record checksum and optional trusted pin, both ZIP hash
 
 A successful check exits zero and prints JSON containing `verified: true`, the version, source commit, record SHA-256, both content digests/counts and all qualifications. A mismatch, failed download or malformed input exits nonzero. Verification establishes byte identity and provenance consistency; it does not establish that a qualification is acceptable to the receiving product or that the applets work in that product.
 
+### Attestation verification
+
+Content releases produced with the attestation workflow publish signed provenance for the record and both ZIPs to GitHub's attestations API. A consumer can require all three proofs instead of supplying a record pin:
+
+```text
+python scripts/release_record.py check v0.2.106 --attestation
+```
+
+This mode also needs an authenticated GitHub CLI with the documented `--source-ref`, `--source-digest` and `--hostname` verification options. Use `gh auth login` or supply the CLI's `GH_TOKEN` through the consumer's existing credentials. The checker invokes [gh attestation verify](https://cli.github.com/manual/gh_attestation_verify) for each subject, requiring repository `paulmooreparks/yavc.app`, signer workflow `.github/workflows/content-release.yml`, the exact certificate identity `https://github.com/paulmooreparks/yavc.app/.github/workflows/content-release.yml@refs/tags/TAG`, GitHub's Actions OIDC issuer, SLSA provenance v1, source ref `refs/tags/TAG` and the record's full source commit. It uses the CLI's documented verification exit status, without interpreting its presentation output. The repository and workflow trust policy are constants in the pinned checker, rather than fields supplied by the record.
+
+The record proof is checked before fetching its packages. Both ZIP proofs must also succeed before the checker retains extracted output or emits a successful summary. Byte and manifest checks remain mandatory in this mode. Missing proofs, a wrong workflow, tag or commit, an unavailable or incompatible CLI, authentication failure and verification timeout all fail the check. A valid SHA pin cannot override a failed requested attestation. Supplying both options requires both to succeed. Local `--assets-dir` avoids package downloads but attestation lookup still uses GitHub's API; this option does not provide offline proof bundles.
+
+`attestationVerified` is true only after all three requested verifications succeed. `trustedPinVerified` retains its existing SHA-pin meaning, so an attestation-only check has `attestationVerified: true` and `trustedPinVerified: false`. Consumers accept whichever trust method their adoption policy requires and keep the checker revision and record digest in their adoption record. Releases through v0.2.105 have no such proofs and fail when this option is requested; the checker never falls back silently.
+
 ## Checker summary contract
 
 The summary has its own integer `summarySchema`, initially `1`. Consumers must reject unsupported summary schemas and ignore unknown fields within summary schema 1. Existing fields are never removed or renamed, and their types and meanings do not change. The following table lists every field currently emitted, including nested objects. Array contents use the record's existing qualifications contract.
@@ -81,6 +95,7 @@ The summary has its own integer `summarySchema`, initially `1`. Consumers must r
 | `summarySchema` | integer | The value is `1`. |
 | `verified` | boolean | The downloaded bytes and recorded package/distribution digests agree. |
 | `trustedPinVerified` | boolean | This is true only when a supplied `--sha256` pin matched; it is false without a supplied pin. |
+| `attestationVerified` | boolean | This is true only when `--attestation` was requested and the record and both ZIPs passed the fixed release provenance policy. It is false otherwise. |
 | `version` | string | The verified record's release tag. |
 | `commit` | string | The verified record's source commit. |
 | `recordSha256` | string | The digest of the record's original bytes. |
@@ -99,7 +114,7 @@ The summary has its own integer `summarySchema`, initially `1`. Consumers must r
 | `pudl.provenanceFile` | string | The repository provenance file used by the generator. |
 | `qualifications` | array | The complete qualifications copied from the record. |
 
-The test reads this table and checks the summary's keys and types against it, in both pinned and unpinned modes. Both modes verify the same bytes. `verified` alone does not establish a trusted pin. A mismatched supplied pin fails instead of emitting a successful summary. Attestation-based pinning is deferred to a follow-up PR.
+The test reads this table and checks the summary's keys and types against it with neither trust option, each option individually and both together. These modes verify the same bytes. `verified` alone does not establish a trusted pin or signed provenance. A mismatched supplied pin or failed requested attestation fails instead of emitting a successful summary.
 
 ## Pinning the checker revision
 
@@ -107,6 +122,6 @@ A consumer fetches `scripts/release_record.py` at the release's own source commi
 
 ## Producer and verification
 
-`content-release.yml` creates both packages, generates the record and sidecar, then runs the same consumer checker against the local release assets before publishing. PUDL's upstream archive is fetched into temporary storage for that verification and is not added to the YAVC release. The existing publish step uploads all eight YAVC assets together without replacing any asset. PR checks run the invented-fixture unit and tamper cases in `scripts/test_release_record.py`.
+`content-release.yml` creates both packages, generates the record and sidecar, then runs the same consumer checker against the local release assets before publishing. PUDL's upstream archive is fetched into temporary storage for that verification and is not added to the YAVC release. The workflow uses [actions/attest-build-provenance](https://github.com/actions/attest-build-provenance/tree/v3), pinned to its reviewed v3 commit, with `id-token: write` and `attestations: write`. Its subject list names only the record and two ZIPs. Attestation runs after byte verification and before publication, so a signing failure blocks the upload. GitHub stores the proofs through its attestations API; the eight release asset names and record schema remain unchanged. The publish step refuses replacement of any asset. PR checks run the invented-fixture unit and tamper cases in `scripts/test_release_record.py`, including mocked CLI success and failure paths. The first release using this workflow still needs a live `--attestation` acceptance run after publication.
 
 v0.2.104 predates this record. Its existing six assets are unchanged. Local acceptance reconstructs a record from those published assets to exercise the new checker; that fixture is never uploaded to the historical release. The acceptance results and tamper failure are recorded in the PR before handoff.

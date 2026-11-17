@@ -316,7 +316,22 @@ def verify_pudl(archive, provenance, manifests):
         require(packaged == files, "Packaged PUDL differs from its upstream archive")
 
 
-def check_record(record_or_tag, assets_dir=None, output_dir=None, pinned_hash=None):
+def verify_attestation(artifact, record):
+    workflow = REPOSITORY + "/.github/workflows/content-release.yml"
+    ref = "refs/tags/" + record["version"]
+    command = ["gh", "attestation", "verify", str(artifact), "--hostname", "github.com",
+               "--repo", REPOSITORY,
+               "--cert-identity", "https://github.com/" + workflow + "@" + ref,
+               "--cert-oidc-issuer", "https://token.actions.githubusercontent.com",
+               "--source-ref", ref, "--source-digest", record["commit"],
+               "--predicate-type", "https://slsa.dev/provenance/v1"]
+    result = subprocess.run(command, capture_output=True, timeout=120,
+                            creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
+    require(result.returncode == 0, "Attestation verification failed for " + artifact.name + ": " +
+            result.stderr.decode("utf-8", errors="replace").strip())
+
+
+def check_record(record_or_tag, assets_dir=None, output_dir=None, pinned_hash=None, attestation=False):
     with tempfile.TemporaryDirectory(prefix="yavc-release-check-") as scratch:
         scratch = Path(scratch)
         if Path(record_or_tag).is_file():
@@ -333,6 +348,8 @@ def check_record(record_or_tag, assets_dir=None, output_dir=None, pinned_hash=No
         validate_record(record)
         tag = record["version"]
         require(record_path.name == "yavc-release-" + tag + ".json", "Release-record filename/tag mismatch")
+        if attestation:
+            verify_attestation(record_path, record)
         assets = Path(assets_dir).resolve() if assets_dir else scratch / "assets"
         if not assets_dir:
             assets.mkdir()
@@ -353,6 +370,9 @@ def check_record(record_or_tag, assets_dir=None, output_dir=None, pinned_hash=No
             upstream = scratch / pudl_name
             download("https://github.com/paulmooreparks/pudl/releases/download/" + pudl["tag"] + "/" + pudl_name, upstream, MAX_TOTAL)
         verify_pudl(upstream, pudl, manifests)
+        if attestation:
+            for profile in ("full", "docs"):
+                verify_attestation(assets / record["packages"][profile]["fileName"], record)
         if output_dir:
             target = Path(output_dir)
             require(not target.exists(), "Output directory must not exist")
@@ -362,7 +382,7 @@ def check_record(record_or_tag, assets_dir=None, output_dir=None, pinned_hash=No
         return {"summarySchema": 1, "version": tag, "commit": record["commit"], "recordSha256": digest, "pudl": record["pudl"],
                 "packages": {profile: {"contentDigest": record["packages"][profile]["contentDigest"], "fileCount": len(manifest["files"])}
                              for profile, manifest in zip(("full", "docs"), manifests)}, "qualifications": record["qualifications"],
-                "verified": True, "trustedPinVerified": pinned_hash is not None}
+                "verified": True, "trustedPinVerified": pinned_hash is not None, "attestationVerified": attestation}
 
 
 def main():
@@ -379,13 +399,14 @@ def main():
     check.add_argument("--assets-dir", type=Path)
     check.add_argument("--output-dir", type=Path)
     check.add_argument("--sha256", help="An independently pinned release-record SHA-256")
+    check.add_argument("--attestation", action="store_true", help="Require GitHub provenance for the record and both ZIPs (needs a current authenticated gh CLI)")
     args = parser.parse_args()
     try:
         if args.command == "create":
             print(create_record(args.assets_dir, args.source_root, args.tag, args.commit, args.workflow_run_url))
         else:
-            print(json.dumps(check_record(args.record_or_tag, args.assets_dir, args.output_dir, args.sha256), indent=2))
-    except (OSError, ValueError, KeyError, TypeError, zipfile.BadZipFile, RuntimeError) as error:
+            print(json.dumps(check_record(args.record_or_tag, args.assets_dir, args.output_dir, args.sha256, args.attestation), indent=2))
+    except (OSError, ValueError, KeyError, TypeError, zipfile.BadZipFile, RuntimeError, subprocess.TimeoutExpired) as error:
         print("Release verification failed: " + str(error), file=sys.stderr)
         return 1
     return 0
