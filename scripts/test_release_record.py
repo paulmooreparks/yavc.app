@@ -131,7 +131,7 @@ class ReleaseRecordTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "differs from the build declarations"):
             self.check()
 
-    @patch.object(release.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, b"", b""))
+    @patch.object(release.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, b"gh version 2.104.0 (2026-11-12)\n", b""))
     def test_summary_matches_documented_keys_types_and_trust_values(self, verify):
         section = (release.ROOT / "docs/release-record.md").read_text(encoding="utf-8").split("## Checker summary contract\n", 1)[1].split("\n## ", 1)[0]
         fields = dict(re.findall(r"^\| `([^`]+)` \| (integer|boolean|string|object|array) \|", section, re.MULTILINE))
@@ -163,16 +163,17 @@ class ReleaseRecordTests(unittest.TestCase):
             self.assertEqual(summary["qualifications"], record["qualifications"])
             for profile in ("full", "docs"):
                 self.assertEqual(summary["packages"][profile], {key: record["packages"][profile][key] for key in ("contentDigest", "fileCount")})
-        self.assertEqual(verify.call_count, 6)
+        self.assertEqual(verify.call_count, 8)
 
     def test_attestation_binds_each_subject_to_the_release_identity(self):
-        with patch.object(release.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, b"", b"")) as verify:
+        with patch.object(release.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, b"gh version 2.104.0 (2026-11-12)\n", b"")) as verify:
             summary = release.check_record(str(self.record_path), self.assets, attestation=True)
         self.assertTrue(summary["attestationVerified"])
         self.assertFalse(summary["trustedPinVerified"])
         subjects = [self.record_path] + [self.assets / release.package_names(self.tag, profile)[0] for profile in ("full", "docs")]
-        self.assertEqual(len(verify.call_args_list), 3)
-        for call, subject in zip(verify.call_args_list, subjects):
+        self.assertEqual(len(verify.call_args_list), 4)
+        self.assertEqual(verify.call_args_list[0].args[0], ["gh", "--version"])
+        for call, subject in zip(verify.call_args_list[1:], subjects):
             self.assertEqual(call.args[0], ["gh", "attestation", "verify", str(subject), "--hostname", "github.com",
                 "--repo", "paulmooreparks/yavc.app",
                 "--cert-identity", "https://github.com/paulmooreparks/yavc.app/.github/workflows/content-release.yml@refs/tags/" + self.tag,
@@ -185,13 +186,14 @@ class ReleaseRecordTests(unittest.TestCase):
     def test_each_failed_attestation_blocks_even_with_a_valid_pin(self):
         for failed_subject in range(3):
             with self.subTest(subject=failed_subject):
-                results = [subprocess.CompletedProcess([], 0, b"", b"")] * failed_subject
+                results = [subprocess.CompletedProcess([], 0, b"gh version 2.104.0\n", b"")]
+                results += [subprocess.CompletedProcess([], 0, b"", b"")] * failed_subject
                 results.append(subprocess.CompletedProcess([], 1, b"", b"no matching signed provenance"))
                 target = self.root / "not-accepted"
                 with patch.object(release.subprocess, "run", side_effect=results) as verify:
                     with self.assertRaisesRegex(ValueError, "Attestation verification failed.*no matching signed provenance"):
                         release.check_record(str(self.record_path), self.assets, target, release.file_hash(self.record_path), True)
-                self.assertEqual(verify.call_count, failed_subject + 1)
+                self.assertEqual(verify.call_count, failed_subject + 2)
                 self.assertFalse(target.exists())
 
     def test_missing_cli_and_timeout_block_attestation(self):
@@ -208,10 +210,36 @@ class ReleaseRecordTests(unittest.TestCase):
     def test_successful_record_attestation_cannot_override_tampered_bytes(self):
         archive = self.assets / release.package_names(self.tag, "full")[0]
         archive.write_bytes(archive.read_bytes() + b"tampered")
-        with patch.object(release.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, b"", b"")) as verify:
+        with patch.object(release.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, b"gh version 2.104.0\n", b"")) as verify:
             with self.assertRaisesRegex(ValueError, "ZIP size mismatch"):
                 release.check_record(str(self.record_path), self.assets, attestation=True)
-        self.assertEqual(verify.call_count, 1)
+        self.assertEqual(verify.call_count, 2)
+
+    def test_old_gh_fails_before_any_download_or_verification(self):
+        for version in ("2.53.0", "2.103.9", "2.99.0"):
+            with self.subTest(version=version):
+                with patch.object(release.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, ("gh version " + version + " (date)\n").encode(), b"")) as cli:
+                    with patch.object(release, "download", side_effect=AssertionError("unexpected download")):
+                        with self.assertRaisesRegex(ValueError, "^" + re.escape("--attestation needs gh 2.104.0 or later; found " + version) + "$"):
+                            release.check_record(self.tag, attestation=True)
+                self.assertEqual(cli.call_count, 1)
+                self.assertEqual(cli.call_args.args[0], ["gh", "--version"])
+                self.assertEqual(cli.call_args.kwargs["creationflags"], subprocess.CREATE_NO_WINDOW if release.os.name == "nt" else 0)
+
+    def test_minimum_and_newer_stable_gh_versions_pass(self):
+        for version in ("2.104.0", "2.104.1", "2.105.0", "3.0.0"):
+            with self.subTest(version=version):
+                with patch.object(release.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, ("gh version " + version + " (date)\n").encode(), b"")):
+                    release.require_attestation_cli()
+
+    def test_unreadable_or_prerelease_version_fails_without_usage_dump(self):
+        for result in (subprocess.CompletedProcess([], 1, b"", b"usage dump\nmore details"),
+                       subprocess.CompletedProcess([], 0, b"unexpected version text", b""),
+                       subprocess.CompletedProcess([], 0, b"gh version 2.104.0-dev\n", b"")):
+            with self.subTest(output=result.stdout):
+                with patch.object(release.subprocess, "run", return_value=result):
+                    with self.assertRaisesRegex(ValueError, r"^--attestation needs gh 2\.104\.0 or later; could not read a stable gh version$"):
+                        release.require_attestation_cli()
 
     def test_bad_record_checksum_and_pin(self):
         with self.assertRaisesRegex(ValueError, "Pinned"):
