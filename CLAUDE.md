@@ -32,3 +32,9 @@ When you fix a problem that could come back, add a rule or a test that would hav
 ## The site tests
 
 The workflow `site tests` runs the tests listed in `scripts/site-tests.txt` in Chromium on every push to main, each against a fresh server (`node scripts/run-site-tests.mjs`, after building `yavc` and the two wasm engines). When you repair a test that is not listed, add it to that file in the same pull request. A change to an applet should also run that applet's own site and package tests before it is reported.
+
+### The verification gate
+
+CI's full matrix on the PR head is the authoritative gate. Locally, run the tests the change touches and the applet's own site and package tests. A full local run is needed only when it checks an environment CI does not have, such as Windows WebKit. A vendored PUDL update verified file by file against PUDL's published manifest needs no full local run.
+
+The one-rerun rule applies only to a failing test assertion or timeout on unchanged inputs. Keep both results, and record the test, browser, both runs and an owner in docs/backlog.md. Describe the failure as unexplained unless its cause is known; a passing rerun does not establish that it was unrelated. A missing test record, ledger mismatch, digest or integrity mismatch, or failed build or packaging step blocks the gate and cannot be rerun away.
