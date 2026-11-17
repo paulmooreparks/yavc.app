@@ -10,6 +10,8 @@ Each release supplies these assets, where `VERSION` includes the leading `v`:
 
 The download prefix is `https://github.com/paulmooreparks/yavc.app/releases/download/VERSION/`. A receiving build should pin the immutable source tag/commit, ZIP SHA-256 and manifest digest in its own dependency configuration. The published checksum file helps verify a download; it does not replace a trusted dependency pin. After extraction into a new directory, compare the internal and external manifests, verify the aggregate digest and every listed file length/hash, and reject duplicate or escaping paths before serving assets. Preserve the prior package and adapter for rollback.
 
+New releases also publish `yavc-release-VERSION.json` and its `.json.sha256` sidecar. The [release record format and consumer checker](release-record.md) bind both profiles to their source commit, verified PUDL provenance and maintained qualifications. Older releases retain their existing assets.
+
 `go run ./cmd/yavc-content -out <new-output> -zip <new-archive.zip>` creates the same package locally. The archiver validates the sorted manifest, paths, sizes and source hashes, refuses symlinks and existing archives, and writes only listed files plus the manifest. Entry timestamps and modes are fixed so identical inputs produce identical ZIP bytes with the same Go toolchain. The output directory and archive must be separate. An invalid package leaves no partial ZIP.
 
 The `content-release.yml` workflow runs the repository gate, builds the package and uploads those assets without replacing existing downloads. The image workflow publishes the site image separately. A release is ready for receiving-host adoption only after both required workflows and the actual receiving-host acceptance succeed. Download availability alone is not desktop acceptance.
@@ -44,6 +46,8 @@ A feature is left out whole or not at all. The list is in the manifest, so a hos
 ### What the manifest says
 
 A `docs` manifest has the same members as the full one, and these differences. `profile` is `"docs"`. `entry` and `entries` name only `content/docs/applet.json`. `omits` is an array with one `{"feature", "message", "paths"}` object for each feature above, where each path is a file or, when it ends in a slash, a folder, and none of them is in the package. `files` lists only what is included, sorted as before, and `digest` is the SHA-256 of that list, worked out as it is for the full package. Two builds of the same source with the same engines give the same digest. A full manifest has no `profile` and no `omits`, and a host treats their absence as `full`. A host that pins a package pins the digest of the profile it took, and a `docs` digest never equals a `full` one. Every file in a `docs` package is the same file, byte for byte, as in the full package, apart from `manifest.json` and `content/omitted.json`.
+
+New builds also declare `hostOnly`, a sorted array of files included for demonstration hosts. The full profile declares its module files and all files copied into its two demonstration-host trees; Docs declares its module files. This additive metadata changes the manifest's bytes but leaves the payload file list and its content digest unchanged. The release record copies the union of both declarations so receiving projects can omit demonstration files without maintaining a separate pattern list.
 
 ### Release assets
 

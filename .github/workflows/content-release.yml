@@ -24,7 +24,9 @@ jobs:
       - name: Require a release tag
         run: test "$GITHUB_REF_TYPE" = tag
       - name: Checks
-        run: bash scripts/check.sh
+        run: |
+          bash scripts/check.sh
+          python3 scripts/test_release_record.py
       - name: Assemble verified content archive
         run: |
           mkdir "$RUNNER_TEMP/release-assets"
@@ -38,6 +40,13 @@ jobs:
           cp "$RUNNER_TEMP/content-release-docs/manifest.json" "$RUNNER_TEMP/release-assets/yavc-content-docs-$GITHUB_REF_NAME.manifest.json"
           cd "$RUNNER_TEMP/release-assets"
           sha256sum "yavc-content-docs-$GITHUB_REF_NAME.zip" "yavc-content-docs-$GITHUB_REF_NAME.manifest.json" > "yavc-content-docs-$GITHUB_REF_NAME.sha256"
+      - name: Create the machine-readable release record
+        run: |
+          python3 scripts/release_record.py create --assets-dir "$RUNNER_TEMP/release-assets" \
+            --tag "$GITHUB_REF_NAME" --commit "$(git rev-parse HEAD)" \
+            --workflow-run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+      - name: Verify the record and packages before publishing
+        run: python3 scripts/release_record.py check "$RUNNER_TEMP/release-assets/yavc-release-$GITHUB_REF_NAME.json" --assets-dir "$RUNNER_TEMP/release-assets"
       - name: Publish immutable download assets
         env:
           GH_TOKEN: ${{ github.token }}

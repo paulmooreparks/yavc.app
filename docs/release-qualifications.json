@@ -1,0 +1,26 @@
+[
+  {
+    "id": "linux-webkit-table-columns",
+    "status": "known-exemption",
+    "test": "scripts/test-document-layout-cycle.cjs",
+    "engine": "webkit",
+    "platform": "linux",
+    "scope": "Synthetic-note column comparisons on load, after undo and after the late-font step are logged instead of failed. Equal-split and page-gap intersection checks still fail.",
+    "reason": "One table's columns can differ from its independently measured layouts on Linux WebKit. Paul accepted Windows as the current release target on 2026-11-16.",
+    "owner": "Yavc.App Builder",
+    "evidence": "docs/backlog.md, WebKit on Linux column exemption"
+  },
+  {
+    "id": "firefox-docx-download-timeout",
+    "status": "unexplained",
+    "test": "scripts/test-docs-export-name.cjs",
+    "engine": "firefox",
+    "platform": "windows",
+    "scope": "A historical assertion timeout passed one rerun on unchanged inputs during PR 262. This records the unresolved failure and grants no exemption to future runs.",
+    "reason": "Firefox timed out waiting for the DOCX download; the cause is unknown.",
+    "owner": "Yavc.App Builder",
+    "originalRun": "PR 262 local full-package run on c39fbcb, 2026-11-17; %TEMP%/yavc-pudl108-package-logs/test-docs-export-name.cjs.log",
+    "confirmationRun": "PR 262 unchanged-package complete named test in Chromium, Firefox and WebKit, 2026-11-17, 13 seconds",
+    "evidence": "docs/backlog.md, Firefox DOCX timeout"
+  }
+]

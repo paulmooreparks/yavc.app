@@ -8,3 +8,4 @@
 /.claude/settings.local.json
 /apps/diagram-kit/yavc-d2.wasm
 /apps/diagram-kit/wasm_exec.js
+__pycache__/
