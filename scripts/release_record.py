@@ -3,9 +3,11 @@
 import argparse
 import hashlib
 import json
+import os
 import re
 import shutil
 import stat
+import subprocess
 import sys
 import tempfile
 import urllib.request
@@ -103,6 +105,44 @@ def inventory(path, profile):
     return manifest
 
 
+def host_paths(manifest):
+    names = {row["path"] for row in manifest["files"]}
+    declared = manifest.get("hostOnly")
+    if declared is None:
+        return None  # Historical manifests predate this declaration; locally reconstructed records can still verify their payloads.
+    require(isinstance(declared, list) and all(isinstance(name, str) for name in declared), "Invalid hostOnly declaration")
+    require(declared == sorted(set(declared)) and set(declared) <= names, "hostOnly must be sorted, unique and manifest-listed")
+    return declared
+
+
+def git(root, *arguments):
+    result = subprocess.run(["git", "-C", str(root), "-c", "i18n.logOutputEncoding=UTF-8", *arguments], check=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                            creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
+    require(result.returncode == 0, "Git failed: " + result.stderr.decode("utf-8", errors="replace"))
+    return result.stdout.decode("utf-8").strip()
+
+
+def release_changes(root, commit):
+    require(git(root, "rev-parse", "--is-shallow-repository") == "false", "Release history requires a complete clone")
+    require(git(root, "rev-parse", "--verify", commit + "^{commit}") == commit, "Source commit is not available")
+    ancestors = git(root, "rev-list", "--first-parent", commit).splitlines()[1:]
+    tagged = {}
+    for tag in git(root, "tag", "--list", "v*", "--sort=-version:refname").splitlines():
+        tag_name(tag)
+        sha = git(root, "rev-parse", "--verify", "refs/tags/" + tag + "^{commit}")
+        tagged.setdefault(sha, tag)
+    previous = next((tagged[sha] for sha in ancestors if sha in tagged), None)
+    history = git(root, "log", "--first-parent", "--reverse", "--format=%H%x00%s%x00", (previous + ".." if previous else "") + commit)
+    changes = []
+    fields = history.split("\x00")
+    require(fields[-1] == "" and len(fields) % 2 == 1, "Invalid Git history framing")
+    for index in range(0, len(fields) - 1, 2):
+        sha, title = fields[index].lstrip("\n"), fields[index + 1]
+        suffix = re.search(r"\s+\(#([0-9]+)\)$", title)
+        changes.append({"pr": int(suffix.group(1)) if suffix else None, "title": title[:suffix.start()] if suffix else title, "commit": sha})
+    return previous, changes
+
+
 def package_names(tag, profile):
     stem = "yavc-content-" + ("docs-" if profile == "docs" else "") + tag
     return stem + ".zip", stem + ".manifest.json", stem + ".sha256"
@@ -129,6 +169,7 @@ def inspect_package(assets, tag, profile, entry, output):
     require(file_hash(external) == entry["manifestSha256"], "Manifest SHA-256 mismatch: " + profile)
     check_sums(assets / checksum_name, {zip_name: entry["sha256"], manifest_name: entry["manifestSha256"]})
     manifest = inventory(external, profile)
+    host_paths(manifest)
     require(entry["contentDigest"] == manifest["digest"] and type(entry["fileCount"]) is int and entry["fileCount"] == len(manifest["files"]), "Record inventory mismatch: " + profile)
     expected = {row["path"]: row for row in manifest["files"]}
     with zipfile.ZipFile(archive) as zipped:
@@ -190,12 +231,17 @@ def create_record(assets, root, tag, commit, run_url):
                              "contentDigest": manifest["digest"], "fileCount": len(manifest["files"])}
     with tempfile.TemporaryDirectory(prefix="yavc-record-build-") as scratch:
         manifests = [inspect_package(assets, tag, profile, entry, Path(scratch) / profile) for profile, entry in packages.items()]
+    declarations = [host_paths(manifest) for manifest in manifests]
+    require(all(paths is not None for paths in declarations), "The build must declare hostOnly for every package")
+    host_only = sorted({name for paths in declarations for name in paths})
+    previous, changes = release_changes(root, commit)
     qualification_source = "docs/release-qualifications.json"
     qualifications = read_json(root / qualification_source)
     require(isinstance(qualifications, list), "Qualifications must be an array")
     record = {"schema": 1, "version": tag, "commit": commit, "writtenAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
               "workflowRunUrl": run_url, "packages": packages, "pudl": matching_pudl(root, manifests),
-              "qualificationSource": qualification_source, "qualifications": qualifications, "readme": README}
+              "qualificationSource": qualification_source, "qualifications": qualifications, "readme": README,
+              "previousVersion": previous, "changes": changes, "hostOnly": host_only}
     validate_record(record)
     path = assets / ("yavc-release-" + tag + ".json")
     data = (json.dumps(record, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
@@ -210,6 +256,19 @@ def validate_record(record):
     require(type(record["schema"]) is int and record["schema"] == 1, "Unsupported release record schema")
     tag_name(record["version"])
     require(re.fullmatch(r"[0-9a-f]{40}", record["commit"]), "Invalid source commit")
+    if record["previousVersion"] is not None:
+        tag_name(record["previousVersion"])
+    changes = record["changes"]
+    require(isinstance(changes, list) and changes, "Release changes must be a nonempty array")
+    for change in changes:
+        require((change["pr"] is None or type(change["pr"]) is int) and isinstance(change["title"], str)
+                and re.fullmatch(r"[0-9a-f]{40}", change["commit"]), "Invalid release change")
+    require(changes[-1]["commit"] == record["commit"] and len({change["commit"] for change in changes}) == len(changes), "Release changes must end at the source commit without duplicates")
+    paths = record["hostOnly"]
+    require(isinstance(paths, list) and all(isinstance(name, str) for name in paths), "Invalid record hostOnly")
+    require(paths == sorted(set(paths)), "Record hostOnly must be sorted and unique")
+    for name in paths:
+        safe_path(name)
     require(record["writtenAt"].endswith("Z"), "Record timestamp must be UTC")
     datetime.fromisoformat(record["writtenAt"].replace("Z", "+00:00"))
     require(re.fullmatch(r"https://github\.com/paulmooreparks/yavc\.app/actions/runs/[0-9]+", record["workflowRunUrl"]), "Invalid workflow run URL")
@@ -280,6 +339,12 @@ def check_record(record_or_tag, assets_dir=None, output_dir=None, pinned_hash=No
                 for name in package_names(tag, profile):
                     download(BASE + tag + "/" + name, assets / name, MAX_TOTAL if name.endswith(".zip") else MAX_JSON)
         manifests = [inspect_package(assets, tag, profile, record["packages"][profile], scratch / profile) for profile in ("full", "docs")]
+        names = {row["path"] for manifest in manifests for row in manifest["files"]}
+        require(set(record["hostOnly"]) <= names, "Record hostOnly contains an unlisted file")
+        declarations = [host_paths(manifest) for manifest in manifests]
+        require(all(paths is not None for paths in declarations) or all(paths is None for paths in declarations), "Packages mix declared and historical hostOnly metadata")
+        if all(paths is not None for paths in declarations):
+            require(record["hostOnly"] == sorted({name for paths in declarations for name in paths}), "Record hostOnly differs from the build declarations")
         pudl = record["pudl"]
         pudl_name = "pudl-" + pudl["version"] + ".zip"
         upstream = assets / pudl_name
@@ -293,9 +358,10 @@ def check_record(record_or_tag, assets_dir=None, output_dir=None, pinned_hash=No
             target.mkdir(parents=True)
             for profile in ("full", "docs"):
                 shutil.copytree(scratch / profile, target / profile)
-        return {"version": tag, "commit": record["commit"], "recordSha256": digest,
+        return {"summarySchema": 1, "version": tag, "commit": record["commit"], "recordSha256": digest, "pudl": record["pudl"],
                 "packages": {profile: {"contentDigest": record["packages"][profile]["contentDigest"], "fileCount": len(manifest["files"])}
-                             for profile, manifest in zip(("full", "docs"), manifests)}, "qualifications": record["qualifications"], "verified": True}
+                             for profile, manifest in zip(("full", "docs"), manifests)}, "qualifications": record["qualifications"],
+                "verified": True, "trustedPinVerified": pinned_hash is not None}
 
 
 def main():

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -28,6 +29,31 @@ type built struct {
 	dir      string
 	manifest map[string]json.RawMessage
 	files    map[string]string // path to the file's bytes
+}
+
+func TestHostOnlyPathsFollowTheBuildCopyDecisions(t *testing.T) {
+	for _, profile := range []string{"full", "docs"} {
+		b := build(t, profile)
+		var declared []string
+		if err := json.Unmarshal(b.manifest["hostOnly"], &declared); err != nil {
+			t.Fatal(err)
+		}
+		want := []string{"go.mod", "go.sum"}
+		for name := range b.files {
+			if strings.HasPrefix(name, "lab/") || strings.HasPrefix(name, "workspace-lab/") {
+				want = append(want, name)
+			}
+		}
+		slices.Sort(want)
+		if !slices.Equal(declared, want) {
+			t.Errorf("%s hostOnly = %v, want %v", profile, declared, want)
+		}
+		for _, name := range declared {
+			if _, exists := b.files[name]; !exists {
+				t.Errorf("%s hostOnly names missing file %s", profile, name)
+			}
+		}
+	}
 }
 
 func build(t *testing.T, name string) built {

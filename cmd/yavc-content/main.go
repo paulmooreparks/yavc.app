@@ -228,7 +228,9 @@ func assemble(root, out, md, d2, profileName string) error {
 	if err = os.Mkdir(out, 0755); err != nil {
 		return err
 	}
-	for _, name := range []string{"LICENSE", "go.mod", "go.sum"} {
+	// These module files and the demonstration trees below are included only for the sample hosts.
+	hostOnly := []string{"go.mod", "go.sum"}
+	for _, name := range append([]string{"LICENSE"}, hostOnly...) {
 		if err = copyFile(filepath.Join(root, name), filepath.Join(out, name)); err != nil {
 			return err
 		}
@@ -243,12 +245,30 @@ func assemble(root, out, md, d2, profileName string) error {
 		}
 	}
 	trees := [][2]string{{"web/pudl", "pudl"}}
-	if prof.fixtures {
-		trees = append(trees, [2]string{"scripts/fixtures/portable-diagrams", "lab"}, [2]string{"scripts/fixtures/portable-workspace", "workspace-lab"})
-	}
 	for _, pair := range trees {
 		if err = copyTree(filepath.Join(root, filepath.FromSlash(pair[0])), filepath.Join(out, pair[1])); err != nil {
 			return err
+		}
+	}
+	if prof.fixtures {
+		for _, pair := range [][2]string{{"scripts/fixtures/portable-diagrams", "lab"}, {"scripts/fixtures/portable-workspace", "workspace-lab"}} {
+			target := filepath.Join(out, pair[1])
+			if err = copyTree(filepath.Join(root, filepath.FromSlash(pair[0])), target); err != nil {
+				return err
+			}
+			// Enumerate what this copy actually produced, so a newly added demonstration file is declared automatically.
+			if err = filepath.WalkDir(target, func(path string, entry fs.DirEntry, err error) error {
+				if err != nil || entry.IsDir() {
+					return err
+				}
+				name, err := filepath.Rel(out, path)
+				if err == nil {
+					hostOnly = append(hostOnly, filepath.ToSlash(name))
+				}
+				return err
+			}); err != nil {
+				return err
+			}
 		}
 	}
 	for _, name := range []string{"yavc-util.js", "dialogs.js", "doc-tabs.js", "pudl-host-kit.js", "snapshot.js", "command-toolbar.js"} {
@@ -355,6 +375,8 @@ func assemble(root, out, md, d2, profileName string) error {
 	}
 	sum := sha256.Sum256(encoded)
 	manifest := map[string]any{"version": 1, "kind": "portable-content-release-set", "entry": prof.entry, "entries": prof.entries, "requirements": map[string]any{"scriptKind": "classic", "resourceContract": 1, "workspaceContract": 1, "snapshotContract": 2}, "files": files, "digest": hex.EncodeToString(sum[:])}
+	sort.Strings(hostOnly)
+	manifest["hostOnly"] = hostOnly
 	if prof.name != "full" {
 		manifest["profile"] = prof.name
 		manifest["omits"] = prof.omit
