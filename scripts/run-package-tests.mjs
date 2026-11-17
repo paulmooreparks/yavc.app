@@ -9,7 +9,9 @@
 // "test-x.cjs | chromium firefox". Blank lines and lines that begin with # are ignored. A test that fails fails the run, and the run
 // goes on to the others. Environment: PACKAGE_ENGINES (default chromium firefox webkit), PACKAGE_TIMEOUT the seconds one test may
 // take (default 900), PACKAGE_LOGS where each test's full output is kept. Playwright must be resolvable, by NODE_PATH or by an
-// install beside the repository.
+// install beside the repository. PACKAGE_SHARD selects a one-based index/count pair, such as 1/2, by list position. PACKAGE_LIST_ONLY=1
+// prints the selected plan as JSON without running browsers, so callers can verify the union of their shards.
+// PACKAGE_RESULTS writes an incremental JSON ledger; PACKAGE_PROFILE labels its package (default full, or docs for the Docs-only package).
 import { spawn } from 'node:child_process';
 import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -24,12 +26,23 @@ const logs = process.env.PACKAGE_LOGS || join(tmpdir(), 'yavc-package-test-logs'
 mkdirSync(logs, { recursive: true });
 
 const named = process.argv.slice(3);
-const tests = named.length ? named.map(name => ({ name, engines })) :
+let tests = named.length ? named.map(name => ({ name, engines })) :
     readFileSync(join(root, 'scripts', 'package-tests.txt'), 'utf8').split(/\r?\n/).map(l => l.trim()).filter(l => l && !l.startsWith('#')).map(line => {
         const [name, only] = line.split('|').map(part => part.trim());
-        return { name, engines: only ? only.split(/\s+/) : engines };
+        return { name, engines: only ? engines.filter(engine => only.split(/\s+/).includes(engine)) : engines };
     });
 for (const test of tests) { if (!/^test-[\w.-]+\.cjs$/.test(test.name)) { console.error('Not a test file name: ' + test.name); process.exit(2); } }
+if (process.env.PACKAGE_SHARD) {
+    const shard = /^([1-9]\d*)\/([1-9]\d*)$/.exec(process.env.PACKAGE_SHARD);
+    const index = shard && Number(shard[1]), count = shard && Number(shard[2]);
+    if (!Number.isSafeInteger(index) || !Number.isSafeInteger(count) || index > count) {
+        console.error('PACKAGE_SHARD must be an index/count pair with 1 <= index <= count.'); process.exit(2);
+    }
+    tests = tests.filter((test, position) => position % count === index - 1);
+}
+tests = tests.filter(test => test.engines.length);
+if (process.env.PACKAGE_LIST_ONLY === '1') { console.log(JSON.stringify(tests)); process.exit(0); }
+if (!tests.length) { console.error('No package tests selected.'); process.exit(2); }
 
 function run(test) {
     return new Promise(done => {
@@ -48,9 +61,18 @@ function run(test) {
 }
 
 const results = [];
+const ledger = [];
+const saveLedger = () => {
+    if (process.env.PACKAGE_RESULTS) { writeFileSync(process.env.PACKAGE_RESULTS, JSON.stringify(ledger, null, 2) + '\n'); }
+};
+saveLedger();
 for (const test of tests) {
     const result = await run(test);
     results.push(result);
+    for (const engine of test.engines) {
+        ledger.push({ profile: process.env.PACKAGE_PROFILE || 'full', test: test.name, engine, pass: result.pass, duration: result.seconds });
+    }
+    saveLedger();
     console.log((result.pass ? 'PASS ' : 'FAIL ') + result.name + ' (' + result.seconds + ' s) in ' + test.engines.join(', '));
     if (!result.pass) { console.log(result.output.split(/\r?\n/).filter(l => l.trim() && !/^\s+at .*node:/.test(l)).slice(-14).map(l => '    ' + l.slice(0, 300)).join('\n')); }
 }
