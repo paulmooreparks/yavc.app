@@ -220,6 +220,16 @@ class ReleaseRecordTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Duplicate JSON member"):
             self.check()
 
+    def test_record_requires_standard_utf8_json(self):
+        record = release.read_json(self.record_path)
+        malformed = [json.dumps(dict(record, futureNumber=float("nan"))).encode("utf-8"), json.dumps(record).encode("utf-16")]
+        for data in malformed:
+            with self.subTest(data=data[:16]):
+                self.record_path.write_bytes(data)
+                self.record_path.with_suffix(".json.sha256").write_text(release.file_hash(self.record_path) + "  " + self.record_path.name + "\n", encoding="utf-8")
+                with self.assertRaises(ValueError):
+                    self.check()
+
     def test_escaping_zip_path_with_updated_outer_hashes(self):
         self.repack(lambda entries: [("../escape" if name == "content/fixture.txt" else name, data) for name, data in entries])
         with self.assertRaisesRegex(ValueError, "Unsafe file path"):

@@ -57,7 +57,8 @@ def object_pairs(pairs):
 
 def read_json(path):
     require(path.stat().st_size <= MAX_JSON, "JSON exceeds size limit: " + str(path))
-    return json.loads(path.read_bytes(), object_pairs_hook=object_pairs)
+    return json.loads(path.read_bytes().decode("utf-8"), object_pairs_hook=object_pairs,
+                      parse_constant=lambda value: require(False, "Non-JSON numeric constant: " + value))
 
 
 def is_hash(value):
@@ -244,7 +245,7 @@ def create_record(assets, root, tag, commit, run_url):
               "previousVersion": previous, "changes": changes, "hostOnly": host_only}
     validate_record(record)
     path = assets / ("yavc-release-" + tag + ".json")
-    data = (json.dumps(record, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
+    data = (json.dumps(record, ensure_ascii=False, indent=2, allow_nan=False) + "\n").encode("utf-8")
     with path.open("xb") as stream:
         stream.write(data)
     with path.with_suffix(".json.sha256").open("x", encoding="utf-8", newline="\n") as stream:
