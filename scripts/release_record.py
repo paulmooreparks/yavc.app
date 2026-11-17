@@ -16,6 +16,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 REPOSITORY = "paulmooreparks/yavc.app"
+MIN_GH_VERSION = (2, 104, 0)
+MIN_GH_VERSION_TEXT = ".".join(map(str, MIN_GH_VERSION))
 BASE = "https://github.com/" + REPOSITORY + "/releases/download/"
 ROOT = Path(__file__).resolve().parent.parent
 MAX_FILE = 256 * 1024 * 1024
@@ -316,6 +318,16 @@ def verify_pudl(archive, provenance, manifests):
         require(packaged == files, "Packaged PUDL differs from its upstream archive")
 
 
+def require_attestation_cli():
+    result = subprocess.run(["gh", "--version"], capture_output=True, timeout=10,
+                            creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
+    match = re.match(r"gh version (\d+)\.(\d+)\.(\d+)(?:\s|$)", result.stdout.decode("utf-8", errors="replace"))
+    message = "--attestation needs gh " + MIN_GH_VERSION_TEXT + " or later; "
+    require(result.returncode == 0 and match is not None, message + "could not read a stable gh version")
+    found = tuple(map(int, match.groups()))
+    require(found >= MIN_GH_VERSION, message + "found " + ".".join(match.groups()))
+
+
 def verify_attestation(artifact, record):
     workflow = REPOSITORY + "/.github/workflows/content-release.yml"
     ref = "refs/tags/" + record["version"]
@@ -332,6 +344,8 @@ def verify_attestation(artifact, record):
 
 
 def check_record(record_or_tag, assets_dir=None, output_dir=None, pinned_hash=None, attestation=False):
+    if attestation:
+        require_attestation_cli()
     with tempfile.TemporaryDirectory(prefix="yavc-release-check-") as scratch:
         scratch = Path(scratch)
         if Path(record_or_tag).is_file():
@@ -386,7 +400,7 @@ def check_record(record_or_tag, assets_dir=None, output_dir=None, pinned_hash=No
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__ + " Attestation mode needs authenticated gh " + MIN_GH_VERSION_TEXT + " or later.")
     commands = parser.add_subparsers(dest="command", required=True)
     create = commands.add_parser("create")
     create.add_argument("--assets-dir", type=Path, required=True)
@@ -399,7 +413,7 @@ def main():
     check.add_argument("--assets-dir", type=Path)
     check.add_argument("--output-dir", type=Path)
     check.add_argument("--sha256", help="An independently pinned release-record SHA-256")
-    check.add_argument("--attestation", action="store_true", help="Require GitHub provenance for the record and both ZIPs (needs a current authenticated gh CLI)")
+    check.add_argument("--attestation", action="store_true", help="Require GitHub provenance for the record and both ZIPs (needs authenticated gh " + MIN_GH_VERSION_TEXT + " or later)")
     args = parser.parse_args()
     try:
         if args.command == "create":
