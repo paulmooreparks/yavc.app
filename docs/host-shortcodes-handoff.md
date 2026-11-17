@@ -1,5 +1,13 @@
 # Host shortcode integration handoff
 
+## v0.2.103 candidate: PUDL 0.108.0
+
+The next release bundles PUDL 0.108.0 from immutable tag `v0.108.0` at `5e77a445fb774012be16f9fb75c6c989242cddf2`. The complete distribution is replaced together. Receiving hosts need no markup changes. The archive and all distribution files are verified as recorded in `pudl-upgrade-0.108.0.md`; this candidate is not yet a published release.
+
+| Item | v0.2.103 candidate |
+| --- | --- |
+| PUDL | 0.108.0 |
+
 ## v0.2.87: late focus, Typography, page count under zoom, and the suggestion card in tables
 
 [v0.2.87](https://github.com/paulmooreparks/yavc.app/releases/tag/v0.2.87) comes from pull requests 160, 162, 166, 168, 171 and 172 on 2026-11-12 and 13. A window that finishes starting takes the keyboard only if it is in front and the keyboard is free or already inside it (DESIGN.md decision 146), which matters most in a host where several windows start at once. Typography no longer writes into the field the person is in. Pages are measured at 100 percent, so the page count no longer depends on zoom in WebKit (decision 144). A suggestion's card for changed table rows is a row after the changed row (decision 145). On the site, the Slides presenter opens on an application's own origin, and analytics are sent only on the public site (decision 147). A host changes nothing.
