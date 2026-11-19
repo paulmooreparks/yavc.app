@@ -29,7 +29,7 @@ const evidence = path.join(os.tmpdir(), 'yavc-launcher-review'); fs.mkdirSync(ev
             await root.waitFor({ state: 'hidden' });
             await page.keyboard.press('Escape');
             await page.locator('#about-site').waitFor({ state: 'hidden' });
-            await page.waitForFunction(() => location.pathname === '/');
+            await page.waitForURL(url => url.pathname === '/', { waitUntil: 'load' });
             await open();
             await root.locator('header').getByRole('link', { name: 'Settings', exact: true }).click();
             await page.locator('.win[data-win="settings"]').waitFor({ state: 'visible' });
@@ -37,8 +37,17 @@ const evidence = path.join(os.tmpdir(), 'yavc-launcher-review'); fs.mkdirSync(ev
             assert.ok(new URL(page.url()).searchParams.get('open').split(',').includes('dice'));
             await open();
             const row = root.locator('[data-win-pin-target="editor"]');
-            await row.hover();
-            await row.locator('[data-row-actions]').click();
+            await root.locator(':scope > header').hover();
+            const rowActions = await root.locator('[data-row-actions]').evaluateAll(buttons => buttons.map(button => {
+                const style = getComputedStyle(button), box = button.getBoundingClientRect();
+                return { visible: style.visibility === 'visible' && style.display !== 'none' && Number(style.opacity) > 0 && box.width > 0 && box.height > 0, tabIndex: button.tabIndex, name: button.getAttribute('aria-label') };
+            }));
+            assert.ok(rowActions.length > 0);
+            assert.ok(rowActions.every(button => button.visible && button.tabIndex === 0 && /^Actions for .+/.test(button.name)), 'Every launcher row action stays visible, tabbable and named at rest');
+            await row.locator('a.start-item').focus();
+            await page.keyboard.press('Tab');
+            assert.equal(await row.locator('[data-row-actions]').evaluate(button => button === document.activeElement), true);
+            await page.keyboard.press('Enter');
             await page.getByRole('menuitem', { name: 'Pin to taskbar', exact: true }).click();
             const pin = page.locator('.win-bar [data-win-pin="editor"]');
             await pin.waitFor();

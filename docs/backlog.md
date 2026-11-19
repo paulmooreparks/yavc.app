@@ -29,6 +29,8 @@ This page lists the defects and gaps the yavc.app team has found and not yet fix
 
 ## Tests
 
+- **test-launcher.cjs reported an unexplained WebKit navigation error during the PUDL 0.108.1 update.** The 2026-11-20 run lost its execution context after Back from About, before the new row-action assertions; the complete unchanged confirmation passed. Both logs remain at `%TEMP%/yavc-pudl1081-launcher-webkit/test-launcher.cjs.log` and `%TEMP%/yavc-pudl1081-launcher-webkit-confirmation/test-launcher.cjs.log`. The test now waits for navigation through load rather than polling the pathname, and the revised test passes in all three engines. The passing confirmation does not establish the original failure's cause. Owner: Yavc.App Builder.
+
 - `test-files-dialogs.cjs` failed in CI without a cause in the logs. Look again when a run keeps its logs. `test-editor-visual-defaults.cjs` is repaired (see review.md, "Waits that ran once"); the same fault is in nine more tests, listed there.
 - `test-docs-key-selection.cjs` fails in Firefox on a clean build of main (2026-11-14): after Click, End, Shift+Enter and typing in the Document view, the text the test typed is still on the page at line 41, where it waits for it to go. It passed in Firefox on an earlier build and in Chromium throughout, so it is intermittent. It has not been diagnosed.
 - A table row with a table or a code block in a cell is not cut inside, in a host's flowing block, so such a row taller than a page cannot be cut; the page and print say so (decisions 173, 183 and 184). A cell with a list, tight or loose, is cut between its items. `rowBands` refuses `table` and `pre` in a cell, and cutting between the rows of a nested table would need gaps between rows of a table inside a cell.
