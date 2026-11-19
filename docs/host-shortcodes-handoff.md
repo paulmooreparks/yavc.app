@@ -1,5 +1,13 @@
 # Host shortcode integration handoff
 
+## Next release candidate: PUDL 0.108.1
+
+The next release candidate bundles the complete PUDL 0.108.1 distribution from tag `v0.108.1` at `3a77a4cba54bde35e34522af176be7645f01b962`. Row-action buttons stay visible at rest and participate in ordinary Tab navigation. Our launcher preserves its authored action names and requires no markup changes. Both release digests and all 196 distribution files are verified as recorded in `pudl-upgrade-0.108.1.md`. This candidate is not yet published.
+
+| Item | Next release candidate |
+| --- | --- |
+| PUDL | 0.108.1 |
+
 ## v0.2.103 candidate: PUDL 0.108.0
 
 The next release bundles PUDL 0.108.0 from immutable tag `v0.108.0` at `5e77a445fb774012be16f9fb75c6c989242cddf2`. The complete distribution is replaced together. Receiving hosts need no markup changes. The archive and all distribution files are verified as recorded in `pudl-upgrade-0.108.0.md`; this candidate is not yet a published release.
