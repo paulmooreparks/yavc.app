@@ -54,6 +54,7 @@ node --test scripts/test-modal-focus.mjs
 node --test scripts/test-command-state.mjs
 node --test scripts/test-obsidian-observer.mjs
 node --test scripts/test-dinah-content-proof.mjs
+node --test scripts/test-pantry-motion.mjs
 
 step "Bundled PUDL release provenance"
 node --test scripts/test-pudl-distribution.mjs
