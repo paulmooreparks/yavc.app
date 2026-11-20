@@ -727,7 +727,12 @@
         start: START, exit: EXIT, door: DOOR, den: DEN, corners: CORNERS, bells: BELLS
     };
 
-    function init(root, opts) {
+    var source = new URL(document.currentScript.src);
+    async function init(root, opts) {
+        var library = new URL('grid-motion.js', source); library.search = source.search;
+        await window.yavcUtil.loadScript(library.href);
+        var motion = window.yavcPantryMotion.create(COLS, DIR), timing = window.yavcPantryMotion.timer(step);
+        opts = opts || {};
         var shell = null, S = null, ctx = null, C = null;
         var maze = makeMaze(1), home = homeward(maze), mazeImg = null, crumbs = new Uint8Array(COLS * ROWS), left = 0, total = 0;
         var bells = [], cheese = null, cheeseDone = false, toast = null;
@@ -739,7 +744,8 @@
            the den, leaving it, hunting, or going home. */
         function place() {
             mouse = { x: START.x, y: START.y, p: 0, dir: null, face: DIR.up };
-            want = null; phase = 0; scatter = true; combo = 0;
+            want = DIR.left; mouse.dir = DIR.left; mouse.face = DIR.left;
+            timing.reset(); phase = 0; scatter = true; combo = 0;
             cats = CORNERS.map(function (corner, i) {
                 var at = i === 0 ? EXIT : DEN[i - 1];
                 var c = { kind: i, corner: corner, x: at.x, y: at.y, p: 0, dir: null, mode: 'den', wait: i === 0 ? 800 : 500 + i * 3500, scared: 0 };
@@ -760,28 +766,9 @@
             place();
         }
 
-        /* Something that runs along the corridors: it is p of the way from
-           its tile (x, y) to the next one in its direction. advance moves
-           it a distance in tiles, asking choose for a direction at every
-           tile it reaches; can says which tiles it may run on. */
-        function advance(e, dist, choose, arrive, can) {
-            for (var guard = 0; dist > 0 && guard < 8; guard++) {
-                if (!e.dir || !can(e.x + e.dir.x, e.y + e.dir.y)) { e.dir = choose(e); if (!e.dir) { return; } }
-                var room = 1 - e.p;
-                if (dist < room) { e.p += dist; return; }
-                dist -= room;
-                e.x = wrap(e.x + e.dir.x); e.y += e.dir.y; e.p = 0;
-                if (arrive) { arrive(e); }
-                e.dir = choose(e);
-            }
-        }
+        var advance = motion.advance;
         function opposite(d) { return d === DIR.left ? DIR.right : d === DIR.right ? DIR.left : d === DIR.up ? DIR.down : DIR.up; }
-        function reverse(e) {
-            if (!e.dir) { return; }
-            if (e.p > 0) { e.x = wrap(e.x + e.dir.x); e.y += e.dir.y; e.p = 1 - e.p; }
-            e.dir = opposite(e.dir);
-        }
-        function at(e) { return { x: e.x + (e.dir ? e.dir.x * e.p : 0), y: e.y + (e.dir ? e.dir.y * e.p : 0) }; }
+        var reverse = motion.reverse, at = motion.position;
 
         function chooseMouse(m) {
             if (want && maze.isOpen(m.x + want.x, m.y + want.y)) { return want; }
@@ -860,17 +847,15 @@
             else if (c.mode === 'home' && c.x === DEN[0].x && c.y === DEN[0].y) { c.mode = 'den'; c.wait = 2500; c.dir = null; }
         }
 
-        function update(dt) {
+        function step(dt) {
             clock += dt; phase += dt;
             /* The cats turn round when they change between hunting and
                going to their corners, which is the mouse's warning. */
             var now = phase % (SCATTER + CHASE) < SCATTER;
             if (now !== scatter) { scatter = now; cats.forEach(function (c) { if (c.mode === 'hunt' && c.scared <= 0) { reverse(c); } }); }
-            if (want && mouse.dir && want === opposite(mouse.dir)) { reverse(mouse); }
-            else if (mouse.p === 0 && mouse.dir) { mouse.dir = chooseMouse(mouse); }
-            advance(mouse, 6.2 * dt / 1000, chooseMouse, arrive, maze.isOpen);
+            advance(mouse, 6.6 * dt / 1000, chooseMouse, arrive, maze.isOpen);
             if (mouse.dir) { mouse.face = mouse.dir; }
-            if (left <= 0) { shell.beep(660, 500, 'triangle', 0.06, 1320); shell.cleared(1500); return; }
+            if (left <= 0) { shell.beep(660, 500, 'triangle', 0.06, 1320); shell.cleared(1500); return false; }
 
             var speed = Math.min(6, 4.6 + (S.level - 1) * 0.2), caught = false, m = at(mouse);
             cats.forEach(function (c) {
@@ -883,7 +868,8 @@
                 var v = c.mode === 'home' ? 11 : c.mode === 'leave' || c.scared > 0 ? 3 : maze.isSlow(c.x, c.y) ? speed * 0.55 : speed;
                 advance(c, v * dt / 1000, chooseCat, arriveCat, c.can);
                 if (c.mode !== 'hunt') { return; }
-                var p = at(c), dx = p.x - m.x, dy = p.y - m.y;
+                var p = at(c), dx = Math.abs(p.x - m.x), dy = p.y - m.y;
+                dx = Math.min(dx, COLS - dx);
                 if (dx * dx + dy * dy > 0.4) { return; }
                 if (c.scared > 0) {
                     combo++;
@@ -893,7 +879,7 @@
                     shell.beep(300, 220, 'sawtooth', 0.05, 1200);
                 } else { caught = true; }
             });
-            if (caught) { shell.die(1300); shell.beep(500, 600, 'sawtooth', 0.05, 60); return; }
+            if (caught) { shell.die(1300); shell.beep(500, 600, 'sawtooth', 0.05, 60); return false; }
             if (cheese) { cheese.t -= dt; if (cheese.t <= 0) { cheese = null; } }
         }
 
@@ -1005,8 +991,12 @@
             game: 'pantry', title: 'Pantry Raid', width: W, height: H, help: HELP,
             pad: ['left', 'up', 'down', 'right'], extraLifeEvery: 5000,
             newGame: startWave, newWave: startWave, respawn: place,
-            update: update, draw: draw,
-            press: function (name) { if (DIR[name]) { want = DIR[name]; } },
+            update: timing.run, draw: draw,
+            press: function (name) {
+                if (!DIR[name]) { return; }
+                want = DIR[name];
+                if (mouse.dir && want === opposite(mouse.dir)) { reverse(mouse); mouse.face = mouse.dir; }
+            },
             after: function (dt) { if (toast) { toast.t -= dt; if (toast.t <= 0) { toast = null; } } },
             busy: function () { return !!toast; },
             recolour: function () { if (S) { C = S.colours; } mazeImg = null; }
