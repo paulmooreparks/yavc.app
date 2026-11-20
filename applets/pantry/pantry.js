@@ -548,22 +548,28 @@
     'use strict';
     /* The shared modules are bundled in front of this file when the
        package is built (applet.json, "bundle"), so window.splash is here. */
-    var T = 12, COLS = 19, ROWS = 21, TOP = 12, FOOT = 14;
+    var T = 12, COLS = 21, ROWS = 25, TOP = 12, FOOT = 14;
     var W = COLS * T, H = TOP + ROWS * T + FOOT;
     var DIR = { left: { x: -1, y: 0, a: -Math.PI / 2 }, right: { x: 1, y: 0, a: Math.PI / 2 }, up: { x: 0, y: -1, a: 0 }, down: { x: 0, y: 1, a: Math.PI } };
     var DIRS = [DIR.up, DIR.left, DIR.down, DIR.right];
     /* The same in every pantry: where the mouse starts, the tile outside
        the den's door, the door, the three tiles of the den with its
-       middle first, the corners the cats go off to, and the bells. */
-    var START = { x: 9, y: 12 }, EXIT = { x: 9, y: 8 }, DOOR = { x: 9, y: 9 };
-    var DEN = [{ x: 9, y: 10 }, { x: 8, y: 10 }, { x: 10, y: 10 }];
-    var CORNERS = [{ x: 17, y: 1 }, { x: 1, y: 1 }, { x: 17, y: 19 }, { x: 1, y: 19 }];
-    var BELLS = [{ x: 1, y: 3 }, { x: 17, y: 3 }, { x: 1, y: 17 }, { x: 17, y: 17 }];
+       middle first, the corners the cats go off to, and the bells. The
+       den is in the middle of the board. */
+    var MX = (COLS - 1) / 2, MY = (ROWS - 1) / 2;
+    var START = { x: MX, y: MY + 2 }, EXIT = { x: MX, y: MY - 2 }, DOOR = { x: MX, y: MY - 1 };
+    var DEN = [{ x: MX, y: MY }, { x: MX - 1, y: MY }, { x: MX + 1, y: MY }];
+    var CORNERS = [{ x: COLS - 2, y: 1 }, { x: 1, y: 1 }, { x: COLS - 2, y: ROWS - 2 }, { x: 1, y: ROWS - 2 }];
+    var BELLS = [{ x: 1, y: 3 }, { x: COLS - 2, y: 3 }, { x: 1, y: ROWS - 4 }, { x: COLS - 2, y: ROWS - 4 }];
     /* The cats hunt for CHASE milliseconds, then go to their corners for
        SCATTER, and so on, starting with the corners. */
     var SCATTER = 5000, CHASE = 18000;
     /* The pantries: the left half of each and its middle column. The
-       right half is the left one mirrored. A # is wall, a dot is floor
+       right half is the left one mirrored. The corridors run three tiles
+       apart, so walls are two tiles thick and the ways across between
+       two corridors are two tiles long; no crumb is left on its own in a
+       nook, and a run along any corridor goes a good way before it has
+       to turn. A # is wall, a dot is floor
        with a crumb, a space is floor of the passage through the side
        walls, where there are no crumbs and the cats are slow, a c is the
        den and a - is its door, which only the cats pass.
@@ -571,71 +577,83 @@
        round but for the passage, has no dead end, and has floor under
        the mouse, the bells and the cats' corners. */
     var PANTRIES = [[
-        '##########',
-        '#.........',
-        '#.##.###.#',
-        '#.##.###.#',
-        '#.........',
-        '#.##.#.###',
-        '#....#....',
-        '####.####.',
-        '####......',
-        '####.#.##-',
-        '    ...#cc',
-        '####.#.###',
-        '####......',
-        '####.####.',
-        '#....#....',
-        '#.##.#.###',
-        '#.........',
-        '#.##.###.#',
-        '#.##.###.#',
-        '#.........',
-        '##########'
+        '###########',
+        '#..........',
+        '#.##.######',
+        '#.##.######',
+        '#..........',
+        '#.##.##.###',
+        '#.##.##.###',
+        '#....##....',
+        '####.##.###',
+        '####.##.###',
+        '####.......',
+        '####.##.##-',
+        '    .##.#cc',
+        '####.##.###',
+        '####.......',
+        '####.##.###',
+        '####.##.###',
+        '#..........',
+        '#.##.######',
+        '#.##.######',
+        '#....##....',
+        '#.##.##.###',
+        '#.##.##.###',
+        '#..........',
+        '###########'
     ], [
-        '##########',
-        '#.........',
-        '#.#.####.#',
-        '#.#......#',
-        '#.#.##.#.#',
-        '#...##.#..',
-        '#.#....###',
-        '#.####.#..',
-        '#.........',
-        '####.#.##-',
-        '    ...#cc',
-        '####.#.###',
-        '#.........',
-        '#.##.##.##',
-        '#.##.##...',
-        '#....##.##',
-        '#.##....##',
-        '#.##.##.##',
-        '#.##.##.##',
-        '#.........',
-        '##########'
+        '###########',
+        '#..........',
+        '#.##.##.###',
+        '#.##.##.###',
+        '#..........',
+        '#.#####.###',
+        '#.#####.###',
+        '#..........',
+        '####.##.##.',
+        '####.##.##.',
+        '####.......',
+        '####.##.##-',
+        '    .##.#cc',
+        '####.##.###',
+        '####.......',
+        '####.##.###',
+        '####.##.###',
+        '#..........',
+        '#.##.##.###',
+        '#.##.##.###',
+        '#..........',
+        '#.#####.###',
+        '#.#####.###',
+        '#..........',
+        '###########'
     ], [
-        '##########',
-        '#.........',
-        '#.##.###.#',
-        '#.##.###.#',
-        '#....#....',
-        '##.#.#.###',
-        '#..#......',
-        '#.##.###.#',
-        '#.........',
-        '####.#.##-',
-        '    ...#cc',
-        '####.#.###',
-        '#.........',
-        '#.#.####.#',
-        '#.........',
-        '#.##.#.###',
-        '#.##.#....',
-        '#....####.',
-        '#.##.####.',
-        '#.........',
-        '##########'
+        '###########',
+        '#..........',
+        '#.##.##.###',
+        '#.##.##.###',
+        '#.##.##.###',
+        '#..........',
+        '####.##.##.',
+        '####.##.##.',
+        '####.......',
+        '####.##.###',
+        '####.##....',
+        '####.##.##-',
+        '    .##.#cc',
+        '####.##.###',
+        '####.......',
+        '####.##.###',
+        '#..........',
+        '#.##.##.###',
+        '#.##.##.###',
+        '#....##....',
+        '#.##.##.###',
+        '#.##.##.###',
+        '#.##.##.###',
+        '#..........',
+        '###########'
     ]];
 
     function sprite(id, rows) { return { id: id, w: rows[0].length, h: rows.length, rows: rows }; }
@@ -883,28 +901,39 @@
             var c = document.createElement('canvas');
             c.width = W; c.height = ROWS * T;
             var g = c.getContext('2d');
-            g.fillStyle = C.muted;
-            /* The walls are shelves. A wall tile is drawn as its middle,
-               an arm to each side where the next tile is wall too, and a
-               corner where the two tiles beside the corner and the one
-               across it are all wall. So a wall one tile thick is a bar
-               with a margin of floor, and a block of wall is solid. */
-            var M = 3, MID = T - 2 * M;
+            /* The walls are hollow shelves with rounded ends. The shape of
+               the walls is drawn twice, once in the wall colour and once a
+               little smaller in the colour of the floor, which leaves a line
+               round every wall. A wall tile is drawn as its middle, an arm
+               to each side where the next tile is wall too, and a corner
+               where the two tiles beside the corner and the one across it
+               are all wall. A corner of the middle with no wall on either
+               side of it is rounded. */
             function wall(x, y) { return x >= 0 && y >= 0 && x < COLS && y < ROWS && !maze.open[y * COLS + x] && !maze.den[y * COLS + x]; }
-            for (var y = 0; y < ROWS; y++) {
-                for (var x = 0; x < COLS; x++) {
-                    if (!wall(x, y)) { continue; }
-                    for (var j = -1; j <= 1; j++) {
-                        for (var i = -1; i <= 1; i++) {
-                            if (!wall(x + i, y) || !wall(x, y + j) || !wall(x + i, y + j)) { continue; }
-                            g.fillRect(x * T + (i < 0 ? 0 : i > 0 ? T - M : M), y * T + (j < 0 ? 0 : j > 0 ? T - M : M), i ? M : MID, j ? M : MID);
+            function shape(M, R) {
+                var MID = T - 2 * M;
+                for (var y = 0; y < ROWS; y++) {
+                    for (var x = 0; x < COLS; x++) {
+                        if (!wall(x, y)) { continue; }
+                        for (var j = -1; j <= 1; j++) {
+                            for (var i = -1; i <= 1; i++) {
+                                if (!wall(x + i, y) || !wall(x, y + j) || !wall(x + i, y + j)) { continue; }
+                                var rx = x * T + (i < 0 ? 0 : i > 0 ? T - M : M), ry = y * T + (j < 0 ? 0 : j > 0 ? T - M : M);
+                                if (i || j || !g.roundRect) { g.fillRect(rx, ry, i ? M : MID, j ? M : MID); continue; }
+                                var up = wall(x, y - 1), down = wall(x, y + 1), left = wall(x - 1, y), right = wall(x + 1, y);
+                                g.beginPath();
+                                g.roundRect(rx, ry, MID, MID, [!up && !left ? R : 0, !up && !right ? R : 0, !down && !right ? R : 0, !down && !left ? R : 0]);
+                                g.fill();
+                            }
                         }
                     }
                 }
             }
+            g.fillStyle = C.accent; shape(2, 4);
+            g.fillStyle = C.bg; shape(4, 2);
             /* The den's door, a thin bar between the ends of its wall. */
             g.fillStyle = C.warn;
-            g.fillRect(DOOR.x * T - M, DOOR.y * T + T / 2 - 1, T + 2 * M, 2);
+            g.fillRect(DOOR.x * T - 2, DOOR.y * T + T / 2 - 1, T + 4, 2);
             mazeImg = c;
         }
         function px(x) { return Math.round(x * T + T / 2); }
@@ -918,10 +947,12 @@
         }
         function pad(n) { return ('00000' + n).slice(-5); }
         function banner(str, colour, sub) {
+            /* Across the middle of the board, over the den. */
+            var top = TOP + (MY - 1) * T;
             ctx.fillStyle = C.bg;
-            ctx.fillRect(0, 116, W, sub ? 46 : 30);
-            shell.text(str, W / 2, 124, colour, 2, 'center');
-            if (sub) { shell.text(sub, W / 2, 146, C.muted, 1, 'center'); }
+            ctx.fillRect(0, top, W, sub ? 46 : 30);
+            shell.text(str, W / 2, top + 8, colour, 2, 'center');
+            if (sub) { shell.text(sub, W / 2, top + 30, C.muted, 1, 'center'); }
         }
         var COAT = ['danger', 'warn', 'positive', 'accent'];
         function draw() {
@@ -929,12 +960,12 @@
             text('SCORE ' + pad(S.score), 4, 2, C.fg);
             text('HI ' + pad(S.hi), W - 4, 2, C.muted, 1, 'right');
             if (mode === 'ready') {
-                text('PANTRY RAID', W / 2, 56, C.fg, 2, 'center');
-                text('ENTER OR NEW GAME TO PLAY', W / 2, 80, C.muted, 1, 'center');
-                ctx.drawImage(image(MOUSE[0], C.fg), 50, 108); text('EATS THE CRUMBS', 70, 110, C.muted);
-                ctx.drawImage(image(CAT, C.danger), 49, 130); text('EATS THE MOUSE', 70, 132, C.muted);
-                ctx.drawImage(image(BELL, C.warn), 51, 154); text('SCARES THE CATS', 70, 154, C.muted);
-                ctx.drawImage(image(CHEESE, C.warn), 50, 176); text('IS WORTH A DETOUR', 70, 176, C.muted);
+                text('PANTRY RAID', W / 2, 80, C.fg, 2, 'center');
+                text('ENTER OR NEW GAME TO PLAY', W / 2, 104, C.muted, 1, 'center');
+                ctx.drawImage(image(MOUSE[0], C.fg), 62, 140); text('EATS THE CRUMBS', 82, 142, C.muted);
+                ctx.drawImage(image(CAT, C.danger), 61, 162); text('EATS THE MOUSE', 82, 164, C.muted);
+                ctx.drawImage(image(BELL, C.warn), 63, 186); text('SCARES THE CATS', 82, 186, C.muted);
+                ctx.drawImage(image(CHEESE, C.warn), 62, 208); text('IS WORTH A DETOUR', 82, 208, C.muted);
                 return;
             }
             if (!mazeImg) { buildMaze(); }

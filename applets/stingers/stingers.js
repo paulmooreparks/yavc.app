@@ -537,8 +537,8 @@
    a nest of wasps flies in by squads and settles into ranks above the
    ship, then they peel off alone or in twos and threes and dive at it,
    shooting as they come. A wasp shot in its dive is worth double, a queen
-   takes two hits, and the honey a queen drops gives the ship rapid fire
-   for a while. A queen can also stop above the ship and let down a snare:
+   takes two hits, and the honey a queen sometimes drops gives the ship
+   rapid fire for a while but slows it down. A queen can also stop above the ship and let down a snare:
    a ship caught in it is carried up to the ranks, and shooting that queen
    brings it back to fly beside the next ship, two ships firing as one.
    Every fourth wave is a bonus wave, where the wasps fly past without
@@ -563,6 +563,16 @@
     var HOVER_Y = 150, SNARE_WARM = 500, SNARE_MS = 2700, SNARE_HALF = 22, SNARE_CATCH = 15;
     /* Twin ships stand this far apart, left edge to left edge. */
     var SHIP_GAP = 14, BONUS_EVERY = 4;
+    /* Honey: the chance that a queen shot down drops it, and how fast a
+       single ship and twin ships move, against their usual speed, while
+       its rapid fire lasts. */
+    var HONEY_CHANCE = 0.7, STICKY = 0.75, STICKY_TWIN = 0.45;
+    /* The nest grows fiercer after each bonus wave. After the first, the
+       chance that a wasp shoots as it flies in, which grows every wave;
+       after the second, a wasp can shoot twice on the way in, and some
+       break off and dive at the ship before they reach the ranks. */
+    function entryFire(level) { return level <= BONUS_EVERY ? 0 : Math.min(0.7, 0.2 + 0.07 * (level - BONUS_EVERY - 1)); }
+    function breakaways(level) { return level <= 2 * BONUS_EVERY ? 0 : Math.min(4, 1 + Math.floor((level - 2 * BONUS_EVERY - 1) / 3)); }
 
     function sprite(id, rows) { return { id: id, w: rows[0].length, h: rows.length, rows: rows }; }
     var DRONE = { points: 10, hp: 1, colour: 'fg', frames: [
@@ -589,9 +599,9 @@
     var RANKS = [QUEEN, SOLDIER, SOLDIER, DRONE, DRONE], RANK_TOP = 34, RANK_GAP = 15;
     var SHAPES = [[3, 6, 8, 9, 10], [3, 8, 6, 10, 9], [3, 7, 7, 9, 10]];
     var HELP =
-        '<p>Shoot the whole nest. The wasps fly in by squads and settle into ranks, then dive at you alone or two and three together, shooting as they come. A wasp hit in its dive is worth double. A queen takes two hits and drops honey, and catching the honey gives you rapid fire.</p>' +
+        '<p>Shoot the whole nest. The wasps fly in by squads and settle into ranks, then dive at you alone or two and three together, shooting as they come. A wasp hit in its dive is worth double. A queen takes two hits and sometimes drops honey. Catching the honey gives you rapid fire for a few seconds, but it is sticky and slows your ship while it lasts, and twin ships much more than one.</p>' +
         '<p>Now and then a queen stops above you and lets down a snare of honey threads. A ship caught in it is carried up to the ranks, and you play on with your next ship. Shoot that queen and the ship comes down to fly beside yours, so that you fire two shots for one. Shoot the ship itself and it is gone. A hit on twin ships costs one of the two. A queen sets no snare while you are on your last ship.</p>' +
-        '<p>Every fourth wave is a bonus wave. Forty wasps fly past in flights without shooting, each one you hit is worth 100 more when the wave ends, and all forty are worth 5,000. Each wave flies in another way, settles into another shape, and dives more often and faster. You have three ships, and another every 4,000 points. When the game is over it tells you how many of your shots hit.</p>' +
+        '<p>Every fourth wave is a bonus wave. Forty wasps fly past in flights without shooting, each one you hit is worth 100 more when the wave ends, and all forty are worth 5,000. Each wave flies in another way, settles into another shape, and dives more often and faster. After the first bonus wave the wasps shoot as they fly in, more of them every wave, and after the second some break off and dive at you before they reach the ranks. You have three ships, and another every 4,000 points. When the game is over it tells you how many of your shots hit.</p>' +
         '<dl class="splash-keys">' +
           '<dt>← → or A D</dt><dd>Move</dd>' +
           '<dt>Space or X</dt><dd>Fire, two shots at a time; hold it down with rapid fire</dd>' +
@@ -642,6 +652,19 @@
         var s = aim < x ? -1 : 1, out = aim + s * 34;
         if (out < 16 || out > W - 16) { out = aim - s * 34; }
         return [peel(x, y, aim), { x: aim, y: PLAYER_Y - 36 }, { x: out, y: H + 20 }];
+    }
+    /* The path of a dive by a wasp that breaks off as it flies in: it is
+       already flying, so it needs no turn out of the ranks and makes
+       straight for the point above the ship. */
+    function breakPath(x, y, aim) { return divePath(x, y, aim).slice(1); }
+    /* Whether a wasp flying in can break off where it is and dive at aim:
+       on the screen, well above the ship, heading down the screen and towards aim or nearly above
+       it, and with room to turn, which it has when it is heading away
+       from the side it is near or is well clear of it. */
+    function canBreak(e, aim) {
+        if (!(e.y > 30 && e.y < 130 && e.x > 8 && e.x < W - 8) || Math.sin(e.ang) < 0.25) { return false; }
+        if (Math.cos(e.ang) * (aim - e.x) < 0 && Math.abs(aim - e.x) > 12) { return false; }
+        return Math.abs(e.x - MID) < MID - 2 * DIVE_R - 10 || Math.cos(e.ang) * (e.x - MID) <= 0;
     }
     /* The path of a queen going to set a snare: the turn, and the place
        above the ship where she stops. */
@@ -712,10 +735,11 @@
     var current = null;
     window.splash.stingers = {
         width: W, height: H, shipY: PLAYER_Y, hoverY: HOVER_Y, turn: DIVE_R, flyTurn: FLY_R, giveUp: GIVE_UP, bonusEvery: BONUS_EVERY,
-        follow: follow, flySpeed: flySpeed, diveSpeed: diveSpeed, divePath: divePath, snarePath: snarePath,
+        follow: follow, flySpeed: flySpeed, diveSpeed: diveSpeed, divePath: divePath, breakPath: breakPath, canBreak: canBreak, snarePath: snarePath,
         passes: PASSES.length, pass: function (n, s) { return route(PASSES[n], s); },
         ways: WAYS.length, way: function (n, s) { return route(WAYS[n], s); },
         plans: PLANS.length, shapes: SHAPES.length, swarms: SWARMS.length, plan: planOf, shape: shapeOf, swarm: swarmOf,
+        sticky: STICKY, stickyTwin: STICKY_TWIN, honeyChance: HONEY_CHANCE, entryFire: entryFire, breakaways: breakaways,
         rows: RANKS.map(function (type, r) { return RANK_TOP + r * RANK_GAP; }),
         game: function () { return current ? current() : null; }
     };
@@ -735,7 +759,7 @@
 
         function wasp(type, delay) {
             return { type: type, sx: 0, sy: 0, x: 0, y: -20, ang: 0, state: 'wait', delay: delay, path: null, wp: 0, wpT: 0,
-                hp: type.hp, alive: true, shot: false, shots: 0, fireT: 0, held: false, phase: '', over: 0, cast: 0, way: null, pass: null };
+                hp: type.hp, alive: true, shot: false, shots: 0, fireT: 0, held: false, phase: '', over: 0, cast: 0, way: null, pass: null, breakT: 0 };
         }
         function ranks(level) {
             var list = [], shape = shapeOf(level), plan = planOf(level);
@@ -753,6 +777,12 @@
                 e.delay = 600 + (plan.pairs ? Math.floor(squad / 2) * 2600 : squad * 1700) + (n % 6) * 150;
                 e.way = route(WAYS[turn[0]], turn[1]);
             });
+            /* From the second bonus wave on, one or more of the wasps break
+               off as they fly in and dive at the ship on the way. */
+            var rest = list.slice();
+            for (var b = breakaways(level); b > 0 && rest.length; b--) {
+                rest.splice(Math.floor(Math.random() * rest.length), 1)[0].breakT = 700 + Math.random() * 1500;
+            }
             return list;
         }
         function swarm(level) {
@@ -799,15 +829,22 @@
         /* A wasp that has left the screen comes back in at the top, above
            its own place in the ranks, and drops into it. */
         function home(e) { e.x = slot(e).x; e.y = -12; e.state = 'return'; }
+        /* After the first bonus wave, some of the wasps shoot as they fly
+           in (entryFire). */
         function enter(e) {
             e.x = e.way.x; e.y = e.way.y; e.ang = e.way.ang; e.path = e.way.path;
             e.state = 'enter'; e.wp = 0; e.wpT = 0;
+            var p = entryFire(S.level);
+            e.shots = (Math.random() < p ? 1 : 0) + (S.level > 2 * BONUS_EVERY && Math.random() < p / 2 ? 1 : 0);
+            e.fireT = 300 + Math.random() * 900;
         }
         /* A dive at the ship, or at a place beside it for a wasp flying
-           in a group. */
-        function launch(e, beside) {
-            e.state = 'dive'; e.ang = -Math.PI / 2; e.wp = 0; e.wpT = 0;
-            e.path = divePath(e.x, e.y, Math.max(20, Math.min(W - 20, centre() + beside)));
+           in a group. A wasp that breaks off as it flies in dives from the
+           way it is heading. */
+        function launch(e, beside, flying) {
+            e.state = 'dive'; e.wp = 0; e.wpT = 0;
+            if (!flying) { e.ang = -Math.PI / 2; }
+            e.path = (flying ? breakPath : divePath)(e.x, e.y, Math.max(20, Math.min(W - 20, centre() + beside)));
             e.shots = Math.min(3, 1 + Math.floor(S.level / 3)); e.fireT = 500;
             shell.beep(900, 350, 'sawtooth', 0.03, 300);
         }
@@ -877,7 +914,7 @@
                 shell.beep(500, 400, 'triangle', 0.06, 1300);
                 return;
             }
-            if (e.type === QUEEN && !bonus && !honey && rapid <= 0) { honey = { x: e.x, y: e.y }; }
+            if (e.type === QUEEN && !bonus && !honey && rapid <= 0 && Math.random() < HONEY_CHANCE) { honey = { x: e.x, y: e.y }; }
             shell.beep(240, 130, 'square', 0.05, 70);
         }
         /* Something has touched the ships at r. A single ship is lost
@@ -915,7 +952,9 @@
         function update(dt, held) {
             clock += dt; waveClock += dt; killed = false;
             if (!said) { said = true; if (bonus) { shell.say('Wave ' + S.level + ', a bonus wave'); } }
-            var move = 110 * dt / 1000;
+            /* Honey is sticky: rapid fire slows the ship a little, and
+               twin ships, which have the more to gain from it, a lot. */
+            var move = 110 * (rapid > 0 ? (twin ? STICKY_TWIN : STICKY) : 1) * dt / 1000;
             if (held.left) { player.x = Math.max(6, player.x - move); }
             if (held.right) { player.x = Math.min(W - 6 - wide(), player.x + move); }
             stars.forEach(function (s) { s.y += s.v * dt / 1000; if (s.y > H) { s.y = 0; s.x = Math.floor(Math.random() * W); } });
@@ -979,7 +1018,19 @@
                     return;
                 }
                 if (e.state === 'pass') { settled = false; if (follow(e, fly, fly / FLY_R, dt)) { e.alive = false; } return; }
-                if (e.state === 'enter') { settled = false; if (follow(e, fly, fly / FLY_R, dt)) { e.state = 'settle'; } return; }
+                if (e.state === 'enter') {
+                    settled = false;
+                    var seen = e.y > 30 && e.y < PLAYER_Y - 70 && e.x > 8 && e.x < W - 8;
+                    e.fireT -= dt;
+                    if (e.shots > 0 && e.fireT <= 0 && seen) { shoot(e); e.shots--; e.fireT = 500; }
+                    if (e.breakT > 0) {
+                        e.breakT -= dt;
+                        if (e.breakT <= 0 && canBreak(e, Math.max(20, Math.min(W - 20, centre())))) { e.breakT = 0; launch(e, 0, true); return; }
+                        if (e.breakT <= 0) { e.breakT = 1; }
+                    }
+                    if (follow(e, fly, fly / FLY_R, dt)) { e.state = 'settle'; e.breakT = 0; }
+                    return;
+                }
                 if (e.state === 'settle' || e.state === 'return') {
                     if (e.state === 'settle') { settled = false; }
                     p = slot(e);
@@ -1143,7 +1194,8 @@
         S = shell.state; ctx = S.ctx; C = S.colours;
         current = function () {
             return { enemies: enemies, shots: shots, bullets: bullets, pending: pending, player: player, twin: twin, rescued: rescued,
-                taking: taking, bonus: bonus, tally: tally, stats: stats, honey: honey };
+                taking: taking, bonus: bonus, tally: tally, stats: stats, honey: honey, rapid: rapid,
+                drop: function () { honey = { x: centre(), y: PLAYER_Y - 8 }; } };
         };
         shell.draw();
         return shell.instance;
