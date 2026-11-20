@@ -1,5 +1,13 @@
 # Host shortcode integration handoff
 
+## Next release candidate: PUDL 0.108.2
+
+The next release candidate bundles the complete PUDL 0.108.2 distribution from tag `v0.108.2` at `ee4426740ab543d040893555c74880a062c19ef4`. Taskbar entries share a minimum height of 30px, including tray actions, and grow with the root font size. Our markup requires no changes. The archive and all 196 distribution files are verified as recorded in `pudl-upgrade-0.108.2.md`. This candidate is not yet published.
+
+| Item | Next release candidate |
+| --- | --- |
+| PUDL | 0.108.2 |
+
 ## Next release candidate: PUDL 0.108.1
 
 The next release candidate bundles the complete PUDL 0.108.1 distribution from tag `v0.108.1` at `3a77a4cba54bde35e34522af176be7645f01b962`. Row-action buttons stay visible at rest and participate in ordinary Tab navigation. Our launcher preserves its authored action names and requires no markup changes. Both release digests and all 196 distribution files are verified as recorded in `pudl-upgrade-0.108.1.md`. This candidate is not yet published.
