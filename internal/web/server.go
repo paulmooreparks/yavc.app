@@ -360,7 +360,10 @@ type hostAlias struct {
 
 // hostAliases are the subdomains that serve an applet under another name.
 // Aliases are looked up before installed applets. Docs is a real package.
-var hostAliases = map[string]hostAlias{}
+var hostAliases = map[string]hostAlias{
+	"asteroids": {applet: "driftwake", title: "Driftwake"},
+	"invaders":  {applet: "lantern-line", title: "Lantern Line"},
+}
 
 // aliasOf is the alias the request's host is, if it is one.
 func (s *Server) aliasOf(r *http.Request) (hostAlias, bool) {

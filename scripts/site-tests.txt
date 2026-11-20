@@ -96,6 +96,7 @@ test-document-theme.cjs
 test-editor-productivity.cjs
 test-launcher.cjs
 test-pantry.cjs
+test-space-games.cjs
 test-operation-feedback.cjs
 test-pudl-upgrade.cjs
 test-slides-exclusions.cjs

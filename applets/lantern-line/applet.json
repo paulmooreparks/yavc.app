@@ -1,18 +1,18 @@
 {
-  "name": "asteroids",
-  "title": "Asteroids",
-  "version": "0.2.0",
-  "description": "The 1979 arcade game: turn, thrust and shoot the rocks into ever smaller pieces, and watch for the saucers.",
+  "name": "lantern-line",
+  "title": "Lantern Line",
+  "version": "0.3.0",
+  "description": "Defend the Lantern outpost against descending raiders from behind four crumbling shelters.",
   "license": "Apache-2.0",
-  "src": "asteroids.js",
-  "css": "asteroids.css",
+  "src": "lantern-line.js",
+  "css": "lantern-line.css",
   "icon": "icon.svg",
   "page": {
     "body": "page.html"
   },
   "window": {
-    "shape": "0.55,0.75",
-    "min": "480,420"
+    "shape": "0.3,0.8",
+    "min": "300,420"
   },
   "handles": {
     "play": {

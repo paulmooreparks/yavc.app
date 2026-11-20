@@ -1,14 +1,14 @@
 {
-  "id": "splash.asteroids",
+  "id": "splash.driftwake",
   "version": "0.1.0",
   "apiVersion": 1,
-  "title": "Asteroids",
+  "title": "Driftwake",
   "description": "The arcade game.",
   "actions": [
     {
-      "ref": "splash.asteroids/play@1",
-      "title": "Play Asteroids",
-      "description": "Open Asteroids for the person at the page and start a game, at the first wave or the one given.",
+      "ref": "splash.driftwake/play@1",
+      "title": "Play Driftwake",
+      "description": "Open Driftwake for the person at the page and start a game, at the first wave or the one given.",
       "handles": "play",
       "inputSchema": {
         "type": "object", "additionalProperties": false,

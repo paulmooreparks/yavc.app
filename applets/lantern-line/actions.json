@@ -1,14 +1,14 @@
 {
-  "id": "splash.invaders",
+  "id": "splash.lantern-line",
   "version": "0.1.0",
   "apiVersion": 1,
-  "title": "Space Invaders",
+  "title": "Lantern Line",
   "description": "The arcade game.",
   "actions": [
     {
-      "ref": "splash.invaders/play@1",
-      "title": "Play Space Invaders",
-      "description": "Open Space Invaders for the person at the page and start a game, at the first level or the one given.",
+      "ref": "splash.lantern-line/play@1",
+      "title": "Play Lantern Line",
+      "description": "Open Lantern Line for the person at the page and start a game, at the first level or the one given.",
       "handles": "play",
       "inputSchema": {
         "type": "object", "additionalProperties": false,
