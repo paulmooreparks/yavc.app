@@ -66,6 +66,8 @@ const (
 // where they went, so a link or a bookmark to the old address still
 // arrives.
 var movedPages = map[string]string{
+	"asteroids":      "/driftwake",
+	"invaders":       "/lantern-line",
 	"files-guide":    "/help/files",
 	"terminal-guide": "/help/terminal",
 }

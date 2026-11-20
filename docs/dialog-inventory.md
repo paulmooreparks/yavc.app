@@ -107,10 +107,10 @@ The executable evidence includes the site, content, authored, block, formatting,
 | Sight Reader | Options | Immediate instrument and practice preferences | Authored sweep, all three engines |
 | Sight Reader | Read | Current score and part selection | Authored sweep, all three engines; populated flow checked |
 | Sight Reader | Help | Structured reference content and Close | Authored sweep, all three engines |
-| Asteroids | Help | Game keys remain inactive while the dialog is open | Authored sweep, all three engines |
-| Asteroids | Scores | Readable table or empty state, Close and Escape | Authored sweep, all three engines; real empty state checked |
-| Invaders | Help | Game keys remain inactive while the dialog is open | Authored sweep, all three engines |
-| Invaders | Scores | Readable table or empty state, Close and Escape | Authored sweep, all three engines; real empty state checked |
+| Driftwake | Help | Game keys remain inactive while the dialog is open | Authored sweep, all three engines |
+| Driftwake | Scores | Readable table or empty state, Close and Escape | Authored sweep, all three engines; real empty state checked |
+| Lantern Line | Help | Game keys remain inactive while the dialog is open | Authored sweep, all three engines |
+| Lantern Line | Scores | Readable table or empty state, Close and Escape | Authored sweep, all three engines; real empty state checked |
 | Pantry Raid | Help | Game keys remain inactive while the dialog is open | Authored sweep, Chromium |
 | Pantry Raid | Scores | Readable table or empty state, Close and Escape | Authored sweep, Chromium; real empty state checked |
 | Stingers | Help | Game keys remain inactive while the dialog is open | Authored sweep, Chromium |

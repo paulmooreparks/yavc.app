@@ -202,7 +202,7 @@
    game asks
 
      var shell = splash.shell(root, opts, {
-       game: 'invaders', title: 'Space Invaders', width: 224, height: 256,
+       game: 'example-game', title: 'Example Game', width: 224, height: 256,
        help: '<p>…</p>', pad: ['left', 'right', 'fire'], crisp: false,
        newGame: function (level) { … },      starts a game at a level
        update: function (dt, held) { … },    a frame's worth of play, in ms
@@ -533,7 +533,7 @@
 })();
 
 /* Copyright 2026 Paul Parks. SPDX-License-Identifier: Apache-2.0 */
-/* Asteroids, a PUDL applet package (../../README.md). The 1979 game, in
+/* Driftwake, a PUDL applet package (../../README.md). A debris-field game, drawn in
    lines on a screen of 640 by 480: the ship turns, thrusts and drifts,
    wrapping at the edges; the rocks break into halves and then into
    pieces; saucers cross now and then and shoot, the small one aiming. The
@@ -777,7 +777,7 @@
                 }
             }
             if (mode === 'ready') {
-                text('ASTEROIDS', W / 2, 150, C.fg, 4, 'center');
+                text('DRIFTWAKE', W / 2, 150, C.fg, 4, 'center');
                 text('ENTER OR NEW GAME TO PLAY', W / 2, 200, C.muted, 2, 'center');
                 text('TURN  THRUST  FIRE  HYPERSPACE', W / 2, 240, C.muted, 2, 'center');
             } else if (mode === 'paused') {
@@ -790,8 +790,9 @@
             }
         }
 
+        // Keep the existing score and sound storage namespace at legacy standalone origins.
         shell = window.splash.shell(root, opts, {
-            game: 'asteroids', title: 'Asteroids', width: W, height: H, help: HELP, crisp: true,
+            game: 'asteroids', title: 'Driftwake', width: W, height: H, help: HELP, crisp: true,
             pad: ['left', 'right', { name: 'up', label: 'Thrust' }, { name: 'fire', label: 'Fire' }, { name: 'alt', label: 'Hyperspace' }],
             extraLifeEvery: 10000,
             newGame: startWave, newWave: startWave,
@@ -816,5 +817,5 @@
         return shell.instance;
     }
 
-    window.pudlApplets.register('asteroids', { init: init });
+    window.pudlApplets.register('driftwake', { init: init });
 })();

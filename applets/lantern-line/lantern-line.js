@@ -102,7 +102,7 @@
    reader's home directory, ~/.splash/scores.json, through the host's file
    service, so they live wherever the host keeps ~; a host with no file
    service keeps them in this browser's storage. A game asks
-   splash.scores(pudlHost, 'invaders') and gets list(), best() and
+   splash.scores(pudlHost, 'lantern-line') and gets list(), best() and
    record(score, level), which resolves to the entry's rank, 1 for the
    best, or null when it did not make the ten. */
 (function () {
@@ -153,7 +153,7 @@
 
 /* Copyright 2026 Paul Parks. SPDX-License-Identifier: Apache-2.0 */
 /* A five-by-seven pixel font for the games' screens, as square as the
-   invaders: capitals, digits and a little punctuation, each as rows of
+   game: capitals, digits and a little punctuation, each as rows of
    pixels. splash.font.glyph(ch) gives a sprite { id, w, h, rows } or
    null, and splash.font.sprite(id, rows) makes one the same way. */
 (function () {
@@ -202,7 +202,7 @@
    game asks
 
      var shell = splash.shell(root, opts, {
-       game: 'invaders', title: 'Space Invaders', width: 224, height: 256,
+       game: 'invaders', title: 'Lantern Line', width: 224, height: 256,
        help: '<p>…</p>', pad: ['left', 'right', 'fire'], crisp: false,
        newGame: function (level) { … },      starts a game at a level
        update: function (dt, held) { … },    a frame's worth of play, in ms
@@ -533,8 +533,8 @@
 })();
 
 /* Copyright 2026 Paul Parks. SPDX-License-Identifier: Apache-2.0 */
-/* Space Invaders, a PUDL applet package (../../README.md). The 1978 game:
-   fifty-five invaders march across a canvas of 224 by 256 pixels, dropping
+/* Lantern Line, a PUDL applet package (../../README.md). A defence game:
+   fifty-five raiders march across a canvas of 224 by 256 pixels, dropping
    a row and speeding up as their number falls, while the cannon shoots
    from behind four shields that crumble under fire. The shell
    (../shared/splash-shell.js) gives it the canvas, the bar, the dialogs,
@@ -581,7 +581,7 @@
     ];
     var MARCH = [110, 98, 87, 78];
     var HELP =
-        '<p>Shoot the invaders before they reach the ground. Each wave starts lower and marches faster as its numbers fall. A saucer now and then is worth more. You have three cannons, and a fourth at 1,500 points.</p>' +
+        '<p>Shoot the raiders before they reach the ground. Each wave starts lower and marches faster as its numbers fall. A saucer now and then is worth more. You have three cannons, and a fourth at 1,500 points.</p>' +
         '<dl class="splash-keys">' +
           '<dt>← → or A D</dt><dd>Move</dd>' +
           '<dt>Space or X</dt><dd>Fire</dd>' +
@@ -760,7 +760,7 @@
             else if (mode !== 'ready' && mode !== 'over') { ctx.drawImage(image(PLAYER, C.accent), Math.round(player.x), PLAYER_Y); }
             if (mode === 'ready') {
                 /* The title and the table end above the shields at 184. */
-                text('SPACE INVADERS', W / 2, 52, C.fg, 2, 'center');
+                text('LANTERN LINE', W / 2, 52, C.fg, 2, 'center');
                 text('ENTER OR NEW GAME TO PLAY', W / 2, 76, C.muted, 1, 'center');
                 ctx.drawImage(image(SQUID[0], C.fg), 76, 100); text('= 30 POINTS', 96, 100, C.muted);
                 ctx.drawImage(image(CRAB[0], C.fg), 74, 116); text('= 20 POINTS', 96, 116, C.muted);
@@ -777,8 +777,9 @@
         }
 
         shields = newShields();
+        // Keep the existing score and sound storage namespace at legacy standalone origins.
         shell = window.splash.shell(root, opts, {
-            game: 'invaders', title: 'Space Invaders', width: W, height: H, help: HELP,
+            game: 'invaders', title: 'Lantern Line', width: W, height: H, help: HELP,
             pad: ['left', 'right', { name: 'fire', label: 'Fire' }], extraLifeEvery: 1500,
             newGame: startWave, newWave: startWave,
             respawn: function () { player.x = (W - PLAYER.w) / 2; },
@@ -796,5 +797,5 @@
         return shell.instance;
     }
 
-    window.pudlApplets.register('invaders', { init: init });
+    window.pudlApplets.register('lantern-line', { init: init });
 })();
