@@ -114,6 +114,19 @@ const styled=['Setext heading','==============','','Second setext','------------
     await page.evaluate(()=>pudlActions.run('yavc.docs/open-file@1',{path:'memory:source.md'},{grant:'all'}));
     try{await pressed('Visual').waitFor();if(await pressed('Document').count())failures.push(`${engine} view: a .md file opened in Document view and not in the rich view`);}catch{failures.push(`${engine} view: a .md file did not open in the rich view`);}
     await page.close();}
+   // 5. Emphasis starting with code remains rich through editing, blur, Undo and reopening.
+   {const source='# Inline code\n\n- **`alpha@1`** checks a file.\n- **`notes.md`.** Section one.\n\nBefore **`x`** after, *`a`* and ***`b`***.\n\nUntouched __words__.\n',page=await open(source,'alpha@1');
+    const rich=async()=>{assert.equal(await page.locator('#document .ProseMirror li strong code').count(),2,'both list items must be rich');assert.equal(await page.locator('#document .ProseMirror p em code').count(),2,'italic and nested emphasis must be rich');};
+    await rich();const item=page.locator('#document .ProseMirror li p').first();await item.click();await frames(page);await page.keyboard.press('End');await page.keyboard.type(' Added.');await frames(page);
+    assert.equal(await item.textContent(),'alpha@1 checks a file. Added.');await rich();
+    await page.locator('#document .ProseMirror h1').click();await frames(page);await rich();await run(page,'undo');
+    await page.waitForFunction(()=>document.querySelector('#document .ProseMirror li p')?.textContent==='alpha@1 checks a file.');await rich();
+    assert.equal((await page.evaluate(()=>pudlActions.run('yavc.docs/document@1',{}, {grant:'all'}))).text,source,'Undo must restore the original Markdown');
+    await run(page,'save');assert.equal(await page.evaluate(()=>fixture.records.get('memory:document.docs.md').text),source);await page.close();
+    const again=await open(source,'alpha@1');assert.equal(await again.locator('#document .ProseMirror li strong code').count(),2,'saved items must reopen rich');
+    const first=again.locator('#document .ProseMirror li p').first();await first.click();await frames(again);await again.keyboard.press('End');await again.keyboard.type(' Kept.');await frames(again);
+    const saved=await save(again);assert.equal(saved,source.replace('checks a file.','checks a file. Kept.'),'editing one item must retain bold code and all untouched Markdown');await again.close();
+    const final=await open(saved,'Kept.');assert.equal(await final.locator('#document .ProseMirror li strong code').count(),2);await final.close();}
   }catch(error){failures.push(`${engine}: ${String(error.message).split('\n')[0]}`);}finally{await browser.close();}
  }}finally{server.close();}
  if(failures.length){console.error(failures.slice(0,30).join('\n')+(failures.length>30?`\n... and ${failures.length-30} more`:''));process.exitCode=1;}else console.log('Docs kept every visible word, and every line it was not asked to change, in every browser.');
