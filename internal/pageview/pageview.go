@@ -596,6 +596,23 @@ func (p parser) starred(e *ast.Emphasis) bool {
 			// was read turns away anything not written with asterisks.
 			return true
 		}
+		// Code-span text starts after the opening backticks and may also
+		// omit one padding space. Find the emphasis delimiter before them.
+		leading := first
+		for {
+			if _, nested := leading.(*ast.Emphasis); !nested {
+				break
+			}
+			leading = leading.FirstChild()
+		}
+		if _, code := leading.(*ast.CodeSpan); code {
+			if off > 0 && p.src[off-1] == ' ' {
+				off--
+			}
+			for off > 0 && p.src[off-1] == '`' {
+				off--
+			}
+		}
 		return off >= e.Level && p.src[off-1] == '*'
 	}
 	off := t.Segment.Start
