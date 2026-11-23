@@ -29,6 +29,7 @@ test-host-shortcode-node.cjs
 test-docs-read-only.cjs
 test-docs-file-commands.cjs
 test-docs-insert.cjs
+test-visual-insert-forms.cjs
 test-portable-nonce-policy.cjs
 test-row-nested-list.cjs
 test-docs-menus.cjs
