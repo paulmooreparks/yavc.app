@@ -28,6 +28,7 @@ test-document-styles.cjs
 test-document-titles.cjs
 test-document-typing-stability.cjs
 test-editing-commands.cjs
+test-context-edit.cjs
 test-editor-export.cjs
 test-editor-panes.cjs
 test-editor-session.cjs
