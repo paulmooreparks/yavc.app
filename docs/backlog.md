@@ -4,6 +4,8 @@ This page lists the defects and gaps the yavc.app team has found and not yet fix
 
 ## Docs and Editor, page view
 
+- **Unexplained WebKit shared-definition refresh timeout.** On 2026-11-23, `test-custom-shortcodes.cjs` timed out at line 83 waiting for the changed shared definition in `%TEMP%/yavc-insert-site-fixed-webkit/test-custom-shortcodes.cjs.log`. Its one full named-test rerun on unchanged inputs passed in Chromium, Firefox and WebKit; the WebKit result is in `%TEMP%/yavc-insert-macros-rerun-webkit/test-custom-shortcodes.cjs.log`. The passing rerun does not establish that the failure was unrelated. Owner: Yavc.App Builder.
+
 - **Typing `---` and Enter does not make a rule.** The three characters stay as text. Found with the previous items.
 - **PDF export has no right-to-left layout.** pdfmake has no such layout and the Roboto font it uses has no Hebrew or Arabic glyphs, so a PDF export refuses a document with such text. Left over from the right-to-left work (decision 155).
 - **Typing right-to-left text is not tested.** The right-to-left test reads a document and checks how it is drawn, printed and exported, and does not type Hebrew or Arabic into the page or the Text view. Left over from decision 155.
