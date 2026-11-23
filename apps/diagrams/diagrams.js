@@ -2599,7 +2599,12 @@
                 var rows = isCanvas() ? ['cv-edit-text', 'cv-new', 'cv-add-picture', 'cv-group', 'cv-connect', 'cv-reconnect-start', 'cv-reconnect-end', 'cv-resize', '-', 'cv-copy', 'cv-paste', 'cv-duplicate', 'cv-forward', 'cv-back', 'cv-delete', '-'] : isD2() && selection() ? ['shape-label', 'shape-rename', 'shape-type', 'connect', 'shape-add-inside', '-', 'shape-delete', '-'] : isD2() ? ['shape-add', '-'] : [];
                 e.detail.add(own(rows.concat(['copy-embed', 'export-svg', 'export-png', '-', 'fit', 'redraw'], offered.length ? ['-'].concat(offered) : [])));
             }
-            else if (t.closest && t.closest('.dg-text .cm-content')) { if (typeof e.detail.handlesEdit === 'function') e.detail.handlesEdit(); e.detail.add(own(['undo', 'redo', '-', 'cut', 'copy', 'paste', 'select-all', '-', 'find', '-', 'format-text', 'copy-embed', '-', 'view-text', 'view-preview', 'view-split'].concat(offered.length ? ['-'].concat(offered) : []))); }
+            else if (t.closest && t.closest('.dg-text')) {
+                var editorSurface = t.closest('.cm-editor');
+                if (editorSurface && typeof e.detail.handlesEdit === 'function') e.detail.handlesEdit();
+                var textRows = ['undo', 'redo', '-'].concat(editorSurface ? ['cut', 'copy', 'paste', 'select-all', '-'] : [], ['find', '-', 'format-text', 'copy-embed', '-', 'view-text', 'view-preview', 'view-split']);
+                e.detail.add(own(textRows.concat(offered.length ? ['-'].concat(offered) : [])));
+            }
         });
 
         /* === Start ======================================================== */

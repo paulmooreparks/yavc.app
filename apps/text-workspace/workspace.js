@@ -547,7 +547,7 @@
                 return;
             }
             if (t.closest('.ed-surface, .ed-page, .cm-editor, .ProseMirror, [data-role="surface"], [data-role="page"]')) {
-                var editorSurface = t.closest('.cm-content,.ProseMirror');
+                var editorSurface = t.closest('.cm-editor,.ProseMirror');
                 if (editorSurface && typeof e.detail.handlesEdit === 'function') e.detail.handlesEdit();
                 editingPane = t.closest('.cm-editor') ? 'text' : t.closest('.ProseMirror') ? 'visual' : 'preview';
                 var rows = ['undo', 'redo', '-'].concat(editorSurface ? ['cut', 'copy', 'paste', 'select-all', '-'] : [], ['find', '-']);

@@ -1869,7 +1869,7 @@
                 return;
             }
             if (t.closest && (t.closest('.deck-stagebox') || t.closest('.deck-text'))) {
-                var editorSurface = t.closest('.cm-content,.ProseMirror');
+                var editorSurface = t.closest('.cm-editor,.ProseMirror');
                 if (editorSurface && typeof e.detail.handlesEdit === 'function') e.detail.handlesEdit();
                 historyPane = t.closest('.cm-editor') ? 'text' : 'visual';
                 var rows = (editorSurface ? ['undo', 'redo', '-', 'cut', 'copy', 'paste', 'select-all', '-'] : []).concat(window.yavcMdEditor ? window.yavcMdEditor.MENU.format : []);

@@ -35,6 +35,12 @@ async function content(p,rich){return rich?p.locator('.ProseMirror').first().inn
    for(const rich of app==='docs'||app==='slides'?[false,true]:[false]){
     if(app!=='editor')await action(p,app,'view',{mode:rich?'visual':'text'});
     if(rich)await p.locator('.ProseMirror[aria-busy=false]').waitFor();
+    if(!rich&&app!=='slides'){
+     const edge=p.locator('.cm-gutters').first();await edge.click({button:'right',position:{x:5,y:8}});
+     const menu=p.locator('.context-menu:visible').first();await menu.waitFor();
+     for(const label of ['Paste','Select All'])assert.equal(await menu.getByRole('menuitem',{name:new RegExp('^'+label+'(?:\\s+(?:Ctrl|Alt|Shift|Meta|Mod)|$)')}).count(),1,app+' editor edge offers '+label);
+     await p.keyboard.press('Escape');
+    }
     await select(p,rich);const before=await content(p,rich);assert.ok(before.trim());
     await choose(await context(p,rich),'Cut');
     await p.waitForFunction(()=>testClipboard.writes>0);
