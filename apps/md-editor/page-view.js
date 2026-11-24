@@ -2340,27 +2340,40 @@ var schemaCache = null;
     o.scroll.addEventListener('click', click, true);
     function staleInput(event) { if (sourceStale) { event.preventDefault(); event.stopPropagation(); } }
     o.page.addEventListener('mousedown', staleInput, true);
+    o.page.addEventListener('mousedown', rememberPointerSelection, true);
     o.page.addEventListener('beforeinput', staleInput, true);
 
     /* ProseMirror takes the browser's selection into its state when the browser's selectionchange event comes, which is a task of its own
        and can be several frames after the selection was made when the page is busy. A command that reads the page's selection in that
        time acts on the one before. So each entry of the API that reads or changes the selection first reads the browser's own selection
        (view.root.getSelection and posAtDOM, both documented) and, when it differs from the state's, makes it the state's. Only a text
-       selection outside a table is replaced (Firefox moves the browser's selection out of a table cell when the table is drawn again, and the state's is then the right one), and only while the page has the focus, which is where ProseMirror would take the browser's selection too. */
-    var seenSelection = null;
+       selection outside a table is replaced without a new pointer gesture. Inside a table the state remains authoritative after a redraw
+       (decision 160); a fresh pointer selection can be read only in the document and cell where that gesture began. */
+    var seenSelection = null, pointerSelection = null;
+    function selectionCell(node) {
+      var element = node && (node.nodeType === 1 ? node : node.parentElement);
+      return element && element.closest('td, th');
+    }
+    function rememberPointerSelection(event) {
+      pointerSelection = !sourceStale && view && event.button === 0 && view.dom.contains(event.target)
+        ? { doc: view.state.doc, cell: selectionCell(event.target) } : null;
+    }
     function domSelection() {
       var dom = view && view.root && view.root.getSelection ? view.root.getSelection() : null;
       return dom && dom.anchorNode ? { anchorNode: dom.anchorNode, anchorOffset: dom.anchorOffset, focusNode: dom.focusNode, focusOffset: dom.focusOffset } : null;
     }
     function sameDomSelection(a, b) {
-      return !!a && !!b && a.anchorNode === b.anchorNode && a.anchorOffset === b.anchorOffset && a.focusNode === b.focusNode && a.focusOffset === b.focusOffset;
+      return a === b || !!a && !!b && a.anchorNode === b.anchorNode && a.anchorOffset === b.anchorOffset && a.focusNode === b.focusNode && a.focusOffset === b.focusOffset;
     }
     function syncSelection() {
       if (!view || !on || view.composing || !view.hasFocus()) return;
       var current = view.state.selection;
-      if (!(current instanceof PM.TextSelection) || PM.isInTable(view.state)) return;
+      // CellSelection and other structural selections stay with the table plugin.
+      if (!(current instanceof PM.TextSelection)) return;
       var dom = domSelection();
       if (!dom || !view.dom.contains(dom.anchorNode) || !view.dom.contains(dom.focusNode)) return;
+      if (PM.isInTable(view.state) && (!pointerSelection || pointerSelection.doc !== view.state.doc ||
+          selectionCell(dom.anchorNode) !== pointerSelection.cell || selectionCell(dom.focusNode) !== pointerSelection.cell)) return;
       /* The state's selection is the page's own unless the browser's has changed since the state last took or set it: a selection the page set
          itself may not be in the browser's yet, and the browser's then says nothing new. */
       if (sameDomSelection(dom, seenSelection)) return;
@@ -2374,7 +2387,7 @@ var schemaCache = null;
     }
     async function mirrorAt(from, to) {
       if (!view || !on || sourceStale || frozen || dirty || syncing || view.composing) return false;
-      var target = view, doc = view.state.doc, text = o.text();
+      var target = view, doc = view.state.doc, selection = view.state.selection, dom = domSelection(), gesture = pointerSelection, text = o.text();
       if (typeof from !== 'number' || typeof to !== 'number' || from < 0 || to < from || to > text.length) return false;
       var bytes = new Uint8Array(8); crypto.getRandomValues(bytes);
       var tag = Array.from(bytes, function (value) { return value.toString(16).padStart(2, '0'); }).join(''), begin = 'YavcMirrorBegin' + tag, end = 'YavcMirrorEnd' + tag;
@@ -2382,7 +2395,7 @@ var schemaCache = null;
       var marked = text.slice(0, from) + begin + text.slice(from, to) + (to > from ? end : '') + text.slice(to);
       try {
         var json = await o.docOf(marked);
-        if (view !== target || !on || sourceStale || frozen || dirty || view.state.doc !== doc || o.text() !== text) return false;
+        if (view !== target || !on || sourceStale || frozen || dirty || view.state.doc !== doc || pointerSelection !== gesture || !view.state.selection.eq(selection) || !sameDomSelection(dom, domSelection()) || o.text() !== text) return false;
         var made = view.state.schema.nodeFromJSON(json), first = -1, last = -1, firstCount = 0, lastCount = 0;
         made.descendants(function (node, pos) {
           if (!node.isText) return;
@@ -2462,12 +2475,16 @@ var schemaCache = null;
       selectAtText: async function (from, to) {
         var text = view && o.text();
         if (typeof from !== 'number' || typeof to !== 'number' || typeof text !== 'string' || from < 0 || to < from || to > text.length) return false;
+        var target = view, doc = view.state.doc, selection = view.state.selection, dom = domSelection(), gesture = pointerSelection;
         /* The place itself first. A caret inside a link's address or an emphasis mark cannot be shown as a place on the page, since a marker there
            changes the page; then the start of the line it is on is the place, which is in the same paragraph, and a selection that cannot be shown
            as it is becomes a caret there. Nothing else stands in for it. */
         var lineStart = text.lastIndexOf(String.fromCharCode(10), Math.max(0, from) - 1) + 1, places = [[from, to]];
         if (lineStart !== from || to > from) places.push([lineStart, lineStart]);
-        for (var i = 0; i < places.length; i++) { if (await mirrorAt(places[i][0], places[i][1])) return true; }
+        for (var i = 0; i < places.length; i++) {
+          if (view !== target || view.state.doc !== doc || pointerSelection !== gesture || !view.state.selection.eq(selection) || !sameDomSelection(dom, domSelection())) return false;
+          if (await mirrorAt(places[i][0], places[i][1])) return true;
+        }
         return false;
       },
       hasSelection: function () { return !!(view && on && !view.state.selection.empty); },
@@ -2660,6 +2677,7 @@ var schemaCache = null;
         clearTimeout(reloadTimer);
         o.scroll.removeEventListener('click', click, true);
         o.page.removeEventListener('mousedown', staleInput, true);
+        o.page.removeEventListener('mousedown', rememberPointerSelection, true);
         o.page.removeEventListener('beforeinput', staleInput, true);
         if (view) { view.destroy(); view = null; }
       }

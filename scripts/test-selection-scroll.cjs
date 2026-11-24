@@ -33,6 +33,14 @@ const paragraphs=Array.from({length:101},(_,i)=>(i===0||i===50||i===100?'Needle 
  const b=await pw[engine].launch({headless:true});
  try{for(const app of ['docs','slides','diagrams','editor'])for(const mode of app==='docs'?['visual','text','split','split-text']:app==='slides'?['visual','text','split']:['text']){
   const p=await b.newPage({viewport:{width:1200,height:800}});p.setDefaultTimeout(20000);let phase=app+' '+mode;
+  if(app==='docs'&&mode==='visual')await p.addInitScript(()=>{
+   let factory;Object.defineProperty(window,'yavcPageView',{configurable:true,get:()=>factory,set:value=>{
+    factory=value;const attach=value.attach;value.attach=function(options){const docOf=options.docOf;options.docOf=function(text){
+     if(window.holdMapping&&text.includes('YavcMirrorBegin')){window.mappingWaiting=true;return new Promise(resolve=>{window.releaseMapping=()=>resolve(docOf(text));});}
+     return docOf(text);
+    };const api=attach(options),map=api.selectAtText;api.selectAtText=function(...args){const task=map.apply(this,args);if(window.holdMapping)window.mappingTask=task;return task;};return api;};
+   }});
+  });
   try{
    await p.goto(`http://localhost:${port}/?open=${app}&top=${app}`,{waitUntil:'domcontentloaded'});await p.locator('.yavc-command-toolbar').waitFor();
    await p.locator('.win[data-win="'+app+'"]').evaluate(win=>{Object.assign(win.style,{width:'900px',height:'520px',left:'80px',top:'80px'});});
@@ -97,6 +105,16 @@ const paragraphs=Array.from({length:101},(_,i)=>(i===0||i===50||i===100?'Needle 
      console.log(engine+' docs '+mode+': headings in both directions and footnote scroll');
     }
     if(mode==='visual'){
+     // Hold the actual asynchronous source mapper after Undo has rebuilt the page.
+     // A later click must win, including when the mapper tries its line fallback.
+     phase='Undo reveal versus later click';await action(p,app,'view',{mode:'text'});
+     await action(p,app,'set-text',{text:'First target.\n\nLast target.\n'});await action(p,app,'view',{mode:'visual'});
+     await p.locator('.ProseMirror[aria-busy=false]').waitFor();await p.locator('.ProseMirror > p:last-child').click();await p.keyboard.press('End');await p.keyboard.type('Z');await p.evaluate(()=>yavcMdEditor._page.sync());
+     await p.evaluate(()=>{window.holdMapping=true;window.historyTask=pudlCommands.run('undo',null,document.querySelector('[data-applet]'));});
+     await p.waitForFunction(()=>window.mappingWaiting);await p.locator('.ProseMirror[aria-busy=false]').waitFor();await p.locator('.ProseMirror > p:first-child').click();
+     assert.equal(await p.evaluate(async()=>{window.holdMapping=false;window.releaseMapping();return await window.mappingTask;}),false,'Undo mapper accepted a later selection');
+     await p.keyboard.type('Q');await p.evaluate(()=>yavcMdEditor._page.sync());
+     assert.ok((await p.locator('.ProseMirror > p:first-child').textContent()).includes('Q'),'late Undo reveal stole the click');assert.equal(await p.locator('.ProseMirror > p:last-child').textContent(),'Last target.');
      await action(p,app,'view',{mode:'text'});
      await action(p,app,'set-text',{text:'{++Upper annotation++}\n\n'+paragraphs.slice(1,-1).join('\n\n')+'\n\n{++Lower annotation++}\n'});await action(p,app,'view',{mode:'visual'});
      for(const label of ['Lower annotation','Upper annotation']){
