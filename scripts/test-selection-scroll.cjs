@@ -14,13 +14,14 @@ function geometry(where){
  let top=0,bottom=innerHeight,left=0,right=innerWidth;
  for(let n=node.parentElement;n;n=n.parentElement){const s=getComputedStyle(n);if(/auto|scroll|hidden|clip/.test(s.overflowY)){const r=n.getBoundingClientRect();top=Math.max(top,r.top+n.clientTop);bottom=Math.min(bottom,r.top+n.clientTop+n.clientHeight);}if(/auto|scroll|hidden|clip/.test(s.overflowX)){const r=n.getBoundingClientRect();left=Math.max(left,r.left+n.clientLeft);right=Math.min(right,r.left+n.clientLeft+n.clientWidth);}}
  const bar=Array.from(document.querySelectorAll('.ed-find')).find(n=>n.getClientRects().length)?.getBoundingClientRect();
+ const covered=!!bar&&bar.left<at.right&&bar.right>at.left&&bar.top<at.bottom&&bar.bottom>at.top;
  if(bar&&bar.left<at.right&&bar.right>at.left&&bar.top<=top+2)top=Math.max(top,bar.bottom);
- const result={visible:at.top>=top-1&&at.bottom<=bottom+1&&at.left>=left-1&&at.right<=right+1,at:{top:at.top,bottom:at.bottom,left:at.left,right:at.right},clip:{top,bottom,left,right},scroll:clip.scrollTop,outer:scrollY,focus:document.activeElement?.getAttribute('data-find')};
+ const result={visible:!covered&&at.top>=top-1&&at.bottom<=bottom+1&&at.left>=left-1&&at.right<=right+1,covered,at:{top:at.top,bottom:at.bottom,left:at.left,right:at.right},clip:{top,bottom,left,right},scroll:clip.scrollTop,outer:scrollY,focus:document.activeElement?.getAttribute('data-find')};
  return where?.check?result.visible:result;
 }
 async function visible(p,rich,label){
  try{await p.waitForFunction(geometry,{rich,check:true},{timeout:4000});}catch(e){throw Error(label+' '+JSON.stringify(await p.evaluate(geometry,rich))+' '+e.message);}
- const state=await p.evaluate(geometry,rich);assert.equal(state.visible,true,label+' is clipped');assert.equal(state.outer,0,label+' moved desktop');assert.equal(state.focus,'search',label+' lost Find field focus');
+ const state=await p.evaluate(geometry,rich);assert.equal(state.visible,true,label+' is clipped');assert.equal(state.covered,false,label+' is under Find');assert.equal(state.outer,0,label+' moved desktop');assert.equal(state.focus,'search',label+' lost Find field focus');
 }
 async function count(p,expected){await p.waitForFunction(expected=>Array.from(document.querySelectorAll('.ed-find')).find(n=>n.getClientRects().length)?.querySelector('[data-find=count]').textContent===expected,expected);}
 async function commandVisible(p,where,label){
@@ -67,11 +68,14 @@ const paragraphs=Array.from({length:101},(_,i)=>(i===0||i===50||i===100?'Needle 
    }
    if(app==='docs'){
     if(rich)await bar.getByRole('button',{name:'Close',exact:true}).click();
+    if(rich){
+     phase=app+' '+mode+' Go to Line from page';await command(p,'go-to-line');const field=p.locator('.cm-goto-line input[name=line]');await field.fill('101');await field.press('Enter');await field.waitFor({state:'detached'});await commandVisible(p,false,phase);
+    }
     await action(p,app,'view',{mode:'text'});
     await action(p,app,'set-text',{text:'# Upper\n\nStart target.\n\n'+paragraphs.slice(1,-1).join('\n\n')+'\n\n# Lower\n\nEnd target.\n'});await action(p,app,'view',{mode:viewMode});
     const target=rich?{rich:true,selector:'.ProseMirror > p:last-child'}:false;
     if(rich)await p.locator('.ProseMirror h1').filter({hasText:'Lower'}).waitFor();
-    await command(p,'toggle-outline');await p.locator('[data-outline-index]').filter({hasText:'Lower'}).click();
+    phase=app+' '+mode+' outline below';await command(p,'toggle-outline');await p.locator('[data-outline-index]').filter({hasText:'Lower'}).click();
     await commandVisible(p,rich?{rich:true,selector:'.ProseMirror h1:last-of-type'}:false,'outline below');
     if(rich)await p.locator('.ProseMirror > p:last-child').click();
     await p.keyboard.press('End');await p.keyboard.type('Z');

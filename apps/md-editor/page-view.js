@@ -2290,8 +2290,8 @@ var schemaCache = null;
           insert(name);
           return true;
       }
-      var acted = cmd(v.state, v.dispatch, v);
       v.focus();
+      var acted = cmd(v.state, v.dispatch, v);
       return acted;
     }
     /* The link for the selection, asked in the site's dialog
@@ -2330,7 +2330,7 @@ var schemaCache = null;
       if(reference&&o.page.contains(reference)){
         e.preventDefault();e.stopPropagation();var label=reference.getAttribute('data-footnote-ref'),found=null;
         view.state.doc.descendants(function(node,pos){if(found==null&&node.type.name==='footnote'&&node.attrs.label===label)found=pos;});
-        if(found!=null){view.dispatch(view.state.tr.setSelection(PM.TextSelection.near(view.state.doc.resolve(found+1))).scrollIntoView());view.focus();}
+        if(found!=null){view.focus();view.dispatch(view.state.tr.setSelection(PM.TextSelection.near(view.state.doc.resolve(found+1))).scrollIntoView());}
         else {var definition=Array.from(o.page.querySelectorAll('.doc-footnote')).find(function(note){return note.getAttribute('data-footnote')===label;});if(definition)definition.scrollIntoView({block:'nearest'});}
         return;
       }
@@ -2613,7 +2613,7 @@ var schemaCache = null;
         view.state.doc.forEach(function (node, offset) { if (node.type.name === 'heading' || node.type.name === 'source_block' && node.attrs.kind === 'heading') { number++; if (number === index) found = { node: node, offset: offset }; } });
         if (!found) return false;
         var selection = found.node.type.name === 'heading' ? PM.TextSelection.create(view.state.doc, found.offset + 1) : PM.NodeSelection.create(view.state.doc, found.offset);
-        view.dispatch(view.state.tr.setSelection(selection).scrollIntoView()); view.focus(); return true;
+        view.focus(); view.dispatch(view.state.tr.setSelection(selection).scrollIntoView()); return true;
       },
       // Whether a table command can act where the cursor is.
       can: can,
