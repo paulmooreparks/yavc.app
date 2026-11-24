@@ -39,6 +39,31 @@ const source = '# Review sample\n\nSecond paragraph with other words.\n';
                 await page.evaluate(() => pudlCommands.run('undo', null, document.querySelector('[data-applet]')));
                 assert.equal((await call('document')).text, source, engine + ': undo takes the comment back');
             }
+            phase = 'table redraw keeps the editor selection';
+            await call('view', { mode: 'text' });
+            await call('set-text', { text: '# Table\n\n| A | B |\n| --- | --- |\n| one | two |\n| three | four |\n\nAfter table.\n' });
+            await call('view', { mode: 'visual' });
+            await page.locator('.ProseMirror[aria-busy=false] td').filter({ hasText: /^one$/ }).click();
+            assert.equal(await page.evaluate(() => yavcMdEditor._page.run('heading-cell')), true);
+            await page.evaluate(() => yavcMdEditor._page.sync());
+            // Model the browser moving its DOM selection out of a redrawn cell,
+            // with no new pointer gesture. Decision 160 keeps the editor's cell.
+            assert.equal(await page.evaluate(() => {
+                const after = document.querySelector('.ProseMirror > p:last-child'), range = document.createRange(), selection = getSelection();
+                range.selectNodeContents(after); range.collapse(true); selection.removeAllRanges(); selection.addRange(range);
+                return yavcMdEditor._page.run('heading-cell');
+            }), true);
+            assert.equal(await page.locator('.ProseMirror td').filter({ hasText: /^one$/ }).count(), 1);
+            phase = 'structural cell selection survives command synchronization';
+            const first = await page.locator('.ProseMirror td').filter({ hasText: /^one$/ }).boundingBox();
+            const last = await page.locator('.ProseMirror td').filter({ hasText: /^four$/ }).boundingBox();
+            await page.mouse.move(first.x + first.width / 2, first.y + first.height / 2); await page.mouse.down();
+            await page.mouse.move(last.x + last.width / 2, last.y + last.height / 2, { steps: 10 }); await page.mouse.up();
+            await page.waitForFunction(() => document.querySelectorAll('.ProseMirror .selectedCell').length === 4);
+            await page.evaluate(() => yavcMdEditor._page.selectionText());
+            assert.equal(await page.locator('.ProseMirror .selectedCell').count(), 4);
+            assert.equal(await page.evaluate(() => yavcMdEditor._page.run('merge-cells')), true);
+            assert.equal(await page.locator('.ProseMirror td[colspan="2"][rowspan="2"]').count(), 1);
             assert.deepEqual(errors, []);
             console.log(engine + ': a command given in the turn of a selection acts on that selection');
         } catch (err) { console.error(engine, phase); throw err; } finally { await browser.close(); }
