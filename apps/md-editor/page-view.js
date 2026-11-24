@@ -493,10 +493,32 @@ var schemaCache = null;
       });
     }
 
+    /* A command can keep focus in Find or a host control. Honour its public
+       transaction scroll request using editor coordinates, without changing
+       that control's focus or composition. The host owns this scroll box. */
+    function revealSelection() {
+      if (!view || !on || !o.scroll.clientHeight) return;
+      var caret = view.coordsAtPos(view.state.selection.head), box = o.scroll.getBoundingClientRect();
+      /* offsetHeight rounds fractional CSS pixels. At a distant match that
+         rounding would turn into several pixels of missed scrolling. */
+      var style = getComputedStyle(o.scroll), width = parseFloat(style.width), height = parseFloat(style.height);
+      if (style.boxSizing !== 'border-box') {
+        width += parseFloat(style.paddingLeft) + parseFloat(style.paddingRight) + parseFloat(style.borderLeftWidth) + parseFloat(style.borderRightWidth);
+        height += parseFloat(style.paddingTop) + parseFloat(style.paddingBottom) + parseFloat(style.borderTopWidth) + parseFloat(style.borderBottomWidth);
+      }
+      var sx = box.width / width || 1, sy = box.height / height || 1;
+      var top = box.top + (o.scroll.clientTop + 5) * sy, bottom = top + (o.scroll.clientHeight - 10) * sy;
+      var left = box.left + (o.scroll.clientLeft + 5) * sx, right = left + (o.scroll.clientWidth - 10) * sx;
+      var dy = caret.top < top ? caret.top - top : caret.bottom > bottom ? caret.bottom - bottom : 0;
+      var dx = caret.left < left ? caret.left - left : caret.right > right ? caret.right - right : 0;
+      if (dy) o.scroll.scrollTop += dy / sy;
+      if (dx) o.scroll.scrollLeft += dx / sx;
+    }
     function dispatch(tr) {
       if (!view) return;
       if ((!on || sourceStale || frozen) && tr.docChanged && !tr.getMeta('fromText')) return;
       view.updateState(view.state.apply(tr));
+      if (tr.scrolledIntoView) revealSelection();
       seenSelection = domSelection();
       /* The reader moved the selection (a click, an arrow key): the host maps it to the text. A selection the host itself mirrored is not told back. */
       if (tr.selectionSet && !tr.docChanged && !tr.getMeta('mirror') && o.selected) { o.selected(); }
