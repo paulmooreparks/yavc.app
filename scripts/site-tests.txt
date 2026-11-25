@@ -110,3 +110,4 @@ test-rtl.cjs
 test-barcode-scanner-library-reload.cjs
 test-split-mirror.cjs
 test-selection-scroll.cjs
+test-docs-menu-startup.cjs
