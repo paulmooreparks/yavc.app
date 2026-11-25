@@ -22,13 +22,15 @@ async function content(p,rich){return rich?p.locator('.ProseMirror').first().inn
   const p=await browser.newPage();p.setDefaultTimeout(20000);const errors=[];p.on('pageerror',e=>errors.push(e.message));
   try{
    await p.addInitScript(()=>{
-    window.testClipboard={text:'',reads:0,writes:0,native:0,claimed:0};
-    window.pudlClipboard={async readText(){testClipboard.reads++;return testClipboard.text;},async writeText(text){testClipboard.writes++;testClipboard.text=text;}};
+    window.testClipboard={text:'',reads:0,writes:0,native:0,claimed:0,rich:0};
+    // The host side of PUDL 0.109.0's documented clipboard transport (docs/EDIT-MENUS.md); installed once pudl-menu.js has loaded.
+    window.testTransport={async readText(){testClipboard.reads++;return testClipboard.text;},async writeText(text){testClipboard.writes++;testClipboard.text=text;}};
     Object.defineProperty(navigator,'clipboard',{configurable:true,value:{async readText(){testClipboard.native++;throw Error('Wrong clipboard');},async writeText(){testClipboard.native++;throw Error('Wrong clipboard');}}});
     document.addEventListener('pudl:contextmenu',e=>{const original=e.detail.handlesEdit;e.detail.handlesEdit=function(){testClipboard.claimed++;if(original)original();};},true);
    });
    await p.route('**/api/site/tree',async route=>{const response=await route.fetch({url:`http://127.0.0.1:${port}/api/site/tree`}),tree=await response.json();tree.children.push({name:'context-readonly.md',kind:'script',source:'Read only words.\n'});await route.fulfill({response,json:tree});});
    await p.goto(`http://${app}.localhost:${port}/`,{waitUntil:'domcontentloaded'});await p.locator('.yavc-command-toolbar').waitFor();
+   await p.evaluate(()=>pudlClipboard.setTransport(testTransport));
    if(app==='editor'||app==='docs')await action(p,app,'new',{text:'Alpha Beta.\n'});
    else if(app==='slides')await action(p,app,'load',{text:'# Alpha\n\nBeta.\n'});
    else {await action(p,app,'new',{kind:'d2'});await action(p,app,'set-text',{text:'alpha: Beta\n'});}
@@ -47,6 +49,13 @@ async function content(p,rich){return rich?p.locator('.ProseMirror').first().inn
     await p.waitForFunction(rich=>rich?!document.querySelector('.ProseMirror').textContent.trim():yavcCodeMirror.EditorView.findFromDOM(document.querySelector('.cm-editor')).state.doc.length===0,rich);
     await choose(await context(p,rich),'Undo');
     await p.waitForFunction(({rich,before})=>rich?document.querySelector('.ProseMirror').innerText.trim()===before.trim():yavcCodeMirror.EditorView.findFromDOM(document.querySelector('.cm-editor')).state.doc.toString()===before,{rich,before});
+    if(rich&&app==='docs'){
+     // PUDL's accessor carries text only, so rich copy keeps writing HTML through navigator.clipboard.write where the page has it.
+     await p.evaluate(()=>{navigator.clipboard.write=async items=>{for(const item of items)if(item.types.includes('text/html'))testClipboard.rich++;};});
+     const writes=await p.evaluate(()=>testClipboard.writes);await select(p,rich);await choose(await context(p,rich),'Copy');
+     await p.waitForFunction(()=>testClipboard.rich>0);assert.equal(await p.evaluate(()=>testClipboard.writes),writes,'rich copy does not fall back to text');
+     await p.evaluate(()=>{delete navigator.clipboard.write;});
+    }
     await select(p,rich);await choose(await context(p,rich),'Copy');
     await p.evaluate(()=>testClipboard.text='Pasted words');await select(p,rich);await choose(await context(p,rich),'Paste');
     await p.waitForFunction(rich=>rich?document.querySelector('.ProseMirror').textContent.includes('Pasted words'):yavcCodeMirror.EditorView.findFromDOM(document.querySelector('.cm-editor')).state.doc.toString().includes('Pasted words'),rich);
@@ -65,13 +74,13 @@ async function content(p,rich){return rich?p.locator('.ProseMirror').first().inn
    if(app==='editor'){
     const before=await content(p,false);
     await p.evaluate(()=>{
-     const view=yavcCodeMirror.EditorView.findFromDOM(document.querySelector('.cm-editor'));window.testReadOnly=false;window.testEditError='';window.savedRead=pudlClipboard.readText;
-     pudlClipboard.readText=()=>new Promise(resolve=>window.finishClipboardRead=resolve);
+     const view=yavcCodeMirror.EditorView.findFromDOM(document.querySelector('.cm-editor'));window.testReadOnly=false;window.testEditError='';
+     pudlClipboard.setTransport({readText:()=>new Promise(resolve=>window.finishClipboardRead=resolve),writeText:testTransport.writeText});
      const edit=yavcMdEditor.editing({source:()=>view,page:()=>null,rich:()=>false,identity:()=>view,alive:()=>true,readOnly:()=>testReadOnly,say:message=>testEditError=message,changed(){}});
      window.pendingPaste=edit.clipboard('paste');
     });
     await p.waitForFunction(()=>!!window.finishClipboardRead);await p.evaluate(()=>{testReadOnly=true;finishClipboardRead('Forbidden paste');});await p.evaluate(()=>pendingPaste);
-    assert.equal(await content(p,false),before);assert.match(await p.evaluate(()=>testEditError),/document or selection changed/);await p.evaluate(()=>{pudlClipboard.readText=savedRead;});
+    assert.equal(await content(p,false),before);assert.match(await p.evaluate(()=>testEditError),/document or selection changed/);await p.evaluate(()=>pudlClipboard.setTransport(testTransport));
    }
    const clip=await p.evaluate(()=>testClipboard);assert.equal(clip.native,0);assert.ok(clip.claimed>0);assert.deepEqual(errors,[]);
    console.log(engine+' '+app+': context Cut/Undo, Copy, Paste/Undo, Select All and PUDL bridge passed');

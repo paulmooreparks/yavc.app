@@ -1,5 +1,13 @@
 # Host shortcode integration handoff
 
+## Next release candidate: PUDL 0.109.0
+
+The next release candidate bundles the complete PUDL 0.109.0 distribution from tag `v0.109.0` at `f8f7f21ab4479fd5acc5edbe9f8dcc7c13bfb90c`. PUDL now gives plain fields and selected text its own Cut, Copy, Paste and Select All rows, publishes `window.pudlClipboard` with `setTransport`, and no longer opens the browser's menu on Shift+right-click. Hosts that want their native clipboard call `pudlClipboard.setTransport({ readText, writeText })` in every document that loads PUDL's menu, including applet frames, and then switch off their default context menu. yavc's editors already claim their own edit rows. The archive and all 196 distribution files are verified as recorded in `pudl-upgrade-0.109.0.md`. This candidate is not yet published.
+
+| Item | Next release candidate |
+| --- | --- |
+| PUDL | 0.109.0 |
+
 ## Next release candidate: PUDL 0.108.2
 
 The next release candidate bundles the complete PUDL 0.108.2 distribution from tag `v0.108.2` at `ee4426740ab543d040893555c74880a062c19ef4`. Taskbar entries share a minimum height of 30px, including tray actions, and grow with the root font size. Our markup requires no changes. The archive and all 196 distribution files are verified as recorded in `pudl-upgrade-0.108.2.md`. This candidate is not yet published.
