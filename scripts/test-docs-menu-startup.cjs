@@ -2,10 +2,6 @@
 const assert = require('node:assert/strict'), pw = require('playwright');
 const port = process.env.YAVC_CHROME_TEST_PORT;
 const ids = ['cut', 'copy', 'paste', 'select-all', 'link', 'table', 'box'];
-// PUDL follow-up requested on 2026-11-25: honour bind:false in menubar check().
-// Its menubar rejects reserved clipboard labels even with bind:false.
-// Remove this narrow allowance when the fixed PUDL distribution is vendored.
-const knownPudl = /^pudl-menubar: (Docs|Editor): Mod\+(?:X on "Cut"|C on "Copy"|V on "Paste"|A on "Select All") is a key a page may not take, and the command keeps no shortcut$/;
 (async () => { for (const engine of process.argv.slice(2).length ? process.argv.slice(2) : ['chromium', 'firefox', 'webkit']) {
     const browser = await pw[engine].launch({headless:true});
     try { for (const app of ['docs', 'editor']) { for (const host of ['desktop', 'standalone']) {
@@ -36,7 +32,8 @@ const knownPudl = /^pudl-menubar: (Docs|Editor): Mod\+(?:X on "Cut"|C on "Copy"|
             for (let i=0;i<await titles.count();i++) { await titles.nth(i).click(); await page.keyboard.press('Escape'); }
             console.log(engine+' '+app+' '+host+' startup registrations '+JSON.stringify(early)+'; warnings '+JSON.stringify(warnings));
             assert.deepEqual(early,ids.map(id=>({id,present:true,disabled:true})), 'Menu commands exist and are disabled before the kit loads.');
-            assert.deepEqual(warnings.filter(w=>!knownPudl.test(w)),[], 'Unexpected PUDL command/menu warning.');
+            // PUDL 0.109.0 keeps the display-only Cut, Copy, Paste and Select All keys (pudl issue 40), so no warning is expected.
+            assert.deepEqual(warnings,[], 'Unexpected PUDL command/menu warning.');
             assert.deepEqual(errors,[]);
         } finally { release(); await page.close(); }
     } } } finally { await browser.close(); }
