@@ -2,7 +2,7 @@
 // Synthetic services injected only by the independent-host shortcode test.
 (function(){
     'use strict';
-    var source='# Host shortcodes\n\nSee {{ticket:EX-1}} and {{@alex}}.\n\n{{children}}\n\n{{panel:Original}}\nEditable **body**.\n{{/panel}}\n\nSome {{target:one}}marked **words**{{/target}} here.\n\n{{thread:id=1}}\nManaged body.\n{{/thread}}\n';
+    var source='# Host shortcodes\n\nSee {{ticket:EX-1}} and {{@alex}}.\n\n{{children}}\n\n{{panel:Original}}\nEditable **body**.\n{{/panel}}\n\nSome {{target:one}}marked **words**{{/target}} here, and {{tint}}tinted words{{/tint}} with nothing to change.\n\n{{thread:id=1}}\nManaged body.\n{{/thread}}\n';
     fixture.records.get('memory:source.md').text=source;fixture.records.get('memory:document.docs.md').text=source;
     var calls=[],forms=[],catalogCalls=0,hold=null;
     var definitions=[
@@ -11,6 +11,7 @@
         {name:'children',title:'Children',kind:'block',example:'{{children}}'},
         {name:'panel',title:'Panel',kind:'container',example:'{{panel:Example}}\nBody.\n{{/panel}}'},
         {name:'target',title:'Target',kind:'span',example:'{{target:one}}Words.{{/target}}'},
+        {name:'tint',title:'Tint',kind:'span',example:'{{tint}}Words.{{/tint}}'},
         {name:'thread',title:'Thread',kind:'container',managed:true,example:'{{thread:id=1}}\nManaged body.\n{{/thread}}'}
     ].map(function(d){return Object.assign({description:'Synthetic host shortcode',params:[]},d);});
     fixture.hostShortcodes={calls:calls,forms:forms,catalogCalls:function(){return catalogCalls;},hold:function(){hold={};hold.promise=new Promise(function(resolve){hold.release=resolve;});},release:function(){var gate=hold;hold=null;if(gate)gate.release();},source:source};

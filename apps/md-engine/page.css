@@ -261,9 +261,12 @@
    and the table fits the pane; the scroll is left for a table whose
    columns cannot fit even at their narrowest (Paul, 2026-11-26). Visual and
    Document fit their tables in pages.js; print keeps ordinary table
-   layout. */
+   layout. Visual's page is held to the pane as well: a host that frames a
+   picture at its natural width (a desktop host's picture viewer) widened it
+   to the picture, so a width of 80% was 80% of the grown page. Held to
+   the pane, the frame's own max-width: 100% applies again. */
 @media screen {
-  .doc-page:not(.page-view):not(.doc-paginated) { min-width: 0; }
+  .doc-page:not(.doc-paginated) { min-width: 0; }
   .doc-page:not(.page-view):not(.doc-paginated) table { display: block; width: max-content; max-width: 100%; overflow-x: auto; }
   .doc-page:not(.page-view):not(.doc-paginated) :is(td, th) { overflow-wrap: anywhere; }
 }

@@ -42,3 +42,4 @@ test-table-editing.cjs
 test-row-gap-paint.cjs
 test-table-piece-paint.cjs
 test-codemirror-ownership.cjs
+test-host-picture-frame.cjs

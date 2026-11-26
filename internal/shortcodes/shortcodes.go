@@ -738,7 +738,9 @@ func init() {
 				if !sizeRe.MatchString(w) {
 					return "", problem{"width is a number with %, px, rem, em or ch, such as 80%."}
 				}
-				style = ` style="max-width:` + Esc(w) + `"`
+				// width is the largest the picture is drawn, and never wider
+				// than its column: 640px in a 600px column is 600px.
+				style = ` style="max-width:min(` + Esc(w) + `,100%)"`
 			}
 			out := `<figure class="sc-figure">` + ImageTag(s, alt, style+` loading="lazy"`)
 			if cap, ok := c.Get("caption", -1); ok && strings.TrimSpace(cap) != "" {
