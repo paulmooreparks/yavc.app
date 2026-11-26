@@ -256,11 +256,16 @@
    let a table cell holding a word longer than the pane, such as a run of
    joined identifiers, widen the whole page, so every paragraph ran past the
    window. On screen such a page keeps the pane's width and its table is its
-   own scrolling box. Visual and Document fit their tables in pages.js;
-   print keeps ordinary table layout. */
+   own scrolling box. A cell's words may break anywhere, as in a fitted
+   Visual table, so a long run of joined identifiers wraps inside its cell
+   and the table fits the pane; the scroll is left for a table whose
+   columns cannot fit even at their narrowest (Paul, 2026-11-26). Visual and
+   Document fit their tables in pages.js; print keeps ordinary table
+   layout. */
 @media screen {
   .doc-page:not(.page-view) { min-width: 0; }
   .doc-page:not(.page-view) table { display: block; width: max-content; max-width: 100%; overflow-x: auto; }
+  .doc-page:not(.page-view) :is(td, th) { overflow-wrap: anywhere; }
 }
 /* GitHub README image alignment, also retained on local attachments. */
 .doc-page img[align="right" i] { float: right; margin: 0 0 1em 1em; }

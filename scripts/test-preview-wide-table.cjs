@@ -1,6 +1,6 @@
 // Copyright 2026 Paul Parks. SPDX-License-Identifier: Apache-2.0
 // A table cell holding one word longer than the pane (a run of joined identifiers) must not widen the page in Preview:
-// paragraphs wrap at the pane and only the table scrolls (DESIGN.md, decision 15). All text is invented.
+// paragraphs wrap at the pane, the long word breaks in its cell, and a table too wide to fit scrolls within itself (decision 15). All text is invented.
 const assert=require('node:assert/strict'),pw=require('playwright');
 const port=process.env.YAVC_CHROME_TEST_PORT;
 const words='Invented sentence words that run on long enough to need several lines at this width. ';
@@ -21,8 +21,13 @@ const text='# Practice page\n\n'+words.repeat(4)+'\n\n- '+words.repeat(3)+'\n\n|
   assert.ok(m.scrollSW<=m.scrollCW+1,'the page must not scroll sideways');
   assert.ok(m.para<=m.page,'paragraphs wrap within the page');
   assert.ok(m.paraLines>1,'the long paragraph wraps');
-  assert.ok(m.tableSW>m.tableCW,'the table scrolls within itself');
+  assert.ok(m.tableSW<=m.tableCW+1,'the long cell word breaks inside its cell, so the table fits the pane');
   assert.equal((await action('document')).text,text,'switching views leaves the document unchanged');
+  // A table that cannot fit even with every cell at its narrowest scrolls within itself instead of widening the page.
+  await action('new',{text:'Words.\n\n|'+' Column |'.repeat(30)+'\n|'+' --- |'.repeat(30)+'\n|'+' Cell |'.repeat(30)+'\n'});await action('view',{mode:'preview'});
+  const wide=await p.evaluate(()=>{const scroll=[...document.querySelectorAll('.ed-scroll')].find(s=>s.querySelector(':scope > .doc-page:not(.page-view) table')),table=scroll.querySelector('table');return {scrollSW:scroll.scrollWidth,scrollCW:scroll.clientWidth,tableSW:table.scrollWidth,tableCW:table.clientWidth};});
+  console.log(engine+' '+JSON.stringify(wide));
+  assert.ok(wide.scrollSW<=wide.scrollCW+1&&wide.tableSW>wide.tableCW,'a very wide table scrolls within itself');
   assert.deepEqual(errors,[]);
   console.log(engine+': a wide table scrolls within itself and the page wraps to the pane');
  }finally{await browser.close();}
