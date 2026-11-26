@@ -2,7 +2,7 @@
 // Tables on a page that is not laid out in pages (Visual and Preview) are laid out as a wiki lays them out (DESIGN.md, decisions 15 and
 // 212): columns as wide as their content needs, no word broken in the middle of a short column, a status label on one line, and a table
 // too wide for the pane scrolling sideways in its own box while the page keeps the pane's width. Two shapes are checked: a table with one
-// prose column, five short ones and a status label (which v0.2.119 crushed), and eight columns of unbreakable words (which widened the
+// prose column, five short ones and a status label (which v0.2.119 crushed, and whose short columns a 6em cell minimum held at 84px until v0.2.122), and eight columns of unbreakable words (which widened the
 // page). In Visual, which is editable, the second shape scrolls the pane sideways and only Preview gives it its own box. All text is invented.
 const assert=require('node:assert/strict'),pw=require('playwright');
 const port=process.env.YAVC_CHROME_TEST_PORT;
@@ -29,7 +29,7 @@ function measure(){
  try{
   const p=await browser.newPage({viewport:{width:1000,height:900}});p.setDefaultTimeout(20000);const errors=[];p.on('pageerror',e=>errors.push(e.message));
   const action=(name,input={})=>p.evaluate(({name,input})=>pudlActions.run('yavc.docs/'+name+'@1',input,{grant:'all'}),{name,input});
-  async function view(mode){await action('view',{mode});if(mode==='visual')await p.locator('.ProseMirror[aria-busy=false] table').waitFor();else await p.locator('.ed-scroll > .doc-page:not(.page-view) table').waitFor();return p.evaluate(measure);}
+  async function view(mode){await action('view',{mode});if(mode==='visual'){await p.locator('.ProseMirror[aria-busy=false] table').waitFor();await p.waitForFunction(()=>![...document.querySelectorAll('.ProseMirror table')].some(t=>t.querySelector(':scope > colgroup[data-doc-columns]')||t.classList.contains('doc-table-constrained')||t.style.tableLayout));}else await p.locator('.ed-scroll > .doc-page:not(.page-view) table').waitFor();return p.evaluate(measure);}
   await p.goto(`http://docs.localhost:${port}/`,{waitUntil:'domcontentloaded'});await p.locator('.yavc-command-toolbar').waitFor();
   for(const width of [1000,720]){
    await p.setViewportSize({width,height:900});
@@ -38,9 +38,11 @@ function measure(){
    for(const mode of ['visual','preview']){
     const m=await view(mode);console.log(engine+' '+width+' '+mode+' actions '+JSON.stringify(m));
     assert.ok(m.scrollSW<=m.scrollCW+1,mode+' '+width+': the page must not scroll sideways');
-    for(const h of m.heads.filter(h=>h.text!=='Description'))assert.equal(h.lines,1,mode+' '+width+': the short heading "'+h.text+'" stays on one line');
+    // A heading of one word stays whole; a heading of several words may wrap between them, as a browser lays a table out by its content.
+    for(const h of m.heads.filter(h=>!/\s/.test(h.text)))assert.equal(h.lines,1,mode+' '+width+': the one-word heading "'+h.text+'" stays on one line');
     assert.equal(m.brokenWords,0,mode+' '+width+': no word in a short column is broken across lines');
     assert.deepEqual(m.badges,[1,1],mode+' '+width+': each status label stays on one line');
+    const no=m.heads.find(h=>h.text==='No');assert.ok(no.width<60,mode+' '+width+': a two-letter column is as narrow as its content, not held at a minimum width ('+no.width+'px)');
     if(width===1000){const widest=m.heads.reduce((a,h)=>h.width>a.width?h:a);assert.equal(widest.text,'Description',mode+' '+width+': the prose column is the widest, as the wiki draws it');}
    }
    assert.equal((await action('document')).text,actions,'drawing the table leaves the document unchanged');
