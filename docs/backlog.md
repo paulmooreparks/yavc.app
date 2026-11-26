@@ -53,3 +53,11 @@ This page lists the defects and gaps the yavc.app team has found and not yet fix
 ## Firefox timeout in test-preview-wide-table.cjs during the table-layout correction (2026-11-26)
 
 Unexplained. The first local Firefox run of the rewritten `test-preview-wide-table.cjs` on branch `tables-follow-content` timed out after 50 seconds; the rerun on unchanged inputs passed in 39 seconds, and Chromium and WebKit passed first time. The first run's log was overwritten by the rerun, so the step that waited is not known. Watch the test's Firefox time in CI. Owner: Yavc.App Builder.
+
+## WebKit failure of test-docs-structure.cjs on Linux, left open for v0.2.120 by Paul's decision (2026-11-26)
+
+Open defect. On pull request 282, CI's WebKit run on Linux failed `test-docs-structure.cjs` three times on head 396a82f with "createTreeWalker root must be Node", and the same test passes on master in the same CI. The table correction therefore causes it, though the part responsible is not yet known. The test passes on Windows in Chromium, Firefox and WebKit. Paul decided on 2026-11-26 to release v0.2.120 with this check open because the correction works on Windows, where GK Companion draws with Chromium through WebView2. WebKit is also the macOS engine, so until the cause is known the failure may affect Mac users as well as Linux. On head 7ca4c00 the test reported what the page held: after the table was filled in, Ctrl+End and typing "See the site for details." produced no new paragraph after the table, and the page ended with the table. The likely cause is the new rule that makes a too-wide table on a reading page its own scrolling box (`display:block; overflow-x:auto` on the table), which may change where WebKit puts the caret at the end of the document. That is not yet confirmed. Owner: Yavc.App Team Lead.
+
+## Chromium failure of test-barcode-scanner-library-reload.cjs on Windows during the v0.2.120 check (2026-11-26)
+
+Unexplained. The full local Chromium site run on branch `tables-follow-content` failed this test with "The file does not exist" from the home store after a reload; the single rerun on unchanged inputs passed in 1 second. The first run's logs are in `%TEMP%/rel120/site-logs-first/`. The table correction does not touch the barcode scanner, and the test passes in CI. A passing rerun does not establish the cause. Owner: Yavc.App Builder.
