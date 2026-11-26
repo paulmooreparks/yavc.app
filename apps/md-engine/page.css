@@ -263,9 +263,9 @@
    Document fit their tables in pages.js; print keeps ordinary table
    layout. */
 @media screen {
-  .doc-page:not(.page-view) { min-width: 0; }
-  .doc-page:not(.page-view) table { display: block; width: max-content; max-width: 100%; overflow-x: auto; }
-  .doc-page:not(.page-view) :is(td, th) { overflow-wrap: anywhere; }
+  .doc-page:not(.page-view):not(.doc-paginated) { min-width: 0; }
+  .doc-page:not(.page-view):not(.doc-paginated) table { display: block; width: max-content; max-width: 100%; overflow-x: auto; }
+  .doc-page:not(.page-view):not(.doc-paginated) :is(td, th) { overflow-wrap: anywhere; }
 }
 /* GitHub README image alignment, also retained on local attachments. */
 .doc-page img[align="right" i] { float: right; margin: 0 0 1em 1em; }

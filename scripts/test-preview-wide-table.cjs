@@ -14,8 +14,8 @@ const text='# Practice page\n\n'+words.repeat(4)+'\n\n- '+words.repeat(3)+'\n\n|
   await p.goto(`http://docs.localhost:${port}/`,{waitUntil:'domcontentloaded'});await p.locator('.yavc-command-toolbar').waitFor();
   await action('new',{text});
   for(const mode of ['preview','visual','preview']){await action('view',{mode});}
-  await p.locator('.ed-scroll > .doc-page:not(.page-view) table').waitFor();
-  const m=await p.evaluate(()=>{const scroll=[...document.querySelectorAll('.ed-scroll')].find(s=>s.querySelector(':scope > .doc-page:not(.page-view) table')),page=scroll.querySelector(':scope > .doc-page'),table=page.querySelector('table'),para=page.querySelector('p');
+  await p.locator('.ed-scroll > .doc-page:not(.page-view):not(.doc-paginated) table').waitFor();
+  const m=await p.evaluate(()=>{const scroll=[...document.querySelectorAll('.ed-scroll')].find(s=>s.querySelector(':scope > .doc-page:not(.page-view):not(.doc-paginated) table')),page=scroll.querySelector(':scope > .doc-page'),table=page.querySelector('table'),para=page.querySelector('p');
    return {scrollSW:scroll.scrollWidth,scrollCW:scroll.clientWidth,page:page.getBoundingClientRect().width,para:para.getBoundingClientRect().width,tableSW:table.scrollWidth,tableCW:table.clientWidth,paraLines:Math.round(para.getBoundingClientRect().height/parseFloat(getComputedStyle(para).lineHeight))};});
   console.log(engine+' '+JSON.stringify(m));
   assert.ok(m.scrollSW<=m.scrollCW+1,'the page must not scroll sideways');
@@ -25,7 +25,7 @@ const text='# Practice page\n\n'+words.repeat(4)+'\n\n- '+words.repeat(3)+'\n\n|
   assert.equal((await action('document')).text,text,'switching views leaves the document unchanged');
   // A table that cannot fit even with every cell at its narrowest scrolls within itself instead of widening the page.
   await action('new',{text:'Words.\n\n|'+' Column |'.repeat(30)+'\n|'+' --- |'.repeat(30)+'\n|'+' Cell |'.repeat(30)+'\n'});await action('view',{mode:'preview'});
-  const wide=await p.evaluate(()=>{const scroll=[...document.querySelectorAll('.ed-scroll')].find(s=>s.querySelector(':scope > .doc-page:not(.page-view) table')),table=scroll.querySelector('table');return {scrollSW:scroll.scrollWidth,scrollCW:scroll.clientWidth,tableSW:table.scrollWidth,tableCW:table.clientWidth};});
+  const wide=await p.evaluate(()=>{const scroll=[...document.querySelectorAll('.ed-scroll')].find(s=>s.querySelector(':scope > .doc-page:not(.page-view):not(.doc-paginated) table')),table=scroll.querySelector('table');return {scrollSW:scroll.scrollWidth,scrollCW:scroll.clientWidth,tableSW:table.scrollWidth,tableCW:table.clientWidth};});
   console.log(engine+' '+JSON.stringify(wide));
   assert.ok(wide.scrollSW<=wide.scrollCW+1&&wide.tableSW>wide.tableCW,'a very wide table scrolls within itself');
   assert.deepEqual(errors,[]);
