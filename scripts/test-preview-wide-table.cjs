@@ -28,6 +28,14 @@ const text='# Practice page\n\n'+words.repeat(4)+'\n\n- '+words.repeat(3)+'\n\n|
   const wide=await p.evaluate(()=>{const scroll=[...document.querySelectorAll('.ed-scroll')].find(s=>s.querySelector(':scope > .doc-page:not(.page-view):not(.doc-paginated) table')),table=scroll.querySelector('table');return {scrollSW:scroll.scrollWidth,scrollCW:scroll.clientWidth,tableSW:table.scrollWidth,tableCW:table.clientWidth};});
   console.log(engine+' '+JSON.stringify(wide));
   assert.ok(wide.scrollSW<=wide.scrollCW+1&&wide.tableSW>wide.tableCW,'a very wide table scrolls within itself');
+  // Visual's editable table with a row of unbreakable words (a host receiving check: eight columns, a 192-character word in each) stays in the pane.
+  await p.setViewportSize({width:720,height:900});
+  const long='InventedLongWord'.repeat(12),visualText='Before.\n\n|'+Array.from({length:8},(_,i)=>' Column '+i+' |').join('')+'\n|'+' --- |'.repeat(8)+'\n|'+(' '+long+' |').repeat(8)+'\n\nAfter.\n';
+  await action('new',{text:visualText});await action('view',{mode:'visual'});await p.locator('.ProseMirror[aria-busy=false] table').waitFor();
+  const visual=await p.evaluate(()=>{const scroll=document.querySelector('.ProseMirror').closest('.ed-scroll'),table=scroll.querySelector('.ProseMirror table');return {scrollSW:scroll.scrollWidth,scrollCW:scroll.clientWidth,table:table.getBoundingClientRect().width};});
+  console.log(engine+' visual '+JSON.stringify(visual));
+  assert.ok(visual.scrollSW<=visual.scrollCW+1,'Visual keeps a table of unbreakable words inside the pane');
+  assert.equal((await action('document')).text,visualText,'drawing the table in Visual leaves the document unchanged');
   assert.deepEqual(errors,[]);
   console.log(engine+': a wide table scrolls within itself and the page wraps to the pane');
  }finally{await browser.close();}
