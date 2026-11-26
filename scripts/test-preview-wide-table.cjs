@@ -3,7 +3,7 @@
 // 212): columns as wide as their content needs, no word broken in the middle of a short column, a status label on one line, and a table
 // too wide for the pane scrolling sideways in its own box while the page keeps the pane's width. Two shapes are checked: a table with one
 // prose column, five short ones and a status label (which v0.2.119 crushed), and eight columns of unbreakable words (which widened the
-// page). All text is invented.
+// page). In Visual, which is editable, the second shape scrolls the pane sideways and only Preview gives it its own box. All text is invented.
 const assert=require('node:assert/strict'),pw=require('playwright');
 const port=process.env.YAVC_CHROME_TEST_PORT;
 const prose='Invented description of an action item that runs on for several sentences so that it needs a wide column. It names no real system and no real person, and it keeps going long enough to wrap across many lines at any width.';
@@ -47,13 +47,17 @@ function measure(){
    await action('new',{text:wide});
    for(const mode of ['visual','preview']){
     const m=await view(mode);console.log(engine+' '+width+' '+mode+' wide '+JSON.stringify({scrollSW:m.scrollSW,scrollCW:m.scrollCW,tableSW:m.tableSW,tableCW:m.tableCW,paraLines:m.paraLines}));
-    assert.ok(m.scrollSW<=m.scrollCW+1,mode+' '+width+': a table of unbreakable words does not widen the page');
-    assert.ok(m.tableSW>m.tableCW+1,mode+' '+width+': the table scrolls sideways in its own box');
+    // Only a page that cannot be edited makes the table its own scrolling box; in Visual's editor that box kept WebKit's caret from
+    // going past a table at the end of a document (page.css), so there the pane scrolls sideways and the paragraphs still wrap.
+    if(mode==='preview'){
+     assert.ok(m.scrollSW<=m.scrollCW+1,mode+' '+width+': a table of unbreakable words does not widen the page');
+     assert.ok(m.tableSW>m.tableCW+1,mode+' '+width+': the table scrolls sideways in its own box');
+    }
     assert.ok(m.paraLines>1,mode+' '+width+': the paragraph after it wraps at the pane');
    }
    assert.equal((await action('document')).text,wide,'drawing the table leaves the document unchanged');
   }
   assert.deepEqual(errors,[]);
-  console.log(engine+': tables follow their content, labels stay whole, and a too-wide table scrolls in its own box');
+  console.log(engine+': tables follow their content, labels stay whole, and a too-wide table never squeezes the paragraphs');
  }finally{await browser.close();}
 }})().catch(e=>{console.error(e);process.exitCode=1;});
