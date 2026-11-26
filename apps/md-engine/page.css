@@ -251,6 +251,17 @@
 /* A picture never widens the page: it scales to the column, as a figure's
    does; code and tables scroll within themselves (DESIGN.md, decision 15). */
 .doc-page img { max-width: 100%; height: auto; }
+/* A page that is not laid out in pages (Preview and the reading page) never
+   grows wider than its pane (decision 15). Its min-width: fit-content above
+   let a table cell holding a word longer than the pane, such as a run of
+   joined identifiers, widen the whole page, so every paragraph ran past the
+   window. On screen such a page keeps the pane's width and its table is its
+   own scrolling box. Visual and Document fit their tables in pages.js;
+   print keeps ordinary table layout. */
+@media screen {
+  .doc-page:not(.page-view) { min-width: 0; }
+  .doc-page:not(.page-view) table { display: block; width: max-content; max-width: 100%; overflow-x: auto; }
+}
 /* GitHub README image alignment, also retained on local attachments. */
 .doc-page img[align="right" i] { float: right; margin: 0 0 1em 1em; }
 .doc-page img[align="left" i] { float: left; margin: 0 1em 1em 0; }
