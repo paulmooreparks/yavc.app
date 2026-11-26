@@ -542,6 +542,8 @@
                 var page = o.pagination && o.pagination();
                 if (!page || !v.dom.isConnected) {
                     o.page.querySelectorAll('.doc-table-gap-cover,.doc-row-header-layer,.doc-table-cut-border').forEach(function(node){node.remove();});
+                    /* The sheet's column widths belong to Document; left in place they held Visual's tables to the sheet's width (decision 212). */
+                    v.dom.querySelectorAll('table > colgroup[data-doc-columns]').forEach(function(node){node.remove();});
                     release();
                     if (signature) { signature = ''; if (o.syncSelection) { o.syncSelection(); } v.dispatch(v.state.tr.setMeta(key, PM.DecorationSet.empty).setMeta('addToHistory', false)); }
                     return;
