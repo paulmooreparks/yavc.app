@@ -1,7 +1,7 @@
 // Copyright 2026 Paul Parks. SPDX-License-Identifier: Apache-2.0
 // In a host that keeps one editor across views, Document's sheet column widths must not stay on a table when Visual takes over, and Visual
-// lays a table out by its content as a wiki does (DESIGN.md, decision 212): the prose column takes the free width, short headings and status
-// labels stay on one line. All text is invented.
+// lays a table out by its content as a wiki does (DESIGN.md, decision 212): the prose column takes the free width, a short column is as narrow
+// as its content, one-word headings and status labels stay on one line. All text is invented.
 const assert=require('node:assert/strict'),http=require('node:http'),fs=require('node:fs/promises'),path=require('node:path'),pw=require('playwright');
 const artifact=path.resolve(process.argv[2]),prefix='/independent/content-release/';
 const types={'.html':'text/html','.js':'text/javascript','.css':'text/css','.json':'application/json','.wasm':'application/wasm','.svg':'image/svg+xml','.woff2':'font/woff2'};
@@ -24,7 +24,9 @@ const addon='(function(){var s='+JSON.stringify(source)+';fixture.records.get("m
    console.log(engine+' '+JSON.stringify(m));
    assert.equal(m.sheetColumns,0,engine+': Document\'s sheet columns are gone from the table in Visual');
    assert.equal(m.heads.reduce((a,h)=>h.width>a.width?h:a).text,'Description',engine+': the prose column takes the free width');
-   for(const h of m.heads)assert.equal(h.lines,1,engine+': the heading "'+h.text+'" stays on one line');
+   // A one-word heading stays whole; "Due Date" may wrap between its words when the prose column needs the room.
+   for(const h of m.heads.filter(h=>!/\s/.test(h.text)))assert.equal(h.lines,1,engine+': the heading "'+h.text+'" stays on one line');
+   assert.ok(m.heads[0].width<60,engine+': the two-letter column is as narrow as its content ('+m.heads[0].width+'px)');
    assert.deepEqual(m.badges,[1,1],engine+': each status label stays on one line');
    await action('view',{mode:'document'});await p.locator('#document .doc-paginated table > colgroup[data-doc-columns]').waitFor({state:'attached'});
    assert.equal((await action('document')).text,await p.evaluate(()=>window.tableSource),'switching views leaves the document unchanged');
