@@ -1,0 +1,11 @@
+# PUDL 0.112.0 integration
+
+The team lead took PUDL 0.112.0 on 2026-11-28. It gives the menu and taskbar bands matching minimum heights that follow the display scale, adds optional identity glyph colours and pin buttons that show membership by being raised or pressed, lets host commands supply a focus target for when the launcher closes, and lets a menu bar display a host-owned launcher shortcut. Automatic docks now expand again when a narrowed host is restored to a wide size (pudl issue 49). Tag `v0.112.0` is the annotated tag object `8fbf2daac46a421bc2a5ab322453f792e0cd6e4f`, which resolves to commit `bf4a5d484ee431fb31d2b066b3f4e8c40cb5a818`. The downloaded archive matches GitHub's asset digest `262b8e970637ebd230ae2c0bcac5be23968e45c30d69f2de9bca75afafb1d0bb`, and its checksum sidecar uses LF. The distribution manifest matches GitHub's asset digest `ba12651c4c33313a79575f476a9a4c5de226454289b66397963eeb36b5585c93`.
+
+All 196 distribution paths match the manifest, and every file matched its byte count, SHA-256 and SHA-384 integrity value before replacement. The whole distribution replaces `web/pudl` together. Fifteen files differ from 0.110.1: `pudl.css`, `pudl-windows.css`, `pudl-windows.js`, `pudl-launcher.js` and `pudl-menubar.js`, each with its minified copy and source map. No file was added or removed. `pudl-0.112.0.json` supplies provenance and file hashes to the distribution test and release-record builder.
+
+yavc.app needs no application change. PUDL's release notes say existing integrations stay neutral until they opt into identity metadata, and yavc.app opts into none of the new features. The Windows host can adopt the identity colours, the launcher shortcut and the return-focus target later.
+
+PUDL's Firefox defects (pudl issues 43 and 44) remain open, so the advice in `pudl-upgrade-0.110.0.md` stands: deploying this release to https://yavc.app is Paul's call. PUDL also records an unexplained test-transport reset in issue 50.
+
+The local gate is `bash scripts/check.sh --since HEAD`, `node scripts/test-pudl-distribution.mjs`, and `test-launcher.cjs`, `test-context-edit.cjs`, `test-docs-menu-startup.cjs` and `test-selection-scroll.cjs` in all three engines. The full site and package lists run in CI.
