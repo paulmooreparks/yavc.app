@@ -1,0 +1,11 @@
+# PUDL 0.110.0 integration
+
+The team lead took PUDL 0.110.0 on 2026-11-27. It adds neutral window counts on the taskbar (`data-win-count` and `data-win-count-label`) and a ribbon row for launcher-backed product tabs. Tag `v0.110.0` is the annotated tag object `0be9c893cdc84c85a45762c4b5d33233c7e48a3d`, which resolves to commit `be15ce340d4549625bdc091db9ead8fded5069ce`. The downloaded archive matches the published SHA-256 `0ea6a81e2688fb592dfda2114bfa038e9ef4f510a9cfe6adaf849147aff1f631`, and its checksum sidecar uses LF. The distribution manifest matches GitHub's asset digest `778e140a292bfd7bf54deb73c397726f32ad408e35a7239c83b908302c43467b`.
+
+All 196 distribution paths match the manifest, and every file matched its byte count, SHA-256 and SHA-384 integrity value before replacement. The whole distribution replaces `web/pudl` together. Fifteen files differ from 0.109.0: `pudl.css`, `pudl-windows.css`, `pudl-windows.js`, `pudl-launcher.js` and `pudl-menubar.js`, each with its minified copy and source map. No file was added or removed. `pudl-0.110.0.json` supplies provenance and file hashes to the distribution test and release-record builder.
+
+yavc.app needs no application change. It declares no `ul[data-menubar-launcher-actions]`, so PUDL's default row containing only Launcher applies, and it sets no window counts. The Windows host can adopt the ribbon declaration and counts later through PUDL's docs/LAUNCHER.md and docs/WINDOW-STATUS.md.
+
+PUDL released 0.110.0 with two Firefox defects open by Paul's decision: the first host-launcher opening times out (pudl issue 43), and a grouped-taskbar glyph wait times out (pudl issue 44). PUDL's notes advise sites serving Firefox visitors not to adopt 0.110.0 until both close. yavc.app's own `test-launcher.cjs`, `test-context-edit.cjs`, `test-docs-menu-startup.cjs` and `test-selection-scroll.cjs` pass in Firefox, Chromium and WebKit on Windows with this distribution, so neither defect shows in yavc.app's tests, but their causes are unknown. Deploying this release to https://yavc.app, which Firefox visitors use, is Paul's call; Dinah and GK Companion draw with Chromium.
+
+The local gate is `bash scripts/check.sh --since HEAD` and `node scripts/test-pudl-distribution.mjs`, with the four tests above in all three engines. The full site and package lists run in CI.
