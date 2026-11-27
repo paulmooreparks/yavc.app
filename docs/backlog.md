@@ -65,3 +65,7 @@ Unexplained. The full local Chromium site run on branch `tables-follow-content` 
 ## Firefox timeouts in three table tests during the v0.2.122 check (2026-11-26)
 
 Unexplained. On branch `table-cell-minimum`, local Windows Firefox runs timed out once each in `test-docs-structure.cjs` (waiting for the editor), `test-visual-table-columns.cjs` (loading the workspace lab) and `test-preview-wide-table.cjs`; each passed its single rerun on unchanged inputs. The first two logs were in `%TEMP%/yavc-package-test-logs/` before the reruns replaced them, and the site test's first log was overwritten by the next engine's run before it was read, so its failure message was not kept. Keep each first log before rerunning. Owner: Yavc.App Builder.
+
+## Chromium timeout in test-document-styles.cjs on Linux during the v0.2.124 check (2026-11-27)
+
+Unexplained. On pull request 286 (PUDL 0.110.1), CI's Chromium site run failed `test-document-styles.cjs` with "page.goto: Timeout 30000ms exceeded" after 33 seconds; the other 110 site tests passed. The test does not touch the launcher or menu bar, which are the only scripts the change replaces, and it passed locally on Windows Chromium on the same head. The first run's failed-step log is kept in `%TEMP%/pr286-site-run1.log`, and the single CI rerun on unchanged inputs passed on run 46001755109 before v0.2.124 was released. A passing rerun does not establish the cause. Owner: Yavc.App Builder.
