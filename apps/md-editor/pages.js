@@ -560,6 +560,10 @@
                     // Keep mapped page furniture visible until its replacement
                     // has been measured. Clearing it paints a collapsed page.
                     if(seenDoc!==v.state.doc){seenDoc=v.state.doc;signature='';release();}
+                    /* The host takes the sheets, headers and footers off the page when the view leaves Document, and takes the page count off with them. A pass
+                       that runs while the view is elsewhere forgets the arrangement, but a view that leaves and returns before a frame is drawn has no such pass.
+                       The missing count says the page was cleared, so the arrangement is drawn again and not taken as the one already shown. */
+                    if (signature && !o.page.hasAttribute('data-page-count')) { signature = ''; release(); }
                     if (stopped) { return; }
                     put(o.page, 'data-layout-passes', ++passes);
                     var d = surface(o.page, page), positions = [], scale = Number(o.page.style.zoom) || 1, measures = measureTables(v, scale); v.state.doc.forEach(function (n, pos) { positions.push(pos); });

@@ -42,7 +42,12 @@ const count=await page.evaluate(()=>new Promise(done=>{let last=null,since=Date.
   await page.setViewportSize({width:700,height:900});await page.waitForTimeout(200);assert.ok(await page.locator('.doc-paginated').evaluate(n=>n.getBoundingClientRect().width<816));
   await action(page,'document-zoom',{value:'page'});await page.waitForTimeout(200);assert.ok(await page.locator('.doc-paginated').evaluate(n=>n.getBoundingClientRect().height/+n.dataset.pageCount<950));assert.equal((await action(page,'document')).text,before);
   await action(page,'view',{mode:'visual'});assert.equal(await page.locator('.doc-furniture').count(),0);assert.equal(await page.locator('.doc-page').evaluate(n=>n.style.zoom),'1');
-  await action(page,'view',{mode:'document'});await page.locator('.doc-footer').first().waitFor();await action(page,'document-zoom',{value:100});await page.setViewportSize({width:1500,height:1000});
+  await action(page,'view',{mode:'document'});await page.locator('.doc-footer').first().waitFor();
+  /* Leaving Document and coming back before the browser draws a frame used to leave the page with no headers or footers: the layout was the one already
+     drawn, so nothing drew them again. Both switches are made in one turn in the page, so no frame comes between them. */
+  await page.evaluate(async()=>{const view=mode=>pudlActions.run('yavc.docs/view@1',{mode},{grant:'all'});await view('visual');await view('document');});
+  await page.locator('.doc-footer').first().waitFor();
+  await action(page,'document-zoom',{value:100});await page.setViewportSize({width:1500,height:1000});
   await page.screenshot({path:path.join(evidence,engine+'-document.png')});
   phase='export';for(const format of ['docx','pdf']) {const pending=page.waitForEvent('download');await command(page,'export-'+format);const download=await pending;await download.saveAs(path.join(evidence,engine+'.'+format));}
   require('node:child_process').execFileSync('python',[path.join(__dirname,'check-document-furniture.py'),path.join(evidence,engine)],{stdio:'inherit',windowsHide:true});
