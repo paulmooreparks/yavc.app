@@ -983,7 +983,12 @@
             window.yavcUtil.notice(el.tabs, '');
             say('Writing the ' + format.toUpperCase() + ' file…');
             try { var result = await exportDocument(format); download(result.name, result.blob); say('Downloaded ' + result.name + '. ' + result.warnings.join(' ')); }
-            catch (err) { if (err.refusal) { say('Download as ' + format.toUpperCase() + ': ' + err.message, 'warn'); retryButton(false); } else if(err.name!=='AbortError')say('The document could not be exported: ' + err.message, true);else say('Export cancelled.'); }
+            catch (err) { if (err.refusal) {
+                    /* A PDF that cannot be written for right-to-left text can be printed, and the browser's Save as PDF lays it out; a host that has taken Print away gets the plain refusal (decision 192). */
+                    var printable = err.rightToLeft && commandExists('print-document');
+                    say('Download as ' + format.toUpperCase() + ': ' + err.message + (printable ? ' Or print it and choose Save as PDF, which lays Hebrew and Arabic out correctly.' : ''), 'warn');
+                    retryButton(printable && function () { return printDocument(); }, 'Print');
+                } else if(err.name!=='AbortError')say('The document could not be exported: ' + err.message, true);else say('Export cancelled.'); }
         }
 
         /* === Dialogs ====================================================== */
@@ -1447,11 +1452,11 @@
             if(source!==null&&source!==undefined&&unchanged())return liveActions['new@1']({text:source});
         }
         /* A refusal that trying again could change has a Try Again button, which a refusal that it could not change does not. */
-        function retryButton(again) {
+        function retryButton(again, label) {
             var n = el.tabs.previousElementSibling; if (!n || !n.classList.contains('yavc-notice')) { return; }
             n.querySelectorAll('.notice-actions').forEach(function (x) { x.remove(); });
             if (!again) { return; }
-            var actions = document.createElement('div'), button = document.createElement('button'); actions.className = 'notice-actions'; button.type = 'button'; button.className = 'btn'; button.textContent = 'Try Again';
+            var actions = document.createElement('div'), button = document.createElement('button'); actions.className = 'notice-actions'; button.type = 'button'; button.className = 'btn'; button.textContent = label || 'Try Again';
             button.addEventListener('click', function () { again(); }); actions.append(button); n.querySelector('.notice-content').append(actions);
         }
         /* printProblem is the reason the last try printed nothing, for print@1, which must not answer as if it had printed. */
@@ -1476,8 +1481,8 @@
                         await document.fonts.ready;
                         P.fitTables(flow);
                         var frameTitles = P.tagFrames(flow), blocks = P.blocks(flow), layout = P.plan(blocks, page);
-                        if(layout.problem)throw new Error(layout.problem);
-                        if (layout.oversized) { throw new Error('A block is taller than the page. Shorten it or enlarge the page before printing.'); }
+                        /* A page that cannot be laid out is a refusal the person can act on, shown as the other refusals are, in a notice that stays beside the tabs. */
+                        if (layout.problem || layout.oversized) { var tooTall = new Error(layout.problem || 'A block is taller than the page. Shorten it or enlarge the page before printing.'); tooTall.refusal = true; throw tooTall; }
                         var frame = document.createElement('iframe'); frame.className = 'ed-print-frame'; frame.title = 'Document Print'; frame.inert = true; frame.tabIndex = -1; frame.setAttribute('aria-hidden', 'true'); document.body.append(frame); printFrame = frame;
                         var doc = frame.contentDocument;
                         // A static standards-mode shell keeps table typography

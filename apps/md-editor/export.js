@@ -9,9 +9,14 @@
         }).then(function (buffer) { return window.fontkit.create(new Uint8Array(buffer)); }).catch(function (err) { fontReady = null; throw err; }); }
         return fontReady;
     }
+    var RIGHT_TO_LEFT = /[\u0590-\u08FF\uFB1D-\uFDFF\uFE70-\uFEFF]/;
     function checkGlyphs(blocks, font) {
         blocks.forEach(function (b) {
-            (b.runs || []).forEach(function (r) { for (var char of r.text) { if (!/[\n\r\t]/.test(char) && !font.hasGlyphForCodePoint(char.codePointAt(0))) { throw new Error('The bundled PDF font cannot display ' + char + '. Export to Word or replace that character before exporting PDF.'); } } });
+            (b.runs || []).forEach(function (r) { for (var char of r.text) { if (!/[\n\r\t]/.test(char) && !font.hasGlyphForCodePoint(char.codePointAt(0))) {
+                /* Hebrew and Arabic are a refusal that Print can answer (DESIGN.md decision 192); the PDF writer has neither the layout nor the font. */
+                if (RIGHT_TO_LEFT.test(char)) { var rtl = new Error('This document has right-to-left text (Hebrew or Arabic), which the PDF writer has no layout or font for. Export to Word instead.'); rtl.refusal = true; rtl.rightToLeft = true; throw rtl; }
+                throw new Error('The bundled PDF font cannot display ' + char + '. Export to Word or replace that character before exporting PDF.');
+            } } });
             if (b.blocks) { checkGlyphs(b.blocks, font); }
             (b.items || []).forEach(function (item) { checkGlyphs(item, font); });
             (b.rows || []).forEach(function (row) { row.forEach(function (cell) { checkGlyphs([{ runs: cell.runs }], font); }); });
