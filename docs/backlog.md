@@ -67,3 +67,26 @@ Unexplained. On branch `table-cell-minimum`, local Windows Firefox runs timed ou
 ## Chromium timeout in test-document-styles.cjs on Linux during the v0.2.124 check (2026-11-27)
 
 Unexplained. On pull request 286 (PUDL 0.110.1), CI's Chromium site run failed `test-document-styles.cjs` with "page.goto: Timeout 30000ms exceeded" after 33 seconds; the other 110 site tests passed. The test does not touch the launcher or menu bar, which are the only scripts the change replaces, and it passed locally on Windows Chromium on the same head. The first run's failed-step log is kept in `%TEMP%/pr286-site-run1.log`, and the single CI rerun on unchanged inputs passed on run 46001755109 before v0.2.124 was released. A passing rerun does not establish the cause. Owner: Yavc.App Builder.
+
+## The Firefox release build does not show the page loads that do not commit (2026-11-28)
+
+The page loads that do not commit were not seen in the Firefox release build. A probe drove the Firefox that the hosted runner has installed through geckodriver, by the W3C WebDriver commands New Session, New Window, Navigate To and Close Window, and opened each page in a new tab of one browser as the Playwright probe does. Both probes ran side by side in stress run 46143068434, against the same server with its `Cross-Origin-Opener-Policy` header in place. In 76 rounds of 16 page loads each, Playwright's Firefox 155.0 had a load that did not commit in 27 rounds, and the release build had none in 1216 loads. The release probe differs in three ways: its tabs share one browser context where Playwright makes a new one for each page, it waits for the page to be interactive where the Playwright probe waits for the commit, and it is driven by Marionette. So the fault has been shown only in Playwright's build, and nothing yet says that a person's Firefox stalls. The header was left as it is. What to do with the Firefox site job is still Paul's choice. Owner: Yavc.App repair engineer until Paul assigns one.
+
+## Firefox loses the Diagrams page on reload on the hosted runner (2026-11-28)
+
+`test-vfs-consumers.cjs` fails in Firefox on the hosted runner because the browser loses the page. When the Diagrams page is reloaded, the content process of Playwright's Firefox 155.0 exits on signal 11. `page.reload` then reports "Page crashed", or the reload commits and never reaches its load event. A probe that opens Diagrams, saves a canvas and reloads failed 16 of 41 rounds (run 46142140273), and the browser's own output has the line "process exited on signal 11" each time the crash is reported. No request is unfinished at that moment, and the old-format home plays no part, because a plain reload fails in the same way; the page does not hold its own load. The Editor page reloaded in the same rounds without a crash. It does not happen in Firefox on Windows. Not yet known: what on the Diagrams page the browser trips over (it loads the D2 engine and a language worker), and whether the Firefox release build does the same. The test is set aside in Firefox with this cause. Owner: Yavc.App repair engineer until Paul assigns one.
+
+## Tests that failed in WebKit while the hosted runner was busy (2026-11-28)
+
+On 28 November about a hundred jobs were queued at once, and four tests each failed once in WebKit on a pull request whose change they do not touch. Table 1 lists them. Each line is a first sighting with its log, and none has had a stress run yet.
+
+**Table 1** *WebKit Failures Seen Once Under Load*
+
+| Test | Pull request | Failure | Cause as far as known |
+|---|---|---|---|
+| `test-editor-view-toolbar.cjs` | 301 | Line 37: the View selector is still on the toolbar after a reload | Likely the reload comes before the asynchronous write of the setting (`config.js`, `save`); read from the code, with no log to show it |
+| `test-custom-shortcodes.cjs` | 303 | Line 83: the changed shared definition is not drawn within 15 s | The open item above, "Unexplained WebKit shared-definition refresh timeout" |
+| `test-document-furniture.cjs` | 303 | An assertion in the zoom phase | Not looked at |
+| `test-document-layout-cycle.cjs` | 302 | Package test: a table's columns differ after an edit and its undo | The open item above, "WebKit lays out one table of the synthetic note in more than one way" |
+
+*Note.* `test-document-typing-stability.cjs` failed in the same runs and is repaired by pull request 303.
