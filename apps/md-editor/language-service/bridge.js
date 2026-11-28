@@ -6,6 +6,16 @@
     if (window.yavcLanguageServices) { return; }
     var self = document.currentScript.src;
     var workerURL = self.replace(/bridge\.js(?=\?|$)/, 'worker.js');
+    /* A session closed while its start is still unanswered ends the start with an error that says so (endRequests, below). The language client
+       also keeps promises of its own that wait on the start (it queues the notices that open and close a file behind it), and each of them
+       is rejected too, with no one to catch it, so a closed window left an unhandled rejection in the console (DESIGN.md, decision 194). A
+       start that was cancelled is not a failure, so exactly that rejection is marked handled with the event the page documents for the
+       purpose; every other unhandled rejection is left alone. */
+    var ENDED = 'Language session ended.';
+    window.addEventListener('unhandledrejection', function (event) {
+        var reason = event.reason;
+        if (reason && reason.code === -32800 && reason.message === ENDED) { event.preventDefault(); }
+    });
     // onError receives {persistent:true} for ongoing availability problems,
     // and {persistent:false} for a refused individual operation.
     function create(CM, onError) {
@@ -49,7 +59,7 @@
                 endRequests = function () {
                     pending.forEach(function (request, id) {
                         clearTimeout(request.timer);
-                        var packet = request.method === 'initialize' ? { jsonrpc: '2.0', id: id, error: { code: -32800, message: 'Language session ended.' } } : { jsonrpc: '2.0', id: id, result: null };
+                        var packet = request.method === 'initialize' ? { jsonrpc: '2.0', id: id, error: { code: -32800, message: ENDED } } : { jsonrpc: '2.0', id: id, result: null };
                         handlers.forEach(function (handler) { handler(JSON.stringify(packet)); });
                     });
                     pending.clear();
