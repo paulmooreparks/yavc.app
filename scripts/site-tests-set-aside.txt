@@ -1,0 +1,6 @@
+# Site tests set aside in one browser, one per line: test | browser | date | owner | reason
+#
+# A red run on main stops merges until it is green, or until the failing test is set aside here with the date, an owner and the cause
+# as far as it is known (CLAUDE.md, "When a test fails"). scripts/run-site-tests.mjs skips a test listed here in that browser and
+# prints the line, so every run shows what is set aside. The owner removes the line in the pull request that repairs the test.
+# A test stays in scripts/site-tests.txt while it is set aside. To run it anyway, give its name to the runner.

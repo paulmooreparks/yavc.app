@@ -1,6 +1,8 @@
-# The site tests drive the real pages in Chromium (document-styles starts all three browsers, and page-keeps reads a PDF with pdftotext) against a freshly built server. check.yml runs the checks and the unit tests,
-# and nothing else ran these, so they could fail for weeks unseen. The tests that pass today are listed in scripts/site-tests.txt,
-# which scripts/run-site-tests.mjs reads, and a test is added to that file when it is repaired. A failing test fails this workflow.
+# The site tests drive the real pages in Chromium, Firefox and WebKit against a freshly built server, one job for each browser
+# (document-styles starts all three browsers itself, and page-keeps reads a PDF with pdftotext). check.yml runs the checks and the
+# unit tests. The tests are listed in scripts/site-tests.txt, which scripts/run-site-tests.mjs reads, and a test is added to that file
+# when it is repaired. A failing test fails this workflow. A test that fails in one browser for a written reason is set aside in
+# scripts/site-tests-set-aside.txt with a date and an owner, and every run prints what is set aside.
 name: site tests
 
 on:
@@ -17,9 +19,14 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  site:
+  site-tests:
+    name: site (${{ matrix.engine }})
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        engine: [chromium, firefox, webkit]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -44,6 +51,7 @@ jobs:
         env:
           NODE_PATH: ${{ runner.temp }}/playwright/node_modules
           SITE_SERVER: ${{ github.workspace }}/yavc
+          SITE_ENGINE: ${{ matrix.engine }}
           SITE_JOBS: '2'
           SITE_LOGS: ${{ runner.temp }}/yavc-site-test-logs
         run: node scripts/run-site-tests.mjs
@@ -51,9 +59,21 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: site-test-logs
+          name: site-test-logs-${{ matrix.engine }}
           path: ${{ runner.temp }}/yavc-site-test-logs
           retention-days: 7
+
+  # One check named "site" that says whether every browser passed. It runs after a failure too, since a skipped job counts as a pass.
+  site:
+    needs: site-tests
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require every browser to pass
+        env:
+          RESULT: ${{ needs.site-tests.result }}
+        run: test "$RESULT" = success
 
   # The package tests load the built content package from a host of their own, as Dinah, GK Companion and PFO do, in all three
   # browsers. The tests are listed in scripts/package-tests.txt, which scripts/run-package-tests.mjs reads.
