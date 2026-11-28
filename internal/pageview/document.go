@@ -421,6 +421,10 @@ func sequenceText(nodes []*Node, first string) (string, error) {
 			if !started {
 				gap = first
 			}
+		} else if started && gap == "" {
+			// The first block of a document was read with nothing before it. A block put before it leaves it after another, and it needs a
+			// blank line there, or it is written onto the end of the block before.
+			gap = "\n\n"
 		}
 		b.WriteString(gap)
 		b.WriteString(text)
