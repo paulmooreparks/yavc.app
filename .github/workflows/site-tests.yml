@@ -1,5 +1,5 @@
 # The site tests drive the real pages in Chromium, Firefox and WebKit against a freshly built server, one job for each browser
-# (document-styles starts all three browsers itself, and page-keeps reads a PDF with pdftotext). check.yml runs the checks and the
+# (page-keeps reads a PDF with pdftotext). check.yml runs the checks and the
 # unit tests. The tests are listed in scripts/site-tests.txt, which scripts/run-site-tests.mjs reads, and a test is added to that file
 # when it is repaired. A failing test fails this workflow. A test that fails in one browser for a written reason is set aside in
 # scripts/site-tests-set-aside.txt with a date and an owner, and every run prints what is set aside.
