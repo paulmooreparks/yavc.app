@@ -103,7 +103,7 @@
         return languagesReady;
     }
     function libs() {
-        if (!cmReady) { cmReady = loadScript(HERE + 'vendor/codemirror-6.43/codemirror.js?v=11').then(function () { cmLibrary = window.yavcCodeMirror; return cmLibrary; }).catch(function (e) { cmReady = null; throw e; }); }
+        if (!cmReady) { cmReady = loadScript(HERE + 'vendor/codemirror-6.43/codemirror.js?v=12').then(function () { cmLibrary = window.yavcCodeMirror; return cmLibrary; }).catch(function (e) { cmReady = null; throw e; }); }
         return cmReady.then(function (lib) { return languages().then(function () { return lib; }); });
     }
     var pagesReady = null;
