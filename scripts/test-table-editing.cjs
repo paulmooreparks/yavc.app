@@ -21,31 +21,33 @@ const SOURCE='# Table\n\n| A | B |\n| --- | --- |\n| one | two |\n| three | four
             try{
                 await page.goto(`http://127.0.0.1:${server.address().port}${prefix}workspace-lab/index.html?apps=docs`);await page.locator('#document .ProseMirror').waitFor();
                 const run=(ref,input)=>page.evaluate(([r,i])=>pudlActions.run(r,i,{grant:'all'}),[ref,input]);
+                // Docs says when it has no work put off (docs/settled-signal.md), so the test waits for that and for no length of time.
+                const settle=()=>run('yavc.docs/settled@1',{});
                 await run('yavc.docs/set-text@1',{text:SOURCE});await run('yavc.docs/view@1',{mode:view});
                 await page.locator('#document .ProseMirror td',{hasText:'one'}).first().waitFor();
-                await page.waitForTimeout(view==='document'?1500:1000);
+                await settle();
                 const text=async()=>(await run('yavc.docs/document@1',{})).text;
                 const rows=()=>page.evaluate(()=>[...document.querySelectorAll('#document .ProseMirror table')].filter(t=>!t.closest('.doc-page-gap')).map(t=>[...t.rows].filter(r=>!r.classList.contains('doc-page-gap')).map(r=>[...r.cells].map(c=>c.textContent.trim())))[0]);
                 const same=(a,b,what)=>{if(JSON.stringify(a)!==JSON.stringify(b))failures.push(`${label}: ${what}: ${JSON.stringify(a)} and not ${JSON.stringify(b)}`);};
                 if(/colgroup|data-doc-columns/.test(await text()))failures.push(`${label}: the page's column elements are in the Markdown`);
                 const hasGroup=await page.evaluate(()=>!!document.querySelector('#document .ProseMirror table > colgroup[data-doc-columns]'));
                 if(view==='document'&&!hasGroup)failures.push(`${label}: the table has no column elements of its own`);
-                const target=()=>page.locator('#document .ProseMirror td',{hasText:'one'}).first(),cell=()=>({click:async()=>{await target().click();await page.waitForTimeout(400);},press:k=>page.keyboard.press(k)});
+                const target=()=>page.locator('#document .ProseMirror td',{hasText:'one'}).first(),cell=()=>({click:async()=>{await target().click();await settle();},press:k=>page.keyboard.press(k)});
                 await cell().click();
                 await run('yavc.docs/table@1',{op:'row-below'});same(await rows(),[['A','B'],['one','two'],['',''],['three','four']],'a row added below');
-                await page.waitForTimeout(300);await page.keyboard.press('Control+z');await page.waitForTimeout(300);same(await rows(),[['A','B'],['one','two'],['three','four']],'undo of the added row');
+                await settle();await page.keyboard.press('Control+z');await settle();same(await rows(),[['A','B'],['one','two'],['three','four']],'undo of the added row');
                 await cell().click();await run('yavc.docs/table@1',{op:'column-after'});same((await rows())[0].length,3,'a column added after');
-                await page.waitForTimeout(300);await page.keyboard.press('Control+z');await page.waitForTimeout(300);same((await rows())[0].length,2,'undo of the added column');
+                await settle();await page.keyboard.press('Control+z');await settle();same((await rows())[0].length,2,'undo of the added column');
                 await cell().click();await run('yavc.docs/table@1',{op:'delete-row'});same(await rows(),[['A','B'],['three','four']],'a row deleted');
-                await page.waitForTimeout(300);await page.keyboard.press('Control+z');await page.waitForTimeout(300);same(await rows(),[['A','B'],['one','two'],['three','four']],'undo of the deleted row');
+                await settle();await page.keyboard.press('Control+z');await settle();same(await rows(),[['A','B'],['one','two'],['three','four']],'undo of the deleted row');
                 await cell().click();await run('yavc.docs/table@1',{op:'delete-column'});same((await rows())[0],['B'],'a column deleted');
-                await page.waitForTimeout(300);await page.keyboard.press('Control+z');await page.waitForTimeout(300);same((await rows())[0],['A','B'],'undo of the deleted column');
+                await settle();await page.keyboard.press('Control+z');await settle();same((await rows())[0],['A','B'],'undo of the deleted column');
                 // A paste of plain text into a cell, and its undo.
                 await cell().click();await page.keyboard.press('End');
-                for(let attempt=0;attempt<3&&!/pasted/.test((await rows())[1][0]);attempt++){await page.evaluate(()=>{const box=document.createElement('textarea');box.value=' pasted';document.body.append(box);box.select();document.execCommand('copy');box.remove();});await cell().click();await page.keyboard.press('End');await page.keyboard.press('Control+v');await page.waitForTimeout(500);}
-                await page.waitForTimeout(300);
+                for(let attempt=0;attempt<3&&!/pasted/.test((await rows())[1][0]);attempt++){await page.evaluate(()=>{const box=document.createElement('textarea');box.value=' pasted';document.body.append(box);box.select();document.execCommand('copy');box.remove();});await cell().click();await page.keyboard.press('End');await page.keyboard.press('Control+v');await settle();}
+                await settle();
                 const pasted=(await rows())[1][0];if(!/pasted/.test(pasted))failures.push(`${label}: the paste did not reach the cell (${pasted})`);
-                await page.waitForTimeout(300);await page.keyboard.press('Control+z');await page.waitForTimeout(300);same((await rows())[1][0],'one','undo of the paste');
+                await settle();await page.keyboard.press('Control+z');await settle();same((await rows())[1][0],'one','undo of the paste');
                 // Typing in a cell after all of it, and the Markdown for the whole.
                 await cell().click();await page.keyboard.press('End');await page.keyboard.type(' typed');
                 const final=await text();if(!/\| one typed \| two \|/.test(final))failures.push(`${label}: the typed text is not in the Markdown: ${final.replace(/\n/g,'/')}`);

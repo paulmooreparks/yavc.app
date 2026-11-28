@@ -362,6 +362,12 @@ var schemaCache = null;
     var lastEdit = 0, batchFirst = 0, batchBroke = false, batchLinked = false, placedEdit = 0;
     var footnoteNamespace='yavc-notes-'+crypto.randomUUID();
     var dirty = false, syncTimer = 0, syncing = null, reloadTimer = 0, sourceStale = false, refreshFocus = null, frozen = false;
+    /* Work the page has put off is reported to the host, which uses it to say when the document has settled (docs/settled-signal.md).
+       o.busy() says that a piece of work is waiting and returns the function that says it is done. A hold is one such piece of work that can
+       be taken again while it is held, and dropped when its timer is cancelled or has run. */
+    var busy = typeof o.busy === 'function' ? o.busy : function () { return function () { }; };
+    function hold() { var release = null; return { take: function () { if (!release) release = busy(); }, drop: function () { if (release) { var done = release; release = null; done(); } } }; }
+    var syncHold = hold(), reloadHold = hold();
     /* Whether the next page built takes its place from the text's caret
        (o.caret): set when the page is turned on, so that changing from
        Text to Visual keeps the reader's place; a page built again for a
@@ -435,6 +441,10 @@ var schemaCache = null;
 
     /* Reads the text into a new editor, keeping the place on the page. */
     function load() {
+      var done = busy();
+      return new Promise(function (resolve) { resolve(loadNow()); }).finally(done);
+    }
+    function loadNow() {
       if (dirty || syncing) return sync().then(load);
       var ticket = ++loading, text = o.text(), top = o.scroll.scrollTop;
       updating(true);
@@ -541,6 +551,7 @@ var schemaCache = null;
        composition. */
     function schedule() {
       clearTimeout(syncTimer);
+      syncHold.take();
       syncTimer = setTimeout(function () {
         if (view && view.composing) { schedule(); return; }
         sync().catch(function () { /* sync reports the failure beside the page. */ });
@@ -640,9 +651,11 @@ var schemaCache = null;
        made on the page. */
     function sync() {
       clearTimeout(syncTimer);
-      if (syncing) return syncing.then(sync);
-      if (!dirty || !view) return Promise.resolve();
+      if (syncing) { syncHold.drop(); return syncing.then(sync); }
+      if (!dirty || !view) { syncHold.drop(); return Promise.resolve(); }
       dirty = false;
+      /* The conversion is held as work before the timer's hold is dropped, so the page is never counted as settled between the two. */
+      var done = busy(); syncHold.drop();
       var original = shown, mine = ++syncTicket;
       var running = Promise.resolve(o.markdownOf(syncJSON())).then(function (text) {
         // flush() has written a newer page since, and this one is no longer wanted.
@@ -653,7 +666,7 @@ var schemaCache = null;
         dirty = true;
         o.say(String(err && err.message || err), true);
         throw err;
-      }).finally(function () { if (syncing === running) syncing = null; });
+      }).finally(function () { if (syncing === running) syncing = null; done(); });
       syncing = running;
       return running;
     }
@@ -673,7 +686,7 @@ var schemaCache = null;
        before the composition began, which flush() made current when it began.
        Returns whether the Editor's text is now the page's. */
     function flush() {
-      clearTimeout(syncTimer);
+      clearTimeout(syncTimer); syncHold.drop();
       if (!view || (!dirty && !syncing)) return true;
       if (view.composing) { schedule(); return false; }
       var original = shown, ticket = ++syncTicket;
@@ -714,10 +727,13 @@ var schemaCache = null;
       if (!on) return;
       if (!dirty && !syncing && (force === true || o.text() !== shown)) updating(true);
       clearTimeout(reloadTimer);
+      reloadHold.take();
       reloadTimer = setTimeout(function () {
-        if (on && !dirty && !syncing && (force === true || o.text() !== shown)) {
-          if (force === true || !patchFromText(o.text())) load(); else updating(false);
-        } else if (on && o.text() === shown && sourceStale) updating(false);
+        try {
+          if (on && !dirty && !syncing && (force === true || o.text() !== shown)) {
+            if (force === true || !patchFromText(o.text())) load(); else updating(false);
+          } else if (on && o.text() === shown && sourceStale) updating(false);
+        } finally { reloadHold.drop(); }
       }, 150);
     }
     /* Reads again only the blocks a change to the text touched, with one
@@ -2449,7 +2465,8 @@ var schemaCache = null;
           } catch (err) { }
         }
         requestAnimationFrame(bring);
-        setTimeout(bring, 300);
+        var looked = busy();
+        setTimeout(function () { try { bring(); } finally { looked(); } }, 300);
       },
       placeInText: async function () {
         if (!view || !on) return null;
@@ -2675,8 +2692,8 @@ var schemaCache = null;
       destroy: function () {
         on = false;
         loading++;
-        clearTimeout(syncTimer);
-        clearTimeout(reloadTimer);
+        clearTimeout(syncTimer); syncHold.drop();
+        clearTimeout(reloadTimer); reloadHold.drop();
         o.scroll.removeEventListener('click', click, true);
         o.page.removeEventListener('mousedown', staleInput, true);
         o.page.removeEventListener('mousedown', rememberPointerSelection, true);

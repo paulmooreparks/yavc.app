@@ -535,9 +535,16 @@
                 Array.from(first.cells).forEach(function(cell,index){var span=range(cell);if(span[1]>span[0])decorations.push(PM.Decoration.node(span[0],span[1],{style:'width:'+values.cells[index]+'px;'}));});
             });return decorations;
         }
+        /* A pass that is waiting for its frame is work the host counts before it says the document has settled (docs/settled-signal.md). A pass
+           that changes the page asks for the next one before it ends, so the count does not reach nothing between two passes. */
+        var held = null;
         function schedule(v) {
             if (raf || !alive) { return; }
-            raf = requestAnimationFrame(function () {
+            held = typeof o.busy === 'function' ? o.busy() : null;
+            raf = requestAnimationFrame(function () { var done = held; held = null; try { pass(v); } finally { if (done) { done(); } } });
+        }
+        function pass(v) {
+            {
                 raf = 0; if (!alive || v.isDestroyed) { return; }
                 var page = o.pagination && o.pagination();
                 if (!page || !v.dom.isConnected) {
@@ -581,7 +588,7 @@
                     if (changed || furniture !== placed(v.dom)) { applyFlowGaps(v.dom, layout, blocks); alignRowHeaders(v.dom); applyPieces(v.dom, d); paintRowBreaks(v.dom,d); furniture = placed(v.dom); }
                     ownSize = sizeOf(v.dom);
                 } catch (err) { if (o.paginationProblem) { o.paginationProblem(err.message); } }
-            });
+            }
         }
         return new PM.Plugin({ key: key,
             state: { init: function () { return PM.DecorationSet.empty; }, apply: function (tr, value) { return tr.getMeta(key) || value.map(tr.mapping, tr.doc); } },
@@ -595,7 +602,7 @@
                 /* A picture or a font that arrives is real input, and one that the page's own gaps draw again (the copy of a repeated header) is not. It also changes how a table lays out by its content, so the measures of the tables are taken again. */
                 function loaded(e) { if (e && e.target && e.target.closest && e.target.closest('.doc-page-gap')) { return; } if(e&&e.type==='loadingdone'&&!rememberLoadedFonts(e.fontfaces||[]))return;v.dom.querySelectorAll('.pm-source table').forEach(function(table){var fit=fittedTables.get(table);if(fit)fit.context=null;});tableCache.widths=new WeakMap();seenDoc=null;schedule(v); }
                 v.dom.addEventListener('load', loaded, true); document.fonts.addEventListener('loadingdone', loaded); schedule(v);
-                return { update: function () { schedule(v); }, destroy: function () { alive = false; cancelAnimationFrame(raf); raf = 0; ro.disconnect(); o.page.querySelectorAll('.doc-table-gap-cover,.doc-row-header-layer,.doc-table-cut-border').forEach(function(node){node.remove();}); v.dom.removeEventListener('load', loaded, true); document.fonts.removeEventListener('loadingdone', loaded); } };
+                return { update: function () { schedule(v); }, destroy: function () { alive = false; cancelAnimationFrame(raf); raf = 0; if (held) { var done = held; held = null; done(); } ro.disconnect(); o.page.querySelectorAll('.doc-table-gap-cover,.doc-row-header-layer,.doc-table-cut-border').forEach(function(node){node.remove();}); v.dom.removeEventListener('load', loaded, true); document.fonts.removeEventListener('loadingdone', loaded); } };
             }
         });
     }

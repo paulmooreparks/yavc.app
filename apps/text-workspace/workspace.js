@@ -1659,9 +1659,33 @@
             target.querySelectorAll('[data-critic-raw]').forEach(function(mark){if(mark.querySelector(':scope > .pm-critic-open'))return;var button=document.createElement('button');button.type='button';button.className='btn btn-sm pm-critic-open';button.setAttribute('aria-label','Review annotation');button.title='Review annotation';button.innerHTML='<span class="glyph" data-glyph="comments" aria-hidden="true"></span>';button.addEventListener('click',function(event){event.preventDefault();event.stopPropagation();reviewTools().then(function(controller){return controller.browse(mark.getAttribute('data-critic-raw'));}).catch(function(err){say(err.message,true);});});mark.appendChild(button);});
         }
         function pageActive() { return !!(visual.api && visual.api.active()); }
+        /* === Settled ==========================================================
+           The workspace puts work off: the page's text reaches the text a pause after typing, the page is read again a moment after the text
+           changes, the Document view lays out frame by frame until its layout stops changing, and Split shows a selection in the other pane a
+           moment after it stops moving. Each piece of such work calls busy() when it is put off and the function busy() returned when it is
+           done or cancelled. settled() resolves when none is outstanding and two frames have then been drawn with none starting, which gives the
+           browser the turn in which it reports a change of size made by the last piece of work. The count is the workspace's own bookkeeping,
+           and the promise does not resolve while the page is hidden, since a browser draws no frames then (docs/settled-signal.md). */
+        var settling = { count: 0, waiting: [] };
+        function busy() {
+            var done = false; settling.count++;
+            return function () {
+                if (done) { return; } done = true;
+                if (--settling.count === 0) { var waiting = settling.waiting; settling.waiting = []; waiting.forEach(function (resolve) { resolve(); }); }
+            };
+        }
+        function idle() { return settling.count === 0 ? Promise.resolve() : new Promise(function (resolve) { settling.waiting.push(resolve); }); }
+        function frame() { return new Promise(function (resolve) { requestAnimationFrame(function () { resolve(); }); }); }
+        async function settled() {
+            for (;;) {
+                await idle(); await frame(); await frame();
+                if (settling.count === 0) { return; }
+            }
+        }
         function pageHost() {
             return {
                 signal: styleLifetime.signal,
+                busy: busy,
                 /* The / menu on the page offers the Insert menu's shortcodes. */
                 inserts: function () {
                     var extra = [];
@@ -1765,26 +1789,32 @@
            moved in the text is shown on the page, and one moved on the page is shown in the text, a moment after it stops moving. The page's
            selection is mapped to the text exactly or not at all, and the text's selection is mapped to the page the same way, so no other
            place stands in for one that cannot be mapped. A move that one pane makes in the other is not told back, so the two cannot chase each other. */
-        var mirror = { text: null, page: null, timer: 0, turn: 0, quiet: 0 };
+        var mirror = { text: null, page: null, timer: 0, turn: 0, quiet: 0, held: null };
         function mirrorOn() { return viewMode === 'split' && pageActive() && !!view; }
+        /* The mirror's timer is work that settled() counts. A new move takes the hold before it drops the one of the move it replaces. */
+        function mirrorHold() { var before = mirror.held; mirror.held = busy(); if (before) { before(); } return mirror.held; }
         function mirrorToPage() {
             /* Any change of the text's selection that the mirror did not make is shown, whoever made it: a key, a click, or an action such as Go To or Find Next. */
             if (!mirrorOn()) { return; }
-            clearTimeout(mirror.timer); var turn = ++mirror.turn, tab = current();
+            clearTimeout(mirror.timer); var turn = ++mirror.turn, tab = current(), done = mirrorHold();
             mirror.timer = setTimeout(async function () {
-                if (turn !== mirror.turn || destroyed || !mirrorOn() || current() !== tab) { return; }
-                var main = view.state.selection.main;
-                mirror.page = turn;
-                try { await visual.api.selectAtText(main.from, main.to); } finally { if (mirror.page === turn) { mirror.page = null; } mirror.quiet = Date.now() + 500; }
+                try {
+                    if (turn !== mirror.turn || destroyed || !mirrorOn() || current() !== tab) { return; }
+                    var main = view.state.selection.main;
+                    mirror.page = turn;
+                    /* The half second in which the page's own report of this selection is not told back is counted as work too, so that a
+                       document that has settled follows the next selection made on the page. */
+                    try { await visual.api.selectAtText(main.from, main.to); } finally { if (mirror.page === turn) { mirror.page = null; } mirror.quiet = Date.now() + 500; var quiet = busy(); setTimeout(quiet, 500); }
+                } finally { done(); }
             }, 120);
         }
         function mirrorToText() {
             /* A change of the page's selection is shown in the text whoever made it. While the text has the keyboard, a change that arrives just after the mirror set the page's selection is the
                mirror's own and is not told back, so the two cannot chase each other, and a caret that the page could only show at the start of its line does not move the text's. */
             if (!mirrorOn() || editingPane === 'text' && (mirror.page !== null || Date.now() < mirror.quiet)) { return; }
-            clearTimeout(mirror.timer); var turn = ++mirror.turn, tab = current();
+            clearTimeout(mirror.timer); var turn = ++mirror.turn, tab = current(), done = mirrorHold();
             mirror.timer = setTimeout(async function () {
-                if (turn !== mirror.turn || destroyed || !mirrorOn() || current() !== tab) { return; }
+                if (turn !== mirror.turn || destroyed || !mirrorOn() || current() !== tab) { done(); return; }
                 try {
                     await visual.api.sync();
                     if (turn !== mirror.turn || !mirrorOn() || current() !== tab) { return; }
@@ -1793,7 +1823,7 @@
                     var at = Math.max(0, Math.min(range.from, view.state.doc.length)), to = Math.max(at, Math.min(range.to, view.state.doc.length));
                     mirror.text = turn;
                     try { view.dispatch({ selection: { anchor: at, head: to }, effects: CM.EditorView.scrollIntoView(at, { y: 'nearest' }), userEvent: 'select.mirror' }); } finally { mirror.text = null; }
-                } catch (err) { /* the page changed while it was mapped; the next move maps again */ }
+                } catch (err) { /* the page changed while it was mapped; the next move maps again */ } finally { done(); }
             }, 120);
         }
         function textChangedForPage() {
@@ -3494,6 +3524,8 @@ cmd('edit-diagram', 'Edit Diagram', 'new-window', function () { return openDiagr
         /* A place in the document, and printing, which a host asks for with an action since its own command may be gone (docs/editing-settings-contract.md). */
         if (isDocs) {
             liveActions['position@1'] = async function () { docNo(); return { output: { position: positionNow() } }; };
+            /* Resolves when the workspace has no work put off (docs/settled-signal.md). It changes nothing, so a read-only instance has it too. */
+            liveActions['settled@1'] = async function () { await settled(); return { output: {} }; };
             liveActions['print@1'] = async function () { docNo(); await printDocument(); if (printProblem) { throw new Error(printProblem); } return { output: {} }; };
         }
         /* A read-only instance has no action that changes the text, the file or the view, and a host that took the file commands away has none that does their work. */
