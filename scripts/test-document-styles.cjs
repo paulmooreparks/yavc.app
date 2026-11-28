@@ -5,7 +5,11 @@ const { chromium, firefox, webkit } = require('playwright');
 const port = process.env.YAVC_CHROME_TEST_PORT || '8412';
 if (!/^\d+$/.test(port)) throw new Error('Invalid test port');
 (async () => {
-    for (const [name, engine] of Object.entries({ chromium, firefox, webkit })) {
+    // The runner gives the browser of its job, as it does to every site test. Without a name the test runs in all three. It used to run in
+    // all three in every job, so a Firefox page load that did not commit failed the Chromium job (pull request 305, 2026-11-28).
+    const engines = { chromium, firefox, webkit }, named = process.argv.slice(2);
+    for (const name of named) { if (!engines[name]) throw new Error('Not a browser: ' + name); }
+    for (const [name, engine] of Object.entries(engines).filter(([name]) => !named.length || named.includes(name))) {
         const browser = await engine.launch({ headless: true });
         try {
             const page = await browser.newPage();
