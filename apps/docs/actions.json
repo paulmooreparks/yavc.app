@@ -1159,6 +1159,24 @@
       "replay": "pure"
     },
     {
+      "ref": "yavc.docs/settled@1",
+      "title": "Wait Until the Document Has Settled",
+      "description": "Answers when Docs has no work put off: the page's text has reached the Markdown, the page has been read again after a change to the text, the Document view's layout has stopped changing, and Split has shown the last selection in the other pane. It changes nothing. It does not answer while the page is hidden.",
+      "live": true,
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "capabilities": [],
+      "changes": "none",
+      "replay": "pure"
+    },
+    {
       "ref": "yavc.docs/print@1",
       "title": "Print the Document",
       "description": "Print the current document as the Print command does, for a host that has taken the command away. A document with host shortcodes the host cannot print is refused and the reason is shown in the application.",
