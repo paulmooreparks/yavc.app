@@ -9,7 +9,10 @@
     'use strict';
     var SELF = document.currentScript.src, BASE = new URL('.', SELF).href, STAMP = SELF.indexOf('?') >= 0 ? SELF.slice(SELF.indexOf('?')) : '';
     var TABLE = [
-        { id: 'go', name: 'Go', extensions: ['go'], names: [], fences: ['go', 'golang'], grammar: 'vendor/codemirror-6.43/lang/go.js', editor: true, page: false }
+        { id: 'c', name: 'C', extensions: ['c', 'h'], names: [], fences: ['c', 'h'], grammar: 'vendor/codemirror-6.43/lang/c.js', editor: true, page: false },
+        { id: 'csharp', name: 'C#', extensions: ['cs', 'csx'], names: [], fences: ['csharp', 'cs', 'c#'], grammar: 'vendor/codemirror-6.43/lang/csharp.js', editor: true, page: false },
+        { id: 'go', name: 'Go', extensions: ['go'], names: [], fences: ['go', 'golang'], grammar: 'vendor/codemirror-6.43/lang/go.js', editor: true, page: false },
+        { id: 'python', name: 'Python', extensions: ['py', 'pyw'], names: [], fences: ['python', 'py', 'python3'], grammar: 'vendor/codemirror-6.43/lang/python.js', editor: true, page: false }
     ];
     var byId = {}, byExtension = {}, byName = {}, byFence = {};
     TABLE.forEach(function (row) {
