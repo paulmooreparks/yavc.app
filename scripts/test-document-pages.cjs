@@ -94,7 +94,8 @@ const margin = page => page.locator('[data-measure="all"]').locator('..').getByR
             await action(page,'new',{path:'~/oversized.docs.md',text:'{{style}}\n.too-tall {height:1200px;}\n{{/style}}\n\n<div class="too-tall">An atomic HTML block</div>\n'});
             await page.waitForFunction(() => document.querySelector('[data-role="page-problems"]')?.textContent.includes('taller than the page'));
             await command(page,'print-document');
-            await page.locator('.toast.danger').filter({hasText:'could not be printed'}).waitFor();
+            // The refusal is a lasting notice beside the tabs since decision 189, and it used to be a toast.
+            await page.locator('.yavc-notice:not([hidden])').filter({hasText:/Print: .*taller than the page/}).waitFor();
             assert.equal(await page.locator('.ed-print-frame').count(),0);
             assert.deepEqual(errors,[]);
             console.log(engine+': pagination, source preservation, rich edit/Undo, page setup/Undo, mode changes, narrow layout and exclusion-safe print passed');
