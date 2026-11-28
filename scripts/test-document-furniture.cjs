@@ -38,8 +38,8 @@ const count=await page.evaluate(()=>new Promise(done=>{let last=null,since=Date.
   await action(page,'document-zoom',{value:100});await page.waitForTimeout(200);
   // Fit Width scales the page to the pane in both directions. The Files pane is hidden at first (DESIGN.md, decision 74), so the pane is nearly as wide
   // as the window: a window of 1100 grows the page past 816 and a window of 700 shrinks it below.
-  await action(page,'document-zoom',{value:'width'});await page.setViewportSize({width:1100,height:900});await page.waitForTimeout(200);assert.ok(await page.locator('.doc-paginated').evaluate(n=>n.getBoundingClientRect().width>816));
-  await page.setViewportSize({width:700,height:900});await page.waitForTimeout(200);assert.ok(await page.locator('.doc-paginated').evaluate(n=>n.getBoundingClientRect().width<816));
+  await action(page,'document-zoom',{value:'width'});await page.setViewportSize({width:1100,height:900});/* The fit follows the resize by a layout, so the width is waited for; a fixed pause was too short in WebKit on a loaded runner. */await page.waitForFunction(()=>document.querySelector('.doc-paginated').getBoundingClientRect().width>816);
+  await page.setViewportSize({width:700,height:900});await page.waitForFunction(()=>document.querySelector('.doc-paginated').getBoundingClientRect().width<816);
   await action(page,'document-zoom',{value:'page'});await page.waitForTimeout(200);assert.ok(await page.locator('.doc-paginated').evaluate(n=>n.getBoundingClientRect().height/+n.dataset.pageCount<950));assert.equal((await action(page,'document')).text,before);
   await action(page,'view',{mode:'visual'});assert.equal(await page.locator('.doc-furniture').count(),0);assert.equal(await page.locator('.doc-page').evaluate(n=>n.style.zoom),'1');
   await action(page,'view',{mode:'document'});await page.locator('.doc-footer').first().waitFor();
