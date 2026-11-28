@@ -9,7 +9,7 @@ const evidence = path.join(os.tmpdir(), 'yavc-launcher-review'); fs.mkdirSync(ev
 (async () => {
     for (const engine of process.argv.slice(2).length ? process.argv.slice(2) : ['chromium', 'firefox', 'webkit']) {
         const browser = await playwright[engine].launch({ headless: true });
-        const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+        const context = await browser.newContext({ viewport: { width: 1280, height: 900 } }), page = await context.newPage();
         page.setDefaultTimeout(15000);
         const errors = []; page.on('pageerror', e => errors.push(e.message));
         try {
@@ -27,9 +27,15 @@ const evidence = path.join(os.tmpdir(), 'yavc-launcher-review'); fs.mkdirSync(ev
             await root.locator('header').getByRole('link', { name: 'About yavc.app', exact: true }).click();
             await page.locator('#about-site').waitFor({ state: 'visible' });
             await root.waitFor({ state: 'hidden' });
+            /* Closing About goes Back to the launcher's address. The address is "/" again at once, and PUDL's regions module then loads that
+               address as a new page, because the launcher's part of the address differs from the one the page was drawn for (pudl-regions.js,
+               its popstate listener). A wait on the path alone ends before that load, and the next step then ran in a page that was being
+               replaced. The page's load event is fired only by the new page, so the test waits for that. */
+            const drawnAgain = page.waitForEvent('load');
             await page.keyboard.press('Escape');
-            await page.locator('#about-site').waitFor({ state: 'hidden' });
-            await page.waitForURL(url => url.pathname === '/', { waitUntil: 'load' });
+            await drawnAgain;
+            assert.equal(new URL(page.url()).pathname, '/');
+            assert.equal(await page.locator('#about-site').isVisible(), false);
             await open();
             await root.locator('header').getByRole('link', { name: 'Settings', exact: true }).click();
             await page.locator('.win[data-win="settings"]').waitFor({ state: 'visible' });
@@ -73,10 +79,14 @@ const evidence = path.join(os.tmpdir(), 'yavc-launcher-review'); fs.mkdirSync(ev
             // A fresh address uses the saved presentation and must canonicalize it for Back.
             await page.goto(`http://localhost:${port}/?open=dice&top=dice`);
             await page.waitForFunction(() => new URL(location.href).searchParams.get('start-mode') === 'pane');
-            await root.locator('[data-start-category-key="games"]').click(); await page.goBack();
-            await page.waitForFunction(() => pudlLauncher.state(document.querySelector('#site-start'))?.presentation === 'pane' && pudlStart.state(document.querySelector('#site-start'))?.category === '');
+            await root.locator('[data-start-category-key="games"]').click();
+            // Back loads the page again here too, for the reason given at About above, so the test waits for the new page before it reads the launcher.
+            const backDrawn = page.waitForEvent('load'); await page.goBack(); await backDrawn;
+            await page.waitForFunction(() => window.pudlLauncher?.state(document.querySelector('#site-start'))?.presentation === 'pane' && window.pudlStart?.state(document.querySelector('#site-start'))?.category === '');
             await page.screenshot({ path: path.join(evidence, engine + '-pane.png') });
             await root.locator('[data-launcher-pin]').click();
+            // The click saves the launcher's presentation. The test leaves this page below, and a save still on its way then would be cut off.
+            await page.evaluate(async ()=>{const condition=async()=>(await (await fetch('/config/site-launcher')).json()).presentation === pudlLauncher.state(document.querySelector('#site-start')).presentation;const limit=Date.now()+20000;while(!(await condition())){if(Date.now()>limit)throw new Error('The launcher presentation was never saved');await new Promise(resolve=>setTimeout(resolve,50));}});
             if (await root.isHidden()) await open();
             await root.locator('[data-start-query]').focus();
             await page.setViewportSize({ width: 360, height: 850 });
@@ -86,8 +96,13 @@ const evidence = path.join(os.tmpdir(), 'yavc-launcher-review'); fs.mkdirSync(ev
             await page.setViewportSize({ width: 1280, height: 900 });
             /* The file has to exist on this origin. The page leaves a file out of its address when it cannot open it, and that is right, so a
                test that names a file nobody made passes or fails by how quickly the page finds out. */
-            await page.goto(`http://diagrams.localhost:${port}/`); await page.locator('.cm-content').waitFor();
-            await page.evaluate(async ()=>{const condition=async()=>{ try { await pudlActions.run('yavc.diagrams/new@1', { kind: 'canvas', text: '{"nodes":[],"edges":[]}' }, { grant: 'all' }); return true; } catch (error) { return false; } };const limit=Date.now()+20000;while(!(await condition())){if(Date.now()>limit)throw new Error('The condition never held');await new Promise(resolve=>setTimeout(resolve,50));}}); await page.evaluate(async () => { await pudlActions.run('yavc.diagrams/save@1', { path: '~/Documents/example.canvas' }, { grant: 'all' }); });
+            /* A second page of the same browser context makes the file, and its errors are read before it is closed. Diagrams is still fetching its D2
+               engine when the file has been saved, and a page that is left then has that fetch cancelled, which WebKit reports as a page error. Closing
+               the page after its errors are read keeps the check on the errors a page raises while it is in use. */
+            const maker = await context.newPage(), makerErrors = []; maker.setDefaultTimeout(15000); maker.on('pageerror', e => makerErrors.push(e.message));
+            await maker.goto(`http://diagrams.localhost:${port}/`); await maker.locator('.cm-content').waitFor();
+            await maker.evaluate(async ()=>{const condition=async()=>{ try { await pudlActions.run('yavc.diagrams/new@1', { kind: 'canvas', text: '{"nodes":[],"edges":[]}' }, { grant: 'all' }); return true; } catch (error) { return false; } };const limit=Date.now()+20000;while(!(await condition())){if(Date.now()>limit)throw new Error('The condition never held');await new Promise(resolve=>setTimeout(resolve,50));}}); await maker.evaluate(async () => { await pudlActions.run('yavc.diagrams/save@1', { path: '~/Documents/example.canvas' }, { grant: 'all' }); });
+            assert.deepEqual(makerErrors, []); await maker.close();
             await page.goto(`http://diagrams.localhost:${port}/?file=~/Documents/example.canvas&start=1`);
             await root.waitFor({ state: 'visible' });
             await root.locator('header').getByRole('link', { name: 'Settings', exact: true }).click();
