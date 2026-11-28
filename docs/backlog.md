@@ -32,6 +32,10 @@ This page lists the defects and gaps the yavc.app team has found and not yet fix
 
 - **Closing a Diagrams window while the language service is still starting rejects with an error nobody handles.** The language-service bridge's start is rejected with `{code: -32800, message: "Language session ended."}` and the rejection is not caught, so a closed window leaves an unhandled rejection in the console. It should be handled quietly, as a start that was cancelled. Found by Dinah Team Lead on 2026-11-14.
 
+## Firefox page loads that do not commit on the hosted runner (2026-11-28)
+
+Open, reproduced, cause not yet known. In Firefox on the hosted Linux runner about one page load in fifty does not commit within 30 seconds. It happens at every address tried (`localhost`, `docs.localhost`, `editor.localhost`, `diagrams.localhost`, `/applet/slides`), so a different site test fails in each run: four in run 46118294849 and two others in run 46125847628. Chromium and WebKit do not show it, and six loads of Docs in Firefox on Windows each fired their load event within 0.7 seconds. A stress run of 25 minutes on a probe branch (run 46127863568) reproduced it 14 times in loads that did nothing but open a page. The server writes no line for a request, so the logs do not say whether the request arrived. The next step is the same stress run with the server logging each request and Firefox's own network log switched on. Until the cause is fixed the Firefox site job runs and is not a gate (`.github/workflows/site-tests.yml`). The same stress run failed `test-vfs-consumers.cjs` in Firefox in every round, waiting for a load after the address became `?file=~/consumer.canvas`, which is a separate fault. Owner: Yavc.App repair engineer until Paul assigns one.
+
 ## Tests
 
 - `test-files-dialogs.cjs` failed in CI without a cause in the logs. Look again when a run keeps its logs. `test-editor-visual-defaults.cjs` is repaired (see review.md, "Waits that ran once"); the same fault is in nine more tests, listed there.

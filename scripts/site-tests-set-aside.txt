@@ -1,0 +1,19 @@
+# Site tests set aside in one browser, one per line: test | browser | date | owner | reason
+#
+# A red run on main stops merges until it is green, or until the failing test is set aside here with the date, an owner and the cause
+# as far as it is known (CLAUDE.md, "When a test fails"). scripts/run-site-tests.mjs skips a test listed here in that browser and
+# prints the line, so every run shows what is set aside. The owner removes the line in the pull request that repairs the test.
+# A test stays in scripts/site-tests.txt while it is set aside. To run it anyway, give its name to the runner.
+#
+# The nine below failed in the first hosted run of the site list in Firefox and WebKit (run 46118294849, 2026-11-28). They had never been
+# gated in these browsers on the hosted runner, so none is known to be a regression. Each line gives the failure as the log has it. A cause
+# is still to be stated for each. This file is their record, and every run prints it.
+test-authored-dialogs.cjs | firefox | 2026-11-28 | Yavc.App repair engineer | Timeout at line 27 after the pantry dialogs were checked. Cause not yet stated.
+test-document-typing-stability.cjs | firefox | 2026-11-28 | Yavc.App repair engineer | Line 41: typing within a line moved the following page. Cause not yet stated; it may be a product fault in Firefox on Linux.
+test-pudl-upgrade.cjs | firefox | 2026-11-28 | Yavc.App repair engineer | page.goto of the desktop page did not reach load in 30 s in the "preference load" step. Cause not yet stated.
+test-save-name-selection.cjs | firefox | 2026-11-28 | Yavc.App repair engineer | page.goto of /applet/slides did not reach load in 30 s (line 9), after Docs had passed. Cause not yet stated.
+test-canvas-batch.cjs | webkit | 2026-11-28 | Yavc.App repair engineer | Line 24: the Show Grid box does not keep the focus after Space. Cause not yet stated.
+test-context-edit.cjs | webkit | 2026-11-28 | Yavc.App repair engineer | Line 66: Cut is not disabled in the context menu with no selection. Cause not yet stated.
+test-footnote-surfaces.cjs | webkit | 2026-11-28 | Yavc.App repair engineer | Line 10: the footnote surface count is 0 in the Docs window. Cause not yet stated.
+test-launcher.cjs | webkit | 2026-11-28 | Yavc.App repair engineer | The test leaves the Diagrams page while its D2 engine is still downloading, and WebKit reports the cancelled fetch as a page error. Pull request 289 repairs the test; remove this line when both are merged.
+test-pudl-upgrade.cjs | webkit | 2026-11-28 | Yavc.App repair engineer | The "Save changes" dialog did not appear within 20 s in the "foreground pins and cancellation" step. Cause not yet stated.

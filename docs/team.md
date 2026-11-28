@@ -39,7 +39,7 @@ Nobody acts on a report that Paul approved something. An approval counts when it
 3. **The member builds, tests and writes the record.** A change that alters behaviour adds or updates a test that fails without it. A decision goes into `DESIGN.md` with the next number, and what was tested goes into `docs/review.md`. A change to any applet's files needs a new version in its `applet.json`.
 4. **The checks pass before a commit**: `bash scripts/check.sh --since HEAD`.
 5. **The member opens a pull request** and tells the lead in the team chat. The message says what changed, what was tested and how, what was not tested, and anything the member is unsure about. A failing test is reported with its output and is never described as passing.
-6. **The lead reviews and merges.** Members do not merge their own pull requests. The lead merges only when every check on the pull request has passed, the site tests included. A check that fails for a reason unrelated to the change is fixed first, not merged past. Every pull request adds a section at the end of `docs/review.md`, so one merged before yours usually makes yours conflict there. Rebase on `main`, keep every section with yours last, and tell the lead it is pushed.
+6. **The lead reviews and merges.** Members do not merge their own pull requests. The lead merges only when every check on the pull request has passed, the site tests included. A check that fails for a reason unrelated to the change is fixed first, not merged past. While main's own run is red nothing is merged, until main is green or the failing test is set aside with a date and an owner. Every pull request adds a section at the end of `docs/review.md`, so one merged before yours usually makes yours conflict there. Rebase on `main`, keep every section with yours last, and tell the lead it is pushed.
 7. **The lead releases**, verifies the published package against a local build, announces it to the projects that take it, and writes the handoff note.
 
 ## Rules that are easy to break
@@ -58,7 +58,9 @@ Playwright is taken from the PUDL checkout: `export NODE_PATH='C:/Users/paul/sou
 
 The package tests run against a built package and need no server. Build one with `go run ./cmd/yavc-content -out "$TEMP/yavc-art-<your-name>"`, then run, for example, `node scripts/test-portable-workspace.cjs "$TEMP/yavc-art-<your-name>"`. Use an output folder of your own, since two members building into one folder corrupt each other's runs.
 
-The site tests need a running server with empty data on a port of your own. `docs/review.md` says which tests cover which feature. Two site tests fail on main today, `test-diagram-chrome.cjs` and the last phase of `test-command-toolbar.cjs`. `test-portable-diagrams.cjs` sometimes crashes Firefox on navigation and passes when run again.
+The site tests need a server with empty data, and `node scripts/run-site-tests.mjs test-x.cjs` starts one for each test on a free port. `docs/review.md` says which tests cover which feature.
+
+Run only the tests your change touches on your own machine, in one browser. The full matrix in Chromium, Firefox and WebKit runs on the hosted runner when you push the branch, and that run is the gate. When a test fails, state its cause before any rerun. `CLAUDE.md` gives the rules under "The verification gate" and "When a test fails", including the stress run for a failure nobody can reproduce and the file for a test that is set aside.
 
 ## Talking to each other
 

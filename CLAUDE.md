@@ -31,10 +31,28 @@ When you fix a problem that could come back, add a rule or a test that would hav
 
 ## The site tests
 
-The workflow `site tests` runs the tests listed in `scripts/site-tests.txt` in Chromium on every push to main, each against a fresh server (`node scripts/run-site-tests.mjs`, after building `yavc` and the two wasm engines). When you repair a test that is not listed, add it to that file in the same pull request. A change to an applet should also run that applet's own site and package tests before it is reported.
+The workflow `site tests` runs the tests listed in `scripts/site-tests.txt` in Chromium, Firefox and WebKit on every pull request and every push to main, each test against a fresh server (`node scripts/run-site-tests.mjs`, after building `yavc` and the two wasm engines). The same workflow runs the package tests in the three browsers. When you repair a test that is not listed, add it to that file in the same pull request.
 
 ### The verification gate
 
-CI's full matrix on the PR head is the authoritative gate. Locally, run the tests the change touches and the applet's own site and package tests. A full local run is needed only when it checks an environment CI does not have, such as Windows WebKit. A vendored PUDL update verified file by file against PUDL's published manifest needs no full local run.
+Paul set these rules on 28 November 2026. They replace the one-rerun rule and the local three-browser gate.
 
-The one-rerun rule applies only to a failing test assertion or timeout on unchanged inputs. Keep both results, and record the test, browser, both runs and an owner in docs/backlog.md. Describe the failure as unexplained unless its cause is known; a passing rerun does not establish that it was unrelated. A missing test record, ledger mismatch, digest or integrity mismatch, or failed build or packaging step blocks the gate and cannot be rerun away.
+The hosted run on the pull request's head is the gate. Push the branch and let the hosted runner run the full matrix. Do not run a full browser matrix on a working desktop. Locally, run only the tests the change touches, in one browser, to see them pass before you push.
+
+WebKit is checked on the hosted Linux runner. WebKit on Windows is not a gate, because nobody who uses yavc.app runs it. A failure seen only in WebKit on Windows does not block a merge or a release.
+
+### When a test fails
+
+State a cause before any rerun. Read the failing line and the log, and write down why it failed. A rerun without a stated cause is not allowed, on the hosted runner or locally, and a passing rerun explains nothing. Keep the first log. The site runner writes each local run to a new folder, and the hosted runner uploads the logs of a failed job.
+
+A failure that nobody can reproduce gets one stress run of about an hour on the hosted runner:
+
+```
+gh workflow run stress.yml --ref <branch> -f tests="test-launcher.cjs" -f engine=webkit -f minutes=60
+```
+
+The run repeats the test and keeps the logs of every round that failed. If it reproduces the failure, diagnose it from those logs. If it does not, close the item in `docs/backlog.md` with a link to the stress run. An item is never left open as unexplained.
+
+A red run on main stops every merge until main is green. The other way to lift the stop is to set the failing test aside in `scripts/site-tests-set-aside.txt` with the browser, the date, an owner and the cause as far as it is known. The owner removes the line in the pull request that repairs the test, and every run prints the tests that are set aside.
+
+A missing test record, a ledger mismatch, a digest or integrity mismatch, and a failed build or packaging step block the gate. None of them can be set aside.

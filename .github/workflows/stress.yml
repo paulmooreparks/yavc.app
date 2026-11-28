@@ -1,0 +1,99 @@
+# Runs chosen tests again and again on the hosted runner for a fixed time (scripts/stress-tests.mjs). It is the tool for a failure
+# that nobody can reproduce: give it the test and about an hour, and the failure is then either reproduced, with its logs kept, or
+# closed (CLAUDE.md, "When a test fails"). Start it by hand:
+#
+#   gh workflow run stress.yml --ref <branch> -f tests="test-launcher.cjs" -f engine=webkit -f minutes=60
+#
+# A run that reproduces a failure ends red and uploads the logs of the rounds that failed. A change to this workflow or to its script
+# runs it for one minute on a pull request, so the tool itself is tested before it is needed.
+name: stress
+
+on:
+  workflow_dispatch:
+    inputs:
+      tests:
+        description: Test file names, separated by spaces, such as test-launcher.cjs
+        required: true
+        type: string
+      kind:
+        description: The list the tests belong to
+        type: choice
+        options: [site, package]
+        default: site
+      engine:
+        description: The browser
+        type: choice
+        options: [chromium, firefox, webkit]
+        default: chromium
+      minutes:
+        description: How long to keep running, in minutes (1 to 300)
+        type: string
+        default: '60'
+      jobs:
+        description: How many site tests run at once in a round
+        type: string
+        default: '2'
+  pull_request:
+    paths:
+      - .github/workflows/stress.yml
+      - scripts/stress-tests.mjs
+
+permissions:
+  contents: read
+
+jobs:
+  stress:
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    env:
+      # A pull request has no inputs, so it takes a one-minute run of a short test.
+      STRESS_TESTS: ${{ inputs.tests || 'test-start.cjs' }}
+      STRESS_KIND: ${{ inputs.kind || 'site' }}
+      STRESS_ENGINE: ${{ inputs.engine || 'chromium' }}
+      STRESS_MINUTES: ${{ inputs.minutes || '1' }}
+      STRESS_JOBS: ${{ inputs.jobs || '2' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Build the server, the two engines and the content package
+        run: |
+          go build -trimpath -o yavc ./cmd/yavc
+          GOOS=js GOARCH=wasm go build -trimpath -o apps/md-engine/yavc-md.wasm ./cmd/yavc-md
+          GOOS=js GOARCH=wasm go build -trimpath -o apps/diagram-kit/yavc-d2.wasm ./cmd/yavc-d2
+          cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" apps/md-engine/wasm_exec.js
+          cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" apps/diagram-kit/wasm_exec.js
+          if [ "$STRESS_KIND" = package ]; then go run ./cmd/yavc-content -out "$RUNNER_TEMP/package"; fi
+      - name: Install Playwright, the browsers and pdftotext
+        run: |
+          npm install --prefix "$RUNNER_TEMP/playwright" playwright@1.63.0
+          "$RUNNER_TEMP/playwright/node_modules/.bin/playwright" install --with-deps chromium firefox webkit
+          sudo apt-get install -y --no-install-recommends poppler-utils
+      # The inputs reach the script through the environment and are split into words by the shell. The script refuses anything that
+      # is not a test file name, and the choices above limit the kind and the browser.
+      - name: Stress run
+        env:
+          NODE_PATH: ${{ runner.temp }}/playwright/node_modules
+          SITE_SERVER: ${{ github.workspace }}/yavc
+          SITE_ENGINE: ${{ env.STRESS_ENGINE }}
+          SITE_JOBS: ${{ env.STRESS_JOBS }}
+          PACKAGE_ENGINES: ${{ env.STRESS_ENGINE }}
+          STRESS_LOGS: ${{ runner.temp }}/yavc-stress-logs
+        run: |
+          set -f
+          if [ "$STRESS_KIND" = package ]; then
+            node scripts/stress-tests.mjs package "$STRESS_MINUTES" "$RUNNER_TEMP/package" $STRESS_TESTS
+          else
+            node scripts/stress-tests.mjs site "$STRESS_MINUTES" $STRESS_TESTS
+          fi
+      - name: Logs of the rounds that failed
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stress-logs
+          path: ${{ runner.temp }}/yavc-stress-logs
+          retention-days: 14
