@@ -62,7 +62,14 @@ async function content(p,rich){return rich?p.locator('.ProseMirror').first().inn
     await choose(await context(p,rich),'Undo');
     await p.waitForFunction(({rich,before})=>rich?document.querySelector('.ProseMirror').innerText.trim()===before.trim():yavcCodeMirror.EditorView.findFromDOM(document.querySelector('.cm-editor')).state.doc.toString()===before,{rich,before});
     await choose(await context(p,rich),'Select All');assert.ok(await p.evaluate(rich=>rich?yavcMdEditor._page.clipboardSelection().empty===false:!yavcCodeMirror.EditorView.findFromDOM(document.querySelector('.cm-editor')).state.selection.main.empty,rich));
-    await p.keyboard.press('ArrowRight');const empty=await context(p,rich);
+    // ArrowRight is pressed until the selection is empty. ProseMirror writes its own selection to the page 20 ms after it gains the focus, so a key
+    // pressed sooner than a person could press it after the menu closes can be undone, and Cut is then rightly enabled.
+    for(let presses=1;;presses++){
+     await p.keyboard.press('ArrowRight');
+     if(await p.evaluate(rich=>rich?yavcMdEditor._page.clipboardSelection().empty:yavcCodeMirror.EditorView.findFromDOM(document.querySelector('.cm-editor')).state.selection.main.empty,rich))break;
+     assert.ok(presses<20,app+': ArrowRight leaves the selection empty');
+    }
+    const empty=await context(p,rich);
     for(const label of ['Cut','Copy'])assert.equal(await empty.getByRole('menuitem',{name:new RegExp('^'+label+'(?:\\s+(?:Ctrl|Alt|Shift|Meta|Mod)|$)')}).getAttribute('aria-disabled'),'true',label+' without selection');
     await p.keyboard.press('Escape');
    }
