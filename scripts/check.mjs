@@ -81,8 +81,12 @@ rules.push({ id: 'js-syntax', run() {
 // behaviour is not documented and could change either way. A test that needs to wait on an async condition polls inside the page with
 // page.evaluate until the condition is true, and fails with its own message after a limit.
 rules.push({ id: 'no-async-wait-function', run() {
-  for (const f of files) {
-    if (!/^scripts\/test-[^/]*\.cjs$/.test(f)) continue;
+  // The scripts folder is read here directly, because .cjs is not among the extensions the other rules read. Until 2026-11-28 this rule
+  // looked through the files the other rules read, found no .cjs file among them, and so never ran.
+  for (const name of readdirSync(join(ROOT, 'scripts'))) {
+    if (!/^test-[^/]*\.cjs$/.test(name)) continue;
+    const f = 'scripts/' + name;
+    if (!text.has(f)) text.set(f, readFileSync(join(ROOT, f), 'utf8'));
     each(/\.waitForFunction\(\s*async\b/g, text.get(f), (m) => report('no-async-wait-function', f, m.index, 'waitForFunction given an async function runs it once and does not test its answer; poll inside the page with page.evaluate'));
   }
 } });
