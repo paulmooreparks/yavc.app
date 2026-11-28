@@ -15,10 +15,10 @@ const artifact=path.resolve(process.argv[2]),prefix='/forms/',types={'.html':'te
    await page.evaluate(()=>{fixture.choices=0;pudlHost.fileFields={version:1,choose:async()=>{fixture.choices++;return '~/portable/plan.canvas';}};});
    await action('set-text',{text:'# Invented note\n\nInsert here.\n'});await action('view',{mode:'visual'});
    const paragraph=page.locator('#document .ProseMirror p').filter({hasText:'Insert here.'});await paragraph.click();await page.keyboard.press('End');await page.keyboard.press('Enter');await page.keyboard.type('/Diagram');
-   await page.waitForFunction(async()=>{const CM=await yavcMdEditor.libs(),view=CM.EditorView.findFromDOM(document.querySelector('#document .cm-editor'));return view.state.doc.toString().includes('/Diagram');});
+   await page.evaluate(async()=>{const CM=await yavcMdEditor.libs(),limit=Date.now()+25000;for(;;){const view=CM.EditorView.findFromDOM(document.querySelector('#document .cm-editor'));if(view&&view.state.doc.toString().includes('/Diagram'))return;if(Date.now()>limit)throw new Error('The typed /Diagram never reached the text');await new Promise(resolve=>setTimeout(resolve,50));}});
    await page.locator('.page-slash').getByRole('option',{name:/Diagram from a File/}).waitFor();await page.keyboard.press('Enter');await form().waitFor();
    // Observe the delayed source copy without flushing it through an action.
-   await page.waitForFunction(async()=>{const CM=await yavcMdEditor.libs(),view=CM.EditorView.findFromDOM(document.querySelector('#document .cm-editor'));return !view.state.doc.toString().includes('/Diagram');});
+   await page.evaluate(async()=>{const CM=await yavcMdEditor.libs(),limit=Date.now()+25000;for(;;){const view=CM.EditorView.findFromDOM(document.querySelector('#document .cm-editor'));if(view&&!view.state.doc.toString().includes('/Diagram'))return;if(Date.now()>limit)throw new Error('The typed /Diagram never left the text');await new Promise(resolve=>setTimeout(resolve,50));}});
   }
   try{
    await page.goto(`http://127.0.0.1:${server.address().port}${prefix}workspace-lab/index.html?apps=docs`);await page.locator('#document .ProseMirror').waitFor();
