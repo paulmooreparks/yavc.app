@@ -44,3 +44,5 @@ test-table-piece-paint.cjs
 test-codemirror-ownership.cjs
 test-host-picture-frame.cjs
 test-visual-table-columns.cjs
+test-doc-ends.cjs
+test-pdf-rtl-print.cjs
