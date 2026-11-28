@@ -22,7 +22,9 @@ const file={format:'pc-barcode-layouts',version:1,layouts:[{id:'my-layout',name:
   await p.waitForFunction(()=>window.held.length>=1);await p.evaluate(()=>{window.holding=false;window.heldCount=window.held.length;});
   // The layout file is imported. It is written, and the scanner's own reads after it have answered.
   await p.locator('[data-role="layout-file"]').setInputFiles({name:'layouts.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(file))});
-  await p.evaluate(async()=>{const limit=Date.now()+15000;for(;;){const text=await pudlHost.fs.readText('~/barcode-layouts.json');if(String(text).includes('My layout')&&window.readsOut===window.heldCount)return;if(Date.now()>limit)throw new Error('The import was not written and read back');await new Promise(resolve=>setTimeout(resolve,50));}});
+  // Until the import has been written there is no file, and a read of a missing file rejects. That is one more "not yet", so the poll keeps going
+  // and reports the last refusal only if the limit passes.
+  await p.evaluate(async()=>{const limit=Date.now()+15000;let last='';for(;;){let text='';try{text=await pudlHost.fs.readText('~/barcode-layouts.json');last='';}catch(e){last=' ('+e.message+')';}if(String(text).includes('My layout')&&window.readsOut===window.heldCount)return;if(Date.now()>limit)throw new Error('The import was not written and read back'+last);await new Promise(resolve=>setTimeout(resolve,50));}});
   await p.waitForFunction(()=>Array.from(document.querySelectorAll('[data-role="layout"] option')).some(o=>o.textContent==='My layout'));
   // Now the read from before the import answers, and every read has answered.
   await p.evaluate(()=>{window.held.splice(0).forEach(release=>release());});await p.waitForFunction(()=>window.readsOut===0);

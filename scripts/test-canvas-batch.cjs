@@ -159,7 +159,9 @@ async function run(engine) {
         assert.equal(await page.locator('.dg').getAttribute('data-kind'), 'canvas');
         assert.equal(await page.locator('[data-role="where"]').innerText(), 'Not saved yet');
         await select(newNode.key); await page.locator('.dg-stage').press('Enter'); await inline.fill('Recovered inline edit'); await idle();
-        await page.waitForFunction(() => Object.values(sessionStorage).some(v => v.includes('sequence-copy')));
+        /* The draft that the reload restores has to hold this edit. The saved copy's name was in the session's storage before the edit was made, so
+           waiting for the name passed at once and the reload could come before the draft was written. */
+        await page.waitForFunction(() => Object.values(sessionStorage).some(v => v.includes('Recovered inline edit')));
         await page.reload(); await page.locator('.cm-editor').waitFor(); await idle();
         assert.equal((await doc()).nodes[0].text, 'Recovered inline edit');
         assert.ok((await action('diagrams')).diagrams.some(d => d.path === '~/sequence-copy.canvas' && d.kind === 'canvas'));
