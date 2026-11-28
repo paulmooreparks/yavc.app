@@ -13,7 +13,6 @@ test-document-typing-stability.cjs | firefox | 2026-11-28 | Yavc.App repair engi
 test-pudl-upgrade.cjs | firefox | 2026-11-28 | Yavc.App repair engineer | page.goto of the desktop page did not reach load in 30 s in the "preference load" step. Cause not yet stated.
 test-save-name-selection.cjs | firefox | 2026-11-28 | Yavc.App repair engineer | page.goto of /applet/slides did not reach load in 30 s (line 9), after Docs had passed. Cause not yet stated.
 test-canvas-batch.cjs | webkit | 2026-11-28 | Yavc.App repair engineer | Line 24: the Show Grid box does not keep the focus after Space. Cause not yet stated.
-test-context-edit.cjs | webkit | 2026-11-28 | Yavc.App repair engineer | Line 66: Cut is not disabled in the context menu with no selection. Cause not yet stated.
 test-footnote-surfaces.cjs | webkit | 2026-11-28 | Yavc.App repair engineer | Line 10: the footnote surface count is 0 in the Docs window. Cause not yet stated.
 test-pudl-upgrade.cjs | webkit | 2026-11-28 | Yavc.App repair engineer | The "Save changes" dialog did not appear within 20 s in the "foreground pins and cancellation" step. Cause not yet stated.
 test-launcher.cjs | webkit | 2026-11-28 | Yavc.App repair engineer | Still fails after pull request 289: a fetch of /config/site-launcher is cancelled when Back reloads the desktop page (docs/backlog.md, "Back reloads the desktop page"), and WebKit reports the cancelled fetch as a page error. Seen locally on Windows WebKit on 2026-11-28 with two tests running at once.
